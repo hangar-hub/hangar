@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/collections"
 	"github.com/jamesagarside/hangar/internal/community"
@@ -33,7 +35,6 @@ import (
 	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/xet"
-	"golang.org/x/sync/singleflight"
 )
 
 // Settings are the configuration values the Hub API reads. FromConfig
