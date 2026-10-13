@@ -590,3 +590,9 @@ func (s *Store) PresignPut(ctx context.Context, key string, size int64, sum []by
 	}
 	return blob.PresignedRequest{URL: u.String(), Headers: out}, nil
 }
+
+// The S3 backend does not implement blob.UploadLister: MinIO only lists
+// multipart uploads for an exact object name. Abandoned multipart uploads
+// are aborted by the upload.expire Job from their upload rows, and by the
+// bucket's lifecycle rule (AbortIncompleteMultipartUpload) on AWS, or
+// MinIO's stale upload expiry (24 hours by default).

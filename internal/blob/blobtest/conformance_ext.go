@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -161,6 +162,41 @@ func runExtended(t *testing.T, caps Capabilities, newStore func(t *testing.T) bl
 		cancel()
 		require.Error(t, s.Put(cctx, "tmp/cancelled", strings.NewReader("x"), 1))
 		requireMissing(t, s, "tmp/cancelled")
+	})
+
+	t.Run("ListUploads", func(t *testing.T) {
+		s := newStore(t)
+		ul, ok := s.(blob.UploadLister)
+		if ok {
+			if err := ul.ListUploads(ctx, func(blob.IncompleteUpload) error { return nil }); errors.Is(err, blob.ErrNotSupported) {
+				ok = false
+			}
+		}
+		if !ok {
+			t.Logf("%T does not list incomplete uploads; garbage collection relies on upload rows", s)
+			return
+		}
+		before := time.Now().Add(-time.Minute)
+		id, err := s.CreateMultipart(ctx, "lfs/sha256/inc/one")
+		require.NoError(t, err)
+		_, err = s.PutPart(ctx, "lfs/sha256/inc/one", id, 1, strings.NewReader("x"), 1)
+		require.NoError(t, err)
+		find := func() *blob.IncompleteUpload {
+			var found *blob.IncompleteUpload
+			require.NoError(t, ul.ListUploads(ctx, func(u blob.IncompleteUpload) error {
+				if u.UploadID == id {
+					found = &u
+				}
+				return nil
+			}))
+			return found
+		}
+		u := find()
+		require.NotNil(t, u)
+		require.Equal(t, "lfs/sha256/inc/one", u.Key)
+		require.True(t, u.Initiated.After(before))
+		require.NoError(t, s.AbortMultipart(ctx, "lfs/sha256/inc/one", id))
+		require.Nil(t, find())
 	})
 
 	if caps.PresignHTTP {

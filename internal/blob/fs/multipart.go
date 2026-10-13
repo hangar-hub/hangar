@@ -234,3 +234,45 @@ func (s *Store) AbortMultipart(_ context.Context, key, uploadID string) error {
 	}
 	return os.RemoveAll(dir)
 }
+
+var _ blob.UploadLister = (*Store)(nil)
+
+// ListUploads implements blob.UploadLister. Initiated is when the upload
+// was created.
+func (s *Store) ListUploads(ctx context.Context, fn func(blob.IncompleteUpload) error) error {
+	dir := filepath.Join(s.root, filepath.FromSlash(blob.PrefixUploads))
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, iofs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := uuid.Parse(e.Name()); err != nil {
+			continue
+		}
+		targetPath := filepath.Join(dir, e.Name(), uploadTargetFile)
+		target, err := os.ReadFile(targetPath) //nolint:gosec // Built from a parsed UUID under the root.
+		if errors.Is(err, iofs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		fi, err := os.Stat(targetPath)
+		if err != nil {
+			continue
+		}
+		if err := fn(blob.IncompleteUpload{Key: string(target), UploadID: e.Name(), Initiated: fi.ModTime().UTC()}); err != nil {
+			return err
+		}
+	}
+	return nil
+}

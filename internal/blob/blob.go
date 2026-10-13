@@ -221,3 +221,18 @@ const (
 	// SentinelKey is the object /readyz stats to check the store is reachable.
 	SentinelKey = "hangar/sentinel"
 )
+
+// IncompleteUpload is a multipart upload that was started and neither
+// completed nor aborted.
+type IncompleteUpload struct {
+	Key       string
+	UploadID  string
+	Initiated time.Time
+}
+
+// UploadLister is implemented by stores that can list incomplete multipart
+// uploads, so garbage collection can abort abandoned ones. Stores that
+// cannot return ErrNotSupported.
+type UploadLister interface {
+	ListUploads(ctx context.Context, fn func(IncompleteUpload) error) error
+}

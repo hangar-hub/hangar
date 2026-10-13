@@ -225,3 +225,17 @@ func (i *Instrumented) Copy(ctx context.Context, srcKey, dstKey string) error {
 	o.end(ctx, err, -1)
 	return err
 }
+
+var _ UploadLister = (*Instrumented)(nil)
+
+// ListUploads implements UploadLister when the wrapped store does.
+func (i *Instrumented) ListUploads(ctx context.Context, fn func(IncompleteUpload) error) error {
+	ul, ok := i.inner.(UploadLister)
+	if !ok {
+		return ErrNotSupported
+	}
+	ctx, o := i.begin(ctx, "multipart.list_uploads", "")
+	err := ul.ListUploads(ctx, fn)
+	o.end(ctx, err, -1)
+	return err
+}
