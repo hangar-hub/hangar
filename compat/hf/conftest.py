@@ -53,6 +53,24 @@ class Hub:
 
 def _start_server() -> Hub:
     workdir = Path(tempfile.mkdtemp(prefix="hangar-hf-compat-"))
+    try:
+        return _build_and_start(workdir)
+    except BaseException:
+        # The test binary is tens of megabytes: never leave it behind.
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise
+
+
+def _server_env(info_path: Path) -> dict[str, str]:
+    env = dict(os.environ, HANGAR_HF_SERVE_INFO=str(info_path))
+    # HANGAR_HF_DB=postgres needs dbtest's Postgres: start a container unless
+    # a server is given with HANGAR_TEST_POSTGRES_DSN.
+    if env.get("HANGAR_HF_DB") == "postgres" and not env.get("HANGAR_TEST_POSTGRES_DSN"):
+        env.setdefault("HANGAR_TEST_POSTGRES", "1")
+    return env
+
+
+def _build_and_start(workdir: Path) -> Hub:
     binary = workdir / "hfserver.test"
     tags = "compat"
     if os.environ.get("HANGAR_HF_GO_TAGS"):
@@ -63,25 +81,30 @@ def _start_server() -> Hub:
         check=True,
     )
     info_path = workdir / "info.json"
-    env = dict(os.environ, HANGAR_HF_SERVE_INFO=str(info_path))
-    log = open(workdir / "server.log", "wb")  # noqa: SIM115 - the process keeps it open
-    proc = subprocess.Popen(
-        [str(binary), "-test.run", "^TestServeHub$", "-test.timeout", "0", "-test.v"],
-        cwd=HF_DIR,
-        stdin=subprocess.PIPE,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        env=env,
-    )
-    deadline = time.monotonic() + 120
-    while not info_path.exists():
-        if proc.poll() is not None:
-            raise RuntimeError("the Hub test server exited:\n" + (workdir / "server.log").read_text())
-        if time.monotonic() > deadline:
+    log_path = workdir / "server.log"
+    with open(log_path, "wb") as log:
+        proc = subprocess.Popen(
+            [str(binary), "-test.run", "^TestServeHub$", "-test.timeout", "0", "-test.v"],
+            cwd=HF_DIR,
+            stdin=subprocess.PIPE,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            env=_server_env(info_path),
+        )
+    try:
+        deadline = time.monotonic() + 120
+        while not info_path.exists():
+            if proc.poll() is not None:
+                raise RuntimeError("the Hub test server exited:\n" + log_path.read_text(errors="replace"))
+            if time.monotonic() > deadline:
+                raise RuntimeError("the Hub test server did not start in time:\n" + log_path.read_text(errors="replace"))
+            time.sleep(0.05)
+        info = json.loads(info_path.read_text())
+    except BaseException:
+        if proc.poll() is None:
             proc.kill()
-            raise RuntimeError("the Hub test server did not start in time")
-        time.sleep(0.05)
-    info = json.loads(info_path.read_text())
+            proc.wait()
+        raise
     return Hub(
         info["endpoint"], info["tokens"], info["org"], info["backend"], info["multipart_threshold"], proc, workdir
     )

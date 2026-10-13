@@ -1,6 +1,7 @@
 """Uploads through huggingface_hub: upload_file, upload_folder,
-create_commit, upload_large_folder, LFS files (single part and multipart),
-branches, tags and history."""
+create_commit, LFS files (single part and multipart), pull requests,
+branches, tags and history. upload_large_folder is in
+test_upload_large_folder.py."""
 
 import hashlib
 import math
@@ -156,7 +157,7 @@ def test_create_commit_adds_deletes_copies(api, repo_name):
 
 @pytest.mark.endpoint("POST /api/{type}s/{repo}/commit/{rev}", "POST /api/{type}s/{repo}/preupload/{rev}")
 def test_upload_many_files(api, repo_name, tmp_path):
-    # huggingface_hub 2.x folded upload_large_folder into upload_folder.
+    # More than 25 files, with allow and ignore patterns, in one upload_folder.
     repo = api.create_repo(repo_name).repo_id
     files = {f"shard-{i}.txt": f"row {i}\n".encode() for i in range(30)}
     files["weights.safetensors"] = os.urandom(30_000)
@@ -220,3 +221,23 @@ def test_hf_upload_to_new_branch_and_pr(api, hub, repo_name):
     details = api.get_discussion_details(repo, 1)
     assert details.is_pull_request
     assert details.target_branch == "refs/heads/main"
+
+
+@pytest.mark.endpoint("POST /api/{type}s/{repo}/commit/{rev}?create_pr=1", "GET /api/{type}s/{repo}/discussions")
+def test_failed_create_pr_commit_opens_no_pull_request(api, hub, repo_name):
+    repo = api.create_repo(repo_name).repo_id
+    api.upload_file(path_or_fileobj=b"main", path_in_repo="f.txt", repo_id=repo)
+    bob = HfApi(endpoint=hub.endpoint, token=hub.token("bob"))
+    # A commit that cannot succeed is refused before the pull request opens,
+    # so client retries do not leave draft pull requests behind.
+    for _ in range(2):
+        with pytest.raises(EntryNotFoundError):
+            bob.create_commit(repo, [CommitOperationDelete("ghost.txt")], commit_message="Bad PR", create_pr=True)
+        with pytest.raises(EntryNotFoundError):
+            bob.create_commit(repo, [CommitOperationDelete("ghost/")], commit_message="Bad PR", create_pr=True)
+    assert list(api.get_repo_discussions(repo)) == []
+    assert api.list_repo_refs(repo, include_pull_requests=True).pull_requests == []
+    # The next pull request is number 1.
+    pr = bob.create_commit(repo, [CommitOperationDelete("f.txt")], commit_message="Good PR", create_pr=True)
+    assert pr.pr_url.endswith("/discussions/1")
+    assert [d.num for d in api.get_repo_discussions(repo)] == [1]
