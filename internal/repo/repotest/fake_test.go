@@ -596,3 +596,76 @@ func TestFakeLFSUploads(t *testing.T) {
 	_, err = f.LFS.Verify(ctx, strings.Repeat("f", 64), 1)
 	require.ErrorIs(t, err, repo.ErrNotFound)
 }
+
+func TestAddsFollowGitAttributes(t *testing.T) {
+	ctx := context.Background()
+	f, _ := newRepo(t)
+	weights := []byte("pickle bytes")
+	sum := sha256.Sum256(weights)
+	oid := hex.EncodeToString(sum[:])
+	res, err := f.Commit(ctx, repo.CommitParams{Repo: modelID, Summary: "add", Actor: alice, Operations: []repo.Operation{
+		{Kind: repo.OpAdd, Path: "pytorch_model.bin", Content: bytes.NewReader(weights)},
+		{Kind: repo.OpAdd, Path: "config.json", Content: strings.NewReader("{}")},
+	}})
+	require.NoError(t, err)
+
+	// *.bin is in the default .gitattributes, so the file is an LFS object
+	// and git holds its pointer.
+	e, err := f.Entry(ctx, modelID, res.SHA, "pytorch_model.bin")
+	require.NoError(t, err)
+	require.NotNil(t, e.LFS)
+	require.Equal(t, oid, e.LFS.OID)
+	require.True(t, e.Present)
+	dir, err := f.Dir(modelID)
+	require.NoError(t, err)
+	require.Equal(t, strings.TrimSpace(string(model.LFSPointer{OID: oid, Size: int64(len(weights))}.Bytes())),
+		gitCmd(t, dir, "cat-file", "blob", string(res.SHA)+":pytorch_model.bin"))
+	rc, _, err := f.OpenFile(ctx, modelID, res.SHA, "pytorch_model.bin", nil)
+	require.NoError(t, err)
+	got, _ := io.ReadAll(rc)
+	rc.Close()
+	require.Equal(t, weights, got)
+	obj, err := f.LFS.Stat(ctx, oid)
+	require.NoError(t, err)
+	require.True(t, obj.Verified)
+	c, err := f.Entry(ctx, modelID, res.SHA, "config.json")
+	require.NoError(t, err)
+	require.Nil(t, c.LFS)
+
+	// A .gitattributes in the Repo replaces the defaults from the next
+	// Commit on.
+	_, err = f.Commit(ctx, repo.CommitParams{Repo: modelID, Summary: "attrs", Actor: alice, Operations: []repo.Operation{
+		{Kind: repo.OpAdd, Path: ".gitattributes", Content: strings.NewReader("*.json filter=lfs diff=lfs merge=lfs -text\n")},
+	}})
+	require.NoError(t, err)
+	res, err = f.Commit(ctx, repo.CommitParams{Repo: modelID, Summary: "more", Actor: alice, Operations: []repo.Operation{
+		{Kind: repo.OpAdd, Path: "other.bin", Content: strings.NewReader("plain")},
+		{Kind: repo.OpAdd, Path: "big.json", Content: strings.NewReader("{\"lfs\":true}")},
+	}})
+	require.NoError(t, err)
+	e, err = f.Entry(ctx, modelID, res.SHA, "other.bin")
+	require.NoError(t, err)
+	require.Nil(t, e.LFS)
+	e, err = f.Entry(ctx, modelID, res.SHA, "big.json")
+	require.NoError(t, err)
+	require.NotNil(t, e.LFS)
+}
+
+func TestMapNamespace(t *testing.T) {
+	ctx := context.Background()
+	f := repotest.NewFake(t)
+	org, other := uuid.New(), uuid.New()
+	f.MapNamespace("Acme", org)
+	f.MapNamespace("other", other)
+	actor := alice
+	actor.NamespaceID = uuid.New()
+	r, err := f.Create(ctx, repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "m"}, Actor: actor})
+	require.NoError(t, err)
+	require.Equal(t, org, r.NamespaceID)
+	r, err = f.Create(ctx, repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "m"}, Actor: actor})
+	require.NoError(t, err)
+	require.Equal(t, actor.NamespaceID, r.NamespaceID, "unmapped Namespaces use the actor's")
+	r, err = f.Transfer(ctx, r.ID, "other", actor)
+	require.NoError(t, err)
+	require.Equal(t, other, r.NamespaceID)
+}

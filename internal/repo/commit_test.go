@@ -46,7 +46,7 @@ func TestCommitsAreByteIdenticalToGit(t *testing.T) {
 
 		steps := [][]repo.Operation{
 			{add("config.json", `{"model_type":"bert"}`), add("nested/dir/notes.txt", "hello\n")},
-			{{Kind: repo.OpAddLFS, Path: "model.safetensors", OID: oid, Size: int64(len(weights))}, add("empty.txt", "")},
+			{{Kind: repo.OpAddLFS, Path: "model.safetensors", OID: oid, Size: int64(len(weights))}, add("empty.txt", ""), add("pytorch_model.bin", "tracked by .gitattributes")},
 			{{Kind: repo.OpCopy, Path: "nested/copy.txt", SrcPath: "nested/dir/notes.txt"}, {Kind: repo.OpDelete, Path: "config.json"}},
 			{{Kind: repo.OpDeleteFolder, Path: "nested/dir"}, add("README.md", "# Replaced\n")},
 		}
