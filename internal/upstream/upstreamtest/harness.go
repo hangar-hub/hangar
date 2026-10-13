@@ -2,6 +2,7 @@ package upstreamtest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -182,6 +183,7 @@ type Harness struct {
 	Client    upstream.Client
 
 	mu       sync.Mutex
+	partSize int64
 	settings upstream.Settings
 	now      time.Time
 	tokens   map[uuid.UUID]string
@@ -201,7 +203,7 @@ func NewHarness(t testing.TB, d *db.DB, o HarnessOptions) *Harness {
 	require.NoError(t, err)
 	h := &Harness{T: t, Ctx: ctx, DB: d, Remote: NewFake(t), Orgs: orgtest.NewFake(), Jobs: jobs.NewRegistry(), Limiter: &HookLimiter{},
 		Authz: authtest.NewAuthz(), Layout: datasetstest.NewLayout(), Hooks: &webhooktest.Fake{}, Audit: audittest.NewFake(),
-		now: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC), tokens: map[uuid.UUID]string{}, Signer: signer}
+		now: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC), tokens: map[uuid.UUID]string{}, Signer: signer, partSize: o.PartSize}
 	h.settings = upstream.Settings{AllowOverrideWindows: true, PullThroughAllow: []string{"*"}, PullThroughMinRole: "user"}
 	h.Server = NewServer(t, h.Remote)
 	local := repotest.NewFake(t)
@@ -319,4 +321,56 @@ func (h *Harness) AddUpstream(name, prefix string) error {
 // Upstream, creating it public if needed, and returns the Commit.
 func (h *Harness) Seed(id model.RepoID, files, lfs map[string][]byte) model.CommitSHA {
 	return Seed(h.T, h.Remote, id, files, lfs)
+}
+
+// NewService returns another Service over the same database, Repos, LFS
+// store, queue and Upstream, as a second process would have: it shares
+// nothing in memory with the first, so tests can stop one mid-transfer
+// and carry on with the other.
+func (h *Harness) NewService(limiter jobs.Limiter) *upstream.Service {
+	h.T.Helper()
+	if limiter == nil {
+		limiter = h.Limiter
+	}
+	svc, err := upstream.New(upstream.Options{DB: h.DB, Registry: h.Upstreams, Client: h.Client, Repos: h.Repos, LFS: h.LFS, Orgs: h.Orgs,
+		Queue: h.Queue, Limiter: limiter, Authz: h.Authz, Layout: h.Layout, Webhooks: h.Hooks, MirrorState: h.Repos,
+		Settings: func(context.Context) (upstream.Settings, error) {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			return h.settings, nil
+		},
+		ParseWindows: ParseHourWindows,
+		Snooze:       func(until time.Time, reason string) error { return &Snoozed{Until: until, Reason: reason} },
+		Signer:       h.Signer, PublicURL: "http://hangar.test", UserTokens: h, Audit: h.Audit, PartSize: h.partSize,
+		PullAttempts: 100, PollInterval: time.Second, PullThroughWait: 30 * time.Second, SpoolDir: h.T.TempDir(), Now: h.Now})
+	require.NoError(h.T, err)
+	return svc
+}
+
+// Progress is a jobs.Progress that keeps the last report and result, for
+// running a handler outside the queue.
+type Progress struct {
+	mu     sync.Mutex
+	Last   jobs.ProgressUpdate
+	Result []byte
+}
+
+// Report implements jobs.Progress.
+func (p *Progress) Report(_ context.Context, u jobs.ProgressUpdate) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Last = u
+	return nil
+}
+
+// SetResult implements jobs.Progress.
+func (p *Progress) SetResult(_ context.Context, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Result = b
+	return nil
 }

@@ -617,25 +617,33 @@ func (c *HTTPClient) Download(ctx context.Context, u Upstream, cred Credentials,
 	if err != nil {
 		return nil, FileMeta{}, err
 	}
-	meta := FileMeta{Commit: commit}
+	// Read the Hub's headers from the first response (the redirect), not
+	// from the CDN's final answer, whose ETag is its own.
+	var chain []http.Header
 	for r := resp; r != nil; {
-		if meta.ETag == "" {
-			meta.ETag = strings.Trim(strings.TrimPrefix(firstHeader(r.Header, "X-Linked-Etag", "ETag"), "W/"), `"`)
-		}
-		if meta.Size == 0 {
-			if s, err := strconv.ParseInt(r.Header.Get("X-Linked-Size"), 10, 64); err == nil {
-				meta.Size = s
-			}
-		}
-		if c := r.Header.Get("X-Repo-Commit"); c != "" {
-			if sha, err := model.ParseCommitSHA(c); err == nil {
-				meta.Commit = sha
-			}
-		}
+		chain = append([]http.Header{r.Header}, chain...)
 		if r.Request == nil {
 			break
 		}
 		r = r.Request.Response
+	}
+	meta := FileMeta{Commit: commit}
+	for _, hdr := range chain {
+		if v := hdr.Get("X-Linked-Etag"); v != "" && meta.ETag == "" {
+			meta.ETag = normaliseETag(v)
+		}
+		if s, err := strconv.ParseInt(hdr.Get("X-Linked-Size"), 10, 64); err == nil && meta.Size == 0 {
+			meta.Size = s
+		}
+		if c := hdr.Get("X-Repo-Commit"); c != "" {
+			if sha, err := model.ParseCommitSHA(c); err == nil {
+				meta.Commit = sha
+			}
+		}
+	}
+	if meta.ETag == "" {
+		// No redirect: the Hub answered directly.
+		meta.ETag = normaliseETag(chain[0].Get("ETag"))
 	}
 	if meta.Size == 0 {
 		meta.Size = totalSize(resp)
@@ -648,13 +656,9 @@ func (c *HTTPClient) Download(ctx context.Context, u Upstream, cred Credentials,
 	return &redactingBody{rc: resp.Body}, meta, nil
 }
 
-func firstHeader(h http.Header, keys ...string) string {
-	for _, k := range keys {
-		if v := h.Get(k); v != "" {
-			return v
-		}
-	}
-	return ""
+// normaliseETag strips the weak prefix and quotes, as huggingface_hub does.
+func normaliseETag(v string) string {
+	return strings.Trim(strings.TrimPrefix(strings.TrimSpace(v), "W/"), `"`)
 }
 
 // totalSize reads the whole object size from Content-Range or Content-Length.

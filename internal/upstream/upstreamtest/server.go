@@ -3,6 +3,8 @@ package upstreamtest
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -407,6 +409,10 @@ func (s *Server) serveCDN(w http.ResponseWriter, r *http.Request) {
 	b, _ := io.ReadAll(rc)
 	_ = rc.Close()
 	_ = obj
+	// Like huggingface.co's CDN, answer with an ETag of the CDN's own that
+	// looks like a SHA-256 but is not the object's.
+	cdnTag := sha256.Sum256([]byte("cdn:" + oid))
+	w.Header().Set("ETag", `"`+hex.EncodeToString(cdnTag[:])+`"`)
 	s.mu.Lock()
 	if s.corruptNext[oid] > 0 {
 		s.corruptNext[oid]--
