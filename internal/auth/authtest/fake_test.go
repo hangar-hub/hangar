@@ -98,6 +98,7 @@ func TestAuthzPermissionTable(t *testing.T) {
 	// Collaborators.
 	z.SetCollaborator(alice.UserID, priv.Repo.UUID, model.RoleWrite)
 	require.NoError(t, z.Can(ctx, alice, auth.ActionWrite, priv))
+	require.ErrorIs(t, z.Can(ctx, alice, auth.ActionPullMirror, priv), auth.ErrForbidden, "pulling into a Mirror needs write on the Namespace")
 
 	// Gating.
 	gated := repoTarget("ml", orgID, model.VisibilityPublic)

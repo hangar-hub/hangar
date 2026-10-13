@@ -17,7 +17,8 @@ import (
 //	read, read_files        anyone if anonymous  signed in       Namespace members,
 //	                        read is on, else                     collaborators,
 //	                        signed in                            Instance admins
-//	pull_mirror             write                write           write
+//	pull_mirror             write on the         same            same
+//	                        Namespace
 //	write                   write                write           write
 //	discuss                 signed in            signed in       readers
 //	admin                   Namespace admin      same            same
@@ -25,6 +26,8 @@ import (
 // Callers who cannot read a Repo get ErrNotFound for every action, so
 // private Repo names do not leak. Gated Repos need an accepted access
 // request for read_files, unless the caller has a Role on the Repo.
+// pull_mirror counts only the Namespace Role (or Instance admin), never a
+// Repo collaborator Role.
 // Token scopes (read < write < admin) and restrictions narrow these rules
 // and never widen them.
 type Authorizer struct{ s *Service }
@@ -178,6 +181,20 @@ func (a *Authorizer) canRepo(ctx context.Context, p model.Principal, action Acti
 			return fmt.Errorf("%w: sign in to take part", ErrForbidden)
 		}
 		return nil
+	case ActionPullMirror:
+		// The spec asks for write on the Namespace itself, so a Repo
+		// collaborator Role does not count here.
+		nsRole, err := a.role(ctx, p, r.NamespaceID, uuid.Nil)
+		if err != nil {
+			return err
+		}
+		if nsRole.Includes(model.RoleWrite) {
+			return nil
+		}
+		if p.IsAnonymous() {
+			return fmt.Errorf("%w: sign in first", ErrForbidden)
+		}
+		return fmt.Errorf("%w: pulling into a Mirror needs the write role in the %s Namespace", ErrForbidden, r.ID.Namespace)
 	default:
 		need := requiredRole(action)
 		if role.Includes(need) {

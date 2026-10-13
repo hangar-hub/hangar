@@ -129,7 +129,7 @@ func TestPermissionMatrix(t *testing.T) {
 			"member-write":                {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},
 			"member-admin":                {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
 			"collab-read":                 {pub: "AAFFAF", internal: "AAFFAF", private: "AAFFAF"},
-			"collab-write":                {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},
+			"collab-write":                {pub: "AAFAAF", internal: "AAFAAF", private: "AAFAAF"},
 			"instance-admin":              {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
 			"member-write+read-token":     {pub: "AAFFFF", internal: "AAFFFF", private: "AAFFFF"},
 			"member-admin+write-token":    {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},
@@ -203,6 +203,54 @@ func TestPermissionsGatedRepos(t *testing.T) {
 		_, err = w.s.AccessRequests.Decide(ctx, g, req.ID, auth.AccessRejected, w.persons["member-admin"])
 		require.NoError(t, err)
 		require.Equal(t, "G", can("outsider", auth.ActionReadFiles), "a later rejection revokes access")
+	})
+}
+
+// TestPermissionsPullMirror checks that pulling more files into a Mirror
+// needs write on the Namespace, as docs/spec/05-auth.md says, and that a
+// Repo collaborator Role never counts towards it.
+func TestPermissionsPullMirror(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		w := buildWorld(t, d, true)
+		priv := w.repos[model.VisibilityPrivate]
+		pull := func(p model.Principal, r *auth.RepoTarget) error {
+			return w.s.Authorizer.Can(ctx, p, auth.ActionPullMirror, auth.Target{Repo: r})
+		}
+
+		// A write collaborator can push to the Repo but cannot pull into it.
+		collab := w.persons["collab-write"]
+		require.NoError(t, w.s.Authorizer.Can(ctx, collab, auth.ActionWrite, auth.Target{Repo: priv}))
+		err := pull(collab, priv)
+		require.ErrorIs(t, err, auth.ErrForbidden)
+		require.Contains(t, err.Error(), "write role in the acme Namespace")
+
+		// A read member who is also a write collaborator still cannot pull:
+		// the Namespace Role is the one that counts.
+		require.NoError(t, w.orgs.SetMember(ctx, "acme", collab.UserID, model.RoleRead, org.SourceManual, w.persons["member-admin"]))
+		require.ErrorIs(t, pull(collab, priv), auth.ErrForbidden)
+		require.NoError(t, w.orgs.SetMember(ctx, "acme", collab.UserID, model.RoleWrite, org.SourceManual, w.persons["member-admin"]))
+		require.NoError(t, pull(collab, priv), "write on the Namespace is enough")
+
+		// Instance admins, the system user and the owner of a personal
+		// Namespace can pull.
+		require.NoError(t, pull(w.persons["instance-admin"], priv))
+		require.NoError(t, pull(model.System(), priv))
+		outsiderNS, err := w.orgs.Get(ctx, "outsider")
+		require.NoError(t, err)
+		own := insertRepo(t, d, outsiderNS.ID, "outsider", "mirror", model.VisibilityPrivate, false)
+		require.NoError(t, pull(w.persons["outsider"], own))
+
+		// A write collaborator on someone's personal Repo cannot pull into it.
+		guest := w.persons["collab-read"]
+		require.NoError(t, w.orgs.SetCollaborators(ctx, own.UUID, []org.Collaborator{{UserID: guest.UserID, Role: model.RoleWrite}}, w.persons["outsider"]))
+		require.NoError(t, w.s.Authorizer.Can(ctx, guest, auth.ActionWrite, auth.Target{Repo: own}))
+		require.ErrorIs(t, pull(guest, own), auth.ErrForbidden)
+
+		// Anonymous callers are told to sign in.
+		err = pull(model.Anonymous(), w.repos[model.VisibilityPublic])
+		require.ErrorIs(t, err, auth.ErrForbidden)
+		require.Contains(t, err.Error(), "sign in")
 	})
 }
 
