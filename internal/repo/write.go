@@ -273,9 +273,11 @@ func (c *countingReader) Read(p []byte) (int, error) {
 func (s *Store) lfsOp(ctx context.Context, row *repoRow, op Operation, allowMirror bool) (LFSRef, error) {
 	obj, err := s.lfs.Stat(ctx, op.OID)
 	if errors.Is(err, ErrNotFound) && op.Size > 0 {
-		obj, err = s.lfs.Verify(ctx, op.OID, op.Size)
+		obj, err = s.verifyLFS(ctx, op.OID, op.Size)
 	}
 	switch {
+	case errors.Is(err, errVerifyWait):
+		return LFSRef{}, fmt.Errorf("%w: %w", ErrLFSObjectMissing, err)
 	case err == nil:
 		size := op.Size
 		if size == 0 {
@@ -291,6 +293,34 @@ func (s *Store) lfsOp(ctx context.Context, row *repoRow, op Operation, allowMirr
 		return LFSRef{}, fmt.Errorf("%w: %s", ErrLFSObjectMissing, op.OID)
 	default:
 		return LFSRef{}, err
+	}
+}
+
+// errVerifyWait reports that an LFS object was still being verified when
+// lfs.verify_wait ran out.
+var errVerifyWait = errors.New("lfs object is still being verified")
+
+// verifyLFS verifies an LFS object that was written through a presigned URL
+// and is not recorded yet, waiting at most VerifyWait (lfs.verify_wait).
+// The verification itself carries on when the wait runs out, and concurrent
+// writers on this process share it, so a retried Commit finds the object
+// verified instead of hashing it again.
+func (s *Store) verifyLFS(ctx context.Context, oid string, size int64) (LFSObject, error) {
+	ch := s.verifies.DoChan(oid+":"+strconv.FormatInt(size, 10), func() (any, error) {
+		return s.lfs.Verify(context.WithoutCancel(ctx), oid, size)
+	})
+	timer := time.NewTimer(s.opts.VerifyWait)
+	defer timer.Stop()
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return LFSObject{}, res.Err
+		}
+		return res.Val.(LFSObject), nil
+	case <-timer.C:
+		return LFSObject{}, fmt.Errorf("%w: %s (%d bytes) was not verified within %s; try again later", errVerifyWait, oid, size, s.opts.VerifyWait)
+	case <-ctx.Done():
+		return LFSObject{}, ctx.Err()
 	}
 }
 

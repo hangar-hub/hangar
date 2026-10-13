@@ -76,7 +76,11 @@ type Options struct {
 	// CompactThreshold is git.compact_threshold: a Commit or push that
 	// leaves more live packs than this enqueues a git.compact Job.
 	CompactThreshold int
-	Log              *slog.Logger
+	// VerifyWait is lfs.verify_wait: how long a Commit or push waits for an
+	// LFS object written through a presigned URL to be verified before it
+	// fails. Zero means 10 minutes.
+	VerifyWait time.Duration
+	Log        *slog.Logger
 	// Now overrides the clock, for tests. Times must have at most
 	// microsecond precision, which both databases store exactly.
 	Now func() time.Time
@@ -94,6 +98,8 @@ type Store struct {
 	now  func() time.Time
 	// fills shares one tree cache build between concurrent readers.
 	fills singleflight.Group
+	// verifies shares one LFS verification between concurrent writers.
+	verifies singleflight.Group
 }
 
 var _ Service = (*Store)(nil)
@@ -114,6 +120,9 @@ func NewStore(opts Options) (*Store, error) {
 	}
 	if opts.CompactThreshold <= 0 {
 		opts.CompactThreshold = 20
+	}
+	if opts.VerifyWait <= 0 {
+		opts.VerifyWait = 10 * time.Minute
 	}
 	log := opts.Log
 	if log == nil {

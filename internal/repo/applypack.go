@@ -188,7 +188,11 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 		obj, ok := stored[p.OID]
 		if !ok && source == SourcePush {
 			// An object written by a presigned PUT may not be verified yet.
-			if v, err := s.lfs.Verify(ctx, p.OID, p.Size); err == nil {
+			v, err := s.verifyLFS(ctx, p.OID, p.Size)
+			if errors.Is(err, errVerifyWait) {
+				return nil, 0, &PolicyError{Message: err.Error()}
+			}
+			if err == nil {
 				obj, ok = v, true
 			}
 		}
