@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
+	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/org"
 )
@@ -297,6 +299,38 @@ func TestOIDCKeycloak(t *testing.T) {
 		require.NoError(t, err)
 		_, err = login("kc-carol", "carol-password-1", uuid.Nil)
 		require.ErrorIs(t, err, auth.ErrDisabled)
+	})
+
+	t.Run("through the HTTP handler", func(t *testing.T) {
+		s, _ := authtest.NewService(t, dbtest.SQLite(t), authtest.RealOptions{Config: func(c *config.Config) {
+			c.OIDC.Providers = []config.OIDCProvider{{ID: "kc", Issuer: kc.issuer(), ClientID: "hangar", ClientSecret: kcClientSecret,
+				Scopes: []string{"openid", "profile", "email"}, AutoCreateUsers: true}}
+		}})
+		h := httpx.Authenticate(s, auth.WriteAuthError("http://hangar.test"))(s.Handler())
+		serve := func(target string) *httptest.ResponseRecorder {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			h.ServeHTTP(rec, req.WithContext(httpx.WithInfo(req.Context(), "r")))
+			return rec
+		}
+		start := serve("http://hangar.test/auth/oidc/kc?redirect=/bob/model")
+		require.Equal(t, http.StatusFound, start.Code)
+		state, code := browserLogin(t, start.Header().Get("Location"), "kc-bob", "bob-password-12")
+		done := serve("http://hangar.test/auth/oidc/kc/callback?" + url.Values{"state": {state}, "code": {code}}.Encode())
+		require.Equal(t, http.StatusFound, done.Code)
+		require.Equal(t, "/bob/model", done.Header().Get("Location"))
+		var session *http.Cookie
+		for _, c := range done.Result().Cookies() {
+			if c.Name == auth.SessionCookie {
+				session = c
+			}
+		}
+		require.NotNil(t, session, "signing in sets the session cookie")
+		req := httptest.NewRequest(http.MethodGet, "http://hangar.test/api/hangar/v1/me", nil)
+		req.AddCookie(session)
+		p, err := s.Authenticate(req)
+		require.NoError(t, err)
+		require.Equal(t, "kc-bob", p.Username)
 	})
 
 	t.Run("no auto-create", func(t *testing.T) {
