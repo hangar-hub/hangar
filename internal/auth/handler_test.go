@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -178,4 +179,27 @@ func TestSmallEdges(t *testing.T) {
 	require.True(t, auth.LooksLikeToken("hgr_"+strings.Repeat("a", 40)))
 	require.False(t, auth.LooksLikeToken("hgr_"+strings.Repeat("-", 40)))
 	require.False(t, auth.LooksLikeToken("hgr_x"))
+}
+
+func TestCleanup(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		u := mustUser(t, s, "alice", false)
+		_, _, err := s.Sessions.Create(ctx, u.ID, "", "")
+		require.NoError(t, err)
+		_, err = s.Device.Start(ctx, "")
+		require.NoError(t, err)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "10.0.0.1"})
+		require.ErrorIs(t, err, auth.ErrLoginFailed)
+		res, err := s.Cleanup(ctx)
+		require.NoError(t, err)
+		require.Equal(t, auth.CleanupResult{}, res, "nothing has expired yet")
+		clock.Advance(s.Config().Security.SessionTTL + 48*time.Hour)
+		res, err = s.Cleanup(ctx)
+		require.NoError(t, err)
+		require.Equal(t, auth.CleanupResult{Sessions: 1, DeviceCodes: 1, LoginAttempts: 2}, res)
+		require.Equal(t, time.Hour, auth.CleanupInterval())
+	})
 }

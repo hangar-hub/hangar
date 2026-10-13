@@ -87,10 +87,12 @@ type env struct {
 	srv  *httptest.Server
 }
 
-func newEnv(t *testing.T, d *db.DB) *env {
+func newEnv(t *testing.T, d *db.DB) *env { return newEnvWith(t, d, nil) }
+
+func newEnvWith(t *testing.T, d *db.DB, upstreams auth.UpstreamLookup) *env {
 	t.Helper()
 	rec := audit.NewDB(d, nil)
-	svc, orgs := authtest.NewService(t, d, authtest.RealOptions{Audit: rec, Config: func(c *config.Config) {
+	svc, orgs := authtest.NewService(t, d, authtest.RealOptions{Audit: rec, Upstreams: upstreams, Config: func(c *config.Config) {
 		c.Server.PublicURL = "http://hangar.test"
 		c.OIDC.Providers = []config.OIDCProvider{{ID: "sso", Name: "Company SSO", Issuer: "https://sso.example.com", ClientID: "hangar"}}
 	}})
@@ -548,4 +550,85 @@ func TestAuthHandlerErrors(t *testing.T) {
 	alice.do(http.MethodDelete, "/auth/oidc/sso/link", nil, http.StatusNotFound, nil)
 	anon.do(http.MethodPost, "/auth/reset/bogus", map[string]any{"password": password}, http.StatusNotFound, nil)
 	anon.do(http.MethodPost, "/auth/invite/bogus", map[string]any{"username": "x1", "password": password}, http.StatusNotFound, nil)
+}
+
+type upstreamLookup map[string]uuid.UUID
+
+func (u upstreamLookup) UpstreamID(_ context.Context, name string) (uuid.UUID, error) {
+	if id, ok := u[name]; ok {
+		return id, nil
+	}
+	return uuid.Nil, fmt.Errorf("%w: upstream %s", auth.ErrNotFound, name)
+}
+
+// TestEveryW5ActionIsAudited drives every identity and access action in
+// docs/spec/05-auth.md "Audit events" through the API and checks the audit
+// log holds each one. Repo, Upstream and webhook events belong to the
+// workstreams that own those actions.
+func TestEveryW5ActionIsAudited(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		hf := db.NewID()
+		_, err := d.NewInsert().Model(&db.Upstream{ID: hf, Name: "huggingface", DisplayName: "Hugging Face", BaseURL: "https://huggingface.co",
+			Kind: "hf", Enabled: true, Source: "config"}).Exec(ctx)
+		require.NoError(t, err)
+		e := newEnvWith(t, d, upstreamLookup{"huggingface": hf})
+		e.user("root", true)
+		bob := e.user("bob", false)
+		root, b := e.login("root"), e.login("bob")
+		e.anon().do(http.MethodPost, "/api/hangar/v1/auth/login", map[string]string{"username": "bob", "password": "wrong-password-1"}, http.StatusUnauthorized, nil)
+
+		var tok gen.TokenCreated
+		b.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "t", "scope": "read"}, http.StatusCreated, &tok)
+		b.do(http.MethodDelete, "/api/hangar/v1/me/tokens/"+tok.Id.String(), nil, http.StatusNoContent, nil)
+		var u gen.AdminUser
+		root.do(http.MethodPost, "/api/hangar/v1/admin/users", map[string]any{"username": "carol"}, http.StatusCreated, &u)
+		root.do(http.MethodPatch, "/api/hangar/v1/admin/users/"+u.Id.String(), map[string]any{"disabled": true, "is_admin": true}, http.StatusOK, nil)
+		root.do(http.MethodPatch, "/api/hangar/v1/admin/users/"+u.Id.String(), map[string]any{"disabled": false}, http.StatusOK, nil)
+		root.do(http.MethodPost, "/api/hangar/v1/admin/users/"+u.Id.String()+"/reset-link", nil, http.StatusCreated, nil)
+		root.do(http.MethodPost, "/api/hangar/v1/admin/invites", map[string]any{}, http.StatusCreated, nil)
+		b.do(http.MethodPost, "/api/hangar/v1/orgs", map[string]any{"name": "acme"}, http.StatusCreated, nil)
+		b.do(http.MethodPut, "/api/hangar/v1/orgs/acme/members/carol", map[string]any{"role": "read"}, http.StatusOK, nil)
+		b.do(http.MethodDelete, "/api/hangar/v1/orgs/acme/members/carol", nil, http.StatusNoContent, nil)
+		b.do(http.MethodDelete, "/api/hangar/v1/orgs/acme", nil, http.StatusNoContent, nil)
+		insertRepo(t, d, bob.NamespaceID, "gated", model.VisibilityPublic, map[string]any{"mode": "manual"})
+		b.do(http.MethodPut, "/api/hangar/v1/repos/models/bob/gated/collaborators", map[string]any{"items": []map[string]any{{"username": "carol", "role": "read"}}}, http.StatusOK, nil)
+		var ar gen.AccessRequest
+		root.do(http.MethodPost, "/api/hangar/v1/repos/models/bob/gated/access-requests", map[string]any{}, http.StatusCreated, &ar)
+		b.do(http.MethodPatch, "/api/hangar/v1/repos/models/bob/gated/access-requests/"+ar.Id.String(), map[string]any{"status": "accepted"}, http.StatusOK, nil)
+		root.do(http.MethodPatch, "/api/hangar/v1/admin/settings", map[string]any{"anonymous_read": true}, http.StatusOK, nil)
+		b.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q"}, http.StatusCreated, nil)
+		b.do(http.MethodPut, "/api/hangar/v1/me/upstream-tokens/huggingface", map[string]any{"token": "hf_secret"}, http.StatusOK, nil)
+		var st gen.UpstreamTokenStatus
+		b.do(http.MethodGet, "/api/hangar/v1/me/upstream-tokens/huggingface", nil, http.StatusOK, &st)
+		require.True(t, st.Saved)
+		b.do(http.MethodDelete, "/api/hangar/v1/me/upstream-tokens/huggingface", nil, http.StatusNoContent, nil)
+		_, err = d.NewInsert().Model(&db.Identity{ID: db.NewID(), UserID: bob.ID, Provider: "sso", Subject: "b", Claims: map[string]any{}}).Exec(ctx)
+		require.NoError(t, err)
+		b.do(http.MethodDelete, "/auth/oidc/sso/link", nil, http.StatusNoContent, nil)
+		b.do(http.MethodPost, "/api/hangar/v1/auth/logout", nil, http.StatusNoContent, nil)
+
+		got := map[audit.Action]bool{}
+		cursor := ""
+		for {
+			list, next, err := audit.NewDB(d, nil).List(ctx, audit.Filter{Limit: 500, Cursor: cursor})
+			require.NoError(t, err)
+			for _, ev := range list {
+				got[ev.Action] = true
+				require.NotContains(t, fmt.Sprint(ev.Data), "hf_secret")
+			}
+			if next == "" {
+				break
+			}
+			cursor = next
+		}
+		for _, a := range []audit.Action{
+			audit.LoginSucceeded, audit.LoginFailed, audit.Logout, audit.TokenCreated, audit.TokenRevoked, audit.UserCreated,
+			audit.UserDisabled, audit.UserEnabled, audit.UserAdminChanged, audit.UserPasswordReset, audit.InviteCreated,
+			audit.OrgCreated, audit.OrgDeleted, audit.MembershipChanged, audit.MembershipRemoved, audit.CollaboratorsChanged,
+			audit.AccessRequestDecided, audit.SettingsChanged, audit.OllamaKeyChanged, audit.UpstreamTokenChanged, audit.IdentityLinked,
+		} {
+			require.True(t, got[a], "no %s event", a)
+		}
+	})
 }
