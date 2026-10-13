@@ -18,6 +18,9 @@ GOTESTFLAGS ?= -race -count=1
 # Postgres tests run with testcontainers (Docker). Set
 # HANGAR_TEST_POSTGRES_DSN to use an existing server instead.
 export HANGAR_TEST_POSTGRES ?= 1
+# S3 Blob store tests run against MinIO with testcontainers (Docker). Set
+# HANGAR_TEST_S3_ENDPOINT to use an existing S3-compatible server instead.
+export HANGAR_TEST_MINIO ?= 1
 
 .PHONY: help
 help: ## Show this help

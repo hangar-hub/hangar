@@ -81,6 +81,27 @@ func PutVerified(ctx context.Context, s Store, key string, r io.Reader, size int
 // completes the upload only if the size and SHA-256 match. Backends call it
 // from their own PutVerified when the object is too large to check first.
 func PutVerifiedMultipart(ctx context.Context, s Store, key string, r io.Reader, size int64, sum []byte) error {
+	if len(sum) != sha256.Size {
+		return fmt.Errorf("put verified %s: want a %d-byte SHA-256, got %d bytes", key, sha256.Size, len(sum))
+	}
+	return putMultipart(ctx, s, key, r, size, sum)
+}
+
+// PutMultipart streams exactly size bytes from r into key through a
+// multipart upload in PartSize(size) parts, holding no more than one part's
+// read buffer in memory. The object becomes visible only if r yields
+// exactly size bytes. Backends use it for Puts too large for one request.
+func PutMultipart(ctx context.Context, s Store, key string, r io.Reader, size int64) error {
+	return putMultipart(ctx, s, key, r, size, nil)
+}
+
+func putMultipart(ctx context.Context, s Store, key string, r io.Reader, size int64, sum []byte) error {
+	if size < 0 {
+		return fmt.Errorf("put %s: the size must be known", key)
+	}
+	if size > MaxObjectSize {
+		return ErrTooLarge
+	}
 	if err := ValidateKey(key); err != nil {
 		return err
 	}
@@ -88,7 +109,7 @@ func PutVerifiedMultipart(ctx context.Context, s Store, key string, r io.Reader,
 		if err := expectEOF(r); err != nil {
 			return err
 		}
-		if empty := sha256.Sum256(nil); !bytes.Equal(empty[:], sum) {
+		if empty := sha256.Sum256(nil); sum != nil && !bytes.Equal(empty[:], sum) {
 			return fmt.Errorf("%w: got %s, want %s", ErrChecksumMismatch, hex.EncodeToString(empty[:]), hex.EncodeToString(sum))
 		}
 		return s.Put(ctx, key, bytes.NewReader(nil), 0)
@@ -127,7 +148,7 @@ func PutVerifiedMultipart(ctx context.Context, s Store, key string, r io.Reader,
 	if err := expectEOF(src); err != nil {
 		return abort(err)
 	}
-	if !bytes.Equal(h.Sum(nil), sum) {
+	if sum != nil && !bytes.Equal(h.Sum(nil), sum) {
 		return abort(fmt.Errorf("%w: got %s, want %s", ErrChecksumMismatch, hex.EncodeToString(h.Sum(nil)), hex.EncodeToString(sum)))
 	}
 	if err := s.CompleteMultipart(ctx, key, id, parts); err != nil {
