@@ -33,7 +33,7 @@ def upload_file_code(repo: str, path: Path, name: str, **kwargs) -> str:
     return (
         "from huggingface_hub import HfApi\n"
         f"r = HfApi().upload_file(path_or_fileobj={str(path)!r}, path_in_repo={name!r}, repo_id={repo!r}{extra})\n"
-        "print(r)\n"
+        "print(r.pr_url or r.commit_url)\n"
     )
 
 
@@ -126,7 +126,7 @@ def test_create_pr(server, client, tmp_path):
     src = tmp_path / "src" / "adapter.bin"
     sha = write_random(src, 2 * MiB, 21)
     out = client.run(upload_file_code(repo, src, "adapter.bin", create_pr=True)).stdout
-    assert "/discussions/1" in out or "refs/pr/1" in out, out
+    assert out.strip().endswith("/discussions/1"), out
     assert_stored(server, repo, "adapter.bin", sha, tmp_path, revision="refs/pr/1")
 
 
@@ -196,12 +196,12 @@ def test_token_expiry_during_a_long_upload(start_server, tmp_path):
     client = Client(srv, tmp_path / "hf-home")
     repo = new_repo(srv)
     src = tmp_path / "src" / "slow.bin"
-    sha = write_random(src, 6 * MiB, 51)
+    sha = write_random(src, 10 * MiB, 51)
     started = time.monotonic()
     client.run(upload_file_code(repo, src, "slow.bin"), timeout=900)
     took = time.monotonic() - started
     stats = srv.stats()
-    assert took > 80, f"the upload took {took:.0f} s, not long enough to outlive two tokens"
+    assert took > 100, f"the upload took {took:.0f} s, not long enough to outlive several tokens"
     assert stats["token_requests"] >= 3, stats
     assert stats["cas_401"] == 0, stats
     assert_stored(srv, repo, "slow.bin", sha, tmp_path)
@@ -221,8 +221,11 @@ def test_v2_shard_heartbeats_behind_a_proxy_with_30s_idle_timeout(start_server, 
     took = time.monotonic() - started
     stats = srv.stats()
     assert took > 45, took
+    # One /v2/shards request, never retried and never cut off: a dropped
+    # stream would make hf_xet retry it. The proxy may still close idle
+    # pooled connections, which is normal.
     assert stats["shard_posts_v2"] == 1 and stats["shard_posts_v1"] == 0, stats
-    assert stats["proxy_dropped"] == 0, stats
+    assert stats["shards_cancelled"] == 0, stats
     assert_stored(srv, repo, "proxied.bin", sha, tmp_path)
 
 
@@ -253,14 +256,21 @@ def test_reject_mode(start_server, tmp_path):
                           cache_dir=str(tmp_path / "dl"))
     assert sha256_file(Path(got)) == small_sha
 
-    # Larger files need Xet, which is refused with the way out.
+    # Larger files need Xet, which is refused at the token request. hf_xet
+    # fetches the token itself and reports only the status and URL, so the
+    # X-Error-Message with the way out is not shown to the user (a known
+    # gap for the docs to cover).
     big = tmp_path / "src" / "big.bin"
     big_sha = write_random(big, 12 * MiB, 82)
     p = client.run(upload_file_code(repo, big, "big.bin"), check=False)
     assert p.returncode != 0
-    assert "HF_HUB_DISABLE_XET=1" in p.stdout + p.stderr
+    assert "400 Bad Request" in p.stderr and "/xet-write-token/" in p.stderr, p.stderr[-2000:]
     assert not api.file_exists(repo, "big.bin")
     assert srv.stats()["xorb_posts"] == 0
+    r = requests.get(f"{srv.endpoint}/api/models/{repo}/xet-write-token/main",
+                     headers={"Authorization": f"Bearer {srv.tokens['alice']}"}, timeout=10)
+    assert r.status_code == 400
+    assert "HF_HUB_DISABLE_XET=1" in r.headers["X-Error-Message"]
 
     # With HF_HUB_DISABLE_XET=1 it uploads over LFS.
     lfs_client = Client(srv, tmp_path / "hf-home-lfs", env={"HF_HUB_DISABLE_XET": "1"})

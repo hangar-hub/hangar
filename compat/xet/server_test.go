@@ -88,6 +88,9 @@ type stats struct {
 	CAS401        atomic.Int64
 	CAS403        atomic.Int64
 	ShardsActive  atomic.Int64
+	// ShardsCancelled counts shard uploads whose client went away
+	// before the result, such as a connection a proxy dropped.
+	ShardsCancelled atomic.Int64
 }
 
 func (s *stats) snapshot(proxyDropped int64) map[string]int64 {
@@ -96,7 +99,8 @@ func (s *stats) snapshot(proxyDropped int64) map[string]int64 {
 		"xorbs_inserted": s.XorbsInserted.Load(), "shard_posts_v1": s.ShardPostsV1.Load(),
 		"shard_posts_v2": s.ShardPostsV2.Load(), "chunk_queries": s.ChunkQueries.Load(),
 		"telemetry": s.Telemetry.Load(), "cas_401": s.CAS401.Load(), "cas_403": s.CAS403.Load(),
-		"shards_active": s.ShardsActive.Load(), "proxy_dropped": proxyDropped,
+		"shards_active": s.ShardsActive.Load(), "shards_cancelled": s.ShardsCancelled.Load(),
+		"proxy_dropped": proxyDropped,
 	}
 }
 
@@ -127,6 +131,11 @@ func (c *counting) AcceptShard(ctx context.Context, cl *xet.Claims, r io.Reader,
 	if err := c.hold.wait(ctx); err != nil {
 		return nil, err
 	}
+	defer func() {
+		if ctx.Err() != nil {
+			c.st.ShardsCancelled.Add(1)
+		}
+	}()
 	return c.Ingestor.AcceptShard(ctx, cl, r, size, func(e xet.ShardEvent) {
 		if events != nil {
 			events(e)
