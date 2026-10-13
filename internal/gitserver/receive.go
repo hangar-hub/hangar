@@ -158,7 +158,7 @@ func (s *Server) receivePack(w http.ResponseWriter, r *http.Request, rp repoPath
 	defer q.remove(s, ctx)
 
 	st := &pushStorer{Storage: q.storage(), memoryRefs: &memoryRefs{refs: refs.pushRefs()}}
-	defer func() { _ = st.Storage.Close() }()
+	defer func() { _ = st.Close() }()
 	hook := &pushHook{s: s, rec: rec, q: q, st: st, principal: httpx.Principal(ctx), outcome: outcomeOK}
 
 	h := w.Header()
@@ -221,7 +221,7 @@ func (s *Server) newQuarantine(viewDir string) (*quarantine, error) {
 	}
 	viewObjects := absPath(filepath.Join(viewDir, "objects"))
 	alternates := []string{viewObjects}
-	if b, err := os.ReadFile(filepath.Join(viewObjects, "info", "alternates")); err == nil {
+	if b, err := os.ReadFile(filepath.Join(viewObjects, "info", "alternates")); err == nil { //nolint:gosec // the view directory comes from repo.Service, not the client.
 		for _, line := range strings.Split(string(b), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
@@ -233,6 +233,7 @@ func (s *Server) newQuarantine(viewDir string) (*quarantine, error) {
 			alternates = append(alternates, absPath(line))
 		}
 	}
+	//nolint:gosec // dir is a private temporary directory Hangar just created.
 	if err := os.WriteFile(filepath.Join(dir, "objects", "info", "alternates"), []byte(strings.Join(alternates, "\n")+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("create push quarantine: %w", err)
@@ -324,7 +325,7 @@ type pushStorer struct {
 func (p *pushStorer) HasEncodedObject(h plumbing.Hash) error {
 	err := p.Storage.HasEncodedObject(h)
 	if errors.Is(err, plumbing.ErrObjectNotFound) {
-		if _, err := p.Storage.EncodedObject(plumbing.AnyObject, h); err == nil {
+		if _, err := p.EncodedObject(plumbing.AnyObject, h); err == nil {
 			return nil
 		}
 	}
@@ -466,7 +467,7 @@ func (h *pushHook) check(ctx context.Context, cmds []*packp.Command) error {
 		AllowForce: h.s.cfg.AllowForcePush || h.s.canForcePush(ctx, h.rec),
 	}
 	if packPath != "" {
-		f, err := os.Open(packPath)
+		f, err := os.Open(packPath) //nolint:gosec // a pack go-git wrote into the push quarantine.
 		if err != nil {
 			return err
 		}

@@ -17,6 +17,7 @@ import (
 )
 
 func TestCloneProtocolsAndShallow(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	want := f.resolve(t, publicID, "main")
 	for _, proto := range []string{"0", "1", "2"} {
@@ -36,6 +37,7 @@ func TestCloneProtocolsAndShallow(t *testing.T) {
 }
 
 func TestPartialCloneFilter(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	dir := f.clone(t, publicID, "", "--filter=blob:none")
 	require.Equal(t, "true", f.git.Must(t, dir, "config", "remote.origin.promisor"))
@@ -43,6 +45,7 @@ func TestPartialCloneFilter(t *testing.T) {
 }
 
 func TestPushFetchAndPull(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	a := f.clone(t, publicID, tokAlice)
 	b := f.clone(t, publicID, tokAlice)
@@ -69,6 +72,7 @@ func TestPushFetchAndPull(t *testing.T) {
 }
 
 func TestPushBranchesAndTags(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	dir := f.clone(t, publicID, tokAlice)
 	f.git.Must(t, dir, "checkout", "-q", "-b", "feature")
@@ -99,6 +103,7 @@ func TestPushBranchesAndTags(t *testing.T) {
 }
 
 func TestPushPolicy(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 	dir := f.clone(t, publicID, tokCarol)
@@ -136,6 +141,7 @@ func TestPushPolicy(t *testing.T) {
 }
 
 func TestForcePushAllowedByConfig(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, withConfig(func(c *gitserverConfig) { c.AllowForcePush = true }))
 	dir := f.clone(t, publicID, tokCarol)
 	f.git.Must(t, dir, "commit", "-q", "--amend", "-m", "rewritten")
@@ -144,6 +150,7 @@ func TestForcePushAllowedByConfig(t *testing.T) {
 }
 
 func TestPushToMirrorRefused(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	dir := f.clone(t, mirrorID, tokAlice)
 	f.commit(t, dir, "x.txt", "x", "x")
@@ -153,6 +160,7 @@ func TestPushToMirrorRefused(t *testing.T) {
 }
 
 func TestPushRefusesLargeNonLFSBlob(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	dir := f.clone(t, publicID, tokAlice)
 	big := make([]byte, 2<<20)
@@ -167,6 +175,7 @@ func TestPushRefusesLargeNonLFSBlob(t *testing.T) {
 }
 
 func TestPushRefusesPackOverLimit(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, withConfig(func(c *gitserverConfig) { c.MaxPackSize = 64 << 10; c.MaxBlobSize = 0 }))
 	dir := f.clone(t, publicID, tokAlice)
 	big := make([]byte, 256<<10)
@@ -187,6 +196,7 @@ func TestPushRefusesPackOverLimit(t *testing.T) {
 }
 
 func TestPushAuth(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 	dir := f.clone(t, publicID, "")
@@ -256,6 +266,7 @@ func readAll(t *testing.T, r io.Reader) string {
 }
 
 func TestSmartHTTPEdgeCases(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	// Dumb HTTP is not served.
 	resp := f.get(t, "/alice/tiny.git/info/refs", "")

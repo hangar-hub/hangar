@@ -29,7 +29,7 @@ type viewRefs struct {
 // packed ones as in git.
 func readViewRefs(dir string) (*viewRefs, error) {
 	v := &viewRefs{refs: map[string]string{}}
-	head, err := os.ReadFile(filepath.Join(dir, "HEAD"))
+	head, err := os.ReadFile(filepath.Join(dir, "HEAD")) //nolint:gosec // the view directory comes from repo.Service, not the client.
 	if err != nil {
 		return nil, fmt.Errorf("read HEAD: %w", err)
 	}
@@ -40,6 +40,7 @@ func readViewRefs(dir string) (*viewRefs, error) {
 		return nil, err
 	}
 	root := filepath.Join(dir, "refs")
+	//nolint:gosec // the view directory comes from repo.Service, not the client.
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -71,7 +72,7 @@ func readViewRefs(dir string) (*viewRefs, error) {
 }
 
 func readPackedRefs(path string, into map[string]string) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // the view directory comes from repo.Service, not the client.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil

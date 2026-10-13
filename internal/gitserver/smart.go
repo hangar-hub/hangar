@@ -353,7 +353,7 @@ func (s *Server) runGit(ctx context.Context, dir, proto string, stdin io.Reader,
 	}
 	full = append(full, args...)
 	full = append(full, dir)
-	cmd := exec.CommandContext(ctx, s.cfg.GitBinary, full...)
+	cmd := exec.CommandContext(ctx, s.cfg.GitBinary, full...) //nolint:gosec // fixed arguments; dir comes from repo.Service.
 	cmd.Env = s.gitEnv(proto)
 	cmd.Dir = dir
 	cmd.Stdin = stdin
