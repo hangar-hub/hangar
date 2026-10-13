@@ -135,6 +135,7 @@ func newEnv(t *testing.T, d *db.DB, tweak ...func(*repo.Options)) *env {
 
 // forEach runs fn against SQLite and, when enabled, Postgres.
 func forEach(t *testing.T, fn func(t *testing.T, e *env), tweak ...func(*repo.Options)) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) { fn(t, newEnv(t, d, tweak...)) })
 }
 

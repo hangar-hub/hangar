@@ -51,3 +51,28 @@ func TestRealServiceRoundTrip(t *testing.T) {
 		require.Equal(t, bob.UserID, ns.UserID)
 	})
 }
+
+func TestFakeLFSUploadRepo(t *testing.T) {
+	ctx := context.Background()
+	f := repotest.NewFake(t)
+	repoUUID := uuid.New()
+	u, err := f.LFS.CreateUpload(ctx, repo.UploadParams{OID: strings.Repeat("a", 64), Size: 1, RepoUUID: repoUUID})
+	require.NoError(t, err)
+	got, err := f.LFS.UploadRepo(ctx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, repoUUID, got)
+	_, err = f.LFS.UploadRepo(ctx, uuid.New())
+	require.ErrorIs(t, err, repo.ErrNotFound)
+
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "m"}
+	alice := model.Principal{Kind: model.PrincipalUser, UserID: uuid.New(), NamespaceID: uuid.New(), Username: "alice"}
+	_, err = f.Create(ctx, repo.CreateParams{ID: id, Actor: alice})
+	require.NoError(t, err)
+	require.NoError(t, f.SetMirrorState(ctx, id, true))
+	r, err := f.Get(ctx, id)
+	require.NoError(t, err)
+	require.True(t, r.Mirror)
+	n, err := f.CountByNamespace(ctx, alice.NamespaceID, alice)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+}
