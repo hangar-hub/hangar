@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { AdminSettingsPage } from "@/features/admin/AdminSettingsPage";
 
 export const Route = createFileRoute("/admin/settings")({
-  component: () => <PageShell title="Instance settings" />,
+  component: () => <AdminSettingsPage />,
 });

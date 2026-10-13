@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RepoPageShell } from "@/pages/repo";
+import { RepoSettingsPage } from "@/features/repos/RepoSettingsPage";
 
 export const Route = createFileRoute("/datasets/$ns/$name/settings")({
   component: Page,
@@ -7,5 +7,5 @@ export const Route = createFileRoute("/datasets/$ns/$name/settings")({
 
 function Page() {
   const { ns, name } = Route.useParams();
-  return <RepoPageShell kind="dataset" ns={ns} name={name} page="Settings" />;
+  return <RepoSettingsPage kind="dataset" ns={ns} name={name} />;
 }

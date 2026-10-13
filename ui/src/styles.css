@@ -4,24 +4,213 @@
    or the system preference. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Hangar's palette: a cool steel neutral and one accent, the amber of
+ * hangar floor markings. Semantic tokens switch with the theme, so
+ * components use `bg-surface`, `text-ink`, `border-line` and so on and
+ * never pick light or dark values themselves.
+ */
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --color-accent-50: oklch(0.97 0.02 255);
-  --color-accent-500: oklch(0.6 0.19 255);
-  --color-accent-600: oklch(0.54 0.2 258);
-  --color-accent-700: oklch(0.47 0.19 260);
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --color-steel-50: #f5f7f9;
+  --color-steel-100: #eceff3;
+  --color-steel-200: #dde2e8;
+  --color-steel-300: #c3cad3;
+  --color-steel-400: #8f99a6;
+  --color-steel-500: #67717e;
+  --color-steel-600: #4d5662;
+  --color-steel-700: #39414b;
+  --color-steel-800: #252b33;
+  --color-steel-900: #181c22;
+  --color-steel-950: #11151a;
+
+  --color-amber-300: #f5c46b;
+  --color-amber-400: #eeac3a;
+  --color-amber-500: #e09a1f;
+  --color-amber-700: #8a5300;
+  --color-amber-800: #6e4200;
+
+  --color-bg: var(--hg-bg);
+  --color-surface: var(--hg-surface);
+  --color-raised: var(--hg-raised);
+  --color-ink: var(--hg-ink);
+  --color-muted: var(--hg-muted);
+  --color-line: var(--hg-line);
+  --color-line-strong: var(--hg-line-strong);
+  --color-accent: var(--hg-accent);
+  --color-accent-ink: var(--hg-accent-ink);
+  --color-accent-fill: var(--hg-accent-fill);
+  --color-accent-soft: var(--hg-accent-soft);
+  --color-ok: var(--hg-ok);
+  --color-ok-soft: var(--hg-ok-soft);
+  --color-warn: var(--hg-warn);
+  --color-warn-soft: var(--hg-warn-soft);
+  --color-danger: var(--hg-danger);
+  --color-danger-soft: var(--hg-danger-soft);
+  --color-info: var(--hg-info);
+  --color-info-soft: var(--hg-info-soft);
+
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 }
 
 :root {
   color-scheme: light;
+  --hg-bg: #f5f7f9;
+  --hg-surface: #ffffff;
+  --hg-raised: #eceff3;
+  --hg-ink: #181c22;
+  --hg-muted: #4d5662;
+  --hg-line: #dde2e8;
+  --hg-line-strong: #c3cad3;
+  /* Text-weight accent: 7.1:1 on white. */
+  --hg-accent: #8a5300;
+  /* Filled accent with dark text on it: 9.6:1. */
+  --hg-accent-fill: #eeac3a;
+  --hg-accent-ink: #1d1300;
+  --hg-accent-soft: #fdf1dc;
+  --hg-ok: #17643a;
+  --hg-ok-soft: #e3f3e9;
+  --hg-warn: #7a4a00;
+  --hg-warn-soft: #fdf1dc;
+  --hg-danger: #a3221b;
+  --hg-danger-soft: #fbe6e4;
+  --hg-info: #1d4f91;
+  --hg-info-soft: #e5eefa;
 }
 
 :root.dark {
   color-scheme: dark;
+  --hg-bg: #13171c;
+  --hg-surface: #1a1f25;
+  --hg-raised: #232a32;
+  --hg-ink: #e8ecf0;
+  --hg-muted: #a5afbb;
+  --hg-line: #2e3640;
+  --hg-line-strong: #46505c;
+  --hg-accent: #f5c46b;
+  --hg-accent-fill: #eeac3a;
+  --hg-accent-ink: #1d1300;
+  --hg-accent-soft: #3a2a0c;
+  --hg-ok: #7fd6a2;
+  --hg-ok-soft: #173826;
+  --hg-warn: #f5c46b;
+  --hg-warn-soft: #3a2a0c;
+  --hg-danger: #ff9a92;
+  --hg-danger-soft: #42201d;
+  --hg-info: #9cc3f5;
+  --hg-info-soft: #1b2d45;
+}
+
+html {
+  background: var(--hg-bg);
+  color: var(--hg-ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--hg-bg);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-accent-500);
+  outline: 2px solid var(--hg-accent);
   outline-offset: 2px;
+}
+
+/* Numbers line up in tables and progress readouts. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rendered Markdown: Model cards, dataset cards and discussions. */
+.prose-hangar {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.prose-hangar > * + * {
+  margin-top: 0.9em;
+}
+.prose-hangar h1,
+.prose-hangar h2,
+.prose-hangar h3,
+.prose-hangar h4 {
+  font-weight: 650;
+  line-height: 1.25;
+  margin-top: 1.6em;
+}
+.prose-hangar h1 {
+  font-size: 1.6rem;
+}
+.prose-hangar h2 {
+  font-size: 1.3rem;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--hg-line);
+}
+.prose-hangar h3 {
+  font-size: 1.1rem;
+}
+.prose-hangar a {
+  color: var(--hg-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-hangar ul {
+  list-style: disc;
+  padding-left: 1.4em;
+}
+.prose-hangar ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+.prose-hangar code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--hg-raised);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+}
+.prose-hangar pre {
+  background: var(--hg-raised);
+  padding: 0.8em 1em;
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.prose-hangar pre code {
+  background: none;
+  padding: 0;
+}
+.prose-hangar blockquote {
+  border-left: 3px solid var(--hg-line-strong);
+  padding-left: 1em;
+  color: var(--hg-muted);
+}
+.prose-hangar table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.prose-hangar th,
+.prose-hangar td {
+  border: 1px solid var(--hg-line);
+  padding: 0.35em 0.7em;
+  text-align: left;
+}
+.prose-hangar img {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component's transitions */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component's transitions */
+    transition-duration: 0.01ms !important;
+  }
 }

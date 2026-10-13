@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RepoPageShell } from "@/pages/repo";
+import { ViewerPage } from "@/features/datasets/ViewerPage";
 
 export const Route = createFileRoute("/datasets/$ns/$name/viewer/$config/$split")({
   component: Page,
@@ -7,13 +7,5 @@ export const Route = createFileRoute("/datasets/$ns/$name/viewer/$config/$split"
 
 function Page() {
   const { ns, name, config, split } = Route.useParams();
-  return (
-    <RepoPageShell
-      kind="dataset"
-      ns={ns}
-      name={name}
-      page="Viewer"
-      detail={`${config} / ${split}`}
-    />
-  );
+  return <ViewerPage ns={ns} name={name} config={config} split={split} />;
 }

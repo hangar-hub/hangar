@@ -2,15 +2,30 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ToastProvider } from "./components/ui/toast";
+import { errorStatus } from "./lib/problem";
+import { parseSearch, stringifySearch } from "./lib/search-params";
 import { applyTheme, loadTheme, resolveTheme } from "./lib/theme";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      // Retrying a refusal or a missing Repo only delays the message.
+      retry: (count, err) => count < 1 && ![401, 403, 404].includes(errorStatus(err)),
+    },
+  },
 });
 
-const router = createRouter({ routeTree, context: { queryClient }, defaultPreload: "intent" });
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  defaultPreload: "intent",
+  parseSearch,
+  stringifySearch,
+});
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -18,15 +33,18 @@ declare module "@tanstack/react-router" {
   }
 }
 
-const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-applyTheme(resolveTheme(loadTheme(), prefersDark));
+const media = window.matchMedia("(prefers-color-scheme: dark)");
+applyTheme(resolveTheme(loadTheme(), media.matches));
+media.addEventListener("change", (e) => applyTheme(resolveTheme(loadTheme(), e.matches)));
 
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
       </QueryClientProvider>
     </StrictMode>,
   );

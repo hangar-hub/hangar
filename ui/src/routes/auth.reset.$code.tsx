@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { AccountLinkPage } from "@/features/auth/AccountLinkPage";
 
 export const Route = createFileRoute("/auth/reset/$code")({
-  component: ResetPage,
+  component: Page,
 });
 
-function ResetPage() {
-  return <PageShell title="Reset your password" />;
+function Page() {
+  const { code } = Route.useParams();
+  return <AccountLinkPage mode="reset" code={code} />;
 }

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { OrganisationsPage } from "@/features/settings/OrganisationsPage";
 
 export const Route = createFileRoute("/settings/organisations")({
-  component: () => <PageShell title="Organisations" />,
+  component: () => <OrganisationsPage />,
 });

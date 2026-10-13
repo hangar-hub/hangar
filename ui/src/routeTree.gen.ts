@@ -17,6 +17,7 @@ import { Route as NewRouteImport } from './routes/new'
 import { Route as NewDatasetRouteImport } from './routes/new-dataset'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as NsIndexRouteImport } from './routes/$ns.index'
+import { Route as NsNameRouteImport } from './routes/$ns.$name'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
@@ -43,6 +44,7 @@ import { Route as NsNameSettingsRouteImport } from './routes/$ns.$name.settings'
 import { Route as AuthInviteCodeRouteImport } from './routes/auth.invite.$code'
 import { Route as AuthResetCodeRouteImport } from './routes/auth.reset.$code'
 import { Route as CollectionsNsSlugRouteImport } from './routes/collections.$ns.$slug'
+import { Route as DatasetsNsNameRouteImport } from './routes/datasets.$ns.$name'
 import { Route as NsNameCommitShaRouteImport } from './routes/$ns.$name.commit.$sha'
 import { Route as NsNameCommitsRevRouteImport } from './routes/$ns.$name.commits.$rev'
 import { Route as NsNameDiscussionsIndexRouteImport } from './routes/$ns.$name.discussions.index'
@@ -55,6 +57,7 @@ import { Route as DatasetsNsNameCommitShaRouteImport } from './routes/datasets.$
 import { Route as DatasetsNsNameCommitsRevRouteImport } from './routes/datasets.$ns.$name.commits.$rev'
 import { Route as DatasetsNsNameDiscussionsIndexRouteImport } from './routes/datasets.$ns.$name.discussions.index'
 import { Route as DatasetsNsNameDiscussionsNumRouteImport } from './routes/datasets.$ns.$name.discussions.$num'
+import { Route as DatasetsNsNameViewerIndexRouteImport } from './routes/datasets.$ns.$name.viewer.index'
 import { Route as DatasetsNsNameBlobRevSplatRouteImport } from './routes/datasets.$ns.$name.blob.$rev.$'
 import { Route as DatasetsNsNameTreeRevSplatRouteImport } from './routes/datasets.$ns.$name.tree.$rev.$'
 import { Route as DatasetsNsNameViewerConfigSplitRouteImport } from './routes/datasets.$ns.$name.viewer.$config.$split'
@@ -97,6 +100,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const NsIndexRoute = NsIndexRouteImport.update({
   id: '/$ns/',
   path: '/$ns/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NsNameRoute = NsNameRouteImport.update({
+  id: '/$ns/$name',
+  path: '/$ns/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -205,14 +213,14 @@ const SettingsUpstreamTokensRoute = SettingsUpstreamTokensRouteImport.update({
   getParentRoute: () => SettingsRoute,
 } as any)
 const NsNameIndexRoute = NsNameIndexRouteImport.update({
-  id: '/$ns/$name/',
-  path: '/$ns/$name/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const NsNameSettingsRoute = NsNameSettingsRouteImport.update({
-  id: '/$ns/$name/settings',
-  path: '/$ns/$name/settings',
-  getParentRoute: () => rootRouteImport,
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const AuthInviteCodeRoute = AuthInviteCodeRouteImport.update({
   id: '/auth/invite/$code',
@@ -229,86 +237,97 @@ const CollectionsNsSlugRoute = CollectionsNsSlugRouteImport.update({
   path: '/collections/$ns/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NsNameCommitShaRoute = NsNameCommitShaRouteImport.update({
-  id: '/$ns/$name/commit/$sha',
-  path: '/$ns/$name/commit/$sha',
+const DatasetsNsNameRoute = DatasetsNsNameRouteImport.update({
+  id: '/datasets/$ns/$name',
+  path: '/datasets/$ns/$name',
   getParentRoute: () => rootRouteImport,
+} as any)
+const NsNameCommitShaRoute = NsNameCommitShaRouteImport.update({
+  id: '/commit/$sha',
+  path: '/commit/$sha',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const NsNameCommitsRevRoute = NsNameCommitsRevRouteImport.update({
-  id: '/$ns/$name/commits/$rev',
-  path: '/$ns/$name/commits/$rev',
-  getParentRoute: () => rootRouteImport,
+  id: '/commits/$rev',
+  path: '/commits/$rev',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const NsNameDiscussionsIndexRoute = NsNameDiscussionsIndexRouteImport.update({
-  id: '/$ns/$name/discussions/',
-  path: '/$ns/$name/discussions/',
-  getParentRoute: () => rootRouteImport,
+  id: '/discussions/',
+  path: '/discussions/',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const NsNameDiscussionsNumRoute = NsNameDiscussionsNumRouteImport.update({
-  id: '/$ns/$name/discussions/$num',
-  path: '/$ns/$name/discussions/$num',
-  getParentRoute: () => rootRouteImport,
+  id: '/discussions/$num',
+  path: '/discussions/$num',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const DatasetsNsNameIndexRoute = DatasetsNsNameIndexRouteImport.update({
-  id: '/datasets/$ns/$name/',
-  path: '/datasets/$ns/$name/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => DatasetsNsNameRoute,
 } as any)
 const DatasetsNsNameSettingsRoute = DatasetsNsNameSettingsRouteImport.update({
-  id: '/datasets/$ns/$name/settings',
-  path: '/datasets/$ns/$name/settings',
-  getParentRoute: () => rootRouteImport,
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DatasetsNsNameRoute,
 } as any)
 const NsNameBlobRevSplatRoute = NsNameBlobRevSplatRouteImport.update({
-  id: '/$ns/$name/blob/$rev/$',
-  path: '/$ns/$name/blob/$rev/$',
-  getParentRoute: () => rootRouteImport,
+  id: '/blob/$rev/$',
+  path: '/blob/$rev/$',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const NsNameTreeRevSplatRoute = NsNameTreeRevSplatRouteImport.update({
-  id: '/$ns/$name/tree/$rev/$',
-  path: '/$ns/$name/tree/$rev/$',
-  getParentRoute: () => rootRouteImport,
+  id: '/tree/$rev/$',
+  path: '/tree/$rev/$',
+  getParentRoute: () => NsNameRoute,
 } as any)
 const DatasetsNsNameCommitShaRoute = DatasetsNsNameCommitShaRouteImport.update({
-  id: '/datasets/$ns/$name/commit/$sha',
-  path: '/datasets/$ns/$name/commit/$sha',
-  getParentRoute: () => rootRouteImport,
+  id: '/commit/$sha',
+  path: '/commit/$sha',
+  getParentRoute: () => DatasetsNsNameRoute,
 } as any)
 const DatasetsNsNameCommitsRevRoute =
   DatasetsNsNameCommitsRevRouteImport.update({
-    id: '/datasets/$ns/$name/commits/$rev',
-    path: '/datasets/$ns/$name/commits/$rev',
-    getParentRoute: () => rootRouteImport,
+    id: '/commits/$rev',
+    path: '/commits/$rev',
+    getParentRoute: () => DatasetsNsNameRoute,
   } as any)
 const DatasetsNsNameDiscussionsIndexRoute =
   DatasetsNsNameDiscussionsIndexRouteImport.update({
-    id: '/datasets/$ns/$name/discussions/',
-    path: '/datasets/$ns/$name/discussions/',
-    getParentRoute: () => rootRouteImport,
+    id: '/discussions/',
+    path: '/discussions/',
+    getParentRoute: () => DatasetsNsNameRoute,
   } as any)
 const DatasetsNsNameDiscussionsNumRoute =
   DatasetsNsNameDiscussionsNumRouteImport.update({
-    id: '/datasets/$ns/$name/discussions/$num',
-    path: '/datasets/$ns/$name/discussions/$num',
-    getParentRoute: () => rootRouteImport,
+    id: '/discussions/$num',
+    path: '/discussions/$num',
+    getParentRoute: () => DatasetsNsNameRoute,
+  } as any)
+const DatasetsNsNameViewerIndexRoute =
+  DatasetsNsNameViewerIndexRouteImport.update({
+    id: '/viewer/',
+    path: '/viewer/',
+    getParentRoute: () => DatasetsNsNameRoute,
   } as any)
 const DatasetsNsNameBlobRevSplatRoute =
   DatasetsNsNameBlobRevSplatRouteImport.update({
-    id: '/datasets/$ns/$name/blob/$rev/$',
-    path: '/datasets/$ns/$name/blob/$rev/$',
-    getParentRoute: () => rootRouteImport,
+    id: '/blob/$rev/$',
+    path: '/blob/$rev/$',
+    getParentRoute: () => DatasetsNsNameRoute,
   } as any)
 const DatasetsNsNameTreeRevSplatRoute =
   DatasetsNsNameTreeRevSplatRouteImport.update({
-    id: '/datasets/$ns/$name/tree/$rev/$',
-    path: '/datasets/$ns/$name/tree/$rev/$',
-    getParentRoute: () => rootRouteImport,
+    id: '/tree/$rev/$',
+    path: '/tree/$rev/$',
+    getParentRoute: () => DatasetsNsNameRoute,
   } as any)
 const DatasetsNsNameViewerConfigSplitRoute =
   DatasetsNsNameViewerConfigSplitRouteImport.update({
-    id: '/datasets/$ns/$name/viewer/$config/$split',
-    path: '/datasets/$ns/$name/viewer/$config/$split',
-    getParentRoute: () => rootRouteImport,
+    id: '/viewer/$config/$split',
+    path: '/viewer/$config/$split',
+    getParentRoute: () => DatasetsNsNameRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -319,6 +338,7 @@ export interface FileRoutesByFullPath {
   '/new': typeof NewRoute
   '/new-dataset': typeof NewDatasetRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/$ns/$name': typeof NsNameRouteWithChildren
   '/admin/audit': typeof AdminAuditRoute
   '/admin/jobs': typeof AdminJobsRoute
   '/admin/organisations': typeof AdminOrganisationsRoute
@@ -345,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/auth/invite/$code': typeof AuthInviteCodeRoute
   '/auth/reset/$code': typeof AuthResetCodeRoute
   '/collections/$ns/$slug': typeof CollectionsNsSlugRoute
+  '/datasets/$ns/$name': typeof DatasetsNsNameRouteWithChildren
   '/$ns/$name/': typeof NsNameIndexRoute
   '/$ns/$name/commit/$sha': typeof NsNameCommitShaRoute
   '/$ns/$name/commits/$rev': typeof NsNameCommitsRevRoute
@@ -358,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/datasets/$ns/$name/commits/$rev': typeof DatasetsNsNameCommitsRevRoute
   '/datasets/$ns/$name/discussions/$num': typeof DatasetsNsNameDiscussionsNumRoute
   '/datasets/$ns/$name/discussions/': typeof DatasetsNsNameDiscussionsIndexRoute
+  '/datasets/$ns/$name/viewer/': typeof DatasetsNsNameViewerIndexRoute
   '/datasets/$ns/$name/blob/$rev/$': typeof DatasetsNsNameBlobRevSplatRoute
   '/datasets/$ns/$name/tree/$rev/$': typeof DatasetsNsNameTreeRevSplatRoute
   '/datasets/$ns/$name/viewer/$config/$split': typeof DatasetsNsNameViewerConfigSplitRoute
@@ -407,6 +429,7 @@ export interface FileRoutesByTo {
   '/datasets/$ns/$name/commits/$rev': typeof DatasetsNsNameCommitsRevRoute
   '/datasets/$ns/$name/discussions/$num': typeof DatasetsNsNameDiscussionsNumRoute
   '/datasets/$ns/$name/discussions': typeof DatasetsNsNameDiscussionsIndexRoute
+  '/datasets/$ns/$name/viewer': typeof DatasetsNsNameViewerIndexRoute
   '/datasets/$ns/$name/blob/$rev/$': typeof DatasetsNsNameBlobRevSplatRoute
   '/datasets/$ns/$name/tree/$rev/$': typeof DatasetsNsNameTreeRevSplatRoute
   '/datasets/$ns/$name/viewer/$config/$split': typeof DatasetsNsNameViewerConfigSplitRoute
@@ -420,6 +443,7 @@ export interface FileRoutesById {
   '/new': typeof NewRoute
   '/new-dataset': typeof NewDatasetRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/$ns/$name': typeof NsNameRouteWithChildren
   '/admin/audit': typeof AdminAuditRoute
   '/admin/jobs': typeof AdminJobsRoute
   '/admin/organisations': typeof AdminOrganisationsRoute
@@ -446,6 +470,7 @@ export interface FileRoutesById {
   '/auth/invite/$code': typeof AuthInviteCodeRoute
   '/auth/reset/$code': typeof AuthResetCodeRoute
   '/collections/$ns/$slug': typeof CollectionsNsSlugRoute
+  '/datasets/$ns/$name': typeof DatasetsNsNameRouteWithChildren
   '/$ns/$name/': typeof NsNameIndexRoute
   '/$ns/$name/commit/$sha': typeof NsNameCommitShaRoute
   '/$ns/$name/commits/$rev': typeof NsNameCommitsRevRoute
@@ -459,6 +484,7 @@ export interface FileRoutesById {
   '/datasets/$ns/$name/commits/$rev': typeof DatasetsNsNameCommitsRevRoute
   '/datasets/$ns/$name/discussions/$num': typeof DatasetsNsNameDiscussionsNumRoute
   '/datasets/$ns/$name/discussions/': typeof DatasetsNsNameDiscussionsIndexRoute
+  '/datasets/$ns/$name/viewer/': typeof DatasetsNsNameViewerIndexRoute
   '/datasets/$ns/$name/blob/$rev/$': typeof DatasetsNsNameBlobRevSplatRoute
   '/datasets/$ns/$name/tree/$rev/$': typeof DatasetsNsNameTreeRevSplatRoute
   '/datasets/$ns/$name/viewer/$config/$split': typeof DatasetsNsNameViewerConfigSplitRoute
@@ -473,6 +499,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/new-dataset'
     | '/settings'
+    | '/$ns/$name'
     | '/admin/audit'
     | '/admin/jobs'
     | '/admin/organisations'
@@ -499,6 +526,7 @@ export interface FileRouteTypes {
     | '/auth/invite/$code'
     | '/auth/reset/$code'
     | '/collections/$ns/$slug'
+    | '/datasets/$ns/$name'
     | '/$ns/$name/'
     | '/$ns/$name/commit/$sha'
     | '/$ns/$name/commits/$rev'
@@ -512,6 +540,7 @@ export interface FileRouteTypes {
     | '/datasets/$ns/$name/commits/$rev'
     | '/datasets/$ns/$name/discussions/$num'
     | '/datasets/$ns/$name/discussions/'
+    | '/datasets/$ns/$name/viewer/'
     | '/datasets/$ns/$name/blob/$rev/$'
     | '/datasets/$ns/$name/tree/$rev/$'
     | '/datasets/$ns/$name/viewer/$config/$split'
@@ -561,6 +590,7 @@ export interface FileRouteTypes {
     | '/datasets/$ns/$name/commits/$rev'
     | '/datasets/$ns/$name/discussions/$num'
     | '/datasets/$ns/$name/discussions'
+    | '/datasets/$ns/$name/viewer'
     | '/datasets/$ns/$name/blob/$rev/$'
     | '/datasets/$ns/$name/tree/$rev/$'
     | '/datasets/$ns/$name/viewer/$config/$split'
@@ -573,6 +603,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/new-dataset'
     | '/settings'
+    | '/$ns/$name'
     | '/admin/audit'
     | '/admin/jobs'
     | '/admin/organisations'
@@ -599,6 +630,7 @@ export interface FileRouteTypes {
     | '/auth/invite/$code'
     | '/auth/reset/$code'
     | '/collections/$ns/$slug'
+    | '/datasets/$ns/$name'
     | '/$ns/$name/'
     | '/$ns/$name/commit/$sha'
     | '/$ns/$name/commits/$rev'
@@ -612,6 +644,7 @@ export interface FileRouteTypes {
     | '/datasets/$ns/$name/commits/$rev'
     | '/datasets/$ns/$name/discussions/$num'
     | '/datasets/$ns/$name/discussions/'
+    | '/datasets/$ns/$name/viewer/'
     | '/datasets/$ns/$name/blob/$rev/$'
     | '/datasets/$ns/$name/tree/$rev/$'
     | '/datasets/$ns/$name/viewer/$config/$split'
@@ -625,29 +658,14 @@ export interface RootRouteChildren {
   NewRoute: typeof NewRoute
   NewDatasetRoute: typeof NewDatasetRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  NsNameRoute: typeof NsNameRouteWithChildren
   AuthLoginRoute: typeof AuthLoginRoute
   NsIndexRoute: typeof NsIndexRoute
   CollectionsIndexRoute: typeof CollectionsIndexRoute
-  NsNameSettingsRoute: typeof NsNameSettingsRoute
   AuthInviteCodeRoute: typeof AuthInviteCodeRoute
   AuthResetCodeRoute: typeof AuthResetCodeRoute
   CollectionsNsSlugRoute: typeof CollectionsNsSlugRoute
-  NsNameIndexRoute: typeof NsNameIndexRoute
-  NsNameCommitShaRoute: typeof NsNameCommitShaRoute
-  NsNameCommitsRevRoute: typeof NsNameCommitsRevRoute
-  NsNameDiscussionsNumRoute: typeof NsNameDiscussionsNumRoute
-  DatasetsNsNameSettingsRoute: typeof DatasetsNsNameSettingsRoute
-  NsNameDiscussionsIndexRoute: typeof NsNameDiscussionsIndexRoute
-  DatasetsNsNameIndexRoute: typeof DatasetsNsNameIndexRoute
-  NsNameBlobRevSplatRoute: typeof NsNameBlobRevSplatRoute
-  NsNameTreeRevSplatRoute: typeof NsNameTreeRevSplatRoute
-  DatasetsNsNameCommitShaRoute: typeof DatasetsNsNameCommitShaRoute
-  DatasetsNsNameCommitsRevRoute: typeof DatasetsNsNameCommitsRevRoute
-  DatasetsNsNameDiscussionsNumRoute: typeof DatasetsNsNameDiscussionsNumRoute
-  DatasetsNsNameDiscussionsIndexRoute: typeof DatasetsNsNameDiscussionsIndexRoute
-  DatasetsNsNameBlobRevSplatRoute: typeof DatasetsNsNameBlobRevSplatRoute
-  DatasetsNsNameTreeRevSplatRoute: typeof DatasetsNsNameTreeRevSplatRoute
-  DatasetsNsNameViewerConfigSplitRoute: typeof DatasetsNsNameViewerConfigSplitRoute
+  DatasetsNsNameRoute: typeof DatasetsNsNameRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -706,6 +724,13 @@ declare module '@tanstack/react-router' {
       path: '/$ns'
       fullPath: '/$ns/'
       preLoaderRoute: typeof NsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$ns/$name': {
+      id: '/$ns/$name'
+      path: '/$ns/$name'
+      fullPath: '/$ns/$name'
+      preLoaderRoute: typeof NsNameRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -857,17 +882,17 @@ declare module '@tanstack/react-router' {
     }
     '/$ns/$name/': {
       id: '/$ns/$name/'
-      path: '/$ns/$name'
+      path: '/'
       fullPath: '/$ns/$name/'
       preLoaderRoute: typeof NsNameIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/$ns/$name/settings': {
       id: '/$ns/$name/settings'
-      path: '/$ns/$name/settings'
+      path: '/settings'
       fullPath: '/$ns/$name/settings'
       preLoaderRoute: typeof NsNameSettingsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/auth/invite/$code': {
       id: '/auth/invite/$code'
@@ -890,110 +915,124 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CollectionsNsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/datasets/$ns/$name': {
+      id: '/datasets/$ns/$name'
+      path: '/datasets/$ns/$name'
+      fullPath: '/datasets/$ns/$name'
+      preLoaderRoute: typeof DatasetsNsNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$ns/$name/commit/$sha': {
       id: '/$ns/$name/commit/$sha'
-      path: '/$ns/$name/commit/$sha'
+      path: '/commit/$sha'
       fullPath: '/$ns/$name/commit/$sha'
       preLoaderRoute: typeof NsNameCommitShaRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/$ns/$name/commits/$rev': {
       id: '/$ns/$name/commits/$rev'
-      path: '/$ns/$name/commits/$rev'
+      path: '/commits/$rev'
       fullPath: '/$ns/$name/commits/$rev'
       preLoaderRoute: typeof NsNameCommitsRevRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/$ns/$name/discussions/': {
       id: '/$ns/$name/discussions/'
-      path: '/$ns/$name/discussions'
+      path: '/discussions'
       fullPath: '/$ns/$name/discussions/'
       preLoaderRoute: typeof NsNameDiscussionsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/$ns/$name/discussions/$num': {
       id: '/$ns/$name/discussions/$num'
-      path: '/$ns/$name/discussions/$num'
+      path: '/discussions/$num'
       fullPath: '/$ns/$name/discussions/$num'
       preLoaderRoute: typeof NsNameDiscussionsNumRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/datasets/$ns/$name/': {
       id: '/datasets/$ns/$name/'
-      path: '/datasets/$ns/$name'
+      path: '/'
       fullPath: '/datasets/$ns/$name/'
       preLoaderRoute: typeof DatasetsNsNameIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/settings': {
       id: '/datasets/$ns/$name/settings'
-      path: '/datasets/$ns/$name/settings'
+      path: '/settings'
       fullPath: '/datasets/$ns/$name/settings'
       preLoaderRoute: typeof DatasetsNsNameSettingsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/$ns/$name/blob/$rev/$': {
       id: '/$ns/$name/blob/$rev/$'
-      path: '/$ns/$name/blob/$rev/$'
+      path: '/blob/$rev/$'
       fullPath: '/$ns/$name/blob/$rev/$'
       preLoaderRoute: typeof NsNameBlobRevSplatRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/$ns/$name/tree/$rev/$': {
       id: '/$ns/$name/tree/$rev/$'
-      path: '/$ns/$name/tree/$rev/$'
+      path: '/tree/$rev/$'
       fullPath: '/$ns/$name/tree/$rev/$'
       preLoaderRoute: typeof NsNameTreeRevSplatRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof NsNameRoute
     }
     '/datasets/$ns/$name/commit/$sha': {
       id: '/datasets/$ns/$name/commit/$sha'
-      path: '/datasets/$ns/$name/commit/$sha'
+      path: '/commit/$sha'
       fullPath: '/datasets/$ns/$name/commit/$sha'
       preLoaderRoute: typeof DatasetsNsNameCommitShaRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/commits/$rev': {
       id: '/datasets/$ns/$name/commits/$rev'
-      path: '/datasets/$ns/$name/commits/$rev'
+      path: '/commits/$rev'
       fullPath: '/datasets/$ns/$name/commits/$rev'
       preLoaderRoute: typeof DatasetsNsNameCommitsRevRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/discussions/': {
       id: '/datasets/$ns/$name/discussions/'
-      path: '/datasets/$ns/$name/discussions'
+      path: '/discussions'
       fullPath: '/datasets/$ns/$name/discussions/'
       preLoaderRoute: typeof DatasetsNsNameDiscussionsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/discussions/$num': {
       id: '/datasets/$ns/$name/discussions/$num'
-      path: '/datasets/$ns/$name/discussions/$num'
+      path: '/discussions/$num'
       fullPath: '/datasets/$ns/$name/discussions/$num'
       preLoaderRoute: typeof DatasetsNsNameDiscussionsNumRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
+    }
+    '/datasets/$ns/$name/viewer/': {
+      id: '/datasets/$ns/$name/viewer/'
+      path: '/viewer'
+      fullPath: '/datasets/$ns/$name/viewer/'
+      preLoaderRoute: typeof DatasetsNsNameViewerIndexRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/blob/$rev/$': {
       id: '/datasets/$ns/$name/blob/$rev/$'
-      path: '/datasets/$ns/$name/blob/$rev/$'
+      path: '/blob/$rev/$'
       fullPath: '/datasets/$ns/$name/blob/$rev/$'
       preLoaderRoute: typeof DatasetsNsNameBlobRevSplatRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/tree/$rev/$': {
       id: '/datasets/$ns/$name/tree/$rev/$'
-      path: '/datasets/$ns/$name/tree/$rev/$'
+      path: '/tree/$rev/$'
       fullPath: '/datasets/$ns/$name/tree/$rev/$'
       preLoaderRoute: typeof DatasetsNsNameTreeRevSplatRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
     '/datasets/$ns/$name/viewer/$config/$split': {
       id: '/datasets/$ns/$name/viewer/$config/$split'
-      path: '/datasets/$ns/$name/viewer/$config/$split'
+      path: '/viewer/$config/$split'
       fullPath: '/datasets/$ns/$name/viewer/$config/$split'
       preLoaderRoute: typeof DatasetsNsNameViewerConfigSplitRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DatasetsNsNameRoute
     }
   }
 }
@@ -1054,6 +1093,61 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
+interface NsNameRouteChildren {
+  NsNameSettingsRoute: typeof NsNameSettingsRoute
+  NsNameIndexRoute: typeof NsNameIndexRoute
+  NsNameCommitShaRoute: typeof NsNameCommitShaRoute
+  NsNameCommitsRevRoute: typeof NsNameCommitsRevRoute
+  NsNameDiscussionsNumRoute: typeof NsNameDiscussionsNumRoute
+  NsNameDiscussionsIndexRoute: typeof NsNameDiscussionsIndexRoute
+  NsNameBlobRevSplatRoute: typeof NsNameBlobRevSplatRoute
+  NsNameTreeRevSplatRoute: typeof NsNameTreeRevSplatRoute
+}
+
+const NsNameRouteChildren: NsNameRouteChildren = {
+  NsNameSettingsRoute: NsNameSettingsRoute,
+  NsNameIndexRoute: NsNameIndexRoute,
+  NsNameCommitShaRoute: NsNameCommitShaRoute,
+  NsNameCommitsRevRoute: NsNameCommitsRevRoute,
+  NsNameDiscussionsNumRoute: NsNameDiscussionsNumRoute,
+  NsNameDiscussionsIndexRoute: NsNameDiscussionsIndexRoute,
+  NsNameBlobRevSplatRoute: NsNameBlobRevSplatRoute,
+  NsNameTreeRevSplatRoute: NsNameTreeRevSplatRoute,
+}
+
+const NsNameRouteWithChildren =
+  NsNameRoute._addFileChildren(NsNameRouteChildren)
+
+interface DatasetsNsNameRouteChildren {
+  DatasetsNsNameSettingsRoute: typeof DatasetsNsNameSettingsRoute
+  DatasetsNsNameIndexRoute: typeof DatasetsNsNameIndexRoute
+  DatasetsNsNameCommitShaRoute: typeof DatasetsNsNameCommitShaRoute
+  DatasetsNsNameCommitsRevRoute: typeof DatasetsNsNameCommitsRevRoute
+  DatasetsNsNameDiscussionsNumRoute: typeof DatasetsNsNameDiscussionsNumRoute
+  DatasetsNsNameDiscussionsIndexRoute: typeof DatasetsNsNameDiscussionsIndexRoute
+  DatasetsNsNameViewerIndexRoute: typeof DatasetsNsNameViewerIndexRoute
+  DatasetsNsNameBlobRevSplatRoute: typeof DatasetsNsNameBlobRevSplatRoute
+  DatasetsNsNameTreeRevSplatRoute: typeof DatasetsNsNameTreeRevSplatRoute
+  DatasetsNsNameViewerConfigSplitRoute: typeof DatasetsNsNameViewerConfigSplitRoute
+}
+
+const DatasetsNsNameRouteChildren: DatasetsNsNameRouteChildren = {
+  DatasetsNsNameSettingsRoute: DatasetsNsNameSettingsRoute,
+  DatasetsNsNameIndexRoute: DatasetsNsNameIndexRoute,
+  DatasetsNsNameCommitShaRoute: DatasetsNsNameCommitShaRoute,
+  DatasetsNsNameCommitsRevRoute: DatasetsNsNameCommitsRevRoute,
+  DatasetsNsNameDiscussionsNumRoute: DatasetsNsNameDiscussionsNumRoute,
+  DatasetsNsNameDiscussionsIndexRoute: DatasetsNsNameDiscussionsIndexRoute,
+  DatasetsNsNameViewerIndexRoute: DatasetsNsNameViewerIndexRoute,
+  DatasetsNsNameBlobRevSplatRoute: DatasetsNsNameBlobRevSplatRoute,
+  DatasetsNsNameTreeRevSplatRoute: DatasetsNsNameTreeRevSplatRoute,
+  DatasetsNsNameViewerConfigSplitRoute: DatasetsNsNameViewerConfigSplitRoute,
+}
+
+const DatasetsNsNameRouteWithChildren = DatasetsNsNameRoute._addFileChildren(
+  DatasetsNsNameRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
@@ -1062,29 +1156,14 @@ const rootRouteChildren: RootRouteChildren = {
   NewRoute: NewRoute,
   NewDatasetRoute: NewDatasetRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  NsNameRoute: NsNameRouteWithChildren,
   AuthLoginRoute: AuthLoginRoute,
   NsIndexRoute: NsIndexRoute,
   CollectionsIndexRoute: CollectionsIndexRoute,
-  NsNameSettingsRoute: NsNameSettingsRoute,
   AuthInviteCodeRoute: AuthInviteCodeRoute,
   AuthResetCodeRoute: AuthResetCodeRoute,
   CollectionsNsSlugRoute: CollectionsNsSlugRoute,
-  NsNameIndexRoute: NsNameIndexRoute,
-  NsNameCommitShaRoute: NsNameCommitShaRoute,
-  NsNameCommitsRevRoute: NsNameCommitsRevRoute,
-  NsNameDiscussionsNumRoute: NsNameDiscussionsNumRoute,
-  DatasetsNsNameSettingsRoute: DatasetsNsNameSettingsRoute,
-  NsNameDiscussionsIndexRoute: NsNameDiscussionsIndexRoute,
-  DatasetsNsNameIndexRoute: DatasetsNsNameIndexRoute,
-  NsNameBlobRevSplatRoute: NsNameBlobRevSplatRoute,
-  NsNameTreeRevSplatRoute: NsNameTreeRevSplatRoute,
-  DatasetsNsNameCommitShaRoute: DatasetsNsNameCommitShaRoute,
-  DatasetsNsNameCommitsRevRoute: DatasetsNsNameCommitsRevRoute,
-  DatasetsNsNameDiscussionsNumRoute: DatasetsNsNameDiscussionsNumRoute,
-  DatasetsNsNameDiscussionsIndexRoute: DatasetsNsNameDiscussionsIndexRoute,
-  DatasetsNsNameBlobRevSplatRoute: DatasetsNsNameBlobRevSplatRoute,
-  DatasetsNsNameTreeRevSplatRoute: DatasetsNsNameTreeRevSplatRoute,
-  DatasetsNsNameViewerConfigSplitRoute: DatasetsNsNameViewerConfigSplitRoute,
+  DatasetsNsNameRoute: DatasetsNsNameRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { AccountLinkPage } from "@/features/auth/AccountLinkPage";
 
 export const Route = createFileRoute("/auth/invite/$code")({
-  component: InvitePage,
+  component: Page,
 });
 
-function InvitePage() {
-  return <PageShell title="Accept your invite" />;
+function Page() {
+  const { code } = Route.useParams();
+  return <AccountLinkPage mode="invite" code={code} />;
 }

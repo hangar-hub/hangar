@@ -1,4 +1,6 @@
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   applyTheme,
   loadTheme,
@@ -14,13 +16,18 @@ const labels: Record<ThemePreference, string> = {
   dark: "Theme: dark",
 };
 
+const icons: Record<ThemePreference, typeof Sun> = { system: Monitor, light: Sun, dark: Moon };
+
 /** Cycles the colour theme between system, light and dark. */
 export function ThemeToggle() {
   const [pref, setPref] = useState<ThemePreference>(() => loadTheme());
+  const Icon = icons[pref];
   return (
-    <button
-      type="button"
-      className="rounded-md px-2 py-1 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={labels[pref]}
+      title={labels[pref]}
       onClick={() => {
         const next = nextTheme(pref);
         saveTheme(next);
@@ -28,7 +35,7 @@ export function ThemeToggle() {
         applyTheme(resolveTheme(next, window.matchMedia("(prefers-color-scheme: dark)").matches));
       }}
     >
-      {labels[pref]}
-    </button>
+      <Icon aria-hidden="true" />
+    </Button>
   );
 }

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { AdminWebhooksPage } from "@/features/admin/AdminWebhooksPage";
 
 export const Route = createFileRoute("/admin/webhooks")({
-  component: () => <PageShell title="Webhooks" />,
+  component: () => <AdminWebhooksPage />,
 });
