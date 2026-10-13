@@ -49,7 +49,7 @@ func TestFakeTokensXorbsAndShards(t *testing.T) {
 	require.Equal(t, "xorb", string(b))
 	_, err = f.PutXorb(ctx, claims, "NOTHEX", bytes.NewReader(nil), 0)
 	require.ErrorIs(t, err, xet.ErrBadXorb)
-	_, err = f.PutXorb(ctx, claims, hash, bytes.NewReader(nil), xet.MaxObjectSize+1)
+	_, err = f.PutXorb(ctx, claims, hash, bytes.NewReader(nil), xet.MaxXorbSize+1)
 	require.ErrorIs(t, err, xet.ErrTooLarge)
 	_, err = f.PutXorb(ctx, &xet.Claims{Scope: xet.ScopeRead}, hash, bytes.NewReader(nil), 0)
 	require.ErrorIs(t, err, xet.ErrScope)
@@ -62,7 +62,7 @@ func TestFakeTokensXorbsAndShards(t *testing.T) {
 	require.Len(t, res.Files, 1)
 	require.Equal(t, []string{xet.EventValidating, xet.EventCommitting, xet.EventResult}, events)
 	require.Equal(t, 1, f.Shards())
-	_, err = f.AcceptShard(ctx, claims, strings.NewReader(""), xet.MaxObjectSize+1, nil)
+	_, err = f.AcceptShard(ctx, claims, strings.NewReader(""), xet.MaxShardSize+1, nil)
 	require.ErrorIs(t, err, xet.ErrTooLarge)
 
 	// The token is valid up to its expiry, then rejected.

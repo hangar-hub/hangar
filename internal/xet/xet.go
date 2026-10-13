@@ -8,7 +8,9 @@ package xet
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"time"
@@ -33,7 +35,7 @@ var (
 	// ErrUnknownXorb means a shard refers to a xorb Hangar does not have (400
 	// with UnknownXorbMessage).
 	ErrUnknownXorb = errors.New("xet: shard refers to an unknown xorb")
-	// ErrTooLarge means a xorb or shard is over 64 MiB (413).
+	// ErrTooLarge means a xorb or shard is over its size limit (413).
 	ErrTooLarge = errors.New("xet: object too large")
 )
 
@@ -42,9 +44,6 @@ const (
 	RejectMessage      = "Xet uploads are turned off on this Hangar. Set HF_HUB_DISABLE_XET=1 to upload."
 	UnknownXorbMessage = "The upload refers to data this Hangar no longer has. Clear the hf_xet cache (~/.cache/huggingface/xet) or set HF_HUB_DISABLE_XET=1, then upload again."
 )
-
-// MaxObjectSize is the largest serialised xorb or shard.
-const MaxObjectSize = 64 << 20
 
 var hashRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -91,7 +90,8 @@ type TokenRequest struct {
 	CreatePR bool
 }
 
-// ShardEvent is one line of the streamed /v2/shards response.
+// ShardEvent is one line of the streamed /v2/shards response. MarshalJSON
+// writes exactly the fields hf_xet's ShardUploadEvent expects for the type.
 type ShardEvent struct {
 	Type      string `json:"type"`
 	Verified  int    `json:"verified,omitempty"`
@@ -109,6 +109,46 @@ const (
 	EventResult     = "result"
 	EventError      = "error"
 )
+
+// Committing stages.
+const (
+	StageUploading = "uploading"
+	StageSyncing   = "syncing"
+)
+
+// MarshalJSON encodes the event as xet-core's serde form of
+// ShardUploadEvent (cas_types/mod.rs): `validating` always carries
+// `verified` and `total`, `committing` carries `stage`, `result` carries
+// nothing else, and `error` carries `message` and `retryable`. hf_xet
+// rejects a `validating` frame without both counts, so omitempty is not
+// enough.
+func (e ShardEvent) MarshalJSON() ([]byte, error) {
+	switch e.Type {
+	case EventValidating:
+		return json.Marshal(struct {
+			Type     string `json:"type"`
+			Verified int    `json:"verified"`
+			Total    int    `json:"total"`
+		}{e.Type, e.Verified, e.Total})
+	case EventCommitting:
+		return json.Marshal(struct {
+			Type  string `json:"type"`
+			Stage string `json:"stage"`
+		}{e.Type, e.Stage})
+	case EventResult:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{e.Type})
+	case EventError:
+		return json.Marshal(struct {
+			Type      string `json:"type"`
+			Message   string `json:"message"`
+			Retryable bool   `json:"retryable"`
+		}{e.Type, e.Message, e.Retryable})
+	default:
+		return nil, fmt.Errorf("xet: unknown shard event type %q", e.Type)
+	}
+}
 
 // ReassembledFile is a file rebuilt from a shard and stored as an LFS object.
 type ReassembledFile struct {
