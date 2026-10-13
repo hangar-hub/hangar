@@ -20,8 +20,10 @@ import (
 // file path instead of the --config flag.
 const ConfigFileEnv = "HANGAR_CONFIG"
 
-// envIgnorePrefixes are HANGAR_* variables that are not configuration keys.
-var envIgnorePrefixes = []string{ConfigFileEnv, "HANGAR_TEST_"}
+// envIgnorePrefixes are HANGAR_* variables that are not configuration keys:
+// the config file, test settings and the client commands' HANGAR_CLI_*
+// variables (internal/cli).
+var envIgnorePrefixes = []string{ConfigFileEnv, "HANGAR_TEST_", "HANGAR_CLI_"}
 
 // LoadOptions says where to read configuration from.
 type LoadOptions struct {
