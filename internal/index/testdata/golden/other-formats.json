@@ -1,0 +1,28 @@
+{
+  "formats": [
+    "coreml",
+    "flax",
+    "onnx",
+    "openvino",
+    "tensorflow",
+    "tflite"
+  ],
+  "licence": {
+    "id": "apache-2.0"
+  },
+  "library_name": "peft",
+  "tags": [
+    "peft",
+    "coreml",
+    "flax",
+    "onnx",
+    "openvino",
+    "tensorflow",
+    "tflite",
+    "license:apache-2.0"
+  ],
+  "size": {
+    "total": 1714,
+    "present": 1714
+  }
+}

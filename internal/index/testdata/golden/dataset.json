@@ -1,0 +1,66 @@
+{
+  "formats": [],
+  "card_data": {
+    "language": [
+      "en",
+      "fr"
+    ],
+    "license": "cc-by-4.0",
+    "pretty_name": "Tiny Demo",
+    "size_categories": [
+      "n\u003c1K"
+    ],
+    "task_categories": [
+      "text-classification"
+    ]
+  },
+  "licence": {
+    "id": "cc-by-4.0"
+  },
+  "tags": [
+    "task_categories:text-classification",
+    "language:en",
+    "language:fr",
+    "size_categories:n\u003c1K",
+    "format:csv",
+    "format:imagefolder",
+    "format:json",
+    "format:parquet",
+    "modality:image",
+    "modality:tabular",
+    "modality:text",
+    "license:cc-by-4.0"
+  ],
+  "size": {
+    "total": 2696,
+    "present": 2696
+  },
+  "dataset": {
+    "configs": [
+      "default"
+    ],
+    "splits": {
+      "default": 2
+    },
+    "modalities": [
+      "image",
+      "tabular",
+      "text"
+    ],
+    "formats": [
+      "csv",
+      "imagefolder",
+      "json",
+      "parquet"
+    ],
+    "task_categories": [
+      "text-classification"
+    ],
+    "languages": [
+      "en",
+      "fr"
+    ],
+    "size_category": "n\u003c1K",
+    "pretty_name": "Tiny Demo"
+  }
+}

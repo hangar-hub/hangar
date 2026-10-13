@@ -1,0 +1,39 @@
+{
+  "formats": [
+    "safetensors"
+  ],
+  "parameters": {
+    "total": 416,
+    "by_dtype": {
+      "F16": 416
+    }
+  },
+  "licence": {},
+  "pipeline_tag": "text-to-image",
+  "library_name": "diffusers",
+  "tags": [
+    "diffusers",
+    "safetensors",
+    "text-to-image"
+  ],
+  "size": {
+    "total": 2633,
+    "present": 2633
+  },
+  "files": [
+    {
+      "path": "text_encoder/model.safetensors",
+      "format": "safetensors",
+      "dtype": "F16",
+      "tensor_count": 1,
+      "parameters": 128
+    },
+    {
+      "path": "unet/diffusion_pytorch_model.safetensors",
+      "format": "safetensors",
+      "dtype": "F16",
+      "tensor_count": 1,
+      "parameters": 288
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "formats": [
+    "mlx",
+    "safetensors"
+  ],
+  "architecture": "LlamaForCausalLM",
+  "model_type": "llama",
+  "parameters": {
+    "total": 288,
+    "by_dtype": {
+      "BF16": 32,
+      "U32": 256
+    }
+  },
+  "quantisations": [
+    {
+      "name": "4bit",
+      "bits": 4,
+      "group_size": 64
+    }
+  ],
+  "context_length": 2048,
+  "card_data": {
+    "library_name": "mlx",
+    "license": "mit",
+    "tags": [
+      "mlx"
+    ]
+  },
+  "licence": {
+    "id": "mit"
+  },
+  "pipeline_tag": "text-generation",
+  "library_name": "mlx",
+  "tags": [
+    "mlx",
+    "safetensors",
+    "llama",
+    "text-generation",
+    "license:mit"
+  ],
+  "size": {
+    "total": 2974,
+    "present": 2974
+  },
+  "files": [
+    {
+      "path": "model.safetensors",
+      "format": "safetensors",
+      "dtype": "U32",
+      "tensor_count": 2,
+      "parameters": 288
+    }
+  ],
+  "config": {
+    "architectures": [
+      "LlamaForCausalLM"
+    ],
+    "model_type": "llama"
+  }
+}

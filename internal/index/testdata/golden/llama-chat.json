@@ -1,0 +1,60 @@
+{
+  "formats": [
+    "safetensors"
+  ],
+  "architecture": "LlamaForCausalLM",
+  "model_type": "llama",
+  "parameters": {
+    "total": 512,
+    "by_dtype": {
+      "BF16": 512
+    }
+  },
+  "context_length": 4096,
+  "chat_template": "{{ messages }}",
+  "tokens": {
+    "bos": "\u003cs\u003e",
+    "eos": "\u003c/s\u003e"
+  },
+  "licence": {
+    "id": "mit"
+  },
+  "pipeline_tag": "text-generation",
+  "library_name": "transformers",
+  "tags": [
+    "transformers",
+    "safetensors",
+    "llama",
+    "text-generation",
+    "license:mit"
+  ],
+  "size": {
+    "total": 3280,
+    "present": 3280
+  },
+  "files": [
+    {
+      "path": "model.safetensors",
+      "format": "safetensors",
+      "dtype": "BF16",
+      "tensor_count": 2,
+      "parameters": 512
+    }
+  ],
+  "config": {
+    "architectures": [
+      "LlamaForCausalLM"
+    ],
+    "model_type": "llama",
+    "tokenizer_config": {
+      "bos_token": {
+        "content": "\u003cs\u003e",
+        "lstrip": false
+      },
+      "chat_template": "{{ messages }}",
+      "eos_token": {
+        "content": "\u003c/s\u003e"
+      }
+    }
+  }
+}

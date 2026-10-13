@@ -1,0 +1,61 @@
+{
+  "formats": [
+    "gguf",
+    "safetensors"
+  ],
+  "quantisations": [
+    {
+      "name": "broken",
+      "files": [
+        "broken.gguf"
+      ]
+    },
+    {
+      "name": "notgguf",
+      "files": [
+        "notgguf.gguf"
+      ]
+    }
+  ],
+  "licence": {},
+  "tags": [
+    "gguf",
+    "safetensors"
+  ],
+  "size": {
+    "total": 1664,
+    "present": 1664
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "format": "markdown",
+      "error": "invalid card metadata: anchors and aliases are not allowed (line 1)"
+    },
+    {
+      "path": "bad.safetensors",
+      "format": "safetensors",
+      "error": "invalid safetensors file: header length 18446744073709551615 is not between 1 and 104857600 bytes"
+    },
+    {
+      "path": "broken.gguf",
+      "format": "gguf",
+      "error": "invalid GGUF file: 1 tensors and 11 metadata keys do not fit in 40 bytes"
+    },
+    {
+      "path": "config.json",
+      "format": "json",
+      "error": "config.json is not a JSON object: unexpected end of JSON input"
+    },
+    {
+      "path": "notgguf.gguf",
+      "format": "gguf",
+      "error": "invalid GGUF file: bad magic \"GGML\""
+    },
+    {
+      "path": "short.safetensors",
+      "format": "safetensors",
+      "error": "invalid safetensors file: header length 16 is larger than the file"
+    }
+  ]
+}
