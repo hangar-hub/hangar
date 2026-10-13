@@ -149,6 +149,20 @@ func TestConfigFileFromEnv(t *testing.T) {
 	require.Equal(t, ":7000", cfg.Server.Listen)
 }
 
+func TestValidateBeforeSecretsAllowsAnEmptyInstanceKey(t *testing.T) {
+	cfg, err := config.Load(config.LoadOptions{Env: []string{"HANGAR_SERVER_PUBLIC_URL=http://localhost:8080"}})
+	require.NoError(t, err)
+	require.NoError(t, cfg.ValidateBeforeSecrets(), "EnsureSecrets generates the key")
+	require.ErrorContains(t, cfg.Validate(), "security.instance_key is required")
+
+	cfg.Security.InstanceKey = "c2hvcnQ="
+	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "security.instance_key: decodes to 5 bytes")
+
+	cfg.Security.InstanceKey = ""
+	cfg.Storage.Backend = "tape"
+	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "storage.backend")
+}
+
 func TestOIDCProvidersFromJSONEnv(t *testing.T) {
 	env := append(validEnv(), `HANGAR_OIDC_PROVIDERS=[{"id":"kc","name":"Keycloak","issuer":"https://kc.example.com/realms/x","client_id":"hangar","scopes":["openid"]}]`)
 	cfg, err := config.Load(config.LoadOptions{Env: env})

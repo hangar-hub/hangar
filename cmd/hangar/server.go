@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -43,12 +44,17 @@ func newServerCommand(use, short, forceRole string) *cobra.Command {
 // if not nil, receives the listening address once the server accepts
 // connections.
 func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan<- string) error {
+	// Validate before EnsureSecrets, which creates server.data_dir, so a bad
+	// configuration reports every problem instead of a file system error.
+	if err := cfg.ValidateBeforeSecrets(); err != nil {
+		return err
+	}
 	gen, err := config.EnsureSecrets(cfg)
 	if err != nil {
 		return err
 	}
-	if err := cfg.Validate(); err != nil {
-		return err
+	if _, err := cfg.InstanceKeyBytes(); err != nil {
+		return fmt.Errorf("security.instance_key in %s: %w", filepath.Join(cfg.Server.DataDir, config.SecretsFileName), err)
 	}
 	if gen.Any() {
 		printGenerated(stderr, gen, cfg)

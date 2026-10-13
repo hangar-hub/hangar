@@ -27,7 +27,16 @@ var CronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month 
 
 // Validate checks the whole configuration and returns Errors listing every
 // problem, or nil.
-func (c *Config) Validate() error {
+func (c *Config) Validate() error { return c.validate(true) }
+
+// ValidateBeforeSecrets checks the configuration as the server sees it before
+// EnsureSecrets runs. It is Validate except that security.instance_key may be
+// empty, because EnsureSecrets reads or generates it in server.data_dir. The
+// server calls it before it creates anything, so a bad configuration reports
+// every problem instead of a file system error.
+func (c *Config) ValidateBeforeSecrets() error { return c.validate(false) }
+
+func (c *Config) validate(requireInstanceKey bool) error {
 	var e Errors
 
 	// server
@@ -106,7 +115,9 @@ func (c *Config) Validate() error {
 
 	// security
 	if c.Security.InstanceKey == "" {
-		e.addf("security.instance_key is required: set a base64-encoded 32-byte key, or leave it empty on first start so Hangar generates one in server.data_dir")
+		if requireInstanceKey {
+			e.addf("security.instance_key is required: set a base64-encoded 32-byte key, or leave it empty on first start so Hangar generates one in server.data_dir")
+		}
 	} else if _, err := c.InstanceKeyBytes(); err != nil {
 		e.addf("security.instance_key: %v", err)
 	}

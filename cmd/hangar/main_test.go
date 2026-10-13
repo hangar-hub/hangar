@@ -106,6 +106,31 @@ func TestServerRefusesInvalidConfig(t *testing.T) {
 	require.Contains(t, err.Error(), "storage.backend")
 }
 
+func TestServerValidatesBeforeCreatingDataDir(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Server.DataDir = filepath.Join(t.TempDir(), "not-yet", "data")
+	cfg.Server.PublicURL = ""
+	cfg.Storage.Backend = "tape"
+	err := serve(context.Background(), cfg, io.Discard, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server.public_url is required")
+	require.Contains(t, err.Error(), "storage.backend")
+	require.NotContains(t, err.Error(), "security.instance_key", "the instance key is generated on first start")
+	_, statErr := os.Stat(cfg.Server.DataDir)
+	require.ErrorIs(t, statErr, os.ErrNotExist, "an invalid configuration creates nothing")
+
+	// A data directory that cannot be created still reports the full
+	// validation error list, not the file system error.
+	blocker := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	cfg.Server.DataDir = filepath.Join(blocker, "data")
+	err = serve(context.Background(), cfg, io.Discard, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server.public_url is required")
+	require.Contains(t, err.Error(), "storage.backend")
+	require.NotContains(t, err.Error(), "server.data_dir")
+}
+
 func execute(t *testing.T, args ...string) (string, int) {
 	t.Helper()
 	root := newRootCommand()
