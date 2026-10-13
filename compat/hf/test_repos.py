@@ -99,9 +99,12 @@ def test_list_models_and_datasets(api, hub, repo_name):
 
 
 @pytest.mark.endpoint("GET /api/models/{repo}")
-def test_model_info_shape(api, repo_name):
+def test_model_info_shape(api, repo_name, tmp_path):
     repo = api.create_repo(repo_name).repo_id
-    api.upload_folder(folder_path=_tree({"config.json": b'{"model_type":"bert"}', "unet/config.json": b"{}"}), repo_id=repo)
+    for name, content in {"config.json": b'{"model_type":"bert"}', "unet/config.json": b"{}"}.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_bytes(content)
+    api.upload_folder(folder_path=tmp_path, repo_id=repo)
     info = api.model_info(repo, files_metadata=True)
     assert info.sha and len(info.sha) == 40
     assert info.last_modified is not None and info.created_at is not None
@@ -122,14 +125,3 @@ def test_unlike(api, hub, repo_name):
     HfApi(endpoint=hub.endpoint, token=hub.token("bob")).unlike(repo)
     assert api.model_info(repo).likes == 0
 
-
-def _tree(files: dict[str, bytes]):
-    import tempfile
-    from pathlib import Path
-
-    root = Path(tempfile.mkdtemp(prefix="hangar-hf-tree-"))
-    for name, content in files.items():
-        p = root / name
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(content)
-    return root
