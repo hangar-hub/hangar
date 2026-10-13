@@ -1,0 +1,11 @@
+# Generates the native API server interface, models, client and embedded
+# spec into internal/api/gen. Run `make generate`; CI checks for drift.
+package: gen
+output: internal/api/gen/api.gen.go
+generate:
+  models: true
+  chi-server: true
+  client: true
+  embedded-spec: true
+output-options:
+  skip-prune: true

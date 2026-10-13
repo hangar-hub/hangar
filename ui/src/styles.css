@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Dark mode follows the `dark` class on <html>, set from the theme toggle
+   or the system preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-accent-50: oklch(0.97 0.02 255);
+  --color-accent-500: oklch(0.6 0.19 255);
+  --color-accent-600: oklch(0.54 0.2 258);
+  --color-accent-700: oklch(0.47 0.19 260);
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
