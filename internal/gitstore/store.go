@@ -131,7 +131,7 @@ func New(opts Options) (*Store, error) {
 			continue
 		}
 		info, _ := r.Info()
-		e := &cacheEntry{size: dirSize(filepath.Join(dir, "repos", r.Name()))}
+		e := &cacheEntry{size: dirSize(filepath.Join(dir, "repos", r.Name(), "objects", "pack"))}
 		if info != nil {
 			e.lastUsed = info.ModTime()
 		}

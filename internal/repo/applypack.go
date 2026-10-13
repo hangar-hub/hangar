@@ -164,6 +164,8 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 	err = g.BatchRead(ctx, st.Dir, small, func(_ gitstore.ObjectInfo, content []byte) error {
 		if p, err := model.ParseLFSPointer(content); err == nil {
 			ptrs = append(ptrs, p)
+		} else {
+			added += int64(len(content))
 		}
 		return nil
 	})
