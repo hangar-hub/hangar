@@ -240,7 +240,8 @@ func (f *Fake) GetByUUID(_ context.Context, id uuid.UUID) (*repo.Repo, error) {
 
 // List implements repo.Service.
 func (f *Fake) List(_ context.Context, opts repo.ListOptions) (*repo.ListResult, error) {
-	if len(opts.Formats)+len(opts.Tasks)+len(opts.Libraries)+len(opts.Quants)+len(opts.Licences) > 0 ||
+	if len(opts.Formats)+len(opts.Tasks)+len(opts.Libraries)+len(opts.Quants)+len(opts.Licences)+
+		len(opts.Modalities)+len(opts.Languages)+len(opts.SizeCategories) > 0 ||
 		opts.ParamsMin+opts.ParamsMax+opts.ContextMin+opts.SizeMax > 0 || opts.IncludeFacets {
 		return nil, errors.New("repotest: metadata filters and facets need the index; the fake does not support them")
 	}
@@ -1405,6 +1406,24 @@ func (f *Fake) UpdateSettings(ctx context.Context, id model.RepoID, u repo.Setti
 	}
 	r.UpdatedAt = f.now()
 	return copyRepo(r), nil
+}
+
+// SetMirrorState implements repo.Service.
+func (f *Fake) SetMirrorState(_ context.Context, id model.RepoID, mirror bool) error {
+	return f.SetMirror(id, mirror)
+}
+
+// CountByNamespace implements repo.Service.
+func (f *Fake) CountByNamespace(_ context.Context, namespaceID uuid.UUID, viewer model.Principal) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, r := range f.repos {
+		if r.DeletedAt == nil && r.NamespaceID == namespaceID && visibleTo(&r.Repo, viewer) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // SetLFSPresence implements repo.Service.
