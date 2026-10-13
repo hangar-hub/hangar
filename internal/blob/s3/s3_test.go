@@ -149,3 +149,11 @@ func TestContentDisposition(t *testing.T) {
 	require.Equal(t, "attachment; filename=model.gguf", s3.ContentDisposition("model.gguf"))
 	require.Contains(t, s3.ContentDisposition("naïve.gguf"), "filename*=utf-8''na%C3%AFve.gguf")
 }
+
+func TestStreamsLargeObjects(t *testing.T) {
+	if !s3Enabled(t) {
+		return
+	}
+	// 48 MiB is three 16 MiB parts, each streamed without a part buffer.
+	blobtest.RunStreaming(t, blobtest.S3(t), 48<<20, 16<<20)
+}

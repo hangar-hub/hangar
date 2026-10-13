@@ -122,3 +122,7 @@ func TestListStopsOnCancelledContext(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, s.List(ctx, "", func(blob.Info) error { return nil }), context.Canceled)
 }
+
+func TestStreamsLargeObjects(t *testing.T) {
+	blobtest.RunStreaming(t, newStore(t), 48<<20, 16<<20)
+}
