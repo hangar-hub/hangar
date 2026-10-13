@@ -5,6 +5,8 @@ package gitcompat
 import (
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
@@ -14,9 +16,14 @@ import (
 // The fake backend is repotest.Fake: real bare git repositories driven by
 // the git binary. Both replicas share one Fake.
 func init() {
-	register("fake", func(t *testing.T, blobs *blobtest.Fake, _ []model.Principal) Backend {
+	register("fake", func(t *testing.T, blobs *blobtest.Fake, usernames []string) Backend {
 		f := repotest.NewFake(t)
 		f.LFS = repotest.NewFakeLFS(blobs)
-		return Backend{Replica: func(*testing.T) repo.Service { return f }, LFS: f.LFS}
+		users := map[string]model.Principal{}
+		for _, name := range usernames {
+			users[name] = model.Principal{Kind: model.PrincipalUser, UserID: uuid.New(), NamespaceID: uuid.New(),
+				Username: name, DisplayName: name, Email: name + "@example.com"}
+		}
+		return Backend{Replica: func(*testing.T) repo.Service { return f }, LFS: f.LFS, Users: users}
 	})
 }

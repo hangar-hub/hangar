@@ -141,7 +141,7 @@ func TestHTTPAPICommitsAndGitAgree(t *testing.T) {
 	forEachBackend(t, func(t *testing.T, _ string, f BackendFactory) {
 		s := newSuite(t, f, suiteOptions{})
 		ctx := context.Background()
-		res, err := s.repos.Commit(ctx, repo.CommitParams{Repo: modelID, Revision: "main", Summary: "upload through the API", Actor: owner,
+		res, err := s.repos.Commit(ctx, repo.CommitParams{Repo: modelID, Revision: "main", Summary: "upload through the API", Actor: s.owner,
 			Operations: []repo.Operation{{Kind: repo.OpAdd, Path: "tokenizer.json", Content: strings.NewReader(`{"v":1}`)}}})
 		require.NoError(t, err)
 		dir := s.clone(modelID, tokOwner)

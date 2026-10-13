@@ -18,11 +18,14 @@ type Backend struct {
 	Replica func(t *testing.T) repo.Service
 	// LFS is the LFS store, shared by every replica.
 	LFS repo.LFSStore
+	// Users maps each requested username to a Principal whose personal
+	// Namespace exists in the backend.
+	Users map[string]model.Principal
 }
 
-// BackendFactory builds a backend over blobs. users are the Users whose
-// personal Namespaces the suite's Repos live in.
-type BackendFactory func(t *testing.T, blobs *blobtest.Fake, users []model.Principal) Backend
+// BackendFactory builds a backend over blobs, with a User and personal
+// Namespace for each of usernames.
+type BackendFactory func(t *testing.T, blobs *blobtest.Fake, usernames []string) Backend
 
 var backends = map[string]BackendFactory{}
 

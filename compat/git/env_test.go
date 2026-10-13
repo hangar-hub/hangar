@@ -36,10 +36,6 @@ const (
 )
 
 var (
-	owner  = model.Principal{Kind: model.PrincipalUser, UserID: uuid.New(), NamespaceID: uuid.New(), Username: "owner", DisplayName: "Owner", Email: "owner@example.com", Method: model.AuthToken}
-	writer = model.Principal{Kind: model.PrincipalUser, UserID: uuid.New(), NamespaceID: uuid.New(), Username: "writer", Method: model.AuthToken}
-	other  = model.Principal{Kind: model.PrincipalUser, UserID: uuid.New(), NamespaceID: uuid.New(), Username: "other", Method: model.AuthToken}
-
 	modelID   = model.RepoID{Type: model.RepoTypeModel, Namespace: "owner", Name: "tiny-model"}
 	privateID = model.RepoID{Type: model.RepoTypeModel, Namespace: "owner", Name: "private-model"}
 	datasetID = model.RepoID{Type: model.RepoTypeDataset, Namespace: "owner", Name: "tiny-data"}
@@ -47,6 +43,7 @@ var (
 )
 
 func token(p model.Principal, scope model.Scope) model.Principal {
+	p.Method = model.AuthToken
 	p.Token = &model.TokenInfo{ID: uuid.New(), Name: "compat", Scope: scope}
 	return p
 }
@@ -55,6 +52,7 @@ func token(p model.Principal, scope model.Scope) model.Principal {
 type suite struct {
 	t        *testing.T
 	repos    repo.Service
+	owner    model.Principal
 	lfs      repo.LFSStore
 	blobs    *blobtest.Fake
 	replicas [2]*gitservertest.Instance
@@ -76,8 +74,9 @@ func newSuite(t *testing.T, factory BackendFactory, o suiteOptions) *suite {
 		blobs.PresignBaseURL = sim.URL + "/bucket"
 		blobs.MaxPresignPut = 5 << 30
 	}
-	b := factory(t, blobs, []model.Principal{owner, writer, other})
-	s := &suite{t: t, repos: b.Replica(t), lfs: b.LFS, blobs: blobs, git: gitservertest.NewGit(t)}
+	b := factory(t, blobs, []string{"owner", "writer", "other"})
+	owner, writer, other := b.Users["owner"], b.Users["writer"], b.Users["other"]
+	s := &suite{t: t, repos: b.Replica(t), owner: owner, lfs: b.LFS, blobs: blobs, git: gitservertest.NewGit(t)}
 
 	authn := authtest.NewAuthenticator()
 	authn.Add(tokOwner, token(owner, model.ScopeWrite))
