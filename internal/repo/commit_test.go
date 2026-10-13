@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +26,8 @@ import (
 // TestCommitsAreByteIdenticalToGit is W2's main definition of done: the
 // same operations through the Repo service and through git itself (the
 // repotest fake drives git plumbing directly) give the same Commit SHAs,
-// and an exported copy passes git fsck.
+// an exported copy passes git fsck, and git add and git commit rebuild
+// every Commit with the same SHA.
 func TestCommitsAreByteIdenticalToGit(t *testing.T) {
 	forEach(t, func(t *testing.T, e *env) {
 		alice := e.addUser("alice")
@@ -69,7 +73,65 @@ func TestCommitsAreByteIdenticalToGit(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, gitCmd(t, fakeDir, "cat-file", "-p", string(head)), gitCmd(t, dir, "cat-file", "-p", string(head)))
 		require.Equal(t, gitCmd(t, fakeDir, "ls-tree", "-r", string(head)), gitCmd(t, dir, "ls-tree", "-r", string(head)))
+		replayWithPorcelain(t, dir, "refs/heads/main")
 	})
+}
+
+// replayWithPorcelain rebuilds every Commit on ref with git add and git
+// commit in a fresh repository, from the files, author, committer and
+// message of the exported Commit, and checks that git produces the same
+// SHA. It checks tree and Commit encoding against git itself, independently
+// of the plumbing that both the service and the fake use.
+func replayWithPorcelain(t *testing.T, exported, ref string) {
+	t.Helper()
+	work := filepath.Join(t.TempDir(), "replay")
+	gitCmd(t, "", "init", "--quiet", "--initial-branch=main", work)
+	for _, sha := range strings.Fields(gitCmd(t, exported, "rev-list", "--reverse", ref)) {
+		entries, err := os.ReadDir(work)
+		require.NoError(t, err)
+		for _, en := range entries {
+			if en.Name() != ".git" {
+				require.NoError(t, os.RemoveAll(filepath.Join(work, en.Name())))
+			}
+		}
+		for _, line := range strings.Split(gitCmd(t, exported, "ls-tree", "-r", "-z", "--format=%(objectmode) %(path)", sha), "\x00") {
+			if line == "" {
+				continue
+			}
+			mode, path, _ := strings.Cut(line, " ")
+			require.Equal(t, "100644", mode, path)
+			out, err := gitRun(exported, nil, "cat-file", "blob", sha+":"+path)
+			require.NoError(t, err)
+			p := filepath.Join(work, filepath.FromSlash(path))
+			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+			require.NoError(t, os.WriteFile(p, []byte(out), 0o644))
+		}
+		raw, err := gitRun(exported, nil, "cat-file", "commit", sha)
+		require.NoError(t, err)
+		header, msg, ok := strings.Cut(raw, "\n\n")
+		require.True(t, ok)
+		env := []string{}
+		for _, h := range strings.Split(header, "\n") {
+			kind, rest, _ := strings.Cut(h, " ")
+			if kind != "author" && kind != "committer" {
+				continue
+			}
+			who, when, _ := strings.Cut(rest, "> ")
+			name, email, _ := strings.Cut(who, " <")
+			prefix := "GIT_" + strings.ToUpper(kind) + "_"
+			env = append(env, prefix+"NAME="+name, prefix+"EMAIL="+email, prefix+"DATE=@"+when)
+		}
+		require.Len(t, env, 6)
+		msgFile := filepath.Join(t.TempDir(), "msg")
+		require.NoError(t, os.WriteFile(msgFile, []byte(msg), 0o600))
+		gitCmd(t, work, "add", "-A")
+		cmd := exec.Command("git", "commit", "--quiet", "--allow-empty", "--no-verify", "--cleanup=verbatim", "-F", msgFile)
+		cmd.Dir = work
+		cmd.Env = append(os.Environ(), append([]string{"GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_NOSYSTEM=1"}, env...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+		require.Equal(t, sha, gitCmd(t, work, "rev-parse", "HEAD"), "git commit gives a different SHA for %s", sha)
+	}
 }
 
 // cloneOps gives each run its own content readers.

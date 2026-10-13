@@ -86,17 +86,17 @@ func (o orgs) SearchNamespaces(ctx context.Context, q string, limit int) ([]org.
 	return out, nil
 }
 
-// server wires the W2 handlers into the generated router, with
+// reposServer wires the W2 handlers into the generated router, with
 // gen.Unimplemented one level deeper so the handlers win.
-type server struct {
+type reposServer struct {
 	*api.ReposAPI
 	*api.UploadsAPI
 	*api.SearchAPI
 	*api.NamespacesAPI
-	unimplemented
+	reposUnimplemented
 }
 
-type unimplemented struct{ gen.Unimplemented }
+type reposUnimplemented struct{ gen.Unimplemented }
 
 type fixture struct {
 	t      *testing.T
@@ -131,7 +131,7 @@ func newFixture(t *testing.T) *fixture {
 	o := orgs{DBNamespaces: real.Namespaces}
 	deps := api.RepoDeps{Repos: real, LFS: real.LFS, Authz: f.authz, Orgs: o, Jobs: f.jobs, Collections: f.colls, NamespaceSearch: o,
 		Community: communitytest.NewFake(), Index: f.index, Scanner: f.scans, PublicURL: f.srv.URL + "/"}
-	var s server
+	var s reposServer
 	s.ReposAPI, err = api.NewReposAPI(deps)
 	require.NoError(t, err)
 	s.UploadsAPI, err = api.NewUploadsAPI(deps)
