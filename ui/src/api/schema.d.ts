@@ -1228,7 +1228,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** Get a Member and their Role */
+        get: operations["getMember"];
         /** Add a Member or change their Role */
         put: operations["setMember"];
         post?: never;
@@ -4737,6 +4738,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Username. */
+                user: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Member. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
                 };
             };
             default: components["responses"]["Problem"];

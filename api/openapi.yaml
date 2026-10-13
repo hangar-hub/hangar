@@ -782,6 +782,13 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
   /orgs/{ns}/members/{user}:
     parameters: [{$ref: "#/components/parameters/Ns"}, {name: user, in: path, required: true, description: Username., schema: {type: string}}]
+    get:
+      tags: [namespaces]
+      operationId: getMember
+      summary: Get a Member and their Role
+      responses:
+        "200": {description: The Member., content: {application/json: {schema: {$ref: "#/components/schemas/Member"}}}}
+        default: {$ref: "#/components/responses/Problem"}
     put:
       tags: [namespaces]
       operationId: setMember
