@@ -1,0 +1,143 @@
+// Package httpx holds the HTTP plumbing every protocol shares: request IDs,
+// panic recovery, the access log, the authentication hook, Hub-style and
+// RFC 9457 error writers, trusted proxy handling, body limits, escaped-path
+// helpers for the Hub routes, and signed URLs.
+package httpx
+
+import (
+	"context"
+	"sync"
+
+	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/telemetry"
+)
+
+type ctxKey int
+
+const (
+	keyInfo ctxKey = iota
+)
+
+// RequestInfo describes a request as it moves through the middleware and
+// handlers. Handlers fill in Route and Repo so the access log and the span
+// name use the route template, never the raw path.
+type RequestInfo struct {
+	mu        sync.Mutex
+	id        string
+	route     string
+	protocol  telemetry.Protocol
+	repo      model.RepoID
+	principal model.Principal
+}
+
+// ID returns the request ID.
+func (i *RequestInfo) ID() string {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.id
+}
+
+// Route returns the route template, such as `GET /{ns}/{name}/resolve/{rev}/{path}`
+// without the method, or "" if no handler set one.
+func (i *RequestInfo) Route() string {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.route
+}
+
+// Protocol returns the protocol the request was dispatched to.
+func (i *RequestInfo) Protocol() telemetry.Protocol {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.protocol
+}
+
+// Repo returns the Repo the request is about, if a handler set one.
+func (i *RequestInfo) Repo() model.RepoID {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.repo
+}
+
+// Principal returns the authenticated caller.
+func (i *RequestInfo) Principal() model.Principal {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.principal
+}
+
+func infoFrom(ctx context.Context) *RequestInfo {
+	if i, ok := ctx.Value(keyInfo).(*RequestInfo); ok {
+		return i
+	}
+	return nil
+}
+
+// Info returns the RequestInfo of the request, or nil outside a request.
+func Info(ctx context.Context) *RequestInfo { return infoFrom(ctx) }
+
+// WithInfo returns a context with a fresh RequestInfo. The request ID
+// middleware calls it; tests can call it directly.
+func WithInfo(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, keyInfo, &RequestInfo{id: requestID, protocol: telemetry.ProtocolUnknown})
+}
+
+// RequestID returns the request ID, or "".
+func RequestID(ctx context.Context) string {
+	if i := infoFrom(ctx); i != nil {
+		return i.ID()
+	}
+	return ""
+}
+
+// SetRoute records the route template, for example `/{ns}/{name}/resolve/{rev}/{path}`.
+func SetRoute(ctx context.Context, route string) {
+	if i := infoFrom(ctx); i != nil {
+		i.mu.Lock()
+		i.route = route
+		i.mu.Unlock()
+	}
+}
+
+// SetProtocol records the protocol.
+func SetProtocol(ctx context.Context, p telemetry.Protocol) {
+	if i := infoFrom(ctx); i != nil {
+		i.mu.Lock()
+		i.protocol = p
+		i.mu.Unlock()
+	}
+}
+
+// SetRepo records the Repo the request is about, for spans and the access log.
+func SetRepo(ctx context.Context, id model.RepoID) {
+	if i := infoFrom(ctx); i != nil {
+		i.mu.Lock()
+		i.repo = id
+		i.mu.Unlock()
+	}
+}
+
+// SetPrincipal records the authenticated caller.
+func SetPrincipal(ctx context.Context, p model.Principal) {
+	if i := infoFrom(ctx); i != nil {
+		i.mu.Lock()
+		i.principal = p
+		i.mu.Unlock()
+	}
+}
+
+// Principal returns the authenticated caller, or an anonymous Principal.
+func Principal(ctx context.Context) model.Principal {
+	if i := infoFrom(ctx); i != nil {
+		return i.Principal()
+	}
+	return model.Anonymous()
+}
+
+// ProtocolOf returns the protocol of the request.
+func ProtocolOf(ctx context.Context) telemetry.Protocol {
+	if i := infoFrom(ctx); i != nil {
+		return i.Protocol()
+	}
+	return telemetry.ProtocolUnknown
+}
