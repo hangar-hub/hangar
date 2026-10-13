@@ -227,7 +227,7 @@ func (c *HTTPClient) backoff(attempt int) time.Duration {
 		ceil *= 2
 	}
 	ceil = min(ceil, c.opts.MaxBackoff)
-	return time.Duration(rand.Int64N(int64(ceil)) + 1)
+	return time.Duration(rand.Int64N(int64(ceil)) + 1) //nolint:gosec // backoff jitter, not a secret
 }
 
 func drain(resp *http.Response) {
@@ -358,15 +358,13 @@ func (c *HTTPClient) getJSON(ctx context.Context, r request, v any) (http.Header
 type hubTime struct{ time.Time }
 
 func (t *hubTime) UnmarshalJSON(b []byte) error {
+	// Unparsable times are left zero: the field is informational.
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil || s == "" {
-		return nil
+	if json.Unmarshal(b, &s) == nil {
+		if v, perr := time.Parse(time.RFC3339Nano, s); perr == nil {
+			t.Time = v.UTC()
+		}
 	}
-	v, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return nil
-	}
-	t.Time = v.UTC()
 	return nil
 }
 

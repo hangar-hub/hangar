@@ -121,7 +121,7 @@ func (h *Upstreams) GetPull(w http.ResponseWriter, r *http.Request, id gen.ID) {
 		return
 	}
 	j, err := h.Queue.Get(r.Context(), id)
-	if errors.Is(err, jobs.ErrNotFound) || (err == nil && (j.Kind != jobs.KindPull || !(p.IsAdmin || (j.CreatedBy != uuid.Nil && j.CreatedBy == p.UserID)))) {
+	if errors.Is(err, jobs.ErrNotFound) || (err == nil && (j.Kind != jobs.KindPull || !upCanSeeJob(p, j))) {
 		upProblem(w, r, http.StatusNotFound, "Pull not found.")
 		return
 	}
@@ -130,4 +130,9 @@ func (h *Upstreams) GetPull(w http.ResponseWriter, r *http.Request, id gen.ID) {
 		return
 	}
 	httpx.WriteJSON(w, r, http.StatusOK, upJobResource(j))
+}
+
+// upCanSeeJob reports whether p may see the Job: its creator or an Instance admin.
+func upCanSeeJob(p model.Principal, j *jobs.Job) bool {
+	return p.IsAdmin || (j.CreatedBy != uuid.Nil && j.CreatedBy == p.UserID)
 }

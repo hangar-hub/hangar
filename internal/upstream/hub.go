@@ -105,7 +105,7 @@ func (t *transfer) finish(err error) {
 
 func (t *transfer) removeSpool() {
 	if t.path != "" {
-		_ = os.Remove(t.path)
+		_ = os.Remove(t.path) //nolint:gosec // the path comes from os.CreateTemp
 	}
 }
 

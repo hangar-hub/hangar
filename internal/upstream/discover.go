@@ -148,10 +148,9 @@ func (s *Service) localState(ctx context.Context, p model.Principal, local model
 	if err != nil {
 		return "", "", err
 	}
-	if p.Kind != model.PrincipalSystem {
-		if err := s.opts.Authz.Can(ctx, p, auth.ActionRead, repoTarget(r)); err != nil {
-			return ArsenalNone, "", nil
-		}
+	// Callers who cannot read the Repo must not learn it exists.
+	if !s.readable(ctx, p, r) {
+		return ArsenalNone, "", nil
 	}
 	head, err := s.opts.Repos.Resolve(ctx, r.ID, "")
 	if errors.Is(err, repo.ErrRevisionNotFound) {
@@ -459,7 +458,7 @@ func (s *Service) Graph(ctx context.Context, p model.Principal, r *repo.Repo) (*
 			if h != row.Commit {
 				continue
 			}
-			if err := s.opts.Authz.Can(ctx, p, auth.ActionRead, repoTarget(src)); err != nil {
+			if !s.readable(ctx, p, src) {
 				continue
 			}
 			key := src.UUID.String() + row.Key()
@@ -536,4 +535,9 @@ func (s *Service) ResolveDependencies(ctx context.Context, repoUUID uuid.UUID, c
 		}
 	}
 	return warnings, nil
+}
+
+// readable reports whether p may read r.
+func (s *Service) readable(ctx context.Context, p model.Principal, r *repo.Repo) bool {
+	return p.Kind == model.PrincipalSystem || s.opts.Authz.Can(ctx, p, auth.ActionRead, repoTarget(r)) == nil
 }

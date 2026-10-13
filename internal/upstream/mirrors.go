@@ -184,11 +184,3 @@ func (s mirrorStore) update(ctx context.Context, repoUUID uuid.UUID, t model.Rep
 	})
 	return out, err
 }
-
-// byUpstream returns the Mirrors (including detached ones) of an upstream
-// Repo, to stop two Upstreams providing the same ID.
-func (s mirrorStore) byUpstreamRepo(ctx context.Context, upstreamRepo model.RepoID) ([]db.Mirror, error) {
-	var rows []db.Mirror
-	err := s.db.NewSelect().Model(&rows).Where("lower(upstream_repo) = lower(?)", upstreamRepo.String()).Scan(ctx)
-	return rows, err
-}

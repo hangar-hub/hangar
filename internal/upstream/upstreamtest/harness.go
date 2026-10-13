@@ -59,7 +59,7 @@ func (r *DBRepos) Create(ctx context.Context, p repo.CreateParams) (*repo.Repo, 
 
 // SetMirrorState implements upstream.MirrorStateSetter.
 func (r *DBRepos) SetMirrorState(_ context.Context, id model.RepoID, mirror bool) error {
-	return r.Fake.SetMirror(id, mirror)
+	return r.SetMirror(id, mirror)
 }
 
 // hourWindows is an upstream.Windows open between two whole hours (UTC).

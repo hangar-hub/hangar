@@ -59,10 +59,8 @@ func redactErr(err error) error {
 	}
 	inner := redactErr(ue.Err)
 	r := &redactedURLError{op: ue.Op, url: redactURL(ue.URL), err: inner}
-	if err == error(ue) {
-		return r
-	}
-	// The *url.Error is wrapped: rebuild the message without the URL.
+	// Rebuild the whole message without the URL, in case the *url.Error
+	// is wrapped.
 	msg := strings.ReplaceAll(err.Error(), ue.URL, r.url)
 	return &wrappedRedacted{msg: msg, err: r}
 }
