@@ -14,6 +14,7 @@ With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a t
 |---|---|
 | `HANGAR_HF_ENDPOINT`, `HANGAR_HF_TOKENS` | Test an Instance that is already running, such as `hangar server`. `HANGAR_HF_TOKENS` is JSON with Tokens for `alice` (admin scope, admin of the `acme` Organisation), `bob` (write scope, read Member of `acme`), `carol` (read scope) and `admin` (an Instance admin). `HANGAR_HF_ORG` renames `acme`. |
 | `HANGAR_HF_GO_TAGS=w2real` | Build the test server with a `compat && w2real` backend file that uses the real `internal/repo`. See [`docs/build/handoffs/w4.md`](../../docs/build/handoffs/w4.md) for the file. |
+| `HANGAR_HF_DB=postgres` | With `HANGAR_HF_GO_TAGS=w2real`, run the real `internal/repo` on Postgres instead of SQLite. `conftest.py` sets `HANGAR_TEST_POSTGRES=1` for the test server (a Postgres container, so Docker must be running) unless `HANGAR_TEST_POSTGRES_DSN` names a server. |
 | `HANGAR_HF_WRITE_MATRIX=1` | Write `compatibility-matrix.json` from the results. |
 | `HANGAR_HF_MULTIPART_THRESHOLD` | The tested Instance's `lfs.multipart_threshold`, with `HANGAR_HF_ENDPOINT` (default 64 MiB). The Go test server lowers it to 5 MiB, the smallest the setting allows. |
 | `HANGAR_HF_MULTIPART_FILE_SIZE` | Size in bytes of the file `test_upload_over_multipart_threshold` uploads. The default is twice the threshold plus one byte; 13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file nightly. |
@@ -35,13 +36,14 @@ With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a t
 | `diffusers` (nightly) | `uv run --frozen --project compat --with diffusers==0.41.0 --with huggingface_hub==1.33.0 python -m pytest compat/hf` |
 | Xet uploads | `HANGAR_HF_XET_UPLOADS=1` against an Instance with W11's CAS endpoints |
 
-`diffusers` 0.41 needs `huggingface_hub` below 2.0, so it is not in the lock; `test_diffusers.py` reports itself as skipped in the other cells. On the macOS host the suite was last run on (Darwin 27), the SciPy 1.15.3 wheel the lock picks for Python 3.10 fails to load with a `dyld` error about `__thread_bss`; add `--with scipy==1.14.1` to that cell there.
+`diffusers` 0.41 needs `huggingface_hub` below 2.0, so it is not in the lock; `test_diffusers.py` reports itself as skipped in the other cells. `huggingface_hub` 2.x removed `upload_large_folder`, so `test_upload_large_folder.py` runs in the floor and `diffusers` cells (`huggingface_hub` 1.31.0 and 1.33.0) and reports itself as skipped in the others. On the macOS host the suite was last run on (Darwin 27), the SciPy 1.15.3 wheel the lock picks for Python 3.10 fails to load with a `dyld` error about `__thread_bss`; add `--with scipy==1.14.1` to that cell there.
 
 ## What it covers
 
 - `hf auth login --token`, `hf auth whoami`, `whoami-v2`, `hf download`, `hf upload`, `hf repos create`
 - `create_repo` (public, private, dataset, Organisation, `exist_ok`), `delete_repo` (`missing_ok`), `move_repo` and the redirects after it, `update_repo_settings` (`private`, `visibility`, `gated`)
-- `upload_file`, `upload_folder` (including LFS files and unchanged files), `create_commit` with adds, deletes, folder deletes and copies, `parent_commit`, `create_pr=True`
+- `upload_file`, `upload_folder` (including LFS files and unchanged files), `create_commit` with adds, deletes, folder deletes and copies, `parent_commit`, `create_pr=True`; a `create_pr=True` commit that fails opens no pull request, also when the client retries
+- `upload_large_folder` with `huggingface_hub` 1.x (models and datasets, ignore patterns, LFS files, a second run that resumes with nothing to commit, then a changed file)
 - files over the multipart threshold: huggingface_hub's multipart path (numbered part `PUT`s with ETags, then the completion `POST`), checked byte for byte after download
 - `create_branch`, `create_tag`, `delete_branch`, `delete_tag`, `list_repo_refs`, `list_repo_commits`
 - `model_info`, `dataset_info`, `list_models` and `list_datasets` with search, author, sort, limit, `full` and `expand`, `list_repo_files`, `list_repo_tree` (recursive, with `expand`), `get_paths_info`, `repo_exists`, `revision_exists`, `file_exists`

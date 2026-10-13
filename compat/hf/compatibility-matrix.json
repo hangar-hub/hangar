@@ -113,7 +113,8 @@
     "GET /api/{type}s/{repo}/discussions": {
       "status": "supported",
       "tests": [
-        "test_discussions_and_pull_requests"
+        "test_discussions_and_pull_requests",
+        "test_failed_create_pr_commit_opens_no_pull_request"
       ]
     },
     "GET /api/{type}s/{repo}/discussions/{num}": {
@@ -250,6 +251,7 @@
     "POST /api/{type}s/{repo}/commit/{rev}?create_pr=1": {
       "status": "supported",
       "tests": [
+        "test_failed_create_pr_commit_opens_no_pull_request",
         "test_hf_upload_to_new_branch_and_pr"
       ]
     },
