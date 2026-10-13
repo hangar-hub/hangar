@@ -78,7 +78,7 @@ func (h *Handler) readCommit(body io.Reader) (*commitRequest, error) {
 	br := bufio.NewReaderSize(body, 64<<10)
 	var inMemory int64
 	first := true
-	for {
+	for n := 1; ; n++ {
 		line, err := readLine(br, h.d.Settings.CommitLineMax)
 		if err != nil && !errors.Is(err, io.EOF) {
 			c.close()
@@ -91,7 +91,7 @@ func (h *Handler) readCommit(body io.Reader) (*commitRequest, error) {
 			}
 			if jerr := json.Unmarshal(line, &item); jerr != nil {
 				c.close()
-				return nil, badCommit("Line %d of the commit body is not valid JSON.", len(c.ops)+1)
+				return nil, badCommit("Line %d of the commit body is not valid JSON.", n)
 			}
 			if first != (item.Key == "header") {
 				c.close()
