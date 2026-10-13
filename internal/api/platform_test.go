@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
 	blobfs "github.com/jamesagarside/hangar/internal/blob/fs"
+	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/gc"
@@ -323,11 +325,73 @@ func TestAdminSystem(t *testing.T) {
 		require.True(t, c.Ok, "%s: %s", *c.Name, c.Message)
 		require.NotNil(t, c.LatencyMs)
 	}
-	for _, n := range []string{"database", "schema", "jobs", "blob_store", "presigned_downloads", "git"} {
+	for _, n := range []string{"database", "schema", "jobs", "clock", "blob_store", "presigned_downloads", "git"} {
 		require.Contains(t, names, n)
 	}
 	require.Equal(t, "Downloads stream through Hangar (download_mode is proxy).", names["presigned_downloads"].Message)
 	require.Contains(t, names["git"].Message, "is installed")
+	require.Equal(t, "This host's clock agrees with the Blob store to within 10s.", names["clock"].Message)
+}
+
+func TestDoctorClockCheck(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		run := func(opts api.DoctorOptions) gen.CheckResult {
+			t.Helper()
+			opts.GitBinary = "-"
+			for _, r := range api.RunChecks(ctx, api.DoctorChecks(d, opts), 10*time.Second) {
+				if *r.Name == "clock" {
+					return r
+				}
+			}
+			t.Fatal("no clock check")
+			return gen.CheckResult{}
+		}
+		store := blobtest.NewFake()
+		r := run(api.DoctorOptions{Store: store})
+		require.True(t, r.Ok, r.Message)
+		require.Empty(t, store.Keys(), "the check removes its object")
+		if d.IsSQLite() {
+			require.Equal(t, "This host's clock agrees with the Blob store to within 10s.", r.Message)
+			r = run(api.DoctorOptions{})
+			require.True(t, r.Ok, r.Message)
+			require.Equal(t, "SQLite uses this host's clock, and there is no Blob store to compare with.", r.Message)
+		} else {
+			require.Equal(t, "This host's clock agrees with the database and the Blob store to within 10s.", r.Message)
+		}
+
+		// This host's clock is two minutes fast.
+		fast := func() time.Time { return time.Now().Add(2 * time.Minute) }
+		r = run(api.DoctorOptions{Store: store, Now: fast})
+		require.False(t, r.Ok)
+		require.Contains(t, r.Message, "the Blob store's clock is 2m0s behind this host's clock")
+		require.Contains(t, r.Message, "run NTP on every host")
+		if !d.IsSQLite() {
+			require.Contains(t, r.Message, "the database's clock is 2m0s behind")
+		}
+		slow := func() time.Time { return time.Now().Add(-time.Minute) }
+		r = run(api.DoctorOptions{Store: store, Now: slow, MaxClockSkew: 30 * time.Second})
+		require.False(t, r.Ok)
+		require.Contains(t, r.Message, "ahead of this host's clock")
+		r = run(api.DoctorOptions{Store: store, Now: slow, MaxClockSkew: 2 * time.Minute})
+		require.True(t, r.Ok, r.Message)
+	})
+}
+
+func TestDoctorConfigCheck(t *testing.T) {
+	d := dbtest.SQLite(t)
+	cfg := config.Default()
+	results := api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), 10*time.Second)
+	require.Equal(t, "config", *results[0].Name, "the config check runs first")
+	require.False(t, results[0].Ok)
+	require.Contains(t, results[0].Message, "server.public_url is required")
+
+	cfg.Server.PublicURL = "https://hangar.example.com"
+	cfg.Server.DataDir = t.TempDir()
+	cfg.Security.InstanceKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	results = api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), 10*time.Second)
+	require.True(t, results[0].Ok, results[0].Message)
+	require.Equal(t, "The configuration is valid.", results[0].Message)
 }
 
 func TestDoctorChecksReportProblems(t *testing.T) {

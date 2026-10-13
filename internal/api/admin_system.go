@@ -20,6 +20,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/api/gen"
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/httpx"
 )
@@ -139,16 +140,32 @@ type DoctorOptions struct {
 	// HTTPClient fetches the presigned URL. Nil means a client with a
 	// 10-second timeout.
 	HTTPClient *http.Client
+	// Config is the configuration the process runs with; nil leaves out the
+	// config check.
+	Config *config.Config
+	// MaxClockSkew is how far this host's clock may differ from the
+	// database's and the Blob store's before the clock check fails. Zero
+	// means 10 seconds.
+	MaxClockSkew time.Duration
+	// Now is this host's clock. Nil means time.Now.
+	Now func() time.Time
 }
 
 // MinGitVersion is the oldest git that Hangar supports (docs/spec/04-git.md).
 var MinGitVersion = [3]int{2, 39, 0}
 
-// DoctorChecks returns the standard checks: database, schema, Blob store,
-// presigned downloads, git and the Job backlog.
+// DoctorChecks returns the standard checks: configuration, database,
+// schema, clock skew, Blob store, presigned downloads, git and the Job
+// backlog.
 func DoctorChecks(d *db.DB, opts DoctorOptions) []SystemCheck {
 	if opts.JobBacklog <= 0 {
 		opts.JobBacklog = 10 * time.Minute
+	}
+	if opts.MaxClockSkew <= 0 {
+		opts.MaxClockSkew = 10 * time.Second
+	}
+	if opts.Now == nil {
+		opts.Now = time.Now
 	}
 	if opts.HTTPClient == nil {
 		opts.HTTPClient = &http.Client{Timeout: 10 * time.Second}
@@ -184,6 +201,18 @@ func DoctorChecks(d *db.DB, opts DoctorOptions) []SystemCheck {
 			}
 			return fmt.Sprintf("%d Jobs are running and none are overdue.", running), nil
 		}},
+		{Name: "clock", Run: func(ctx context.Context) (string, error) {
+			return checkClock(ctx, d, opts.Store, opts.Now, opts.MaxClockSkew)
+		}},
+	}
+	if opts.Config != nil {
+		cfg := opts.Config
+		checks = append([]SystemCheck{{Name: "config", Run: func(context.Context) (string, error) {
+			if err := cfg.Validate(); err != nil {
+				return "", err
+			}
+			return "The configuration is valid.", nil
+		}}}, checks...)
 	}
 	if opts.Store != nil {
 		checks = append(checks,
@@ -201,6 +230,81 @@ func DoctorChecks(d *db.DB, opts DoctorOptions) []SystemCheck {
 		checks = append(checks, SystemCheck{Name: "git", Run: func(ctx context.Context) (string, error) { return checkGit(ctx, bin) }})
 	}
 	return checks
+}
+
+// skewOutside returns how far t lies outside the interval from before to
+// after: negative when t is earlier, positive when later, zero inside.
+func skewOutside(t, before, after time.Time) time.Duration {
+	switch {
+	case t.Before(before):
+		return t.Sub(before)
+	case t.After(after):
+		return t.Sub(after)
+	}
+	return 0
+}
+
+func absDuration(d time.Duration) time.Duration {
+	if d < 0 {
+		return -d
+	}
+	return d
+}
+
+// checkClock compares this host's clock with the database server's
+// (Postgres) and with the modification time the Blob store gives a new
+// object (the S3 server, or the file server behind an NFS or SMB mount).
+// Job leases, schedules, garbage collection grace periods and presigned
+// URLs all need clocks that agree.
+func checkClock(ctx context.Context, d *db.DB, s blob.Store, now func() time.Time, maxSkew time.Duration) (string, error) {
+	var checked []string
+	var problems []string
+	if !d.IsSQLite() {
+		before := now()
+		var dbNow time.Time
+		if err := d.NewRaw("SELECT CURRENT_TIMESTAMP").Scan(ctx, &dbNow); err != nil {
+			return "", fmt.Errorf("reading the database clock failed: %w", err)
+		}
+		skew := skewOutside(dbNow, before, now())
+		checked = append(checked, "the database")
+		if absDuration(skew) > maxSkew {
+			problems = append(problems, fmt.Sprintf("the database's clock is %s %s", absDuration(skew).Round(time.Second), aheadOrBehind(skew)))
+		}
+	}
+	if s != nil {
+		key := doctorKey()
+		body := []byte("hangar clock check")
+		before := now()
+		if err := s.Put(ctx, key, bytes.NewReader(body), int64(len(body))); err != nil {
+			return "", fmt.Errorf("writing to the Blob store failed: %w", err)
+		}
+		after := now()
+		defer func() { _ = s.Delete(context.WithoutCancel(ctx), key) }()
+		info, err := s.Stat(ctx, key)
+		if err != nil {
+			return "", fmt.Errorf("reading from the Blob store failed: %w", err)
+		}
+		// S3 and many file systems record whole seconds.
+		skew := skewOutside(info.ModTime, before, after)
+		checked = append(checked, "the Blob store")
+		if absDuration(skew) > maxSkew+time.Second {
+			problems = append(problems, fmt.Sprintf("the Blob store's clock is %s %s", absDuration(skew).Round(time.Second), aheadOrBehind(skew)))
+		}
+	}
+	if len(problems) > 0 {
+		return "", fmt.Errorf("%s this host's clock. Job leases, schedules, garbage collection and presigned URLs need synchronised clocks: run NTP on every host", strings.Join(problems, ", and "))
+	}
+	if len(checked) == 0 {
+		return "SQLite uses this host's clock, and there is no Blob store to compare with.", nil
+	}
+	return fmt.Sprintf("This host's clock agrees with %s to within %s.", strings.Join(checked, " and "), maxSkew), nil
+}
+
+func aheadOrBehind(skew time.Duration) string {
+	if skew > 0 {
+		return "ahead of"
+	}
+	return "behind"
 }
 
 func doctorKey() string { return blob.PrefixTmp + "doctor-" + uuid.NewString() }
