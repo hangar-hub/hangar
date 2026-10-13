@@ -1,0 +1,13 @@
+{
+  "comment": "Upstream fixtures from docs/spec/13-testing.md. fixtures.py downloads them into compat/.fixtures, which CI caches. allow_patterns keeps downloads small.",
+  "fixtures": [
+    {"repo": "hf-internal-testing/tiny-random-bert", "type": "model", "purpose": "transformers loads"},
+    {"repo": "hf-internal-testing/tiny-random-gpt2", "type": "model", "purpose": "transformers loads"},
+    {"repo": "hf-internal-testing/tiny-random-LlamaForCausalLM", "type": "model", "purpose": "transformers loads, vLLM-style metadata reads"},
+    {"repo": "hf-internal-testing/test_dynamic_model", "type": "model", "purpose": "remote code and Dependency resolution"},
+    {"repo": "ggml-org/tiny-llamas", "type": "model", "purpose": "GGUF quants for Ollama and the quant picker",
+     "allow_patterns": [".gitattributes", "README.md", "stories15M-q4_0.gguf", "stories15M-q8_0.gguf", "stories260K.gguf"]},
+    {"repo": "mlx-community/SmolLM-135M-Instruct-4bit", "type": "model", "purpose": "MLX format detection", "nightly": true},
+    {"repo": "lhoestq/demo1", "type": "dataset", "purpose": "datasets.load_dataset"}
+  ]
+}

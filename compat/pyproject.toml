@@ -1,0 +1,18 @@
+[project]
+name = "hangar-compat"
+version = "0.0.0"
+description = "Client compatibility suites for Hangar."
+requires-python = ">=3.10"
+license = "Elastic-2.0"
+dependencies = [
+  "pytest==9.1.1",
+  "requests==2.34.2",
+  "huggingface_hub==2.2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = "-ra"
