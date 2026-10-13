@@ -1,8 +1,11 @@
 package s3
 
 import (
+	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/blob"
@@ -28,4 +31,30 @@ func TestTotalFromContentRange(t *testing.T) {
 	require.False(t, ok)
 	_, ok = totalFromContentRange("bytes 3-4/*")
 	require.False(t, ok)
+}
+
+func TestMapErrKeepsS3CodeForTelemetry(t *testing.T) {
+	resp := minio.ErrorResponse{Code: "AccessDenied", StatusCode: http.StatusForbidden, Message: "Access Denied.", Key: "lfs/sha256/ab/ab/secret"}
+	err := mapErr(resp, "lfs/sha256/ab/ab/secret")
+	coded, ok := errors.AsType[blob.CodedError](err)
+	require.True(t, ok, "an unmapped S3 error carries its code")
+	require.Equal(t, "s3.AccessDenied", coded.ErrorCode())
+	got, ok := errors.AsType[minio.ErrorResponse](err)
+	require.True(t, ok, "the response stays reachable")
+	require.Equal(t, resp.Code, got.Code)
+	require.Equal(t, resp.Error(), err.Error())
+
+	err = mapErr(minio.ErrorResponse{Code: "NoSuchBucket", StatusCode: http.StatusNotFound}, "x")
+	coded, ok = errors.AsType[blob.CodedError](err)
+	require.True(t, ok)
+	require.Equal(t, "s3.NoSuchBucket", coded.ErrorCode())
+	require.Contains(t, err.Error(), "bucket does not exist")
+
+	require.ErrorIs(t, mapErr(minio.ErrorResponse{Code: "NoSuchKey"}, "x"), blob.ErrNotFound)
+	plain := errors.New("connection reset")
+	require.Same(t, plain, mapErr(plain, "x"), "errors other than S3 responses pass through")
+	noCode := minio.ErrorResponse{StatusCode: http.StatusInternalServerError}
+	_, ok = errors.AsType[blob.CodedError](mapErr(noCode, "x"))
+	require.False(t, ok, "a response with no code has nothing to record")
+	require.NoError(t, mapErr(nil, "x"))
 }

@@ -166,6 +166,18 @@ func (s *Store) objectKey(key string) (string, error) {
 	return s.prefix + key, nil
 }
 
+// apiError is an S3 error response that the blob package has no error for.
+// It implements blob.CodedError, so spans record its S3 error code rather
+// than its text.
+type apiError struct {
+	code string
+	err  error
+}
+
+func (e *apiError) Error() string     { return e.err.Error() }
+func (e *apiError) Unwrap() error     { return e.err }
+func (e *apiError) ErrorCode() string { return "s3." + e.code }
+
 // mapErr turns S3 errors into the blob package's errors.
 func mapErr(err error, what string) error {
 	if err == nil {
@@ -177,7 +189,7 @@ func mapErr(err error, what string) error {
 	}
 	switch resp.Code {
 	case "NoSuchBucket":
-		return fmt.Errorf("s3 blob store: bucket does not exist: %w", err)
+		return fmt.Errorf("s3 blob store: bucket does not exist: %w", &apiError{code: resp.Code, err: err})
 	case "NoSuchKey", "NoSuchUpload", "NotFound":
 		return fmt.Errorf("%w: %s", blob.ErrNotFound, what)
 	case "InvalidRange":
@@ -189,7 +201,10 @@ func mapErr(err error, what string) error {
 	case http.StatusRequestedRangeNotSatisfiable:
 		return blob.ErrInvalidRange
 	}
-	return err
+	if resp.Code == "" {
+		return err
+	}
+	return &apiError{code: resp.Code, err: err}
 }
 
 func infoFrom(key string, oi minio.ObjectInfo) blob.Info {

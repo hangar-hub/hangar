@@ -3,12 +3,16 @@ package blob
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net"
+	"syscall"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jamesagarside/hangar/internal/telemetry"
@@ -17,7 +21,9 @@ import (
 // Instrumented wraps a Store with a span per operation and the
 // hangar.blob.operation.duration histogram (docs/spec/11-observability.md).
 // Spans carry the backend, the key's top-level prefix and the bytes moved,
-// never full keys or presigned URLs.
+// never full keys or presigned URLs. A failed operation records an exception
+// event that names the kind of failure, never the error's text, because
+// backend errors carry full keys and, on the filesystem, the root path.
 type Instrumented struct {
 	inner    Store
 	backend  string
@@ -73,7 +79,7 @@ func (o *op) end(ctx context.Context, err error, bytes int64) {
 	}
 	out := outcome(err)
 	if out == "error" {
-		o.span.RecordError(err)
+		recordError(o.span, err)
 		o.span.SetStatus(codes.Error, "blob operation failed")
 	}
 	o.span.End()
@@ -84,6 +90,87 @@ func (o *op) end(ctx context.Context, err error, bytes int64) {
 			attribute.String(telemetry.MetricOutcome, out),
 		))
 	}
+}
+
+// CodedError is implemented by backend errors that carry a short code from a
+// fixed set, such as an S3 error code. Instrumented records the code on spans
+// in place of the error's text.
+type CodedError interface {
+	error
+	ErrorCode() string
+}
+
+// safeSentinels are errors whose text is fixed, so spans may record it.
+var safeSentinels = []error{
+	ErrNotFound, ErrNotSupported, ErrInvalidRange, ErrSizeMismatch, ErrInvalidKey,
+	ErrChecksumMismatch, ErrTooLarge, context.Canceled, context.DeadlineExceeded,
+}
+
+// maxCodeLen bounds the error code recorded from a CodedError.
+const maxCodeLen = 64
+
+// recordError adds an exception event to span with exception.type set to the
+// innermost error's Go type and exception.message set by errorClass. It never
+// records err.Error().
+func recordError(span trace.Span, err error) {
+	span.AddEvent(semconv.ExceptionEventName, trace.WithAttributes(
+		semconv.ExceptionType(errorType(err)),
+		semconv.ExceptionMessage(errorClass(err)),
+	))
+}
+
+// errorType returns the Go type of the innermost error in err's chain.
+func errorType(err error) string {
+	for {
+		next := errors.Unwrap(err)
+		if next == nil {
+			return fmt.Sprintf("%T", err)
+		}
+		err = next
+	}
+}
+
+// errorClass describes err with text that holds no keys, paths or URLs: a
+// sentinel's fixed text, a backend's error code, an operating system error
+// number's description, or a generic description of a network failure.
+func errorClass(err error) string {
+	for _, sentinel := range safeSentinels {
+		if errors.Is(err, sentinel) {
+			return sentinel.Error()
+		}
+	}
+	if coded, ok := errors.AsType[CodedError](err); ok {
+		if code := safeCode(coded.ErrorCode()); code != "" {
+			return "error code " + code
+		}
+	}
+	if errno, ok := errors.AsType[syscall.Errno](err); ok {
+		return errno.Error()
+	}
+	if ne, ok := errors.AsType[net.Error](err); ok {
+		if ne.Timeout() {
+			return "network timeout"
+		}
+		return "network error"
+	}
+	return "blob operation failed"
+}
+
+// safeCode returns code if it is a short token of letters, digits, dots,
+// hyphens and underscores, and an empty string otherwise, so a code from a
+// misbehaving server cannot carry a key into a span.
+func safeCode(code string) string {
+	if len(code) == 0 || len(code) > maxCodeLen {
+		return ""
+	}
+	for _, c := range code {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '.', c == '-', c == '_':
+		default:
+			return ""
+		}
+	}
+	return code
 }
 
 // Stat implements Store.
