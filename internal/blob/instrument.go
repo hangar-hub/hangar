@@ -239,3 +239,17 @@ func (i *Instrumented) ListUploads(ctx context.Context, fn func(IncompleteUpload
 	o.end(ctx, err, -1)
 	return err
 }
+
+var _ StagingSweeper = (*Instrumented)(nil)
+
+// SweepStaging implements StagingSweeper when the wrapped store does.
+func (i *Instrumented) SweepStaging(ctx context.Context, cutoff time.Time) (int, error) {
+	sw, ok := i.inner.(StagingSweeper)
+	if !ok {
+		return 0, ErrNotSupported
+	}
+	ctx, o := i.begin(ctx, "sweep_staging", "")
+	n, err := sw.SweepStaging(ctx, cutoff)
+	o.end(ctx, err, -1)
+	return n, err
+}

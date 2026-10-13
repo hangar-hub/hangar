@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
+	blobfs "github.com/jamesagarside/hangar/internal/blob/fs"
 )
 
 func TestInstrumentedConformance(t *testing.T) {
@@ -75,6 +78,23 @@ func TestInstrumentedSpansAndMetrics(t *testing.T) {
 	}
 	require.True(t, outcomes["ok"])
 	require.True(t, outcomes["not_found"])
+}
+
+func TestInstrumentedSweepStaging(t *testing.T) {
+	ctx := context.Background()
+	tp := sdktrace.NewTracerProvider()
+	_, err := blob.Instrument(blobtest.NewFake(), "s3", tp.Tracer("test"), nil).SweepStaging(ctx, time.Now())
+	require.ErrorIs(t, err, blob.ErrNotSupported, "a store with no staging area")
+
+	fs, err := blobfs.New(filepath.Join(t.TempDir(), "blobs"))
+	require.NoError(t, err)
+	old := filepath.Join(fs.Root(), ".staging", "put-1")
+	require.NoError(t, os.WriteFile(old, []byte("partial"), 0o600))
+	at := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(old, at, at))
+	n, err := blob.Instrument(fs, "fs", tp.Tracer("test"), nil).SweepStaging(ctx, time.Now().Add(-24*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
 }
 
 func TestDownloads(t *testing.T) {

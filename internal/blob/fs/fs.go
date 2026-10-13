@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +48,7 @@ type Store struct {
 var (
 	_ blob.Store          = (*Store)(nil)
 	_ blob.VerifiedPutter = (*Store)(nil)
+	_ blob.StagingSweeper = (*Store)(nil)
 )
 
 // New opens a filesystem Blob store rooted at root, creating the directory
@@ -199,24 +201,80 @@ func (s *Store) writeTemp(ctx context.Context, r io.Reader, size int64, sum []by
 	return name, got, nil
 }
 
+// SweepStaging implements blob.StagingSweeper: it removes files under
+// <root>/.staging last modified before cutoff, which writes that a crash or
+// a killed process interrupted leave behind. A write in progress keeps its
+// file's modification time current, so a cutoff of hours never removes one,
+// even when several processes share the directory over NFS.
+func (s *Store) SweepStaging(ctx context.Context, cutoff time.Time) (int, error) {
+	entries, err := os.ReadDir(s.staging)
+	if errors.Is(err, iofs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	var errs []error
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+		if !e.Type().IsRegular() {
+			continue
+		}
+		fi, err := e.Info()
+		if errors.Is(err, iofs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if !fi.ModTime().Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.staging, e.Name())); err != nil {
+			if !errors.Is(err, iofs.ErrNotExist) {
+				errs = append(errs, err)
+			}
+			continue
+		}
+		removed++
+	}
+	return removed, errors.Join(errs...)
+}
+
+// installAttempts bounds how often install retries after a concurrent
+// Delete pruned the destination's directory.
+const installAttempts = 10
+
 // install renames a staged file into place, creating parent directories.
 // A concurrent Delete may remove an empty parent between MkdirAll and
-// Rename, so it retries once.
+// Rename, or while MkdirAll creates it, so it retries while the error is
+// one that a vanished directory causes.
 func (s *Store) install(tmp, dst string) error {
 	var err error
-	for range 3 {
-		if err = os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
-			break
+	for range installAttempts {
+		if err = os.MkdirAll(filepath.Dir(dst), 0o750); err == nil {
+			if err = os.Rename(tmp, dst); err == nil {
+				return nil
+			}
 		}
-		if err = os.Rename(tmp, dst); err == nil {
-			return nil
-		}
-		if !errors.Is(err, iofs.ErrNotExist) {
+		if !lostDirectory(err) {
 			break
 		}
 	}
 	_ = os.Remove(tmp)
 	return err
+}
+
+// lostDirectory reports whether err is what MkdirAll or Rename return when
+// a directory on the path was removed during the call: ENOENT; EEXIST from
+// MkdirAll when the directory vanished between its mkdir and the check that
+// followed; and EINVAL, which macOS returns for a directory being removed.
+func lostDirectory(err error) bool {
+	return errors.Is(err, iofs.ErrNotExist) || errors.Is(err, iofs.ErrExist) || errors.Is(err, syscall.EINVAL)
 }
 
 // Put implements blob.Store.

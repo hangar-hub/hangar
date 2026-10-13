@@ -2,9 +2,11 @@ package fs_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -123,6 +125,80 @@ func TestListStopsOnCancelledContext(t *testing.T) {
 	require.ErrorIs(t, s.List(ctx, "", func(blob.Info) error { return nil }), context.Canceled)
 }
 
+func TestSweepStagingRemovesLeftoverWrites(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	staging := filepath.Join(s.Root(), ".staging")
+	now := time.Now()
+	// A Put killed mid-write leaves its partial file; one still being
+	// written has a recent modification time.
+	stale := filepath.Join(staging, "put-111")
+	live := filepath.Join(staging, "put-222")
+	link := filepath.Join(staging, "link-333")
+	for _, p := range []string{stale, live, link} {
+		require.NoError(t, os.WriteFile(p, []byte("partial"), 0o600))
+	}
+	require.NoError(t, os.Chtimes(stale, now.Add(-25*time.Hour), now.Add(-25*time.Hour)))
+	require.NoError(t, os.Chtimes(link, now.Add(-48*time.Hour), now.Add(-48*time.Hour)))
+	require.NoError(t, os.Mkdir(filepath.Join(staging, "dir"), 0o750))
+	require.NoError(t, s.Put(ctx, "lfs/kept", strings.NewReader("x"), 1))
+
+	n, err := s.SweepStaging(ctx, now.Add(-24*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	for _, p := range []string{stale, link} {
+		_, err := os.Stat(p)
+		require.ErrorIs(t, err, os.ErrNotExist, p)
+	}
+	_, err = os.Stat(live)
+	require.NoError(t, err, "a write in progress is kept")
+	_, err = os.Stat(filepath.Join(staging, "dir"))
+	require.NoError(t, err, "only files are swept")
+	_, err = s.Stat(ctx, "lfs/kept")
+	require.NoError(t, err, "objects are never touched")
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = s.SweepStaging(cancelled, now)
+	require.ErrorIs(t, err, context.Canceled)
+
+	require.NoError(t, os.RemoveAll(staging))
+	n, err = s.SweepStaging(ctx, now)
+	require.NoError(t, err, "a missing staging directory has nothing to sweep")
+	require.Zero(t, n)
+}
+
 func TestStreamsLargeObjects(t *testing.T) {
 	blobtest.RunStreaming(t, newStore(t), 48<<20, 16<<20)
+}
+
+// TestConcurrentPutAndDeleteInOneDirectory checks that a Put never fails
+// because a concurrent Delete pruned the directory it was renaming into.
+func TestConcurrentPutAndDeleteInOneDirectory(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for g := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range 100 {
+				key := fmt.Sprintf("tmp/shared/%d-%d", g, i)
+				if err := s.Put(ctx, key, strings.NewReader("x"), 1); err != nil {
+					errs <- err
+					return
+				}
+				if err := s.Delete(ctx, key); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
 }
