@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -443,19 +444,53 @@ func TestDispatchRoutesAndStripsViewerPrefix(t *testing.T) {
 }
 
 func TestResponseWriterPassThrough(t *testing.T) {
-	var logs bytes.Buffer
+	var logs syncBuffer
+	var isReaderFrom bool
+	var flushErr error
 	h := httpx.RequestIDs(httpx.AccessLog(slog.New(slog.NewJSONHandler(&logs, nil)))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, isReaderFrom := w.(io.ReaderFrom)
-		require.True(t, isReaderFrom)
+		_, isReaderFrom = w.(io.ReaderFrom)
 		w.(http.Flusher).Flush()
 		_, _ = w.Write([]byte("abc"))
-		require.NoError(t, http.NewResponseController(w).Flush())
+		flushErr = http.NewResponseController(w).Flush()
 	})))
-	srv := httptest.NewServer(h)
+	// AccessLog writes its line after the handler returns, which can be after
+	// the client has read the response. Wait for the whole chain to finish
+	// before reading anything the server goroutine wrote.
+	finished := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(finished)
+		h.ServeHTTP(w, r)
+	}))
 	defer srv.Close()
 	resp, err := http.Get(srv.URL)
 	require.NoError(t, err)
 	resp.Body.Close()
+	select {
+	case <-finished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the middleware chain did not finish")
+	}
 	require.Equal(t, 200, resp.StatusCode)
+	require.True(t, isReaderFrom, "the wrapped writer keeps io.ReaderFrom")
+	require.NoError(t, flushErr, "the wrapped writer keeps Flush through ResponseController")
 	require.Contains(t, logs.String(), `"bytes_out":3`)
+}
+
+// syncBuffer is a bytes.Buffer that is safe to write from a server goroutine
+// and read from the test.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
