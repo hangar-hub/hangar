@@ -33,6 +33,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/xet"
+	"golang.org/x/sync/singleflight"
 )
 
 // Settings are the configuration values the Hub API reads. FromConfig
@@ -59,6 +60,10 @@ type Settings struct {
 	CommitLineMax int64
 	// BodyMax caps buffered JSON request bodies (server.max_request_body).
 	BodyMax int64
+	// VerifyWait is lfs.verify_wait: how long a create_pr=1 commit waits
+	// for an LFS object that is still being verified before it opens the
+	// pull request. Zero means 10 minutes.
+	VerifyWait time.Duration
 }
 
 // FromConfig returns the Hub API settings of an Instance configuration.
@@ -71,6 +76,7 @@ func FromConfig(c *config.Config) Settings {
 		RedirectDownloads: c.Storage.Backend == config.BackendS3 && c.Storage.S3.DownloadMode == config.DownloadRedir,
 		PresignTTL:        c.Storage.S3.PresignTTL,
 		BodyMax:           c.Server.MaxRequestBody.Int64(),
+		VerifyWait:        c.LFS.VerifyWait,
 	}
 }
 
@@ -125,6 +131,8 @@ type Handler struct {
 	log       *slog.Logger
 	now       func() time.Time
 	dataFiles dataFileCache
+	// verifies shares LFS object verifications between requests.
+	verifies singleflight.Group
 }
 
 // New returns the Hub API handler.
@@ -162,6 +170,9 @@ func New(d Deps) (*Handler, error) {
 	}
 	if d.Settings.PresignTTL <= 0 {
 		d.Settings.PresignTTL = time.Hour
+	}
+	if d.Settings.VerifyWait <= 0 {
+		d.Settings.VerifyWait = defaultVerifyWait
 	}
 	h := &Handler{d: d, log: d.Log, now: d.Now}
 	if h.log == nil {

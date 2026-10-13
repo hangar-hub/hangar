@@ -290,6 +290,12 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, ref repoRef, re
 	}
 	var disc *community.Discussion
 	if createPR {
+		// Check the operations before opening the pull request, so a
+		// commit that cannot succeed leaves no pull request behind.
+		if err := h.checkPRCommit(ctx, rp, base, params.Operations); err != nil {
+			h.commitError(w, r, rp, err)
+			return
+		}
 		disc, err = h.d.Community.Create(ctx, community.CreateParams{
 			RepoUUID: rp.UUID, Repo: rp.ID, Title: req.header.Summary, Description: req.header.Description,
 			PullRequest: true, Base: rev, Author: p,
@@ -302,11 +308,10 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, ref repoRef, re
 	}
 	res, err := h.d.Repos.Commit(ctx, params)
 	if err != nil {
-		if errors.Is(err, repo.ErrEntryNotFound) {
-			httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusNotFound, Code: httpx.CodeEntryNotFound, Message: MsgFileMissing + ": " + err.Error()})
-			return
+		if disc != nil {
+			h.closeFailedPR(ctx, rp, disc, p)
 		}
-		h.serviceError(w, r, rp.ID, err)
+		h.commitError(w, r, rp, err)
 		return
 	}
 	if in := h.d.Instruments; in != nil && in.UploadBytes != nil && req.regularLen > 0 {
@@ -362,4 +367,14 @@ func (h *Handler) mayPushToPR(ctx context.Context, rp *repo.Repo, ref string, p 
 	num, _ := model.ParsePRRef(ref)
 	d, err := h.d.Community.Get(ctx, rp.UUID, num)
 	return err == nil && d.IsPullRequest() && !p.IsAnonymous() && strings.EqualFold(d.Author, p.Username)
+}
+
+// commitError answers a failed Commit. A missing file gets the message
+// huggingface_hub matches to add its "is it a folder?" hint.
+func (h *Handler) commitError(w http.ResponseWriter, r *http.Request, rp *repo.Repo, err error) {
+	if errors.Is(err, repo.ErrEntryNotFound) {
+		httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusNotFound, Code: httpx.CodeEntryNotFound, Message: MsgFileMissing + ": " + err.Error()})
+		return
+	}
+	h.serviceError(w, r, rp.ID, err)
 }
