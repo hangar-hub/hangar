@@ -103,7 +103,12 @@ function repoOr404(ctx: Ctx): MockRepo | Result {
 }
 
 function isResult(x: unknown): x is Result {
-  return typeof x === "object" && x !== null && "status" in x && !("repo" in x);
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    typeof (x as { status?: unknown }).status === "number" &&
+    !("repo" in x)
+  );
 }
 
 function withRepo(fn: (ctx: Ctx, r: MockRepo) => Result): Handler {

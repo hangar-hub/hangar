@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FeatureType } from "@/api/viewer";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { formatCount } from "@/lib/format";
 
 function isImage(v: unknown): v is { src: string; width?: number; height?: number } {
@@ -114,7 +115,9 @@ export function Cell({
   return (
     <details>
       <summary className="cursor-pointer text-xs text-muted">{summary}</summary>
-      <pre className="mt-1 max-h-60 overflow-auto font-mono text-xs">{json}</pre>
+      <ScrollRegion label={`${label} value`} className="mt-1 max-h-60">
+        <pre className="font-mono text-xs">{json}</pre>
+      </ScrollRegion>
     </details>
   );
 }

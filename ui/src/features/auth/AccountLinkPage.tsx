@@ -1,13 +1,13 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { rawFetch, setCsrfToken } from "@/api/client";
+import { rawFetch } from "@/api/client";
 import type { Me } from "@/api/types";
 import { useGo } from "@/components/AppLink";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { InlineError } from "@/components/ui/states";
 import { ApiError, fieldErrors } from "@/lib/problem";
-import { meKey } from "@/lib/session";
+import { useSignedIn } from "@/lib/session";
 
 /**
  * Invite acceptance and password reset, from the single-use links admins
@@ -22,7 +22,7 @@ export function AccountLinkPage({ mode, code }: { mode: "invite" | "reset"; code
     display_name: "",
   });
   const [mismatch, setMismatch] = useState(false);
-  const qc = useQueryClient();
+  const signedIn = useSignedIn();
   const go = useGo();
   const submit = useMutation({
     mutationFn: async () => {
@@ -45,9 +45,7 @@ export function AccountLinkPage({ mode, code }: { mode: "invite" | "reset"; code
       return json as Me;
     },
     onSuccess: (me) => {
-      setCsrfToken(me.csrf_token);
-      qc.clear();
-      qc.setQueryData(meKey, me);
+      signedIn(me);
       go("/");
     },
   });

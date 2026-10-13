@@ -26,12 +26,11 @@ function mockApi(): Plugin {
       server.middlewares.use(await load());
     },
     async configurePreviewServer(server) {
-      const { csp } = await import("./mock/server");
-      server.middlewares.use((_req, res, next) => {
-        res.setHeader("Content-Security-Policy", csp);
-        next();
-      });
+      const { uiPages } = await import("./mock/server");
       server.middlewares.use(await load());
+      server.middlewares.use(
+        uiPages(fileURLToPath(new URL("../internal/web/dist/index.html", import.meta.url))),
+      );
     },
   };
 }

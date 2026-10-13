@@ -1,15 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
-import { api, rawFetch, setCsrfToken } from "@/api/client";
+import { api, rawFetch } from "@/api/client";
 import type { Me } from "@/api/types";
 import { useGo } from "@/components/AppLink";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { ErrorState, InlineError, Skeleton } from "@/components/ui/states";
 import { ApiError, fieldErrors, unwrap } from "@/lib/problem";
-import { meKey } from "@/lib/session";
+import { useSignedIn } from "@/lib/session";
 
 /** Messages for the `?error=` codes the OIDC callback redirects with (W5's `/auth/` handler). */
 export const oidcErrors: Record<string, string> = {
@@ -43,7 +43,7 @@ export function LoginPage() {
   const redirect = safeRedirect(search.redirect);
   const [register, setRegister] = useState(search.register === "1");
   const [form, setForm] = useState({ username: "", password: "", email: "", display_name: "" });
-  const qc = useQueryClient();
+  const signedIn = useSignedIn();
   const go = useGo();
   const navigate = useNavigate();
   const providers = useQuery({
@@ -51,9 +51,7 @@ export function LoginPage() {
     queryFn: async () => unwrap(await api.GET("/auth/providers")),
   });
   const done = (me: Me) => {
-    setCsrfToken(me.csrf_token);
-    qc.clear();
-    qc.setQueryData(meKey, me);
+    signedIn(me);
     go(redirect);
   };
   const login = useMutation({

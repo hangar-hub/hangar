@@ -40,15 +40,21 @@ export const csrfMiddleware: Middleware = {
 export function createApiClient(options: { baseUrl?: string; fetch?: typeof fetch } = {}) {
   const client = createClient<paths>({
     baseUrl: options.baseUrl ?? apiBase,
-    fetch: options.fetch,
+    // Resolve fetch on each call rather than once, so tests can replace it.
+    fetch: options.fetch ?? ((input: Request, init?: RequestInit) => globalThis.fetch(input, init)),
     credentials: "same-origin",
   });
   client.use(csrfMiddleware);
   return client;
 }
 
-/** The shared client the UI uses. */
-export const api = createApiClient();
+/**
+ * The shared client the UI uses, with an absolute base URL so requests are
+ * built the same way in the browser and in tests.
+ */
+export const api = createApiClient({
+  baseUrl: typeof window === "undefined" ? apiBase : new URL(apiBase, window.location.origin).href,
+});
 
 /**
  * Sends a same-origin request outside the generated client (the `/auth/`

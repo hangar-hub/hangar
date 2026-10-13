@@ -5,6 +5,7 @@ import { api } from "@/api/client";
 import type { DiscoverDetail as Detail } from "@/api/types";
 import { AppLink } from "@/components/AppLink";
 import { LazyMarkdown } from "@/components/content/LazyMarkdown";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/form";
@@ -23,7 +24,7 @@ function PreviewTable({ preview }: { preview: Record<string, unknown> }) {
   const rows = (preview.rows ?? []) as { row_idx: number; row: Record<string, unknown> }[];
   if (!features.length) return null;
   return (
-    <div className="overflow-x-auto rounded-md border border-line">
+    <ScrollRegion label="First rows" className="rounded-md border border-line">
       <table className="w-full text-xs">
         <caption className="sr-only">First rows</caption>
         <thead>
@@ -49,7 +50,7 @@ function PreviewTable({ preview }: { preview: Record<string, unknown> }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
 }
 

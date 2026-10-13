@@ -44,7 +44,7 @@ export function JsonTree({
   const close = Array.isArray(value) ? "]" : "}";
   return (
     <details open={depth < 2} className="pl-4">
-      <summary className="-ml-4 cursor-pointer list-inside">
+      <summary className="-ml-4 min-h-6 cursor-pointer list-inside leading-6">
         {label}
         <span className="text-muted">
           {open} {entries.length}{" "}

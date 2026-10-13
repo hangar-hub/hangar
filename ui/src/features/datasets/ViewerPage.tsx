@@ -15,6 +15,7 @@ import {
   ViewerError,
 } from "@/api/viewer";
 import { useGo } from "@/components/AppLink";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form";
@@ -234,14 +235,18 @@ function RowsTable({
   });
   const template = `72px repeat(${data.features.length}, minmax(180px, 1fr))`;
   return (
-    <div
-      role="table"
-      aria-label="Rows"
-      aria-rowcount={data.num_rows_total + 1}
-      className="overflow-hidden rounded-lg border border-line bg-surface"
+    <ScrollRegion
+      ref={scroller}
+      label="Rows, scrollable"
+      className="max-h-[70vh] rounded-lg border border-line bg-surface"
     >
-      <div ref={scroller} className="max-h-[70vh] overflow-auto">
-        <div style={{ minWidth: `${72 + data.features.length * 180}px` }}>
+      <div
+        role="table"
+        aria-label="Rows"
+        aria-rowcount={data.num_rows_total + 1}
+        style={{ minWidth: `${72 + data.features.length * 180}px` }}
+      >
+        <div>
           <div
             role="row"
             aria-rowindex={1}
@@ -266,6 +271,7 @@ function RowsTable({
                   <button
                     type="button"
                     onClick={() => onSort(f.name)}
+                    aria-label={`Sort by ${f.name}`}
                     className="flex min-w-0 items-center gap-1 text-left text-xs font-semibold hover:text-accent"
                   >
                     <span className="truncate font-mono">{f.name}</span>
@@ -273,7 +279,6 @@ function RowsTable({
                       className={cn("size-3.5 shrink-0", !active && "text-muted")}
                       aria-hidden="true"
                     />
-                    <span className="sr-only">, sort</span>
                   </button>
                   <span className="truncate font-mono text-[10px] text-muted">
                     {f.type._type === "Value" ? f.type.dtype : (f.type._type ?? "struct")}
@@ -319,7 +324,7 @@ function RowsTable({
           </div>
         </div>
       </div>
-    </div>
+    </ScrollRegion>
   );
 }
 

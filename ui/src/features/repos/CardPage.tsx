@@ -191,7 +191,7 @@ function Sidebar({ repo, cardData }: { repo: Repo; cardData: Record<string, unkn
                       >
                         <AppLink
                           href={`${repoPath("dataset", repo.namespace, repo.name)}/viewer/${encodeURIComponent(c.config)}/${encodeURIComponent(sp.split)}`}
-                          className="font-mono hover:underline"
+                          className="inline-block min-h-6 py-0.5 font-mono hover:underline"
                         >
                           {sp.split}
                         </AppLink>

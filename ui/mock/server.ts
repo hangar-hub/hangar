@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { operations } from "../src/api/schema";
 import { createState, type MockState, randomUUID, type Scenario } from "./data";
@@ -16,21 +18,48 @@ type Next = (err?: unknown) => void;
 
 const publicOps = new Set<keyof operations>(["login", "listAuthProviders"]);
 
-/** The Content Security Policy internal/web sets on UI pages. */
-export const csp = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self'",
-  "img-src 'self' data: blob: https:",
-  "media-src 'self' blob:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
+/** The Content Security Policy internal/web sets on UI pages (web.CSP). */
+export function csp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    `style-src 'self' 'nonce-${nonce}'`,
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+/**
+ * Serves index.html for UI routes as internal/web does: a fresh style
+ * nonce in a meta element and in the Content Security Policy.
+ */
+export function uiPages(indexPath: string) {
+  return (req: IncomingMessage, res: ServerResponse, next: Next): void => {
+    const path = new URL(req.url ?? "/", "http://mock.local").pathname;
+    const html = (req.headers.accept ?? "").includes("text/html");
+    const api = /^\/(api|assets|datasets-server)\//.test(path) || path.includes("/resolve/");
+    if (req.method !== "GET" || !html || api) {
+      next();
+      return;
+    }
+    const nonce = randomBytes(16).toString("base64");
+    const index = readFileSync(indexPath, "utf8").replace(
+      "<head>",
+      `<head><meta name="csp-nonce" content="${nonce}" />`,
+    );
+    res.setHeader("Content-Security-Policy", csp(nonce));
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.end(index);
+  };
+}
 
 function cookies(req: IncomingMessage): Record<string, string> {
   const out: Record<string, string> = {};

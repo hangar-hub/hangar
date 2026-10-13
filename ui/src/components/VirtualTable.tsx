@@ -51,6 +51,9 @@ export function VirtualTable<T>({
       role="table"
       aria-label={label}
       aria-rowcount={rows.length + 1}
+      // Focusable so keyboard users can scroll it.
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable table must take focus
+      tabIndex={0}
       className="overflow-x-auto rounded-lg border border-line bg-surface"
     >
       <div className="min-w-[560px]">
@@ -67,7 +70,13 @@ export function VirtualTable<T>({
           ))}
         </div>
         {virtual ? (
-          <div ref={scroller} className="max-h-[60vh] overflow-y-auto" role="rowgroup">
+          <div
+            ref={scroller}
+            className="max-h-[60vh] overflow-y-auto"
+            role="rowgroup"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable table must take focus
+            tabIndex={0}
+          >
             <div className="relative" style={{ height: v.getTotalSize() }}>
               {v.getVirtualItems().map((item) =>
                 renderRow(rows[item.index] as T, item.index, {

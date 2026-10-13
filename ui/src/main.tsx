@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { setNonce } from "get-nonce";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "./components/ui/toast";
@@ -8,6 +9,12 @@ import { parseSearch, stringifySearch } from "./lib/search-params";
 import { applyTheme, loadTheme, resolveTheme } from "./lib/theme";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
+
+// internal/web puts a per-response style nonce in a meta element. Dialogs
+// add a style element to lock page scrolling, and the Content Security
+// Policy only allows style elements that carry this nonce.
+const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
+if (nonce) setNonce(nonce);
 
 const queryClient = new QueryClient({
   defaultOptions: {

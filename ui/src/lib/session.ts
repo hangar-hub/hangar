@@ -31,8 +31,21 @@ export function useSignOut() {
       throw new ApiError(res.response.status);
     }
     setCsrfToken(undefined);
-    qc.clear();
     qc.setQueryData(meKey, null);
+    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== meKey[0] });
+  };
+}
+
+/**
+ * Records a new sign-in: stores the user, drops every other cached query
+ * (they were fetched as someone else) and keeps the header's observers.
+ */
+export function useSignedIn() {
+  const qc = useQueryClient();
+  return (me: Me) => {
+    setCsrfToken(me.csrf_token);
+    qc.setQueryData(meKey, me);
+    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== meKey[0] });
   };
 }
 

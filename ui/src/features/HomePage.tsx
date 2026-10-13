@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { api } from "@/api/client";
 import { Logo } from "@/components/Logo";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/states";
 import { unwrap } from "@/lib/problem";
@@ -66,21 +67,23 @@ function Landing() {
             <span className="size-2.5 rounded-full bg-steel-600" />
             <span className="size-2.5 rounded-full bg-amber-400" />
           </div>
-          <pre className="overflow-x-auto px-4 py-4 font-mono text-[13px] leading-6">
-            <code>
-              <span className="text-steel-400"># Point any Hugging Face client at Hangar</span>
-              {"\n"}
-              <span className="text-amber-300">$</span> export HF_ENDPOINT={origin}
-              {"\n"}
-              <span className="text-amber-300">$</span> hf download
-              TinyLlama/TinyLlama-1.1B-Chat-GGUF
-              {"\n\n"}
-              <span className="text-steel-400"># Or pull one quant straight into Ollama</span>
-              {"\n"}
-              <span className="text-amber-300">$</span> ollama pull {host}
-              /TinyLlama/TinyLlama-1.1B-Chat-GGUF:Q4_K_M
-            </code>
-          </pre>
+          <ScrollRegion label="Example commands" className="overflow-y-hidden">
+            <pre className="px-4 py-4 font-mono text-[13px] leading-6">
+              <code>
+                <span className="text-steel-400"># Point any Hugging Face client at Hangar</span>
+                {"\n"}
+                <span className="text-amber-300">$</span> export HF_ENDPOINT={origin}
+                {"\n"}
+                <span className="text-amber-300">$</span> hf download
+                TinyLlama/TinyLlama-1.1B-Chat-GGUF
+                {"\n\n"}
+                <span className="text-steel-400"># Or pull one quant straight into Ollama</span>
+                {"\n"}
+                <span className="text-amber-300">$</span> ollama pull {host}
+                /TinyLlama/TinyLlama-1.1B-Chat-GGUF:Q4_K_M
+              </code>
+            </pre>
+          </ScrollRegion>
         </div>
         <ul
           aria-label="Works with"

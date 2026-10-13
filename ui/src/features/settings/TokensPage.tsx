@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { Scope, Token, TokenCreated } from "@/api/types";
 import { PageShell } from "@/components/PageShell";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -296,10 +297,15 @@ export function TokensPage() {
               <CopyButton value={created.secret} label="Copy the Token" />
             </div>
             <p className="text-sm text-muted">Sign in the hf CLI with it:</p>
-            <pre className="overflow-x-auto rounded-md bg-raised px-3 py-2 font-mono text-xs">
-              export HF_ENDPOINT={window.location.origin}
-              {"\n"}hf auth login --token {created.prefix}...
-            </pre>
+            <ScrollRegion
+              label="Sign-in commands"
+              className="overflow-y-hidden rounded-md bg-raised"
+            >
+              <pre className="px-3 py-2 font-mono text-xs">
+                export HF_ENDPOINT={window.location.origin}
+                {"\n"}hf auth login --token {created.prefix}...
+              </pre>
+            </ScrollRegion>
           </div>
         ) : null}
       </Dialog>

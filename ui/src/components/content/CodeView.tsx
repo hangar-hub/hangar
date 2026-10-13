@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { cn } from "@/lib/utils";
 import { tokenize } from "./highlight";
 
@@ -28,11 +29,13 @@ export function CodeView({
   lang,
   lineNumbers = true,
   className,
+  label = "Code",
 }: {
   code: string;
   lang: string;
   lineNumbers?: boolean;
   className?: string;
+  label?: string;
 }) {
   const dark = useDark();
   const tokens = useQuery({
@@ -47,7 +50,10 @@ export function CodeView({
       : tokens.data.light
     : code.split("\n").map((l) => [{ content: l, color: undefined, offset: 0 }]);
   return (
-    <div className={cn("overflow-x-auto rounded-lg border border-line bg-surface", className)}>
+    <ScrollRegion
+      label={label}
+      className={cn("overflow-y-hidden rounded-lg border border-line bg-surface", className)}
+    >
       <pre className="py-2 font-mono text-[13px] leading-5">
         <code>
           {lines.map((line, i) => (
@@ -74,6 +80,6 @@ export function CodeView({
           ))}
         </code>
       </pre>
-    </div>
+    </ScrollRegion>
   );
 }

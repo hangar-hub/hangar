@@ -78,13 +78,22 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   if (errorStatus(error) === 403) return <PermissionDenied />;
   if (errorStatus(error) === 401) {
     return (
-      <div role="alert" className="flex items-start gap-3 rounded-lg border border-line bg-surface px-5 py-6">
+      <div
+        role="alert"
+        className="flex items-start gap-3 rounded-lg border border-line bg-surface px-5 py-6"
+      >
         <Lock className="mt-0.5 size-5 shrink-0 text-muted" aria-hidden="true" />
         <div>
           <p className="font-medium">Sign in to see this</p>
-          <p className="mt-1 text-sm text-muted">This Instance only shows its arsenal to people who are signed in.</p>
+          <p className="mt-1 text-sm text-muted">
+            This Instance only shows its arsenal to people who are signed in.
+          </p>
           <Button asChild variant="primary" size="sm" className="mt-3">
-            <a href={`/auth/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Sign in</a>
+            <a
+              href={`/auth/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+            >
+              Sign in
+            </a>
           </Button>
         </div>
       </div>

@@ -5,7 +5,10 @@
 package web
 
 import (
+	"bytes"
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"io/fs"
 	"net/http"
 	"path"
@@ -29,14 +32,25 @@ type Options struct {
 
 var hashedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$`)
 
+// NonceMeta is the name of the meta element that carries the per-response
+// style nonce to the UI, which hands it to the libraries that add style
+// elements at run time (dialogs lock page scrolling that way).
+const NonceMeta = "csp-nonce"
+
 // CSP returns the Content Security Policy for UI pages: no inline scripts,
-// API calls to the same origin plus connectSrc.
-func CSP(connectSrc []string) string {
+// stylesheets from the same origin plus style elements carrying nonce, and
+// API calls to the same origin plus connectSrc. An empty nonce allows no
+// style elements.
+func CSP(connectSrc []string, nonce string) string {
 	connect := append([]string{"'self'"}, connectSrc...)
+	style := "style-src 'self'"
+	if nonce != "" {
+		style += " 'nonce-" + nonce + "'"
+	}
 	return strings.Join([]string{
 		"default-src 'self'",
 		"script-src 'self'",
-		"style-src 'self'",
+		style,
 		"img-src 'self' data: blob: https:",
 		"media-src 'self' blob:",
 		"font-src 'self'",
@@ -47,6 +61,27 @@ func CSP(connectSrc []string) string {
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 	}, "; ")
+}
+
+// newNonce returns 128 random bits, base64 encoded, for one response.
+func newNonce() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b) // crypto/rand.Read never fails on supported platforms
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// withNonce adds the nonce meta element at the start of the head.
+func withNonce(index []byte, nonce string) []byte {
+	meta := []byte(`<meta name="` + NonceMeta + `" content="` + nonce + `" />`)
+	i := bytes.Index(index, []byte("<head>"))
+	if i < 0 {
+		return append(meta, index...)
+	}
+	i += len("<head>")
+	out := make([]byte, 0, len(index)+len(meta))
+	out = append(out, index[:i]...)
+	out = append(out, meta...)
+	return append(out, index[i:]...)
 }
 
 // Handler returns the UI handler.
@@ -60,7 +95,6 @@ func Handler(opts Options) http.Handler {
 		root = sub
 	}
 	files := http.FS(root)
-	csp := CSP(opts.ConnectSrc)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpx.SetRoute(r.Context(), "/{ui}")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -96,13 +130,14 @@ func Handler(opts Options) http.Handler {
 			httpx.WriteError(w, r, http.StatusServiceUnavailable, "", "The web UI is not built into this binary. Run make build.")
 			return
 		}
-		h.Set("Content-Security-Policy", csp)
+		nonce := newNonce()
+		h.Set("Content-Security-Policy", CSP(opts.ConnectSrc, nonce))
 		h.Set("Cache-Control", "no-cache")
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("X-Frame-Options", "DENY")
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			_, _ = w.Write(index)
+			_, _ = w.Write(withNonce(index, nonce))
 		}
 	})
 }
