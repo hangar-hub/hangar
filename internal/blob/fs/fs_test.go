@@ -2,7 +2,9 @@ package fs_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,4 +203,32 @@ func TestConcurrentPutAndDeleteInOneDirectory(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
+}
+
+func TestPutOntoDirectoryFailsWithoutPaths(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	require.NoError(t, s.Put(ctx, "lfs/dir/child", strings.NewReader("x"), 1))
+	for name, put := range map[string]func() error{
+		"Put":         func() error { return s.Put(ctx, "lfs/dir", strings.NewReader("y"), 1) },
+		"PutVerified": func() error { return s.PutVerified(ctx, "lfs/dir", strings.NewReader("y"), 1, sha256Of("y")) },
+		"Copy":        func() error { return s.Copy(ctx, "lfs/dir/child", "lfs/dir") },
+	} {
+		err := put()
+		require.ErrorIs(t, err, iofs.ErrExist, name)
+		require.Contains(t, err.Error(), "lfs/dir", name)
+		require.NotContains(t, err.Error(), s.Root(), "%s: errors name keys, not paths", name)
+		require.NotContains(t, err.Error(), ".staging", name)
+	}
+	staged, err := os.ReadDir(filepath.Join(s.Root(), ".staging"))
+	require.NoError(t, err)
+	require.Empty(t, staged, "a failed install removes its staged file")
+	info, err := s.Stat(ctx, "lfs/dir/child")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), info.Size)
+}
+
+func sha256Of(s string) []byte {
+	sum := sha256.Sum256([]byte(s))
+	return sum[:]
 }

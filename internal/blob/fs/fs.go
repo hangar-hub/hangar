@@ -249,32 +249,62 @@ func (s *Store) SweepStaging(ctx context.Context, cutoff time.Time) (int, error)
 // Delete pruned the destination's directory.
 const installAttempts = 10
 
-// install renames a staged file into place, creating parent directories.
-// A concurrent Delete may remove an empty parent between MkdirAll and
-// Rename, or while MkdirAll creates it, so it retries while the error is
-// one that a vanished directory causes.
+// install renames a staged file into place at dst, creating parent
+// directories. A concurrent Delete may remove an empty parent between
+// MkdirAll and Rename, or while MkdirAll creates it, so it retries while the
+// error is one that a vanished directory causes. The error it returns names
+// dst relative to the root, never an absolute path.
 func (s *Store) install(tmp, dst string) error {
 	var err error
 	for range installAttempts {
-		if err = os.MkdirAll(filepath.Dir(dst), 0o750); err == nil {
-			if err = os.Rename(tmp, dst); err == nil {
-				return nil
+		if err = os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+			if lostDirectory(err) || errors.Is(err, iofs.ErrExist) {
+				continue
 			}
+			break
+		}
+		if err = os.Rename(tmp, dst); err == nil {
+			return nil
 		}
 		if !lostDirectory(err) {
 			break
 		}
 	}
 	_ = os.Remove(tmp)
-	return err
+	return installError(s.relative(dst), err)
 }
 
 // lostDirectory reports whether err is what MkdirAll or Rename return when
-// a directory on the path was removed during the call: ENOENT; EEXIST from
-// MkdirAll when the directory vanished between its mkdir and the check that
-// followed; and EINVAL, which macOS returns for a directory being removed.
+// a directory on the path was removed during the call: ENOENT, or EINVAL,
+// which macOS returns for a directory being removed. MkdirAll can also
+// return EEXIST when the directory vanished between its mkdir and the check
+// that followed; install retries that for MkdirAll only, because EEXIST from
+// Rename means the destination is a directory, which retrying cannot fix.
 func lostDirectory(err error) bool {
-	return errors.Is(err, iofs.ErrNotExist) || errors.Is(err, iofs.ErrExist) || errors.Is(err, syscall.EINVAL)
+	return errors.Is(err, iofs.ErrNotExist) || errors.Is(err, syscall.EINVAL)
+}
+
+// relative returns path relative to the root with forward slashes: the key,
+// for an object.
+func (s *Store) relative(path string) string {
+	rel, err := filepath.Rel(s.root, path)
+	if err != nil {
+		return filepath.Base(path)
+	}
+	return filepath.ToSlash(rel)
+}
+
+// installError reports a failed install at key without the paths that
+// os.MkdirAll and os.Rename put in their errors.
+func installError(key string, err error) error {
+	errno, ok := errors.AsType[syscall.Errno](err)
+	if !ok {
+		return fmt.Errorf("blob fs: store %s: %w", key, err)
+	}
+	if errno == syscall.EEXIST || errno == syscall.EISDIR || errno == syscall.ENOTEMPTY {
+		return fmt.Errorf("blob fs: store %s: a directory already has this key's path: %w", key, errno)
+	}
+	return fmt.Errorf("blob fs: store %s: %w", key, errno)
 }
 
 // Put implements blob.Store.
