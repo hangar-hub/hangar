@@ -265,8 +265,10 @@ type pullPayload struct {
 	Chain        []string       `json:"chain,omitempty"`
 }
 
-func (p pullPayload) upstreamID() (model.RepoID, error) { return model.ParseRepoID(p.Type, p.UpstreamRepo) }
-func (p pullPayload) localID() (model.RepoID, error)    { return model.ParseRepoID(p.Type, p.Repo) }
+func (p pullPayload) upstreamID() (model.RepoID, error) {
+	return model.ParseRepoID(p.Type, p.UpstreamRepo)
+}
+func (p pullPayload) localID() (model.RepoID, error) { return model.ParseRepoID(p.Type, p.Repo) }
 
 // dedupeKey joins Pulls of the same files of the same Revision.
 func (p pullPayload) dedupeKey() string {

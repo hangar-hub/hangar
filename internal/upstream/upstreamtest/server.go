@@ -507,3 +507,31 @@ func (s *Server) serveGit(w http.ResponseWriter, r *http.Request, id model.RepoI
 
 // String describes the Server for test failure messages.
 func (s *Server) String() string { return fmt.Sprintf("upstreamtest.Server(%s)", s.URL) }
+
+// Seed commits regular files and LFS files to a Repo on f, creating it
+// public if needed, and returns the Commit.
+func Seed(t testing.TB, f *Fake, id model.RepoID, files, lfs map[string][]byte) model.CommitSHA {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := f.Repos.Get(ctx, id); errors.Is(err, repo.ErrNotFound) {
+		if _, err := f.Repos.Create(ctx, repo.CreateParams{ID: id, Visibility: model.VisibilityPublic}); err != nil {
+			t.Fatalf("create %s: %v", id, err)
+		}
+	}
+	var ops []repo.Operation
+	for p, c := range files {
+		ops = append(ops, repo.Operation{Kind: repo.OpAdd, Path: p, Content: bytes.NewReader(c)})
+	}
+	for p, c := range lfs {
+		obj, err := f.Repos.LFS.Put(ctx, c)
+		if err != nil {
+			t.Fatalf("store %s: %v", p, err)
+		}
+		ops = append(ops, repo.Operation{Kind: repo.OpAddLFS, Path: p, OID: obj.OID, Size: obj.Size})
+	}
+	res, err := f.Repos.Commit(ctx, repo.CommitParams{Repo: id, Summary: "add files", Operations: ops, Actor: model.System(), AllowMirror: true})
+	if err != nil {
+		t.Fatalf("commit to %s: %v", id, err)
+	}
+	return res.SHA
+}

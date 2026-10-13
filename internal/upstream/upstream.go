@@ -129,7 +129,7 @@ type RepoInfo struct {
 	SHA     model.CommitSHA
 	Private bool
 	// Gated is "", "auto" or "manual".
-	Gated string
+	Gated        string
 	Siblings     []Sibling
 	CardData     map[string]any
 	Tags         []string
