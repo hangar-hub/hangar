@@ -189,9 +189,12 @@ def test_resume_after_killing_the_client(server, tmp_path):
 
 
 def test_token_expiry_during_a_long_upload(start_server, tmp_path):
-    """Tokens last 40 s and xorbs are read slowly, so the upload outlives
-    several tokens. hf_xet refreshes 30 s before expiry; no CAS call may get
-    a 401, because hf_xet never retries one."""
+    """Tokens last 40 s and xorbs are read slowly, so the upload takes more
+    than twice as long. hf_xet checks its token when each CAS request
+    starts and refreshes it 30 s before expiry: the xorb POST starts with
+    the first token and runs past its expiry, and the shard POST needs a
+    refreshed one. No CAS call may get a 401, because hf_xet never retries
+    one."""
     srv = start_server(HANGAR_XET_TOKEN_TTL="40s", HANGAR_XET_XORB_BYTES_PER_SEC=str(64 * 1024))
     client = Client(srv, tmp_path / "hf-home")
     repo = new_repo(srv)
@@ -201,8 +204,9 @@ def test_token_expiry_during_a_long_upload(start_server, tmp_path):
     client.run(upload_file_code(repo, src, "slow.bin"), timeout=900)
     took = time.monotonic() - started
     stats = srv.stats()
-    assert took > 100, f"the upload took {took:.0f} s, not long enough to outlive several tokens"
-    assert stats["token_requests"] >= 3, stats
+    assert took > 100, f"the upload took {took:.0f} s, not long enough to outlive the first token"
+    assert stats["token_requests"] >= 2, "the client refreshed its token"
+    assert stats["xorb_posts"] >= 1 and stats["shard_posts_v2"] == 1, stats
     assert stats["cas_401"] == 0, stats
     assert_stored(srv, repo, "slow.bin", sha, tmp_path)
 
