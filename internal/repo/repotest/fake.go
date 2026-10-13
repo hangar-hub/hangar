@@ -1423,3 +1423,53 @@ func (f *Fake) SetLFSPresence(_ context.Context, id model.RepoID, refs []repo.LF
 	}
 	return nil
 }
+
+// LFSRefs implements repo.Service. The fake records references when a
+// Commit adds an LFS file or SetLFSPresence is called; objects referenced
+// by packs from ApplyPack are found by scanning every ref's tree.
+func (f *Fake) LFSRefs(ctx context.Context, id model.RepoID, oids []string) (map[string]repo.LFSRef, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r, err := f.lookup(id)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := f.refsLocked(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	known := map[string]repo.LFSRef{}
+	for oid, ref := range r.lfs {
+		known[oid] = ref
+	}
+	for _, group := range [][]repo.Ref{refs.Branches, refs.Tags, refs.PullRequests, refs.Converts} {
+		for _, ref := range group {
+			entries, err := f.lsTree(ctx, r, "-r", string(ref.Target))
+			if err != nil {
+				return nil, err
+			}
+			for _, e := range entries {
+				if e.typ != "blob" || e.size > model.MaxLFSPointerSize {
+					continue
+				}
+				content, err := f.git.run(ctx, r.dir, nil, nil, "cat-file", "blob", e.oid)
+				if err != nil {
+					return nil, err
+				}
+				if p, err := model.ParseLFSPointer(content); err == nil {
+					if _, ok := known[p.OID]; !ok {
+						known[p.OID] = repo.LFSRef{OID: p.OID, Size: p.Size, Present: f.present(ctx, r, p.OID)}
+					}
+				}
+			}
+		}
+	}
+	out := map[string]repo.LFSRef{}
+	for _, oid := range oids {
+		if ref, ok := known[oid]; ok {
+			ref.Present = ref.Present && f.present(ctx, r, oid)
+			out[oid] = ref
+		}
+	}
+	return out, nil
+}

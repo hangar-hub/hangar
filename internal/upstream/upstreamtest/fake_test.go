@@ -123,6 +123,10 @@ func TestFakeFetchPackKeepsCommitSHAs(t *testing.T) {
 	e, err := local.Entry(ctx, jina, got, "model.safetensors")
 	require.NoError(t, err)
 	require.False(t, e.Present, "the LFS object is not in the Mirror until a Pull transfers it")
+	refs, err := local.LFSRefs(ctx, jina, []string{e.LFS.OID})
+	require.NoError(t, err)
+	require.False(t, refs[e.LFS.OID].Present, "pointers in fetched packs are referenced but not present")
+	require.Equal(t, int64(100), refs[e.LFS.OID].Size)
 
 	// With what we have, there is nothing new.
 	again, err := f.FetchPack(ctx, hf, anon, jina, []model.CommitSHA{sha})

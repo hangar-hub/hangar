@@ -462,6 +462,10 @@ type Service interface {
 	// SetLFSPresence records LFS objects a Repo references and whether
 	// they are present, for Partial mirrors and Pulls.
 	SetLFSPresence(ctx context.Context, id model.RepoID, refs []LFSRef) error
+	// LFSRefs returns which of oids the Repo references, and whether each is
+	// present. The git-lfs download batch uses it so a Repo can only fetch
+	// objects it references, and to answer "not in arsenal" for Partial mirrors.
+	LFSRefs(ctx context.Context, id model.RepoID, oids []string) (map[string]LFSRef, error)
 }
 
 // LFSObject describes a stored LFS object.

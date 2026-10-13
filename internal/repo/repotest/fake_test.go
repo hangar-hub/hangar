@@ -421,6 +421,11 @@ func TestPartialMirrorPresence(t *testing.T) {
 	sum := sha256.Sum256(content)
 	oid := hex.EncodeToString(sum[:])
 	require.NoError(t, f.SetLFSPresence(ctx, id, []repo.LFSRef{{OID: oid, Size: int64(len(content)), Present: false}}))
+	refs, err := f.LFSRefs(ctx, id, []string{missing, oid, strings.Repeat("e", 64)})
+	require.NoError(t, err)
+	require.Len(t, refs, 2, "objects the Repo does not reference are not listed")
+	require.False(t, refs[missing].Present)
+	require.Equal(t, int64(1<<30), refs[missing].Size)
 	require.ErrorIs(t, f.SetLFSPresence(ctx, id, []repo.LFSRef{{OID: "bad"}}), repo.ErrInvalid)
 }
 
