@@ -1,0 +1,64 @@
+name: Compatibility
+
+on:
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compat:
+    name: Client suites
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v10
+      - uses: actions/cache@v6
+        with:
+          path: compat/.fixtures
+          key: compat-fixtures-${{ hashFiles('compat/fixtures.json') }}
+      - name: Download fixtures
+        run: make fixtures
+      - name: Build hangar
+        run: go build -o "$RUNNER_TEMP/hangar" ./cmd/hangar && echo "HANGAR_BINARY=$RUNNER_TEMP/hangar" >> "$GITHUB_ENV"
+      - name: Go and pytest suites
+        run: make test-compat
+
+  e2e:
+    name: UI end to end
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - run: corepack enable
+      - run: make build PNPM=pnpm
+      - name: Start hangar
+        run: |
+          ./bin/hangar server --public-url http://localhost:8080 --set server.data_dir="$RUNNER_TEMP/hangar" \
+            --set database.dsn="$RUNNER_TEMP/hangar/hangar.db" --set storage.fs.path="$RUNNER_TEMP/hangar/blobs" \
+            --set git.cache_dir="$RUNNER_TEMP/hangar/git" &
+          for _ in $(seq 1 30); do ./bin/hangar healthcheck && break; sleep 1; done
+      - working-directory: ui
+        run: pnpm exec playwright install --with-deps chromium
+      - working-directory: ui
+        run: pnpm exec playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: ui/playwright-report

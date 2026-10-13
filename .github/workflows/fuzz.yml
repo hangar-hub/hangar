@@ -1,0 +1,30 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: Time per fuzz target
+        default: 10m
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Run every fuzz target
+        run: ./scripts/fuzz.sh "${{ inputs.fuzztime || '10m' }}"
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-corpus
+          path: "**/testdata/fuzz/**"

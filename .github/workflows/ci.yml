@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  go-lint:
+    name: Go lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: House style
+        run: make lint-style
+
+  go-test:
+    name: Go test (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: hangar
+          POSTGRES_PASSWORD: hangar
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hangar"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      HANGAR_TEST_POSTGRES_DSN: postgres://hangar:hangar@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test with SQLite and Postgres, and check coverage floors
+        run: ./scripts/coverage.sh -race -tags integration
+      - name: Blob store conformance
+        run: go test -count=1 -run Conformance ./internal/blob/...
+
+  ui:
+    name: UI lint, types and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - name: Install
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+      - working-directory: ui
+        run: pnpm run lint
+      - working-directory: ui
+        run: pnpm run typecheck
+      - working-directory: ui
+        run: pnpm run test
+
+  generated:
+    name: Generated code is current
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - working-directory: ui
+        run: pnpm install --frozen-lockfile
+      - name: OpenAPI and config reference drift
+        run: make check-generate PNPM=pnpm
+
+  build:
+    name: Build (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - run: make build PNPM=pnpm
+      - name: Smoke test the binary
+        run: |
+          ./bin/hangar version
+          ./bin/hangar server --public-url http://localhost:8080 --set server.data_dir="$RUNNER_TEMP/hangar" \
+            --set database.dsn="$RUNNER_TEMP/hangar/hangar.db" --set storage.fs.path="$RUNNER_TEMP/hangar/blobs" \
+            --set git.cache_dir="$RUNNER_TEMP/hangar/git" &
+          for _ in $(seq 1 30); do ./bin/hangar healthcheck && break; sleep 1; done
+          curl -fsS http://localhost:8080/healthz
+          curl -fsS http://localhost:8080/ | grep -q 'id="root"'
