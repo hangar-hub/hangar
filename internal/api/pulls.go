@@ -14,9 +14,16 @@ import (
 	"github.com/jamesagarside/hangar/internal/upstream"
 )
 
+// upSelection converts the API Selection. An explicit empty `paths`
+// list with nothing else selects no files: a history-only Pull.
 func upSelection(s *gen.Selection) upstream.Selection {
 	if s == nil {
 		return upstream.Selection{}
+	}
+	if s.Paths != nil && len(*s.Paths) == 0 && s.Include == nil && s.Quants == nil && s.Configs == nil && s.Splits == nil &&
+		(s.ParquetOnly == nil || !*s.ParquetOnly) {
+		out := upstream.Selection{None: true}
+		return out
 	}
 	val := func(p *[]string) []string {
 		if p == nil {
