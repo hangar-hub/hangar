@@ -1,0 +1,33 @@
+# Build output
+/bin/
+/dist/
+/coverage.out
+/coverage/
+*.test
+*.prof
+
+# UI build output (embedded at build time; the directory itself is kept)
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+/ui/node_modules/
+/ui/test-results/
+/ui/playwright-report/
+/ui/blob-report/
+/ui/.vite/
+
+# Python (compat suites)
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Local data and fixtures cache
+/.cache/
+/compat/.fixtures/
+/tmp/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
