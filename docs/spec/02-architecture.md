@@ -274,7 +274,7 @@ security:
   local_login: true
   session_ttl: 720h
   bootstrap_admin:                          # created on first start if no admin exists
-    username: admin
+    username: hangar-admin
     password: ""                            # or password_file
     email: ""
 

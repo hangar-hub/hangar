@@ -285,7 +285,7 @@ func Default() Config {
 			Registration:   RegistrationClosed,
 			LocalLogin:     true,
 			SessionTTL:     720 * time.Hour,
-			BootstrapAdmin: BootstrapConfig{Username: "admin"},
+			BootstrapAdmin: BootstrapConfig{Username: "hangar-admin"},
 		},
 		OIDC: OIDCConfig{Providers: []OIDCProvider{}},
 		Upstreams: map[string]UpstreamConfig{

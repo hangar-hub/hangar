@@ -31,6 +31,7 @@ func TestDefaultsValidateWithRequiredKeys(t *testing.T) {
 	require.Equal(t, 64*config.MiB, cfg.Server.MaxRequestBody)
 	require.Equal(t, 60*time.Second, cfg.Jobs.Lease)
 	require.Equal(t, "https://huggingface.co", cfg.Upstreams["huggingface"].BaseURL)
+	require.Equal(t, "hangar-admin", cfg.Security.BootstrapAdmin.Username, "admin is a reserved Namespace name")
 	require.Equal(t, "http://localhost:8080/xet-cas", cfg.CASURL())
 	key, err := cfg.InstanceKeyBytes()
 	require.NoError(t, err)
@@ -161,6 +162,12 @@ func TestValidateBeforeSecretsAllowsAnEmptyInstanceKey(t *testing.T) {
 	cfg.Security.InstanceKey = ""
 	cfg.Storage.Backend = "tape"
 	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "storage.backend")
+}
+
+func TestValidateRefusesAReservedBootstrapUsername(t *testing.T) {
+	cfg, err := config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_SECURITY_BOOTSTRAP_ADMIN_USERNAME=admin")})
+	require.NoError(t, err)
+	require.ErrorContains(t, cfg.Validate(), `security.bootstrap_admin.username: invalid namespace name: "admin" is reserved`)
 }
 
 func TestOIDCProvidersFromJSONEnv(t *testing.T) {

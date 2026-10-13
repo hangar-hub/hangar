@@ -128,9 +128,9 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	}
 	positiveDuration(&e, "security.session_ttl", c.Security.SessionTTL)
 	if c.Security.BootstrapAdmin.Username != "" {
-		// Syntax only: the default bootstrap username, admin, is a reserved
-		// Namespace name that only the bootstrap step may use.
-		if err := model.ValidateNamespaceName(c.Security.BootstrapAdmin.Username); err != nil {
+		// The bootstrap admin gets a personal Namespace, so a reserved name
+		// such as admin would be shadowed by Hangar's own routes.
+		if err := model.ValidateNewNamespaceName(c.Security.BootstrapAdmin.Username); err != nil {
 			e.addf("security.bootstrap_admin.username: %v", err)
 		}
 	}
