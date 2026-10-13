@@ -16,9 +16,10 @@ Where the spec was silent or inconsistent, phase 0 chose as follows. Change any 
 - **Default `.gitattributes`.** Copied from Repos created on huggingface.co on 2026-10-13: one file for models and one for datasets, which the Hub gives extra media rules.
 - **Native API.** The Discover endpoints take the Repo type in the path (`/discover/{type}`), so datasets use the same shape as models (DATA-7). `GET /repos/datasets/{ns}/{name}/configs` gives Configs, Splits and conversion status for the Viewer tab, owned by W10.
 - **Phase 0 server wiring.** `cmd/hangar` serves the real health checks, the embedded UI and the generated native API router (answering 501 until handlers exist). The other protocols are stand-ins from `internal/httpx/httpxtest`, the Blob store is in memory, and every request is anonymous. Phase 2 replaces them.
+- **Bootstrap admin username `hangar-admin`.** Decided by the integration lead on 2026-10-13. The default `security.bootstrap_admin.username` is `hangar-admin`, not `admin`, because `admin` is a reserved Namespace name and `/admin` is a UI route, so the bootstrap admin's personal Namespace page and Repos would be shadowed by the admin UI. Config validation refuses reserved names for this key. W5 implements the bootstrap step.
+- **Owners of native API endpoints the build plan left unowned.** Decided by the integration lead on 2026-10-13: `/jobs` and `/admin/system` belong to W1, `/search` and `/namespaces` to W2, and `/me/device` and `/admin/settings` to W5.
+- **Packages outside the layout in 02.** Decided by the integration lead on 2026-10-13: the integration lead owns `internal/contracttest`, `internal/secrets`, `internal/pins` and `internal/httpx/httpxtest`.
 
 ## Open questions for James
 
-- The default bootstrap username `admin` is also a reserved Namespace name, and `/admin/...` is a UI route, so the admin's personal Namespace page and any Repos in it would be shadowed by the admin UI. Config validation allows the default; W5 must either keep the bootstrap user from owning Repos or change the default (for example to `hangar-admin`).
-- Native API endpoints with no owner in the build plan: `/search`, `/jobs`, `/namespaces/{ns}`, `/admin/settings`, `/admin/system`, `/me/device`. Suggested owners: `/jobs` W1, `/search` and `/namespaces` W2, `/me/device` W5, `/admin/settings` and `/admin/system` the integration lead.
-- `internal/contracttest`, `internal/secrets`, `internal/pins` and `internal/httpx/httpxtest` are new packages not in the layout in 02. The integration lead owns them.
+None.
