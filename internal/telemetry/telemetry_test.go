@@ -51,7 +51,7 @@ func TestDefaultsExportNothingAndLogJSON(t *testing.T) {
 
 	attrs := map[string]string{}
 	for _, kv := range tel.Resource.Attributes() {
-		attrs[string(kv.Key)] = kv.Value.Emit()
+		attrs[string(kv.Key)] = kv.Value.String()
 	}
 	require.Equal(t, "hangar", attrs["service.name"])
 	require.Equal(t, "1.2.3", attrs["service.version"])

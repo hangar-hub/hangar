@@ -28,7 +28,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
-	"go.opentelemetry.io/otel/log/global"
 	lognoop "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
@@ -144,9 +143,9 @@ func Setup(ctx context.Context, opts Options) (*Telemetry, error) {
 	otel.SetMeterProvider(t.MeterProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	if logExp != nil {
-		global.SetLoggerProvider(t.LoggerProvider)
+		otel.SetLoggerProvider(t.LoggerProvider)
 	} else {
-		global.SetLoggerProvider(lognoop.NewLoggerProvider())
+		otel.SetLoggerProvider(lognoop.NewLoggerProvider())
 	}
 
 	if err := otelruntime.Start(otelruntime.WithMeterProvider(t.MeterProvider)); err != nil {

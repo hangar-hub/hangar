@@ -39,10 +39,10 @@ func EnvName(key string) string {
 }
 
 func typeName(t reflect.Type) string {
-	switch {
-	case t == durationType:
+	switch t {
+	case durationType:
 		return "duration"
-	case t == byteSizeType:
+	case byteSizeType:
 		return "size"
 	}
 	switch t.Kind() {

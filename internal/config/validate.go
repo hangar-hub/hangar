@@ -267,7 +267,7 @@ func (c *Config) Validate() error {
 	if c.Viewer.MaxScanRows < 1 {
 		e.addf("viewer.max_scan_rows must be at least 1")
 	}
-	positiveDuration(&e, "viewer.max_scan_seconds", c.Viewer.MaxScanSeconds)
+	positiveDuration(&e, "viewer.max_scan_seconds", c.Viewer.MaxScanTime)
 	positiveSize(&e, "viewer.max_cell_bytes", c.Viewer.MaxCellBytes)
 	if c.Viewer.ConvertConcurrency < 1 {
 		e.addf("viewer.convert_concurrency must be at least 1")

@@ -21,7 +21,7 @@ const (
 const (
 	// MsgInvalidCredentials keeps huggingface_hub from mislabelling a bad
 	// token as RepositoryNotFoundError.
-	MsgInvalidCredentials = "Invalid credentials in Authorization header"
+	MsgInvalidCredentials = "Invalid credentials in Authorization header" //nolint:gosec // an error message, not a credential.
 	// MsgDisabled makes huggingface_hub raise DisabledRepoError.
 	MsgDisabled = "Access to this resource is disabled."
 )

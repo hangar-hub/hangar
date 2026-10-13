@@ -43,7 +43,7 @@ const (
 	UnknownXorbMessage = "The upload refers to data this Hangar no longer has. Clear the hf_xet cache (~/.cache/huggingface/xet) or set HF_HUB_DISABLE_XET=1, then upload again."
 )
 
-// MaxObjectSize is the largest serialized xorb or shard.
+// MaxObjectSize is the largest serialised xorb or shard.
 const MaxObjectSize = 64 << 20
 
 var hashRe = regexp.MustCompile(`^[0-9a-f]{64}$`)

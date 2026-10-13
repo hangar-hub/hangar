@@ -100,7 +100,7 @@ func newHandler(d deps, health *httpx.Health) (http.Handler, error) {
 		Native: http.MaxBytesHandler(native, d.cfg.Server.MaxRequestBody.Int64()),
 		UI:     web.Handler(web.Options{}),
 	})
-	var h http.Handler = httpx.Dispatch(protocols, d.cfg.Server.PublicURL)
+	h := httpx.Dispatch(protocols, d.cfg.Server.PublicURL)
 	h = httpx.Authenticate(d.authn, nil)(h)
 	h = httpx.AccessLog(d.log)(h)
 	h = httpx.Recover(d.log)(h)

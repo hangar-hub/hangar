@@ -180,7 +180,7 @@ func RunConformance(t *testing.T, caps Capabilities, newStore func(t *testing.T)
 		require.NoError(t, err)
 		got, _ := io.ReadAll(rc)
 		_ = rc.Close()
-		require.Equal(t, int64(2*partSize+100), info.Size)
+		require.Equal(t, 2*partSize+100, info.Size)
 		require.Equal(t, append(append(append([]byte{}, p1...), p2...), p3...), got)
 	})
 

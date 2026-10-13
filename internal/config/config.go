@@ -239,7 +239,7 @@ type ViewerConfig struct {
 	Enabled            bool          `koanf:"enabled" desc:"Turn on Parquet export and the Dataset Viewer."`
 	MaxConvertBytes    ByteSize      `koanf:"max_convert_bytes" desc:"Splits larger than this get a partial Parquet export."`
 	MaxScanRows        int           `koanf:"max_scan_rows" desc:"Rows scanned by one filter or search request before it returns partial results."`
-	MaxScanSeconds     time.Duration `koanf:"max_scan_seconds" desc:"Time limit of one filter or search request before it returns partial results."`
+	MaxScanTime        time.Duration `koanf:"max_scan_seconds" desc:"Time limit of one filter or search request before it returns partial results."`
 	MaxCellBytes       ByteSize      `koanf:"max_cell_bytes" desc:"Cells larger than this are truncated in Viewer responses."`
 	ConvertConcurrency int           `koanf:"convert_concurrency" desc:"dataset.convert Jobs per worker."`
 }
@@ -323,7 +323,7 @@ func Default() Config {
 			Enabled:            true,
 			MaxConvertBytes:    5 * GiB,
 			MaxScanRows:        5_000_000,
-			MaxScanSeconds:     10 * time.Second,
+			MaxScanTime:        10 * time.Second,
 			MaxCellBytes:       100 * KiB,
 			ConvertConcurrency: 1,
 		},

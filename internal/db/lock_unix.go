@@ -16,7 +16,7 @@ import (
 type fileLock struct{ f *os.File }
 
 func acquireLock(path string) (*fileLock, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // path comes from database.dsn in the server config.
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}

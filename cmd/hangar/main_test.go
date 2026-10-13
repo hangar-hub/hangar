@@ -69,7 +69,7 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 
 	// The native API is mounted from the generated router.
 	resp, body = get("/api/hangar/v1/me")
-	require.Equal(t, http.StatusNotImplemented, resp.StatusCode)
+	require.Equal(t, http.StatusNotImplemented, resp.StatusCode, body)
 	resp, _ = get("/api/hangar/v1/repos?limit=lots")
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode, "the generated router validates parameters")
 	require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))

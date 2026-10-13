@@ -105,7 +105,7 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 		return nil, fmt.Errorf("unknown database driver %q", opts.Driver)
 	}
 	if opts.Tracing {
-		d.AddQueryHook(bunotel.NewQueryHook(bunotel.WithDBName("hangar")))
+		d.DB = d.WithQueryHook(bunotel.NewQueryHook(bunotel.WithDBName("hangar")))
 	}
 	if err := d.PingContext(ctx); err != nil {
 		_ = d.Close()

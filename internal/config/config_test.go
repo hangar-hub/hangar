@@ -258,7 +258,7 @@ func TestReferenceListsEveryKey(t *testing.T) {
 	require.Contains(t, out, "`upstreams.<id>.base_url`")
 	require.Contains(t, out, "`oidc.providers[].client_id`")
 	require.Contains(t, out, "| `64MiB` |")
-	require.NotContains(t, out, "—", "house style: no em dashes")
+	require.NotContains(t, out, "\u2014", "house style: no em dashes")
 	// Secrets never show a default value.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, "`security.instance_key`") {
