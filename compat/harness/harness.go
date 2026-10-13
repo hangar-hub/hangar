@@ -187,7 +187,7 @@ func (i *Instance) waitReady(timeout time.Duration) error {
 		select {
 		case err := <-i.done:
 			i.done <- err
-			return fmt.Errorf("process exited: %v", err)
+			return fmt.Errorf("process exited: %w", err)
 		default:
 		}
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, i.URL+"/readyz", nil)

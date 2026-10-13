@@ -12,7 +12,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: { baseURL, trace: "retain-on-failure" },
   projects: [
-    { name: "phone", use: { ...devices["iPhone 13"], viewport: { width: 390, height: 844 } } },
+    { name: "phone", use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
     {
       name: "tablet",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1024, height: 768 } },
