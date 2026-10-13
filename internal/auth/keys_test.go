@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/jamesagarside/hangar/internal/audit"
@@ -26,6 +27,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/secrets"
 )
 
 // ollamaKey is an Ollama client key pair, generated in the test.
@@ -322,6 +324,29 @@ func TestUpstreamTokens(t *testing.T) {
 		require.Equal(t, "hf_second", tok)
 		_, err = s.UpstreamTokens.Set(ctx, alice.ID, "huggingface", "  ", ap)
 		require.ErrorIs(t, err, auth.ErrInvalid)
+
+		// Key rotation re-encrypts stored tokens in one transaction.
+		key := make([]byte, 32)
+		_, _ = rand.Read(key)
+		newSealer, err := secrets.New(key)
+		require.NoError(t, err)
+		oldKey, err := s.Config().InstanceKeyBytes()
+		require.NoError(t, err)
+		oldSealer, err := secrets.New(oldKey)
+		require.NoError(t, err)
+		require.NoError(t, d.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+			n, err := auth.ReencryptUpstreamTokens(ctx, tx, oldSealer, newSealer)
+			require.Equal(t, 1, n)
+			return err
+		}))
+		require.NoError(t, d.NewSelect().Model(&row).Where("user_id = ?", alice.ID).Scan(ctx))
+		plain, err := newSealer.Open(row.Ciphertext, "upstream_token")
+		require.NoError(t, err)
+		require.Equal(t, "hf_second", plain)
+		require.Error(t, d.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+			_, err := auth.ReencryptUpstreamTokens(ctx, tx, oldSealer, newSealer)
+			return err
+		}), "the wrong old key fails")
 
 		require.NoError(t, s.UpstreamTokens.Delete(ctx, alice.ID, "huggingface", ap))
 		require.ErrorIs(t, s.UpstreamTokens.Delete(ctx, alice.ID, "huggingface", ap), auth.ErrNotFound)

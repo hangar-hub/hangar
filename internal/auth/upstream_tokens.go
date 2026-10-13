@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 
 	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/secrets"
 )
 
 // upstreamTokenPurpose binds upstream token ciphertexts to their use.
@@ -120,4 +122,29 @@ func (ut *UpstreamTokenStore) Token(ctx context.Context, userID, upstreamID uuid
 		return "", false, err
 	}
 	return plain, true, nil
+}
+
+// ReencryptUpstreamTokens re-encrypts every stored upstream token from
+// one Instance key to another inside tx, for `hangar admin rotate-key`,
+// and returns how many it changed. It fails without changing anything
+// if a token cannot be decrypted with from.
+func ReencryptUpstreamTokens(ctx context.Context, tx bun.IDB, from, to *secrets.Sealer) (int, error) {
+	var rows []db.UpstreamToken
+	if err := tx.NewSelect().Model(&rows).Scan(ctx); err != nil {
+		return 0, err
+	}
+	for _, r := range rows {
+		plain, err := from.Open(r.Ciphertext, upstreamTokenPurpose)
+		if err != nil {
+			return 0, fmt.Errorf("upstream token %s: %w", r.ID, err)
+		}
+		ct, err := to.Seal(plain, upstreamTokenPurpose)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.NewUpdate().Model((*db.UpstreamToken)(nil)).Where("id = ?", r.ID).Set("ciphertext = ?", ct).Exec(ctx); err != nil {
+			return 0, err
+		}
+	}
+	return len(rows), nil
 }
