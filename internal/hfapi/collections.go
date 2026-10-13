@@ -93,7 +93,11 @@ func (h *Handler) listCollections(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(list))
 	for i := range list {
-		out = append(out, collectionJSON(&list[i]))
+		// The client sets `position` from the list order itself and fails
+		// on a second value.
+		c := collectionJSON(&list[i])
+		delete(c, "position")
+		out = append(out, c)
 	}
 	httpx.WriteJSON(w, r, http.StatusOK, out)
 }

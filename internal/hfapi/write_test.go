@@ -9,11 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/hfapi"
 	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
 	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/webhook"
 )
 
 func TestCreateRepo(t *testing.T) {
@@ -49,8 +47,6 @@ func TestCreateRepo(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, e.Request(t, http.MethodPost, "/api/repos/create", "alice", `{"name":"x","visibility":"secret"}`).StatusCode)
 	require.Equal(t, http.StatusBadRequest, e.Request(t, http.MethodPost, "/api/repos/create", "alice", `nope`).StatusCode)
 
-	require.Contains(t, e.Audit.Actions(), audit.RepoCreated)
-	require.Contains(t, e.Webhooks.Names(), webhook.RepoCreated)
 }
 
 func TestDeleteMoveAndSettings(t *testing.T) {
@@ -71,8 +67,6 @@ func TestDeleteMoveAndSettings(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, e.Request(t, http.MethodPut, "/api/models/alice/a/settings", "alice", bad).StatusCode, bad)
 	}
 	require.Equal(t, http.StatusForbidden, e.Request(t, http.MethodPut, "/api/models/alice/a/settings", "bob", `{"private":true}`).StatusCode)
-	require.Contains(t, e.Audit.Actions(), audit.RepoVisibilityChanged)
-	require.Contains(t, e.Webhooks.Names(), webhook.RepoVisibilityChanged)
 
 	// Move to another name and Namespace; the old ID redirects.
 	r = e.Request(t, http.MethodPost, "/api/repos/move", "alice", `{"fromRepo":"alice/a","toRepo":"acme/renamed","type":"model"}`)
@@ -80,8 +74,6 @@ func TestDeleteMoveAndSettings(t *testing.T) {
 	r = e.Request(t, http.MethodGet, "/api/models/alice/a", "", "")
 	require.Equal(t, http.StatusTemporaryRedirect, r.StatusCode)
 	require.Equal(t, "/api/models/acme/renamed", r.Header.Get("Location"))
-	require.Contains(t, e.Audit.Actions(), audit.RepoTransferred)
-	require.Contains(t, e.Audit.Actions(), audit.RepoRenamed)
 	require.Equal(t, http.StatusForbidden, e.Request(t, http.MethodPost, "/api/repos/move", "alice", `{"fromRepo":"alice/b","toRepo":"bob/b"}`).StatusCode)
 	require.Equal(t, http.StatusNotFound, e.Request(t, http.MethodPost, "/api/repos/move", "alice", `{"fromRepo":"alice/b","toRepo":"ghost/b"}`).StatusCode)
 	require.Equal(t, http.StatusBadRequest, e.Request(t, http.MethodPost, "/api/repos/move", "alice", `{"fromRepo":"b","toRepo":"alice/c"}`).StatusCode)
@@ -94,7 +86,6 @@ func TestDeleteMoveAndSettings(t *testing.T) {
 	requireHubError(t, e.Request(t, http.MethodDelete, "/api/repos/delete", "alice", `{"name":"b"}`), http.StatusNotFound, "RepoNotFound")
 	requireHubError(t, e.Request(t, http.MethodDelete, "/api/repos/delete", "alice", `{"name":"b--"}`), http.StatusNotFound, "RepoNotFound")
 	require.Equal(t, http.StatusBadRequest, e.Request(t, http.MethodDelete, "/api/repos/delete", "alice", `{"name":"b","type":"kernel"}`).StatusCode)
-	require.Contains(t, e.Webhooks.Names(), webhook.RepoDeleted)
 	require.Equal(t, http.StatusNotFound, e.Request(t, http.MethodPost, "/api/repos/other", "alice", `{}`).StatusCode)
 }
 
@@ -243,7 +234,6 @@ func TestCommit(t *testing.T) {
 	require.Equal(t, "plain", string(readBody(t, e.Request(t, http.MethodGet, "/alice/c/resolve/main/notes.txt", "", ""))))
 	requireHubError(t, e.Request(t, http.MethodGet, "/alice/c/resolve/main/old.bin", "", ""), http.StatusNotFound, "EntryNotFound")
 	requireHubError(t, e.Request(t, http.MethodGet, "/alice/c/resolve/main/logs/a.txt", "", ""), http.StatusNotFound, "EntryNotFound")
-	require.Contains(t, e.Webhooks.Names(), webhook.RepoUpdated)
 
 	commit := func(user, path, body string) *http.Response {
 		return e.Request(t, http.MethodPost, path, user, body, "Content-Type", "application/x-ndjson")

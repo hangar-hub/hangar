@@ -23,7 +23,6 @@ import (
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/telemetry"
-	"github.com/jamesagarside/hangar/internal/webhook"
 )
 
 // spoolMemory is how many bytes of regular file content one commit keeps
@@ -312,9 +311,6 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, ref repoRef, re
 	}
 	if in := h.d.Instruments; in != nil && in.UploadBytes != nil && req.regularLen > 0 {
 		in.UploadBytes.Add(ctx, req.regularLen, metric.WithAttributes(attribute.String(telemetry.MetricProtocol, string(telemetry.ProtocolHub))))
-	}
-	if !res.NoOp {
-		h.emit(r, webhook.RepoUpdated, rp, map[string]any{"refs": []map[string]any{{"ref": res.Ref, "before": string(res.Parent), "after": string(res.SHA)}}, "via": "hub_api"})
 	}
 	out := map[string]any{
 		"success":   true,

@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/collections"
 	"github.com/jamesagarside/hangar/internal/community"
@@ -33,7 +32,6 @@ import (
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
-	"github.com/jamesagarside/hangar/internal/webhook"
 	"github.com/jamesagarside/hangar/internal/xet"
 )
 
@@ -96,7 +94,9 @@ type PullThrough interface {
 var ErrPullPending = errors.New("the pull has not finished planning yet")
 
 // Deps are the services the Hub API uses. Every field except PullThrough,
-// Instruments and Log is required.
+// Instruments, Log and Now is required. The Hub API records no audit events
+// and emits no webhooks itself: repo.Service does for the Repo changes it
+// makes, and community.Service for discussions.
 type Deps struct {
 	Settings    Settings
 	Repos       repo.Service
@@ -110,8 +110,6 @@ type Deps struct {
 	Xet         xet.Ingestor
 	Viewer      datasets.Viewer
 	Devices     auth.DeviceFlow
-	Webhooks    webhook.Emitter
-	Audit       audit.Recorder
 	PullThrough PullThrough
 	Instruments *telemetry.Instruments
 	Log         *slog.Logger
@@ -148,8 +146,6 @@ func New(d Deps) (*Handler, error) {
 	check(d.Xet != nil, "Xet")
 	check(d.Viewer != nil, "Viewer")
 	check(d.Devices != nil, "Devices")
-	check(d.Webhooks != nil, "Webhooks")
-	check(d.Audit != nil, "Audit")
 	check(d.Settings.PublicURL != "", "Settings.PublicURL")
 	if len(missing) > 0 {
 		return nil, errors.New("hfapi: missing dependencies: " + strings.Join(missing, ", "))

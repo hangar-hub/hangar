@@ -6,13 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/org"
 	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/webhook"
 )
 
 // serveRepos routes /api/repos/{create,delete,move}.
@@ -154,8 +152,6 @@ func (h *Handler) createRepo(w http.ResponseWriter, r *http.Request) {
 		h.serviceError(w, r, id, err)
 		return
 	}
-	h.audit(r, audit.RepoCreated, rp.ID, map[string]any{"visibility": string(rp.Visibility), "via": "hub_api"})
-	h.emit(r, webhook.RepoCreated, rp, map[string]any{"visibility": string(rp.Visibility)})
 	httpx.WriteJSON(w, r, http.StatusOK, map[string]any{"url": h.repoURL(rp.ID), "name": rp.ID.String(), "id": rp.UUID.String()})
 }
 
@@ -218,8 +214,6 @@ func (h *Handler) deleteRepo(w http.ResponseWriter, r *http.Request) {
 		h.serviceError(w, r, rp.ID, err)
 		return
 	}
-	h.audit(r, audit.RepoDeleted, rp.ID, map[string]any{"via": "hub_api"})
-	h.emit(r, webhook.RepoDeleted, rp, nil)
 	httpx.WriteJSON(w, r, http.StatusOK, map[string]any{})
 }
 
@@ -270,7 +264,6 @@ func (h *Handler) moveRepo(w http.ResponseWriter, r *http.Request) {
 			h.serviceError(w, r, cur.ID, err)
 			return
 		}
-		h.audit(r, audit.RepoTransferred, moved.ID, map[string]any{"from": cur.ID.String(), "to": moved.ID.String()})
 		cur = moved
 	}
 	if cur.ID.Name != to.Name {
@@ -279,10 +272,8 @@ func (h *Handler) moveRepo(w http.ResponseWriter, r *http.Request) {
 			h.serviceError(w, r, cur.ID, err)
 			return
 		}
-		h.audit(r, audit.RepoRenamed, renamed.ID, map[string]any{"from": cur.ID.String(), "to": renamed.ID.String()})
 		cur = renamed
 	}
-	h.emit(r, webhook.RepoRenamed, cur, map[string]any{"from": rp.ID.String(), "to": cur.ID.String()})
 	httpx.WriteJSON(w, r, http.StatusOK, map[string]any{"url": h.repoURL(cur.ID)})
 }
 
@@ -335,36 +326,9 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request, ref rep
 		}
 		u.Gating = &g
 	}
-	updated, err := h.d.Repos.UpdateSettings(r.Context(), rp.ID, u, httpx.Principal(r.Context()))
-	if err != nil {
+	if _, err := h.d.Repos.UpdateSettings(r.Context(), rp.ID, u, httpx.Principal(r.Context())); err != nil {
 		h.serviceError(w, r, rp.ID, err)
 		return
 	}
-	if updated.Visibility != rp.Visibility {
-		data := map[string]any{"from": string(rp.Visibility), "to": string(updated.Visibility)}
-		h.audit(r, audit.RepoVisibilityChanged, updated.ID, data)
-		h.emit(r, webhook.RepoVisibilityChanged, updated, data)
-	}
 	httpx.WriteJSON(w, r, http.StatusOK, map[string]any{})
-}
-
-// audit records an audit event. A failure is logged and never fails the
-// request, which has already succeeded.
-func (h *Handler) audit(r *http.Request, action audit.Action, id model.RepoID, data map[string]any) {
-	err := h.d.Audit.Record(r.Context(), audit.Event{
-		Action: action, Actor: httpx.Principal(r.Context()), TargetType: "repo",
-		TargetID: string(id.Type) + ":" + id.String(), IP: httpx.ClientIP(r), UserAgent: r.UserAgent(), Data: data,
-	})
-	if err != nil {
-		h.log.ErrorContext(r.Context(), "could not record an audit event", "action", string(action), "error", err)
-	}
-}
-
-// emit queues a webhook event about a Repo.
-func (h *Handler) emit(r *http.Request, name webhook.EventName, rp *repo.Repo, data map[string]any) {
-	id := rp.ID
-	e := webhook.NewEvent(name, httpx.Principal(r.Context()), &id, rp.UUID, rp.NamespaceID, data)
-	if err := h.d.Webhooks.Emit(r.Context(), e); err != nil {
-		h.log.ErrorContext(r.Context(), "could not queue a webhook event", "event", string(name), "error", err)
-	}
 }

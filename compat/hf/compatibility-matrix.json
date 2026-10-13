@@ -1,0 +1,396 @@
+{
+  "backend": "repotest.Fake",
+  "endpoints": {
+    "/api/jobs/... and /api/inference/...": {
+      "note": "Jobs and the Inference API are out of scope.",
+      "status": "not supported"
+    },
+    "/api/spaces/...": {
+      "note": "Spaces are out of scope.",
+      "status": "not supported"
+    },
+    "DELETE /api/collections/{slug}": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "DELETE /api/collections/{slug}/items/{id}": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "DELETE /api/repos/delete": {
+      "status": "supported",
+      "tests": [
+        "test_delete_repo"
+      ]
+    },
+    "DELETE /api/{type}s/{repo}/branch/{branch}": {
+      "status": "supported",
+      "tests": [
+        "test_branches_and_tags"
+      ]
+    },
+    "DELETE /api/{type}s/{repo}/like": {
+      "status": "supported",
+      "tests": [
+        "test_unlike"
+      ]
+    },
+    "DELETE /api/{type}s/{repo}/tag/{tag}": {
+      "status": "supported",
+      "tests": [
+        "test_branches_and_tags"
+      ]
+    },
+    "GET /api/collections": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "GET /api/collections/{slug}": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "GET /api/datasets": {
+      "status": "supported",
+      "tests": [
+        "test_list_models_and_datasets"
+      ]
+    },
+    "GET /api/datasets/{repo}": {
+      "status": "supported",
+      "tests": [
+        "test_create_repo_variants"
+      ]
+    },
+    "GET /api/models": {
+      "status": "supported",
+      "tests": [
+        "test_list_models_and_datasets"
+      ]
+    },
+    "GET /api/models/{repo}": {
+      "status": "supported",
+      "tests": [
+        "test_create_repo_variants",
+        "test_model_info_shape"
+      ]
+    },
+    "GET /api/models/{repo}/revision/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_exists_checks"
+      ]
+    },
+    "GET /api/users/{user}/likes, GET /api/{type}s/{repo}/likers": {
+      "note": "Liker listings are not in v1.0; like and unlike work.",
+      "status": "not supported"
+    },
+    "GET /api/whoami-v2": {
+      "status": "supported",
+      "tests": [
+        "test_whoami"
+      ]
+    },
+    "GET /api/whoami-v2 (hf auth)": {
+      "status": "supported",
+      "tests": [
+        "test_hf_auth_login_and_whoami"
+      ]
+    },
+    "GET /api/{type}s/{repo}/commits/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_list_repo_commits"
+      ]
+    },
+    "GET /api/{type}s/{repo}/discussions": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests"
+      ]
+    },
+    "GET /api/{type}s/{repo}/discussions/{num}": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests",
+        "test_hf_upload_to_new_branch_and_pr"
+      ]
+    },
+    "GET /api/{type}s/{repo}/refs": {
+      "status": "supported",
+      "tests": [
+        "test_branches_and_tags"
+      ]
+    },
+    "GET /api/{type}s/{repo}/revision/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_exists_checks",
+        "test_snapshot_download_and_offline"
+      ]
+    },
+    "GET /api/{type}s/{repo}/tree/{rev}/{path}": {
+      "status": "supported",
+      "tests": [
+        "test_snapshot_download_and_offline",
+        "test_tree_and_paths_info"
+      ]
+    },
+    "GET /api/{type}s/{repo}/xet-read-token/{rev}": {
+      "note": "Hangar never offers Xet downloads; downloads use plain HTTP.",
+      "status": "not supported"
+    },
+    "GET /api/{type}s/{repo}/xet-write-token/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_xet_write_token"
+      ]
+    },
+    "GET /{repo}/resolve/{rev}/{path}": {
+      "status": "supported",
+      "tests": [
+        "test_hf_hub_download_by_revision"
+      ]
+    },
+    "GET /{repo}/resolve/{rev}/{path} (Range)": {
+      "status": "supported",
+      "tests": [
+        "test_ranges_and_safetensors_metadata"
+      ]
+    },
+    "GET /{repo}/resolve/{rev}/{path} (no Xet)": {
+      "status": "supported",
+      "tests": [
+        "test_download_with_hf_xet_installed"
+      ]
+    },
+    "GET /{repo}/resolve/{rev}/{path} (resume)": {
+      "status": "supported",
+      "tests": [
+        "test_resume_partial_download"
+      ]
+    },
+    "HEAD /{repo}/resolve/{rev}/{path}": {
+      "status": "supported",
+      "tests": [
+        "test_hf_hub_download_by_revision"
+      ]
+    },
+    "HfFileSystem": {
+      "status": "supported",
+      "tests": [
+        "test_datasets_load_dataset",
+        "test_hf_file_system"
+      ]
+    },
+    "PATCH /api/collections/{slug}": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "PATCH /api/collections/{slug}/items/{id}": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "POST /api/collections": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "POST /api/collections/{slug}/items": {
+      "status": "supported",
+      "tests": [
+        "test_collections"
+      ]
+    },
+    "POST /api/repos/create": {
+      "status": "supported",
+      "tests": [
+        "test_create_repo_variants"
+      ]
+    },
+    "POST /api/repos/move": {
+      "status": "supported",
+      "tests": [
+        "test_move_repo_redirects"
+      ]
+    },
+    "POST /api/validate-yaml": {
+      "status": "supported",
+      "tests": [
+        "test_upload_file_and_folder"
+      ]
+    },
+    "POST /api/{type}s/{repo}/branch/{branch}": {
+      "status": "supported",
+      "tests": [
+        "test_branches_and_tags"
+      ]
+    },
+    "POST /api/{type}s/{repo}/commit/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_create_commit_adds_deletes_copies",
+        "test_upload_file_and_folder",
+        "test_upload_many_files"
+      ]
+    },
+    "POST /api/{type}s/{repo}/commit/{rev}?create_pr=1": {
+      "status": "supported",
+      "tests": [
+        "test_hf_upload_to_new_branch_and_pr"
+      ]
+    },
+    "POST /api/{type}s/{repo}/discussions": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests"
+      ]
+    },
+    "POST /api/{type}s/{repo}/discussions/{num}/comment": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests"
+      ]
+    },
+    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit|hide": {
+      "note": "Editing and hiding comments are not in v1.0.",
+      "status": "not supported"
+    },
+    "POST /api/{type}s/{repo}/discussions/{num}/merge": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests"
+      ]
+    },
+    "POST /api/{type}s/{repo}/discussions/{num}/status": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests"
+      ]
+    },
+    "POST /api/{type}s/{repo}/discussions/{num}/title": {
+      "status": "supported",
+      "tests": [
+        "test_discussions_and_pull_requests"
+      ]
+    },
+    "POST /api/{type}s/{repo}/lfs-files/duplicate": {
+      "note": "Cross-Repo LFS copy needs Xet hashes. Copies within a Repo work.",
+      "status": "not supported"
+    },
+    "POST /api/{type}s/{repo}/like": {
+      "status": "supported",
+      "tests": [
+        "test_unlike"
+      ]
+    },
+    "POST /api/{type}s/{repo}/paths-info/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_create_commit_adds_deletes_copies",
+        "test_tree_and_paths_info"
+      ]
+    },
+    "POST /api/{type}s/{repo}/preupload/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_upload_file_and_folder",
+        "test_upload_many_files"
+      ]
+    },
+    "POST /api/{type}s/{repo}/tag/{rev}": {
+      "status": "supported",
+      "tests": [
+        "test_branches_and_tags"
+      ]
+    },
+    "POST /{repo}.git/info/lfs/objects/batch (stand-in)": {
+      "status": "supported",
+      "tests": [
+        "test_upload_file_and_folder"
+      ]
+    },
+    "PUT /api/{type}s/{repo}/settings": {
+      "status": "supported",
+      "tests": [
+        "test_update_repo_settings"
+      ]
+    },
+    "bad token": {
+      "status": "supported",
+      "tests": [
+        "test_bad_token"
+      ]
+    },
+    "datasets load_dataset": {
+      "status": "supported",
+      "tests": [
+        "test_datasets_load_dataset"
+      ]
+    },
+    "error mapping": {
+      "status": "supported",
+      "tests": [
+        "test_gated_repo",
+        "test_not_found_errors",
+        "test_private_repos_are_hidden"
+      ]
+    },
+    "hf download": {
+      "status": "supported",
+      "tests": [
+        "test_hf_download_and_upload"
+      ]
+    },
+    "hf upload": {
+      "status": "supported",
+      "tests": [
+        "test_hf_download_and_upload"
+      ]
+    },
+    "permissions": {
+      "status": "supported",
+      "tests": [
+        "test_write_permissions"
+      ]
+    },
+    "redirects for moved Repos": {
+      "status": "supported",
+      "tests": [
+        "test_move_repo_redirects"
+      ]
+    },
+    "sentence-transformers load": {
+      "status": "supported",
+      "tests": [
+        "test_sentence_transformers"
+      ]
+    },
+    "transformers from_pretrained": {
+      "status": "supported",
+      "tests": [
+        "test_transformers_auto_classes"
+      ]
+    },
+    "transformers safetensors conversion guard": {
+      "status": "supported",
+      "tests": [
+        "test_pickle_only_model_never_contacts_conversion_space"
+      ]
+    }
+  },
+  "generated_by": "compat/hf (HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf)",
+  "huggingface_hub": "2.2.0"
+}

@@ -18,7 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/audit/audittest"
+	"github.com/google/uuid"
+
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/auth/authtest"
 	"github.com/jamesagarside/hangar/internal/collections/collectionstest"
@@ -33,7 +34,6 @@ import (
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/repo/repotest"
 	"github.com/jamesagarside/hangar/internal/scan/scantest"
-	"github.com/jamesagarside/hangar/internal/webhook/webhooktest"
 	"github.com/jamesagarside/hangar/internal/xet/xettest"
 )
 
@@ -60,6 +60,15 @@ type Options struct {
 	Settings func(*hfapi.Settings)
 	// Deps adjusts the dependencies before the handler is built.
 	Deps func(*hfapi.Deps)
+	// Orgs replaces the orgtest fake. AddUser and AddOrg must then create
+	// users and Organisations in it (and in the Repo backend).
+	Orgs org.Service
+	// AddUser creates a user and returns their Principal; nil uses the
+	// orgtest fake.
+	AddUser func(t testing.TB, name string) model.Principal
+	// AddOrg creates an Organisation with members and returns its
+	// Namespace ID; nil uses the orgtest fake.
+	AddOrg func(t testing.TB, name string, members map[uuid.UUID]model.Role) uuid.UUID
 }
 
 // Env is a running Hub API with fakes.
@@ -76,15 +85,13 @@ type Env struct {
 	Authz       *authtest.Authz
 	Tokens      *authtest.Tokens
 	Devices     *authtest.DeviceFlow
-	Orgs        *orgtest.Fake
+	Orgs        org.Service
 	Community   *communitytest.Fake
 	Collections *collectionstest.Fake
 	Index       *indextest.Fake
 	Scan        *scantest.Fake
 	Xet         *xettest.Fake
 	Viewer      *datasetstest.Viewer
-	Webhooks    *webhooktest.Fake
-	Audit       *audittest.Fake
 
 	// Users holds alice, bob, carol (a read-scope Token) and admin (an
 	// Instance admin).
@@ -95,10 +102,9 @@ type Env struct {
 func New(t testing.TB, o Options) *Env {
 	t.Helper()
 	e := &Env{
-		Authn: authtest.NewAuthenticator(), Authz: authtest.NewAuthz(), Orgs: orgtest.NewFake(),
+		Authn: authtest.NewAuthenticator(), Authz: authtest.NewAuthz(),
 		Community: communitytest.NewFake(), Collections: collectionstest.NewFake(), Index: indextest.NewFake(),
-		Viewer: datasetstest.NewViewer(), Webhooks: &webhooktest.Fake{}, Audit: audittest.NewFake(),
-		Users: map[string]User{},
+		Viewer: datasetstest.NewViewer(), Users: map[string]User{},
 	}
 	e.Tokens = authtest.NewTokens(e.Authn)
 	// Public Repos are readable without a Token, as on huggingface.co.
@@ -123,11 +129,35 @@ func New(t testing.TB, o Options) *Env {
 	e.Devices = authtest.NewDeviceFlow(e.Tokens, e.URL)
 	e.Xet = xettest.NewFake(e.URL+"/xet-cas", time.Hour)
 
-	for _, name := range []string{"alice", "bob", "carol", "admin"} {
-		p, err := e.Orgs.AddUser(name)
-		if err != nil {
-			t.Fatalf("add user: %v", err)
+	addUser, addOrg := o.AddUser, o.AddOrg
+	if o.Orgs != nil {
+		e.Orgs = o.Orgs
+	} else {
+		fake := orgtest.NewFake()
+		e.Orgs = fake
+		addUser = func(t testing.TB, name string) model.Principal {
+			p, err := fake.AddUser(name)
+			if err != nil {
+				t.Fatalf("add user: %v", err)
+			}
+			return p
 		}
+		addOrg = func(t testing.TB, name string, members map[uuid.UUID]model.Role) uuid.UUID {
+			ctx := context.Background()
+			ns, err := fake.CreateOrg(ctx, name, name, model.System())
+			if err != nil {
+				t.Fatalf("create org: %v", err)
+			}
+			for id, role := range members {
+				if err := fake.SetMember(ctx, name, id, role, org.SourceManual, model.System()); err != nil {
+					t.Fatalf("set member: %v", err)
+				}
+			}
+			return ns.ID
+		}
+	}
+	for _, name := range []string{"alice", "bob", "carol", "admin"} {
+		p := addUser(t, name)
 		p.Email = name + "@example.com"
 		if name == "admin" {
 			p.IsAdmin = true
@@ -147,16 +177,10 @@ func New(t testing.TB, o Options) *Env {
 		e.Authn.Add(secret, tp)
 		e.Users[name] = User{Principal: tp, Token: secret}
 	}
-	ctx := context.Background()
-	acme, err := e.Orgs.CreateOrg(ctx, Org, "Acme", e.Users["alice"].Principal)
-	if err != nil {
-		t.Fatalf("create org: %v", err)
-	}
-	if err := e.Orgs.SetMember(ctx, Org, e.Users["bob"].Principal.UserID, model.RoleRead, org.SourceManual, e.Users["alice"].Principal); err != nil {
-		t.Fatalf("set member: %v", err)
-	}
-	e.Authz.SetRole(e.Users["alice"].Principal.UserID, acme.ID, model.RoleAdmin)
-	e.Authz.SetRole(e.Users["bob"].Principal.UserID, acme.ID, model.RoleRead)
+	alice, bob := e.Users["alice"].Principal.UserID, e.Users["bob"].Principal.UserID
+	acme := addOrg(t, Org, map[uuid.UUID]model.Role{alice: model.RoleAdmin, bob: model.RoleRead})
+	e.Authz.SetRole(alice, acme, model.RoleAdmin)
+	e.Authz.SetRole(bob, acme, model.RoleRead)
 
 	settings := hfapi.Settings{PublicURL: e.URL}
 	if o.Settings != nil {
@@ -165,7 +189,7 @@ func New(t testing.TB, o Options) *Env {
 	deps := hfapi.Deps{
 		Settings: settings, Repos: e.Repos, LFS: e.LFS, Authz: &namespaceAuthz{inner: e.Authz, orgs: e.Orgs},
 		Orgs: e.Orgs, Community: e.Community, Collections: e.Collections, Index: e.Index, Scan: e.Scan,
-		Xet: e.Xet, Viewer: e.Viewer, Devices: e.Devices, Webhooks: e.Webhooks, Audit: e.Audit,
+		Xet: e.Xet, Viewer: e.Viewer, Devices: e.Devices,
 		Log: slog.New(slog.DiscardHandler),
 	}
 	if o.Deps != nil {

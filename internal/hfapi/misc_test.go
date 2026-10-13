@@ -197,6 +197,7 @@ func TestCollections(t *testing.T) {
 
 	list := decode[[]map[string]any](t, e.Request(t, http.MethodGet, "/api/collections?owner=alice&limit=10", "alice", ""))
 	require.Len(t, list, 2)
+	require.NotContains(t, list[0], "position", "huggingface_hub sets position from the list order")
 	require.Equal(t, http.StatusOK, e.Request(t, http.MethodDelete, "/api/collections/"+slug+"/items/"+itemID, "alice", "").StatusCode)
 	require.Equal(t, http.StatusNotFound, e.Request(t, http.MethodDelete, "/api/collections/"+slug+"/items/x", "alice", "").StatusCode)
 	require.Equal(t, http.StatusOK, e.Request(t, http.MethodDelete, "/api/collections/"+slug, "alice", "").StatusCode)
