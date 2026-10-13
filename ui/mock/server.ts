@@ -2,11 +2,11 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { operations } from "../src/api/schema";
-import { createState, type MockState, randomUUID, type Scenario } from "./data";
-import { type Ctx, handlers, problem, type Result } from "./handlers";
-import { compileValidators, loadSpec, matchRoute } from "./openapi";
-import { resolveFile } from "./resolve";
-import { viewer } from "./viewer";
+import { createState, type MockState, randomUUID, type Scenario } from "./data.ts";
+import { type Ctx, handlers, problem, type Result } from "./handlers.ts";
+import { compileValidators, loadSpec, matchRoute } from "./openapi.ts";
+import { resolveFile } from "./resolve.ts";
+import { viewer } from "./viewer.ts";
 
 /**
  * A stateful mock of Hangar's HTTP surface for the UI: the native API from

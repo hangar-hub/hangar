@@ -1,6 +1,6 @@
-import type { MockState } from "./data";
-import type { Result } from "./handlers";
-import { findRepo } from "./repo-model";
+import type { MockState } from "./data.ts";
+import type { Result } from "./handlers.ts";
+import { findRepo } from "./repo-model.ts";
 
 /**
  * A Dataset Viewer API compatible with the Hub's (14-datasets.md, DATA-4),

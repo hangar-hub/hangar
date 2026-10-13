@@ -2,9 +2,9 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { handlers } from "./handlers";
-import { loadSpec } from "./openapi";
-import { createMock } from "./server";
+import { handlers } from "./handlers.ts";
+import { loadSpec } from "./openapi.ts";
+import { createMock } from "./server.ts";
 
 let server: Server;
 let base = "";

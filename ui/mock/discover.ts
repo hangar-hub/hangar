@@ -1,6 +1,6 @@
 import type { components } from "../src/api/schema";
-import { iso, type MockState } from "./data";
-import { findRepo, quantGroups } from "./repo-model";
+import { iso, type MockState } from "./data.ts";
+import { findRepo, quantGroups } from "./repo-model.ts";
 
 type S = components["schemas"];
 const MiB = 1024 * 1024;

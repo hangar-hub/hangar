@@ -68,7 +68,7 @@ export function DataTable<T>({
                       {c.header}
                     </span>
                   ) : null}
-                  <span className={cn("min-w-0", !c.primary && "max-md:text-right")}>
+                  <span className={cn("min-w-0", !c.primary && "max-md:ml-auto max-md:text-right")}>
                     {c.cell(row)}
                   </span>
                 </td>

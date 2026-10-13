@@ -14,7 +14,7 @@ import { defineConfig, type Plugin } from "vite";
  */
 function mockApi(): Plugin {
   const load = async () => {
-    const { createMock } = await import("./mock/server");
+    const { createMock } = await import("./mock/server.ts");
     return createMock({
       signedIn: process.env.HANGAR_MOCK_SIGNED_IN === "1",
       delay: Number(process.env.HANGAR_MOCK_DELAY ?? 0),
@@ -26,7 +26,7 @@ function mockApi(): Plugin {
       server.middlewares.use(await load());
     },
     async configurePreviewServer(server) {
-      const { uiPages } = await import("./mock/server");
+      const { uiPages } = await import("./mock/server.ts");
       server.middlewares.use(await load());
       server.middlewares.use(
         uiPages(fileURLToPath(new URL("../internal/web/dist/index.html", import.meta.url))),

@@ -520,7 +520,7 @@ export function ViewerPage({
                 key={search.q ?? ""}
                 defaultValue={search.q ?? ""}
                 aria-label="Search the rows"
-                placeholder="Search text in every column"
+                placeholder="Search the rows"
               />
               <Button type="submit" aria-label="Search">
                 <Search aria-hidden="true" />

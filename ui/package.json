@@ -19,7 +19,8 @@
     "e2e": "playwright test",
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
     "dev:mock": "HANGAR_MOCK=1 HANGAR_MOCK_SIGNED_IN=1 vite",
-    "preview:mock": "HANGAR_MOCK=1 vite preview"
+    "preview:mock": "HANGAR_MOCK=1 vite preview",
+    "screenshots": "SCREENSHOTS=1 playwright test e2e/screenshots.spec.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

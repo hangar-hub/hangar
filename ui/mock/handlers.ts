@@ -8,8 +8,8 @@ import {
   randomUUID,
   sha1,
   uuidOf,
-} from "./data";
-import { discoverDetail, discoverList } from "./discover";
+} from "./data.ts";
+import { discoverDetail, discoverList } from "./discover.ts";
 import {
   changesOf,
   fileOid,
@@ -21,7 +21,7 @@ import {
   resolveRev,
   treeEntry,
   unifiedDiff,
-} from "./repo-model";
+} from "./repo-model.ts";
 
 type S = components["schemas"];
 type Body = Record<string, unknown>;

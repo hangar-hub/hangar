@@ -1,5 +1,5 @@
-import type { MockState } from "./data";
-import { fileSize, findRepo, resolveRev } from "./repo-model";
+import type { MockState } from "./data.ts";
+import { fileSize, findRepo, resolveRev } from "./repo-model.ts";
 
 /**
  * Answers the Hub's `resolve` URLs for files in mock Repos. Large LFS files

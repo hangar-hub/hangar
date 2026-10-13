@@ -6,7 +6,7 @@ import {
   type MockState,
   sha1,
   sha256,
-} from "./data";
+} from "./data.ts";
 
 type S = components["schemas"];
 
