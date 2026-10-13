@@ -47,6 +47,13 @@ func heapPeak() (stop func() uint64) {
 	runtime.ReadMemStats(&ms)
 	base := ms.HeapAlloc
 	var peak atomic.Uint64
+	sample := func() {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		if m.HeapAlloc > base && m.HeapAlloc-base > peak.Load() {
+			peak.Store(m.HeapAlloc - base)
+		}
+	}
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -59,17 +66,16 @@ func heapPeak() (stop func() uint64) {
 			case <-done:
 				return
 			case <-t.C:
-				var m runtime.MemStats
-				runtime.ReadMemStats(&m)
-				if m.HeapAlloc > base && m.HeapAlloc-base > peak.Load() {
-					peak.Store(m.HeapAlloc - base)
-				}
+				sample()
 			}
 		}
 	}()
 	return func() uint64 {
 		close(done)
 		wg.Wait()
+		// A last sample catches an operation that finished, still holding
+		// what it buffered, before the first tick.
+		sample()
 		return peak.Load()
 	}
 }
@@ -77,7 +83,7 @@ func heapPeak() (stop func() uint64) {
 // RunStreaming checks that a backend streams (UP-5): a verified write, a
 // plain write of known size and a read of an object several parts long
 // never hold the object in memory. maxHeap is the allowed heap growth.
-func RunStreaming(t *testing.T, s blob.Store, size int64, maxHeap uint64) {
+func RunStreaming(t testing.TB, s blob.Store, size int64, maxHeap uint64) {
 	t.Helper()
 	ctx := context.Background()
 	h := sha256.New()
