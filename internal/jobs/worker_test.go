@@ -3,6 +3,7 @@ package jobs_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -294,6 +295,77 @@ func TestTwoWorkersRunEachJobOnce(t *testing.T) {
 		owners := map[string]int{}
 		runs.Range(func(_, v any) bool { owners[v.(string)]++; return true })
 		require.Len(t, owners, 2, "both workers took part: %v", owners)
+	})
+}
+
+func TestWorkerPerProcessKindLimit(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		release := make(chan struct{})
+		var concurrent, peak atomic.Int32
+		block := func(context.Context, *jobs.Job, jobs.Progress) error {
+			n := concurrent.Add(1)
+			for {
+				p := peak.Load()
+				if n <= p || peak.CompareAndSwap(p, n) {
+					break
+				}
+			}
+			<-release
+			concurrent.Add(-1)
+			return nil
+		}
+		reg := jobs.NewRegistry()
+		require.NoError(t, reg.Register(jobs.KindGC, block, jobs.HandlerOptions{Concurrency: 1}))
+		require.NoError(t, reg.Register(jobs.KindIndex, func(context.Context, *jobs.Job, jobs.Progress) error {
+			<-release
+			return nil
+		}, jobs.HandlerOptions{}))
+		// pull.file has a per-process limit of 2 and an Instance-wide limit
+		// of 3: the tighter one applies.
+		require.NoError(t, reg.Register(jobs.KindPullFile, func(context.Context, *jobs.Job, jobs.Progress) error {
+			<-release
+			return nil
+		}, jobs.HandlerOptions{Concurrency: 2}))
+		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Concurrency: 10, InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: 3}})
+		q := w.Queue()
+		for i := range 3 {
+			_, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindGC, DedupeKey: fmt.Sprint("gc", i)})
+			require.NoError(t, err)
+			_, err = q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex})
+			require.NoError(t, err)
+			_, err = q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile})
+			require.NoError(t, err)
+		}
+		running := func() map[string]int {
+			var rows []struct {
+				Kind string `bun:"kind"`
+				N    int    `bun:"n"`
+			}
+			require.NoError(t, d.NewSelect().Model((*db.Job)(nil)).ColumnExpr("kind, COUNT(*) AS n").
+				Where("status = ?", "running").GroupExpr("kind").Scan(ctx, &rows))
+			out := map[string]int{}
+			for _, r := range rows {
+				out[r.Kind] = r.N
+			}
+			return out
+		}
+
+		w.Tick(ctx)
+		w.Tick(ctx)
+		require.Equal(t, map[string]int{"gc": 1, "index": 3, "pull.file": 2}, running(),
+			"one Tick claims up to each kind's per-process limit and fills the other slots")
+
+		close(release)
+		w.Wait()
+		for range 5 {
+			w.Tick(ctx)
+			w.Wait()
+		}
+		n, err := d.NewSelect().Model((*db.Job)(nil)).Where("status = ?", "succeeded").Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 9, int(n), "every Job ran in the end")
+		require.Equal(t, int32(1), peak.Load(), "gc never ran more than once at a time in this process")
 	})
 }
 

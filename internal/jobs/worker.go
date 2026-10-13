@@ -340,11 +340,15 @@ func (w *Worker) claimAndStart(ctx context.Context) error {
 			}
 			claimed = append(claimed, rows...)
 		}
-		for _, k := range limited {
+		for _, s := range limited {
 			if len(claimed) >= free {
 				break
 			}
-			rows, err := w.claim(ctx, []string{string(k)}, free-len(claimed), &k)
+			var instance *Kind
+			if w.opts.InstanceLimits[s.kind] > 0 {
+				instance = &s.kind
+			}
+			rows, err := w.claim(ctx, []string{string(s.kind)}, min(s.room, free-len(claimed)), instance)
 			if err != nil {
 				return err
 			}
@@ -359,9 +363,18 @@ func (w *Worker) claimAndStart(ctx context.Context) error {
 	}
 }
 
-// capacity returns the free slots, the kinds that can be claimed freely,
-// and the kinds with an Instance-wide limit.
-func (w *Worker) capacity() (int, []string, []Kind) {
+// kindSlots is a kind whose claims are capped, with the number of Jobs of
+// it this process may still start.
+type kindSlots struct {
+	kind Kind
+	room int
+}
+
+// capacity returns the free slots, the kinds that can be claimed freely
+// in one batch, and the kinds capped by a per-process limit
+// (HandlerOptions.Concurrency) or an Instance-wide limit, each with the
+// room it has left in this process.
+func (w *Worker) capacity() (int, []string, []kindSlots) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	free := w.opts.Concurrency - w.total
@@ -369,14 +382,18 @@ func (w *Worker) capacity() (int, []string, []Kind) {
 		return 0, nil, nil
 	}
 	var open []string
-	var limited []Kind
+	var limited []kindSlots
 	for _, k := range w.reg.Kinds() {
 		reg, _ := w.reg.Lookup(k)
-		if reg.Options.Concurrency > 0 && w.running[k] >= reg.Options.Concurrency {
-			continue
+		room := free
+		if reg.Options.Concurrency > 0 {
+			room = min(room, reg.Options.Concurrency-w.running[k])
+			if room <= 0 {
+				continue
+			}
 		}
-		if w.opts.InstanceLimits[k] > 0 {
-			limited = append(limited, k)
+		if reg.Options.Concurrency > 0 || w.opts.InstanceLimits[k] > 0 {
+			limited = append(limited, kindSlots{kind: k, room: room})
 			continue
 		}
 		open = append(open, string(k))
