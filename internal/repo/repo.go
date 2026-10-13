@@ -529,6 +529,9 @@ type LFSStore interface {
 	CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 	// GetUpload returns an upload and the parts done so far.
 	GetUpload(ctx context.Context, id uuid.UUID) (*Upload, error)
+	// UploadRepo returns the Repo an upload was started for (uuid.Nil if
+	// none), so handlers can refuse parts sent through another Repo.
+	UploadRepo(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// PresignPart returns a direct URL for a part, or blob.ErrNotSupported.
 	PresignPart(ctx context.Context, id uuid.UUID, part int, ttl time.Duration) (string, error)
 	// PutPart uploads a part through Hangar and returns its ETag.
