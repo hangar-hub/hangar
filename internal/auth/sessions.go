@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -215,4 +216,9 @@ func (s *Service) CurrentSession(ctx context.Context, p model.Principal) (*Sessi
 func checkCSRF(r *http.Request, sess *Session) bool {
 	got := r.Header.Get(CSRFHeader)
 	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(sess.CSRFToken)) == 1
+}
+
+// RecordLogout records a logout audit event.
+func (s *Service) RecordLogout(ctx context.Context, p model.Principal, ip, userAgent string) {
+	s.record(ctx, audit.Event{Action: audit.Logout, Actor: p, TargetType: "user", TargetID: p.Username, IP: ip, UserAgent: userAgent})
 }

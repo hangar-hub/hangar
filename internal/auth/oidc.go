@@ -420,6 +420,12 @@ func (o *OIDCService) signIn(ctx context.Context, cfg config.OIDCProvider, c ide
 		if err != nil {
 			return nil, err
 		}
+		// Some providers (Keycloak among them) leave the groups claim out
+		// when the user is in no groups. If an earlier sign-in carried the
+		// claim, its absence now means "no groups", not "no groups claim".
+		if _, had := lookupClaim(ident.Claims, claimName(cfg, "groups", "groups")); had && !c.HasGroups {
+			c.HasGroups, c.Groups = true, nil
+		}
 		if _, err := o.s.db.NewUpdate().Model((*db.Identity)(nil)).Where("id = ?", ident.ID).
 			Set("claims = ?", jsonClaims(c.Raw)).Set("email = ?", nullable(c.Email)).
 			Set("last_login_at = ?", o.s.nowUTC()).Set("updated_at = ?", o.s.nowUTC()).Exec(ctx); err != nil {
