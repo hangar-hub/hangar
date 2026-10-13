@@ -32,6 +32,9 @@ MATRIX_PATH = HF_DIR / "compatibility-matrix.json"
 # is a read Member of it, carol has a read Token, admin is an Instance admin.
 ORG = "acme"
 
+# The default of the Instance setting `lfs.multipart_threshold`.
+DEFAULT_MULTIPART_THRESHOLD = 64 << 20
+
 
 @dataclass
 class Hub:
@@ -39,6 +42,8 @@ class Hub:
     tokens: dict[str, str]
     org: str
     backend: str
+    # LFS uploads larger than this are multipart (`lfs.multipart_threshold`).
+    multipart_threshold: int = DEFAULT_MULTIPART_THRESHOLD
     process: subprocess.Popen | None = None
     workdir: Path | None = None
 
@@ -77,7 +82,9 @@ def _start_server() -> Hub:
             raise RuntimeError("the Hub test server did not start in time")
         time.sleep(0.05)
     info = json.loads(info_path.read_text())
-    return Hub(info["endpoint"], info["tokens"], info["org"], info["backend"], proc, workdir)
+    return Hub(
+        info["endpoint"], info["tokens"], info["org"], info["backend"], info["multipart_threshold"], proc, workdir
+    )
 
 
 def _stop_server(hub: Hub) -> None:
@@ -99,6 +106,7 @@ if os.environ.get("HANGAR_HF_ENDPOINT"):
         json.loads(os.environ["HANGAR_HF_TOKENS"]),
         os.environ.get("HANGAR_HF_ORG", ORG),
         "external",
+        int(os.environ.get("HANGAR_HF_MULTIPART_THRESHOLD", DEFAULT_MULTIPART_THRESHOLD)),
     )
 else:
     HUB = _start_server()
@@ -123,14 +131,35 @@ def hub() -> Hub:
     return HUB
 
 
+def pytest_report_header(config):
+    import huggingface_hub
+
+    try:
+        from importlib.metadata import version
+
+        xet = version("hf_xet")
+    except Exception:  # noqa: BLE001 - any failure means hf_xet is absent
+        xet = "not installed"
+    xet_uploads = "on" if os.environ.get("HANGAR_HF_XET_UPLOADS") == "1" else "off (HF_HUB_DISABLE_XET=1)"
+    return [
+        f"hangar compat/hf: huggingface_hub {huggingface_hub.__version__}, hf_xet {xet}, Xet uploads {xet_uploads}",
+        f"hangar compat/hf: backend {HUB.backend}, multipart threshold {HUB.multipart_threshold} bytes",
+    ]
+
+
 @pytest.fixture
 def no_xet(monkeypatch):
     """Upload through the LFS path, as with HF_HUB_DISABLE_XET=1.
 
-    Xet uploads need the CAS endpoints, which compat/xet covers.
+    Xet uploads need the CAS endpoints (W11's internal/xet), which the Go
+    test server does not serve. Against an Instance that serves them, set
+    HANGAR_HF_XET_UPLOADS=1 to run the same upload tests through hf_xet, the
+    matrix cell 13-testing.md asks for.
     """
     from huggingface_hub import constants
 
+    if os.environ.get("HANGAR_HF_XET_UPLOADS") == "1":
+        return
     monkeypatch.setattr(constants, "HF_HUB_DISABLE_XET", True)
 
 

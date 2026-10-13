@@ -1,7 +1,9 @@
 """Uploads through huggingface_hub: upload_file, upload_folder,
-create_commit, upload_large_folder, LFS files, branches, tags and history."""
+create_commit, upload_large_folder, LFS files (single part and multipart),
+branches, tags and history."""
 
 import hashlib
+import math
 import os
 from pathlib import Path
 
@@ -48,6 +50,71 @@ def test_upload_file_and_folder(api, repo_name, tmp_path):
     # Unchanged files are skipped: an upload of the same folder makes no Commit.
     again = api.upload_folder(folder_path=folder, repo_id=repo, commit_message="Again")
     assert again.oid == commit.oid
+
+
+def _multipart_file_size(hub) -> int:
+    """The size of the file test_upload_over_multipart_threshold uploads.
+
+    13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file
+    nightly; HANGAR_HF_MULTIPART_FILE_SIZE sets it. The default, two parts
+    and one byte, keeps local runs small and still ends on a short part.
+    """
+    return int(os.environ.get("HANGAR_HF_MULTIPART_FILE_SIZE", 2 * hub.multipart_threshold + 1))
+
+
+@pytest.mark.endpoint(
+    "POST /api/{type}s/{repo}/preupload/{rev}",
+    "POST /api/{type}s/{repo}/commit/{rev}",
+    "POST /{repo}.git/info/lfs/objects/batch (stand-in, multipart)",
+)
+def test_upload_over_multipart_threshold(api, hub, repo_name, tmp_path, monkeypatch):
+    from huggingface_hub import lfs
+
+    size = _multipart_file_size(hub)
+    assert size > hub.multipart_threshold, "HANGAR_HF_MULTIPART_FILE_SIZE must be over lfs.multipart_threshold"
+    path = tmp_path / "big.bin"
+    digest = hashlib.sha256()
+    with path.open("wb") as f:
+        # Random blocks, so parts sent out of order cannot hash the same.
+        left = size
+        while left:
+            block = os.urandom(min(left, 1 << 20))
+            f.write(block)
+            digest.update(block)
+            left -= len(block)
+
+    # Record the multipart uploads huggingface_hub makes, so the test fails if
+    # the server answers with a single PUT instead.
+    multipart = []
+    upload_multi_part = lfs._upload_multi_part
+
+    def spy(*, operation, header, chunk_size, upload_url):
+        multipart.append((operation.path_in_repo, chunk_size, sum(k.isdigit() for k in header)))
+        return upload_multi_part(operation=operation, header=header, chunk_size=chunk_size, upload_url=upload_url)
+
+    monkeypatch.setattr(lfs, "_upload_multi_part", spy)
+
+    repo = api.create_repo(repo_name).repo_id
+    api.upload_file(path_or_fileobj=str(path), path_in_repo="big.bin", repo_id=repo)
+    assert len(multipart) == 1
+    name, chunk_size, parts = multipart[0]
+    assert name == "big.bin"
+    assert parts == math.ceil(size / chunk_size) > 1
+
+    meta = {s.rfilename: s for s in api.model_info(repo, files_metadata=True).siblings}
+    assert meta["big.bin"].lfs is not None
+    assert meta["big.bin"].lfs.sha256 == digest.hexdigest()
+    assert meta["big.bin"].size == size
+
+    # The same bytes under another name are already stored: nothing is sent.
+    api.upload_file(path_or_fileobj=str(path), path_in_repo="copy/big.bin", repo_id=repo)
+    assert len(multipart) == 1
+
+    downloaded = hashlib.sha256()
+    with open(api.hf_hub_download(repo, "copy/big.bin"), "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            downloaded.update(block)
+    assert downloaded.hexdigest() == digest.hexdigest()
 
 
 @pytest.mark.endpoint("POST /api/{type}s/{repo}/commit/{rev}", "POST /api/{type}s/{repo}/paths-info/{rev}")

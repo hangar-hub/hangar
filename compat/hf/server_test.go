@@ -25,20 +25,31 @@ import (
 // to. When it is set, TestServeHub serves until its standard input closes.
 const EnvServeInfo = "HANGAR_HF_SERVE_INFO"
 
+// MultipartThreshold is the lowered `lfs.multipart_threshold` the test
+// server uses, the smallest the setting allows (one S3 part), so
+// test_upload_over_multipart_threshold reaches huggingface_hub's multipart
+// path with a small file.
+const MultipartThreshold = 5 << 20
+
 // serveInfo is what the pytest suite reads to reach the server.
 type serveInfo struct {
 	Endpoint string            `json:"endpoint"`
 	Tokens   map[string]string `json:"tokens"`
 	Org      string            `json:"org"`
 	Backend  string            `json:"backend"`
+	// MultipartThreshold is the size above which LFS uploads are multipart.
+	MultipartThreshold int64 `json:"multipart_threshold"`
 }
 
 func startHub(t *testing.T) (*hfapitest.Env, serveInfo) {
 	t.Helper()
-	opts := hfapitest.Options{}
+	opts := hfapitest.Options{LFSMultipartThreshold: MultipartThreshold}
 	backend := repoBackend(t, &opts)
 	e := hfapitest.New(t, opts)
-	info := serveInfo{Endpoint: e.URL, Tokens: map[string]string{}, Org: hfapitest.Org, Backend: backend}
+	info := serveInfo{
+		Endpoint: e.URL, Tokens: map[string]string{}, Org: hfapitest.Org, Backend: backend,
+		MultipartThreshold: MultipartThreshold,
+	}
 	for name, u := range e.Users {
 		info.Tokens[name] = u.Token
 	}

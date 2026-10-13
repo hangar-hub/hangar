@@ -2,7 +2,8 @@
 // hfapi tests and the compat/hf suite. It wires every dependency in
 // hfapi.Deps with the fake from its `<pkg>test` package, adds a set of
 // users with Tokens, and stands in for the git-lfs batch endpoint (W3's
-// gitserver) so clients can upload LFS files with HF_HUB_DISABLE_XET=1.
+// gitserver), with basic and multipart transfers, so clients can upload LFS
+// files with HF_HUB_DISABLE_XET=1.
 //
 // The Repo service is the real-git repotest.Fake unless Options names
 // another repo.Service, such as the real internal/repo implementation.
@@ -69,6 +70,14 @@ type Options struct {
 	// AddOrg creates an Organisation with members and returns its
 	// Namespace ID; nil uses the orgtest fake.
 	AddOrg func(t testing.TB, name string, members map[uuid.UUID]model.Role) uuid.UUID
+	// LFSMultipartThreshold plays the part of the Instance setting
+	// `lfs.multipart_threshold` for the git-lfs stand-in: objects larger
+	// than this get Hugging Face's multipart transfer when the client
+	// offers it. Zero means every upload is a single PUT.
+	LFSMultipartThreshold int64
+	// LFSPartSize is the multipart part size; zero means
+	// LFSMultipartThreshold.
+	LFSPartSize int64
 }
 
 // Env is a running Hub API with fakes.
@@ -200,7 +209,11 @@ func New(t testing.TB, o Options) *Env {
 		t.Fatalf("hfapi.New: %v", err)
 	}
 	e.Handler = h
-	lfs := &lfsStandIn{lfs: e.LFS, repos: e.Repos, base: e.URL}
+	partSize := o.LFSPartSize
+	if partSize <= 0 {
+		partSize = o.LFSMultipartThreshold
+	}
+	lfs := &lfsStandIn{lfs: e.LFS, repos: e.Repos, base: e.URL, multipartThreshold: o.LFSMultipartThreshold, partSize: partSize}
 	protocols := httpx.Protocols{Hub: h, LFS: lfs, Health: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})
 	})}
