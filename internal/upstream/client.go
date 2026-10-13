@@ -98,8 +98,14 @@ func NewHTTPClient(opts HTTPOptions) *HTTPClient {
 		if len(via) >= 10 {
 			return errors.New("stopped after 10 redirects")
 		}
-		// Never send Xet or credential headers to another origin. Go
-		// already drops Authorization when the host changes.
+		// Never send credentials to another origin. Go only drops them
+		// when the host name changes, not the port or scheme, and a
+		// presigned Blob store URL on the same host must not get them.
+		prev := via[len(via)-1].URL
+		if !strings.EqualFold(prev.Scheme, req.URL.Scheme) || !strings.EqualFold(prev.Host, req.URL.Host) {
+			req.Header.Del("Authorization")
+			req.Header.Del("Cookie")
+		}
 		return nil
 	}}
 	return &HTTPClient{opts: opts, hc: hc}

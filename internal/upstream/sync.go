@@ -128,7 +128,7 @@ func (s *Service) PullMore(ctx context.Context, p model.Principal, r *repo.Repo,
 	if m.DetachedAt != nil {
 		return uuid.Nil, ErrNotMirror
 	}
-	id, _, err := s.StartPull(ctx, PullRequest{Upstream: up.Name, Repo: m.UpstreamRepo, Revision: m.TrackRef, Selection: m.Selection, Now: now, Actor: p})
+	id, _, err := s.StartPull(ctx, PullRequest{Upstream: up.Name, Repo: m.UpstreamRepo, Revision: m.TrackRef, Selection: sel, Now: now, Actor: p})
 	return id, err
 }
 

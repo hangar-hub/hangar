@@ -109,6 +109,11 @@ type Options struct {
 	// SpoolDir holds Pull-through transfers that clients read while they
 	// arrive. Empty means the system temporary directory.
 	SpoolDir string
+	// PullAttempts and FileAttempts cap retries of failed pull and
+	// pull.file runs. Snoozed runs (waiting for transfers or a pull
+	// window) do not count. Zero means 5 and 8.
+	PullAttempts int
+	FileAttempts int
 	// Now is the clock. Nil means time.Now.
 	Now func() time.Time
 }
@@ -165,6 +170,12 @@ func New(opts Options) (*Service, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
+	if opts.PullAttempts <= 0 {
+		opts.PullAttempts = 5
+	}
+	if opts.FileAttempts <= 0 {
+		opts.FileAttempts = 8
+	}
 	if opts.Log == nil {
 		opts.Log = slog.Default()
 	}
@@ -183,10 +194,10 @@ func (s *Service) Dependencies() *deps.Store { return s.deps }
 
 // RegisterJobs registers the pull, pull.file and mirror.sync handlers.
 func (s *Service) RegisterJobs(reg *jobs.Registry) error {
-	if err := reg.Register(jobs.KindPull, s.runPull, jobs.HandlerOptions{MaxAttempts: 5}); err != nil {
+	if err := reg.Register(jobs.KindPull, s.runPull, jobs.HandlerOptions{MaxAttempts: s.opts.PullAttempts}); err != nil {
 		return err
 	}
-	if err := reg.Register(jobs.KindPullFile, s.runFile, jobs.HandlerOptions{MaxAttempts: 8}); err != nil {
+	if err := reg.Register(jobs.KindPullFile, s.runFile, jobs.HandlerOptions{MaxAttempts: s.opts.FileAttempts}); err != nil {
 		return err
 	}
 	return reg.Register(jobs.KindMirrorSync, s.runSync, jobs.HandlerOptions{MaxAttempts: 3})
