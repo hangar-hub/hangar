@@ -237,3 +237,91 @@ func (f *Fake) Downloads(_ context.Context, repoUUID uuid.UUID, since time.Time)
 	sort.Slice(out, func(i, j int) bool { return out[i].Day.Before(out[j].Day) })
 	return out, nil
 }
+
+func (f *Fake) editEvent(repoUUID uuid.UUID, num int, eventID uuid.UUID, change func(*community.Event)) (*community.Event, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, err := f.find(repoUUID, num)
+	if err != nil {
+		return nil, err
+	}
+	for i := range d.Events {
+		if d.Events[i].ID == eventID && d.Events[i].Type == community.EventComment {
+			change(&d.Events[i])
+			e := d.Events[i]
+			return &e, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: comment %s", community.ErrNotFound, eventID)
+}
+
+// EditComment implements community.Service.
+func (f *Fake) EditComment(_ context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, body string, _ model.Principal) (*community.Event, error) {
+	if strings.TrimSpace(body) == "" {
+		return nil, fmt.Errorf("%w: the comment is empty", community.ErrInvalid)
+	}
+	return f.editEvent(repoUUID, num, eventID, func(e *community.Event) { e.Body, e.Edited = body, true })
+}
+
+// HideComment implements community.Service.
+func (f *Fake) HideComment(_ context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, _ model.Principal) (*community.Event, error) {
+	return f.editEvent(repoUUID, num, eventID, func(e *community.Event) { e.Body, e.Hidden = "", true })
+}
+
+// Discard implements community.Service. The fake has no refs, so a pull
+// request is discardable while it has at most its description event.
+func (f *Fake) Discard(_ context.Context, repoUUID uuid.UUID, num int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, err := f.find(repoUUID, num)
+	if err != nil {
+		return err
+	}
+	if !d.IsPullRequest() {
+		return community.ErrNotPullRequest
+	}
+	if len(d.Events) > 1 {
+		return community.ErrNotDiscardable
+	}
+	list := f.discussions[repoUUID]
+	for i, x := range list {
+		if x == d {
+			f.discussions[repoUUID] = append(list[:i:i], list[i+1:]...)
+		}
+	}
+	return nil
+}
+
+// Liked implements community.Service.
+func (f *Fake) Liked(_ context.Context, userID, repoUUID uuid.UUID) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.likes[repoUUID][userID], nil
+}
+
+// Likers implements community.Service. The fake knows user IDs, not
+// names, so it returns the IDs as strings in order.
+func (f *Fake) Likers(_ context.Context, repoUUID uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := []string{}
+	for u := range f.likes[repoUUID] {
+		out = append(out, u.String())
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// LikedBy implements community.Service, in Repo UUID order.
+func (f *Fake) LikedBy(_ context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := []uuid.UUID{}
+	for r, users := range f.likes {
+		if users[userID] {
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out, nil
+}
