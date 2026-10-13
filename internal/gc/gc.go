@@ -131,10 +131,6 @@ type Report struct {
 // batchSize bounds every query and every in-memory list of a run.
 const batchSize = 500
 
-// maxOrphansPerRun bounds the orphaned blobs one run collects; the next
-// run continues.
-const maxOrphansPerRun = 100_000
-
 func (c *Collector) now() time.Time { return c.opts.Now().UTC().Truncate(time.Microsecond) }
 
 // Run collects garbage in scope and reports progress through p, which may
@@ -234,44 +230,54 @@ func (c *Collector) collectLFSObjects(ctx context.Context, r *Report) error {
 	}
 }
 
-// listOld lists the objects under prefix older than cutoff, in batches.
-func (c *Collector) listOld(ctx context.Context, prefix string, cutoff time.Time, fn func([]blob.Info) error) error {
+// sweepOld lists the objects under prefix older than cutoff in batches,
+// asks orphans which keys of each batch to delete, and deletes them before
+// the listing goes on. Every run walks the whole prefix and holds at most
+// one batch in memory, so no number of referenced objects that sort first
+// can stop a run from reaching an orphan. Deleting keys the listing has
+// already returned is safe on both backends: the filesystem walk reads each
+// directory before visiting it and skips entries that disappear, and an S3
+// listing continues after the last key it returned. It returns how many
+// keys it deleted and how many deletes failed.
+func (c *Collector) sweepOld(ctx context.Context, prefix string, cutoff time.Time, orphans func([]blob.Info) ([]string, error)) (deleted, failed int, err error) {
 	var batch []blob.Info
-	seen := 0
-	errStop := errors.New("stop")
-	err := c.store.List(ctx, prefix, func(i blob.Info) error {
+	flush := func() error {
+		doomed, err := orphans(batch)
+		if err != nil {
+			return err
+		}
+		batch = batch[:0]
+		for _, k := range doomed {
+			if err := c.store.Delete(ctx, k); err != nil {
+				failed++
+				c.opts.Logger.WarnContext(ctx, "delete orphaned blob", "prefix", prefix, "error", err)
+				continue
+			}
+			deleted++
+		}
+		return nil
+	}
+	err = c.store.List(ctx, prefix, func(i blob.Info) error {
 		if !i.ModTime.Before(cutoff) {
 			return nil
 		}
 		batch = append(batch, i)
-		seen++
 		if len(batch) == batchSize {
-			if err := fn(batch); err != nil {
-				return err
-			}
-			batch = nil
-		}
-		if seen >= maxOrphansPerRun {
-			return errStop
+			return flush()
 		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, errStop) {
-		return err
+	if err == nil && len(batch) > 0 {
+		err = flush()
 	}
-	if len(batch) > 0 {
-		return fn(batch)
-	}
-	return nil
+	return deleted, failed, err
 }
 
 // collectOrphanLFSBlobs deletes blobs under lfs/ that have no lfs_objects
-// row and no upload, such as leftovers of failed deletes. Deletes happen
-// after the listing, so the listing never walks a changing directory.
+// row and no upload, such as leftovers of failed deletes.
 func (c *Collector) collectOrphanLFSBlobs(ctx context.Context, r *Report) error {
 	cutoff := c.now().Add(-c.opts.GracePeriod)
-	var doomed []string
-	err := c.listOld(ctx, blob.PrefixLFS, cutoff, func(batch []blob.Info) error {
+	deleted, failed, err := c.sweepOld(ctx, blob.PrefixLFS, cutoff, func(batch []blob.Info) ([]string, error) {
 		keys := make([]string, len(batch))
 		oids := make([]string, len(batch))
 		for i, info := range batch {
@@ -281,12 +287,12 @@ func (c *Collector) collectOrphanLFSBlobs(ctx context.Context, r *Report) error 
 		var objs []db.LFSObject
 		if err := c.db.NewSelect().Model(&objs).Column("oid", "storage_key").
 			Where("storage_key IN (?) OR oid IN (?)", bun.List(keys), bun.List(oids)).Scan(ctx); err != nil {
-			return err
+			return nil, err
 		}
 		var ups []db.Upload
 		if err := c.db.NewSelect().Model(&ups).Column("oid", "storage_key").
 			Where("storage_key IN (?) OR oid IN (?)", bun.List(keys), bun.List(oids)).Scan(ctx); err != nil {
-			return err
+			return nil, err
 		}
 		keep := map[string]bool{}
 		for _, o := range objs {
@@ -295,24 +301,17 @@ func (c *Collector) collectOrphanLFSBlobs(ctx context.Context, r *Report) error 
 		for _, u := range ups {
 			keep[u.OID], keep[u.StorageKey] = true, true
 		}
+		var doomed []string
 		for i, k := range keys {
 			if !keep[k] && !keep[oids[i]] {
 				doomed = append(doomed, k)
 			}
 		}
-		return nil
+		return doomed, nil
 	})
-	if err != nil {
-		return err
-	}
-	for _, k := range doomed {
-		if err := c.store.Delete(ctx, k); err != nil {
-			r.Errors++
-			continue
-		}
-		r.OrphanLFSBlobsDeleted++
-	}
-	return nil
+	r.OrphanLFSBlobsDeleted += deleted
+	r.Errors += failed
+	return err
 }
 
 func set(lists ...[]string) map[string]bool {
@@ -391,8 +390,7 @@ func (c *Collector) deletePrefix(ctx context.Context, prefix string) error {
 // period.
 func (c *Collector) collectOrphanGitBlobs(ctx context.Context, r *Report) error {
 	cutoff := c.now().Add(-c.opts.GracePeriod)
-	var doomed []string
-	err := c.listOld(ctx, blob.PrefixGit, cutoff, func(batch []blob.Info) error {
+	deleted, failed, err := c.sweepOld(ctx, blob.PrefixGit, cutoff, func(batch []blob.Info) ([]string, error) {
 		repoIDs := map[uuid.UUID]bool{}
 		type packRef struct {
 			repo uuid.UUID
@@ -419,7 +417,7 @@ func (c *Collector) collectOrphanGitBlobs(ctx context.Context, r *Report) error 
 		if len(ids) > 0 {
 			var found []uuid.UUID
 			if err := c.db.NewSelect().Model((*db.Repo)(nil)).Column("id").Where("id IN (?)", bun.List(ids)).Scan(ctx, &found); err != nil {
-				return err
+				return nil, err
 			}
 			for _, id := range found {
 				existing[id] = true
@@ -428,10 +426,11 @@ func (c *Collector) collectOrphanGitBlobs(ctx context.Context, r *Report) error 
 		var packs []db.Pack
 		if len(ids) > 0 {
 			if err := c.db.NewSelect().Model(&packs).Column("repo_id", "pack_sha1").Where("repo_id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		known := map[string]bool{}
+		var doomed []string
 		for _, p := range packs {
 			known[p.RepoID.String()+"/"+p.PackSHA1] = true
 		}
@@ -448,70 +447,57 @@ func (c *Collector) collectOrphanGitBlobs(ctx context.Context, r *Report) error 
 				doomed = append(doomed, info.Key)
 			}
 		}
-		return nil
+		return doomed, nil
 	})
-	if err != nil {
-		return err
-	}
-	for _, k := range doomed {
-		if err := c.store.Delete(ctx, k); err != nil {
-			r.Errors++
-			continue
-		}
-		r.OrphanGitBlobsDeleted++
-	}
-	return nil
+	r.OrphanGitBlobsDeleted += deleted
+	r.Errors += failed
+	return err
 }
 
 // collectStaging deletes streaming staging (tmp/) and generated zips
-// (exports/) older than the staging age.
+// (exports/) older than the staging age, and staging files outside the key
+// space that a crash or a killed process left behind, such as the
+// filesystem backend's partial writes.
 func (c *Collector) collectStaging(ctx context.Context, r *Report) error {
 	cutoff := c.now().Add(-c.opts.StagingAge)
+	all := func(batch []blob.Info) ([]string, error) {
+		keys := make([]string, len(batch))
+		for i, info := range batch {
+			keys[i] = info.Key
+		}
+		return keys, nil
+	}
 	for _, prefix := range []string{blob.PrefixTmp, blob.PrefixExports} {
-		var doomed []string
-		if err := c.listOld(ctx, prefix, cutoff, func(batch []blob.Info) error {
-			for _, i := range batch {
-				doomed = append(doomed, i.Key)
-			}
-			return nil
-		}); err != nil {
+		deleted, failed, err := c.sweepOld(ctx, prefix, cutoff, all)
+		r.StagingBlobsDeleted += deleted
+		r.Errors += failed
+		if err != nil {
 			return err
 		}
-		for _, k := range doomed {
-			if err := c.store.Delete(ctx, k); err != nil {
-				r.Errors++
-				continue
-			}
-			r.StagingBlobsDeleted++
+	}
+	if sw, ok := c.store.(blob.StagingSweeper); ok {
+		n, err := sw.SweepStaging(ctx, cutoff)
+		r.StagingBlobsDeleted += n
+		if err != nil && !errors.Is(err, blob.ErrNotSupported) {
+			return err
 		}
 	}
 	return nil
 }
 
 // collectAbandonedUploads aborts incomplete multipart uploads that no
-// upload row refers to, once they are older than AbandonedUploadAge. Stores
-// that cannot list uploads rely on upload.expire and their own expiry.
+// upload row refers to, once they are older than AbandonedUploadAge. It
+// checks and aborts them in batches while the listing goes on, so memory
+// stays bounded however many there are. Stores that cannot list uploads
+// rely on upload.expire and their own expiry.
 func (c *Collector) collectAbandonedUploads(ctx context.Context, r *Report) error {
 	ul, ok := c.store.(blob.UploadLister)
 	if !ok {
 		return nil
 	}
 	cutoff := c.now().Add(-c.opts.AbandonedUploadAge)
-	var old []blob.IncompleteUpload
-	err := ul.ListUploads(ctx, func(u blob.IncompleteUpload) error {
-		if u.Initiated.Before(cutoff) && len(old) < maxOrphansPerRun {
-			old = append(old, u)
-		}
-		return nil
-	})
-	if errors.Is(err, blob.ErrNotSupported) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for start := 0; start < len(old); start += batchSize {
-		batch := old[start:min(start+batchSize, len(old))]
+	var batch []blob.IncompleteUpload
+	flush := func() error {
 		ids := make([]string, len(batch))
 		for i, u := range batch {
 			ids[i] = u.UploadID
@@ -531,8 +517,26 @@ func (c *Collector) collectAbandonedUploads(ctx context.Context, r *Report) erro
 			}
 			r.UploadsAborted++
 		}
+		batch = batch[:0]
+		return nil
 	}
-	return nil
+	err := ul.ListUploads(ctx, func(u blob.IncompleteUpload) error {
+		if !u.Initiated.Before(cutoff) {
+			return nil
+		}
+		batch = append(batch, u)
+		if len(batch) == batchSize {
+			return flush()
+		}
+		return nil
+	})
+	if errors.Is(err, blob.ErrNotSupported) {
+		return nil
+	}
+	if err == nil && len(batch) > 0 {
+		err = flush()
+	}
+	return err
 }
 
 type totals struct{ lfs, git int64 }

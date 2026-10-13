@@ -112,6 +112,15 @@ func (f *fixture) blob(key string, at time.Time) {
 	f.age(key, at)
 }
 
+// rawBlob writes a blob's file directly, without the store's fsync, for
+// tests that need thousands of them.
+func (f *fixture) rawBlob(key string, at time.Time) {
+	p := filepath.Join(f.store.Root(), filepath.FromSlash(key))
+	require.NoError(f.t, os.MkdirAll(filepath.Dir(p), 0o750))
+	require.NoError(f.t, os.WriteFile(p, []byte(key), 0o600))
+	require.NoError(f.t, os.Chtimes(p, at, at))
+}
+
 func (f *fixture) age(key string, at time.Time) {
 	p := filepath.Join(f.store.Root(), filepath.FromSlash(key))
 	require.NoError(f.t, os.Chtimes(p, at, at))
@@ -285,6 +294,68 @@ func TestGCPacksAndGitData(t *testing.T) {
 	})
 }
 
+// TestGCOrphanSweepsReachEveryKey checks that the orphan sweeps walk the
+// whole of lfs/ and git/ in one run: referenced objects across several
+// listing batches never stop a run before the orphans whose keys sort last,
+// such as the git data of the newest purged Repo (UUIDv7 IDs sort by age).
+func TestGCOrphanSweepsReachEveryKey(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		f := newFixture(t, d)
+		old := f.now.Add(-30 * 24 * time.Hour)
+		const referenced = 1600 // more than three listing batches
+		rows := make([]db.LFSObject, 0, referenced)
+		for i := range referenced {
+			sum := sha256.Sum256(fmt.Appendf(nil, "object %d", i))
+			oid := hex.EncodeToString(sum[:])
+			if strings.HasPrefix(oid, "ff") {
+				continue // Keep the orphan below last in key order.
+			}
+			key := model.LFSObjectKey(oid)
+			f.rawBlob(key, old)
+			rows = append(rows, db.LFSObject{OID: oid, Size: int64(len(key)), StorageKey: key, LastReferencedAt: f.now})
+		}
+		for start := 0; start < len(rows); start += 200 {
+			chunk := rows[start:min(start+200, len(rows))]
+			_, err := d.NewInsert().Model(&chunk).Exec(ctx)
+			require.NoError(t, err)
+		}
+		orphanFirst := model.LFSObjectKey(strings.Repeat("0", 64))
+		orphanLast := model.LFSObjectKey(strings.Repeat("f", 64))
+		f.blob(orphanFirst, old)
+		f.blob(orphanLast, old)
+
+		ns := f.namespace("scale")
+		var live []uuid.UUID
+		for i := range 4 {
+			id := f.repo(ns, fmt.Sprint("r", i), false)
+			live = append(live, id)
+			for j := range 400 {
+				f.rawBlob(fmt.Sprintf("git/%s/objects/info/f%03d", id, j), old)
+			}
+		}
+		purged := db.NewID() // Newer than every live Repo, so its keys sort last.
+		purgedKey := "git/" + purged.String() + "/pack/pack-" + strings.Repeat("e", 40) + ".pack"
+		f.blob(purgedKey, old)
+
+		r, err := f.collector().Run(ctx, gc.ScopeAll, nil)
+		require.NoError(t, err)
+		require.Equal(t, 2, r.OrphanLFSBlobsDeleted)
+		require.Equal(t, 1, r.OrphanGitBlobsDeleted)
+		require.Zero(t, r.LFSObjectsDeleted, "every row is recently referenced")
+		require.Zero(t, r.Errors)
+		require.False(t, f.exists(orphanFirst))
+		require.False(t, f.exists(orphanLast), "an orphan after %d referenced objects is reached", len(rows))
+		require.False(t, f.exists(purgedKey), "git data of the newest purged Repo is reached")
+		for _, o := range rows {
+			require.True(t, f.exists(o.StorageKey))
+		}
+		for _, id := range live {
+			require.True(t, f.exists(fmt.Sprintf("git/%s/objects/info/f399", id)))
+		}
+	})
+}
+
 func TestGCStagingAndAbandonedUploads(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()
@@ -302,10 +373,22 @@ func TestGCStagingAndAbandonedUploads(t *testing.T) {
 		for _, id := range []string{abandoned, tracked} {
 			f.age("uploads/"+id+"/target", f.now.Add(-72*time.Hour))
 		}
+		// Partial writes a killed process left in the filesystem backend's
+		// staging directory, which List never shows.
+		staging := filepath.Join(f.store.Root(), ".staging")
+		for name, at := range map[string]time.Time{"put-crashed": f.now.Add(-30 * time.Hour), "put-live": f.now.Add(-time.Minute)} {
+			p := filepath.Join(staging, name)
+			require.NoError(t, os.WriteFile(p, []byte("partial"), 0o600))
+			require.NoError(t, os.Chtimes(p, at, at))
+		}
 		r, err := f.collector().Run(ctx, gc.ScopeAll, nil)
 		require.NoError(t, err)
-		require.Equal(t, 2, r.StagingBlobsDeleted)
+		require.Equal(t, 3, r.StagingBlobsDeleted)
 		require.Equal(t, 1, r.UploadsAborted)
+		_, err = os.Stat(filepath.Join(staging, "put-crashed"))
+		require.ErrorIs(t, err, os.ErrNotExist, "a partial write older than the staging age is swept")
+		_, err = os.Stat(filepath.Join(staging, "put-live"))
+		require.NoError(t, err, "a write in progress is kept")
 		require.False(t, f.exists("tmp/old"))
 		require.True(t, f.exists("tmp/new"))
 		require.False(t, f.exists("exports/old.zip"))
