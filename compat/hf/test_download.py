@@ -137,13 +137,19 @@ def test_hf_file_system(api, model_repo):
 
 @pytest.mark.endpoint("GET /{repo}/resolve/{rev}/{path} (no Xet)")
 def test_download_with_hf_xet_installed(api, model_repo, tmp_path):
-    """Downloads use plain HTTP whether or not hf_xet is installed and enabled."""
+    """Downloads use plain HTTP whether or not hf_xet is installed and enabled.
+
+    The locked environment has hf_xet, and the test checks Xet is enabled.
+    The matrix cell without hf_xet sets HANGAR_HF_WITHOUT_XET=1, and the test
+    then checks hf_xet is absent.
+    """
     repo, st = model_repo
     env = {k: v for k, v in os.environ.items() if k != "HF_HUB_DISABLE_XET"}
+    expect_xet = os.environ.get("HANGAR_HF_WITHOUT_XET") != "1"
     code = (
         "import huggingface_hub, sys\n"
         "from huggingface_hub.utils._runtime import is_xet_available\n"
-        "assert is_xet_available(), 'hf_xet should be installed and enabled'\n"
+        f"assert is_xet_available() is {expect_xet}, 'hf_xet should be {'installed and enabled' if expect_xet else 'absent'}'\n"
         f"p = huggingface_hub.hf_hub_download({repo!r}, 'model.safetensors', cache_dir={str(tmp_path)!r})\n"
         "sys.stdout.write(open(p, 'rb').read().hex())\n"
     )
