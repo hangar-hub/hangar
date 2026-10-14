@@ -4,45 +4,39 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/jamesagarside/hangar/internal/api"
 	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/auth/authtest"
+	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/httpx/httpxtest"
+	"github.com/jamesagarside/hangar/internal/ollama"
+	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/jamesagarside/hangar/internal/upstream"
 	"github.com/jamesagarside/hangar/internal/web"
+	"github.com/jamesagarside/hangar/internal/xet"
 )
-
-// deps are the services the router needs. Phase 0 of the build plan wires
-// fakes for everything except the database, health and the UI; phase 2
-// replaces them with the real implementations.
-type deps struct {
-	cfg   *config.Config
-	log   *slog.Logger
-	db    *db.DB
-	blobs blob.Store
-	authn httpx.Authenticator
-}
 
 // newHealth builds the readiness checks: database reachable, migrations at
 // the expected version, and the Blob store sentinel readable.
-func newHealth(d deps) *httpx.Health {
+func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
 	return httpx.NewHealth(
 		httpx.Check{Name: "database", Run: func(ctx context.Context) error {
-			if err := d.db.PingContext(ctx); err != nil {
+			if err := d.PingContext(ctx); err != nil {
 				return fmt.Errorf("database unreachable: %w", err)
 			}
-			st, err := d.db.Schema(ctx)
+			st, err := d.Schema(ctx)
 			if err != nil {
 				return err
 			}
@@ -52,7 +46,7 @@ func newHealth(d deps) *httpx.Health {
 			return nil
 		}},
 		httpx.Check{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
-			_, err := d.blobs.Stat(ctx, blob.SentinelKey)
+			_, err := blobs.Stat(ctx, blob.SentinelKey)
 			return err
 		}},
 	)
@@ -69,18 +63,56 @@ func ensureSentinel(ctx context.Context, s blob.Store) error {
 	return s.Put(ctx, blob.SentinelKey, strings.NewReader(body), int64(len(body)))
 }
 
+// uploadPartPath matches native API upload part PUTs, which stream into
+// the Blob store and so have no body limit (parts are 16 MiB to 512 MiB).
+var uploadPartPath = regexp.MustCompile(`^/api/hangar/v1/repos/[^/]+/[^/]+/[^/]+/uploads/[^/]+/parts/[0-9]+$`)
+
 // newHandler assembles the middleware chain and the protocol dispatcher
-// for the routes in docs/spec/02-architecture.md.
-func newHandler(d deps, health *httpx.Health) (http.Handler, error) {
-	trusted := make([]netip.Prefix, 0, len(d.cfg.Server.TrustedProxies))
-	for _, p := range d.cfg.Server.TrustedProxies {
+// for the routes in docs/spec/02-architecture.md. A worker process serves
+// only the health endpoints.
+func newHandler(ctx context.Context, in *instance, health *httpx.Health, workerOnly bool) (http.Handler, error) {
+	cfg := in.cfg
+	trusted := make([]netip.Prefix, 0, len(cfg.Server.TrustedProxies))
+	for _, p := range cfg.Server.TrustedProxies {
 		prefix, err := config.ParsePrefix(p)
 		if err != nil {
 			return nil, err
 		}
 		trusted = append(trusted, prefix)
 	}
-	native := gen.HandlerWithOptions(gen.Unimplemented{}, gen.ChiServerOptions{
+	viewerHost := ""
+	if u, err := url.Parse(cfg.Server.PublicURL); err == nil && u.Host != "" {
+		viewerHost = "datasets-server." + u.Host
+	}
+
+	var h http.Handler
+	if workerOnly {
+		h = httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL)
+	} else {
+		var err error
+		if h, err = protocolHandler(ctx, in, health, viewerHost); err != nil {
+			return nil, err
+		}
+	}
+	h = httpx.AccessLog(in.log)(h)
+	h = httpx.Recover(in.log)(h)
+	h = httpx.TrustedProxies(trusted)(h)
+	h = otelhttp.NewHandler(h, "http", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }))
+	h = httpx.RequestIDs(h)
+	return h, nil
+}
+
+// protocolHandler serves every protocol on one host. Requests are
+// authenticated before dispatch, except where the URL or the protocol
+// carries its own credential: signed export and Pull-through links, and
+// Xet CAS requests, whose bearer is a CAS token the Xet handler verifies.
+func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, viewerHost string) (http.Handler, error) {
+	cfg := in.cfg
+	srv, err := newNativeServer(in)
+	if err != nil {
+		return nil, err
+	}
+	native := gen.HandlerWithOptions(srv, gen.ChiServerOptions{
 		BaseURL: "/api/hangar/v1",
 		// Record the route template for the access log and the span name.
 		Middlewares: []gen.MiddlewareFunc{func(next http.Handler) http.Handler {
@@ -95,21 +127,65 @@ func newHandler(d deps, health *httpx.Health) (http.Handler, error) {
 			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusBadRequest, Detail: err.Error()})
 		},
 	})
-	protocols := httpxtest.Protocols(httpx.Protocols{
-		Health: health,
-		Native: http.MaxBytesHandler(native, d.cfg.Server.MaxRequestBody.Int64()),
-		UI:     web.Handler(web.Options{}),
+	limited := http.MaxBytesHandler(native, cfg.Server.MaxRequestBody.Int64())
+	nativeLimited := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut && uploadPartPath.MatchString(r.URL.EscapedPath()) {
+			native.ServeHTTP(w, r)
+			return
+		}
+		limited.ServeHTTP(w, r)
 	})
-	h := httpx.Dispatch(protocols, d.cfg.Server.PublicURL)
-	h = httpx.Authenticate(d.authn, nil)(h)
-	h = httpx.AccessLog(d.log)(h)
-	h = httpx.Recover(d.log)(h)
-	h = httpx.TrustedProxies(trusted)(h)
-	h = otelhttp.NewHandler(h, "http", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }))
-	h = httpx.RequestIDs(h)
-	return h, nil
-}
 
-// stubAuthenticator is the phase 0 Authenticator: every request is anonymous
-// until internal/auth is wired in phase 2.
-func stubAuthenticator() httpx.Authenticator { return authtest.NewAuthenticator() }
+	casURL := in.casURL
+	cas, err := xet.NewHandler(in.xet, xet.HandlerOptions{CASURL: casURL, Log: in.log})
+	if err != nil {
+		return nil, err
+	}
+	casHost := ""
+	if u, err := url.Parse(casURL); err == nil && u.Host != "" {
+		if pu, err := url.Parse(cfg.Server.PublicURL); err == nil && !strings.EqualFold(u.Host, pu.Host) {
+			casHost = u.Host
+		}
+	}
+
+	protocols := httpx.Protocols{
+		Health: health,
+		Native: nativeLimited,
+		Hub:    in.hub,
+		Git:    in.gitServer.Git(),
+		LFS:    in.gitServer.LFS(),
+		Ollama: in.ollama,
+		Xet:    cas,
+		Auth:   in.auth.Handler(),
+		UI:     web.Handler(web.Options{ConnectSrc: in.presignOrigins(ctx)}),
+	}
+	if in.viewer != nil {
+		protocols.Viewer = in.viewer.Handler()
+	}
+	dispatch := httpx.Dispatch(protocols, cfg.Server.PublicURL)
+	// The Ollama token endpoint takes an Ollama key signature, which the
+	// Ollama handler verifies; WriteAuthError classifies the protocol first,
+	// so bad credentials get each client's own challenge.
+	authed := httpx.Authenticate(ollama.ExemptTokenEndpoint(in.auth), auth.WriteAuthError(cfg.Server.PublicURL))(dispatch)
+
+	exports := api.ExportHandler(in.blobs, in.signer)
+	pullThrough := in.pulls.PullThrough().Handler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.EscapedPath()
+		switch {
+		case casHost != "" && strings.EqualFold(r.Host, casHost):
+			httpx.SetProtocol(r.Context(), telemetry.ProtocolXet)
+			cas.ServeHTTP(w, r)
+		case strings.HasPrefix(p, api.ExportPath):
+			httpx.SetProtocol(r.Context(), telemetry.ProtocolNative)
+			exports.ServeHTTP(w, r)
+		case strings.HasPrefix(p, upstream.PullThroughPath):
+			httpx.SetProtocol(r.Context(), telemetry.ProtocolLFS)
+			pullThrough.ServeHTTP(w, r)
+		case httpx.Classify(r, viewerHost) == httpx.TargetXet:
+			dispatch.ServeHTTP(w, r)
+		default:
+			authed.ServeHTTP(w, r)
+		}
+	}), nil
+}

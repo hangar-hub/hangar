@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
 func testConfig(t *testing.T) *config.Config {
@@ -69,25 +71,68 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 	resp, body = get("/readyz")
 	require.Equal(t, 200, resp.StatusCode, body)
 
-	// The native API is mounted from the generated router.
+	// The native API is the generated router over the real handlers.
 	resp, body = get("/api/hangar/v1/me")
-	require.Equal(t, http.StatusNotImplemented, resp.StatusCode, body)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode, body)
+	require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
 	resp, _ = get("/api/hangar/v1/repos?limit=lots")
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode, "the generated router validates parameters")
 	require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
 
-	// Other protocols are phase 0 stand-ins that answer in their own format.
+	// The Hub API answers in its own error format.
 	resp, _ = get("/api/models/a/b")
-	require.Equal(t, "Hub API", resp.Header.Get("X-Hangar-Fake"))
-	require.NotEmpty(t, resp.Header.Get("X-Error-Message"))
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	require.Equal(t, "RepoNotFound", resp.Header.Get("X-Error-Code"))
+	require.Empty(t, resp.Header.Get("X-Hangar-Fake"), "no phase 0 stand-ins")
+
+	// A bad git credential gets git's Basic challenge, because the
+	// protocol is classified before authentication.
+	req, _ := http.NewRequest(http.MethodGet, base+"/a/b.git/info/refs?service=git-upload-pack", nil)
+	req.SetBasicAuth("user", "hgr_not_a_real_token")
+	gitResp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = gitResp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, gitResp.StatusCode)
+	require.Contains(t, gitResp.Header.Get("WWW-Authenticate"), "Basic")
+	resp, _ = get("/v2/")
+	require.NotEqual(t, http.StatusNotFound, resp.StatusCode)
+
+	// The bootstrap admin signs in with the password printed once.
+	password := ""
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "Admin password: "); ok {
+			password = v
+		}
+	}
+	require.NotEmpty(t, password)
+	login, err := http.Post(base+"/api/hangar/v1/auth/login", "application/json",
+		strings.NewReader(`{"username":"hangar-admin","password":"`+password+`"}`))
+	require.NoError(t, err)
+	_ = login.Body.Close()
+	require.Equal(t, http.StatusOK, login.StatusCode)
+	req, _ = http.NewRequest(http.MethodGet, base+"/api/hangar/v1/admin/system", nil)
+	for _, c := range login.Cookies() {
+		req.AddCookie(c)
+	}
+	sys, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	b, _ := io.ReadAll(sys.Body)
+	_ = sys.Body.Close()
+	require.Equal(t, http.StatusOK, sys.StatusCode, string(b))
+	require.Contains(t, string(b), `"blob_store":{"backend":"fs"}`)
 
 	require.NoError(t, checkReady(context.Background(), addr), "hangar healthcheck succeeds against a ready server")
 
 	// First start generated and printed the secrets once.
 	require.Contains(t, stderr.String(), "Admin password:")
-	_, err := os.Stat(filepath.Join(cfg.Server.DataDir, config.SecretsFileName))
+	_, err = os.Stat(filepath.Join(cfg.Server.DataDir, config.SecretsFileName))
 	require.NoError(t, err)
 
+	// The client can be left holding a connection it dialled but never
+	// used; net/http counts such a connection as active for its first 5
+	// seconds, as long as this test's shutdown_timeout. A client going
+	// away closes it.
+	http.DefaultClient.CloseIdleConnections()
 	cancel()
 	select {
 	case err := <-done:
@@ -180,7 +225,7 @@ func TestReadyzReportsSchemaAndBlobStore(t *testing.T) {
 	d, err := openDatabase(context.Background(), cfg, false)
 	require.NoError(t, err)
 	defer d.Close()
-	h := newHealth(deps{cfg: cfg, db: d, blobs: newEmptyBlobs()})
+	h := newHealth(d, newEmptyBlobs())
 	failed := h.Failures(context.Background())
 	names := []string{}
 	for _, f := range failed {
@@ -308,4 +353,35 @@ func TestServerJSONSelectsJSONLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "json", cfg.Telemetry.LogFormat, "--json overrides telemetry.log_format")
 	require.Equal(t, "worker", cfg.Server.Role)
+}
+
+// TestWorkerServesOnlyHealth checks that a worker process serves the
+// health endpoints and no protocol. A worker needs Postgres, so the test
+// builds the handler directly over an Instance on SQLite.
+func TestWorkerServesOnlyHealth(t *testing.T) {
+	cfg := testConfig(t)
+	ctx := context.Background()
+	_, err := config.EnsureSecrets(cfg)
+	require.NoError(t, err)
+	tel, err := telemetry.Setup(ctx, telemetry.Options{Config: cfg.Telemetry, Version: version, Role: config.RoleWorker,
+		Getenv: func(string) string { return "" }, Stdout: io.Discard})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
+	d, err := openDatabase(ctx, cfg, false)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = d.Close() })
+	require.NoError(t, d.Migrate(ctx))
+	blobs, err := openBlobStore(ctx, cfg, tel)
+	require.NoError(t, err)
+	in, err := newInstance(ctx, cfg, tel, d, blobs)
+	require.NoError(t, err)
+	t.Cleanup(func() { in.close(ctx) })
+	h, err := newHandler(ctx, in, newHealth(d, blobs), true)
+	require.NoError(t, err)
+	for path, want := range map[string]int{"/healthz": http.StatusOK, "/readyz": http.StatusOK, "/api/hangar/v1/me": http.StatusNotFound,
+		"/": http.StatusNotFound, "/api/models/a/b": http.StatusNotFound} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		require.Equal(t, want, rec.Code, path)
+	}
 }
