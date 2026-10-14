@@ -71,19 +71,19 @@ func TestPushResumesAfterAFailedPart(t *testing.T) {
 	weights := blobOf("resume", 256<<10)
 	writeTree(t, dir, map[string][]byte{"model.safetensors": weights})
 	e.inst.AddRepo(mustID(t, model.RepoTypeModel, "acme/resume"))
-	e.inst.FailPart(sha(weights), 3, 100)
+	// Four 64 KiB parts go up in parallel. Part 3 fails only after parts
+	// 1, 2 and 4 are stored, whatever order the requests arrive in.
+	e.inst.FailPartLast(sha(weights), 3, 1)
 
 	r := e.run("push", dir, "acme/resume")
 	require.Equal(t, ExitFailure, r.code)
 	require.Contains(t, r.err.Error(), "run the command again to resume")
+	require.Contains(t, r.err.Error(), "part 3")
 	putsAfterFailure := e.inst.PartPuts()
-	require.GreaterOrEqual(t, putsAfterFailure, 1)
+	require.Equal(t, 3, putsAfterFailure)
 
-	e.inst.FailPart(sha(weights), 3, 0)
 	e.ok("push", dir, "acme/resume", "--branch", "main")
-	resent := e.inst.PartPuts() - putsAfterFailure
-	require.Less(t, resent, 4, "only the parts not stored before are sent again")
-	require.GreaterOrEqual(t, resent, 1)
+	require.Equal(t, 1, e.inst.PartPuts()-putsAfterFailure, "only part 3, which was not stored, is sent again")
 	require.Equal(t, weights, e.inst.Files(mustID(t, model.RepoTypeModel, "acme/resume"), "main")["model.safetensors"])
 }
 

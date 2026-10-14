@@ -487,8 +487,9 @@ func (s *server) GetUpload(w http.ResponseWriter, r *http.Request, _ gen.RepoTyp
 	writeJSON(w, http.StatusOK, s.status(up))
 }
 
-// storePart stores a part, or fails it if FailPart asked to.
-func (i *Instance) storePart(w http.ResponseWriter, id uuid.UUID, n int, body []byte) {
+// storePart stores a part, or fails it if FailPart or FailPartLast asked
+// to.
+func (i *Instance) storePart(w http.ResponseWriter, r *http.Request, id uuid.UUID, n int, body []byte) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	up := i.uploads[id]
@@ -497,16 +498,52 @@ func (i *Instance) storePart(w http.ResponseWriter, id uuid.UUID, n int, body []
 		return
 	}
 	key := fmt.Sprintf("%s/%d", up.sha, n)
-	if i.failedParts[key] > 0 {
-		i.failedParts[key]--
+	if f := i.failedParts[key]; f.times > 0 {
+		f.times--
+		i.failedParts[key] = f
+		if f.afterOthers {
+			i.waitForOtherParts(r, up, n)
+		}
 		problem(w, http.StatusInternalServerError, "Injected part failure.")
 		return
 	}
 	up.parts[n] = body
 	i.partPuts++
+	close(i.partStored)
+	i.partStored = make(chan struct{})
 	w.Header().Set("ETag", etagOf(body))
 	size := int64(len(body))
 	writeJSON(w, http.StatusOK, gen.UploadedPart{Number: n, Etag: etagOf(body), Size: &size})
+}
+
+// waitForOtherParts returns once every part of up other than n is stored,
+// the request ends or PartFailureWait has passed. i.mu is held on entry and
+// on return.
+func (i *Instance) waitForOtherParts(r *http.Request, up *upload, n int) {
+	total := int((up.size + i.PartSize - 1) / i.PartSize)
+	timeout := time.NewTimer(PartFailureWait)
+	defer timeout.Stop()
+	for {
+		others := len(up.parts)
+		if _, ok := up.parts[n]; ok {
+			others--
+		}
+		if others >= total-1 {
+			return
+		}
+		stored := i.partStored
+		i.mu.Unlock()
+		select {
+		case <-stored:
+			i.mu.Lock()
+		case <-r.Context().Done():
+			i.mu.Lock()
+			return
+		case <-timeout.C:
+			i.mu.Lock()
+			return
+		}
+	}
 }
 
 func (s *server) PutUploadPart(w http.ResponseWriter, r *http.Request, _ gen.RepoType, _, _ string, id gen.ID, n int) {
@@ -518,7 +555,7 @@ func (s *server) PutUploadPart(w http.ResponseWriter, r *http.Request, _ gen.Rep
 		problem(w, http.StatusBadRequest, "Incomplete part body.")
 		return
 	}
-	s.i.storePart(w, id, n, body)
+	s.i.storePart(w, r, id, n, body)
 }
 
 // presignedObject serves an LFS object at a presigned URL, with Range
@@ -555,7 +592,7 @@ func (i *Instance) presignedPart(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusBadRequest, "Incomplete part body.")
 		return
 	}
-	i.storePart(w, id, n, body)
+	i.storePart(w, r, id, n, body)
 }
 
 func (s *server) CompleteUpload(w http.ResponseWriter, r *http.Request, _ gen.RepoType, _, _ string, id gen.ID) {

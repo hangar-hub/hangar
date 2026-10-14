@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
@@ -356,4 +357,57 @@ func TestPresignedDownloadRedirects(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, get(http.DefaultClient, loc, true).StatusCode, "a presigned URL takes no Authorization header")
 	require.Equal(t, http.StatusForbidden, get(http.DefaultClient, strings.TrimSuffix(loc, "?sig=fake"), false).StatusCode)
 	require.Equal(t, http.StatusNotFound, get(http.DefaultClient, i.PresignBase+"/presigned-objects/missing?sig=fake", false).StatusCode)
+}
+
+func TestFailPartLastWaitsForTheOtherParts(t *testing.T) {
+	i := clitest.New(t)
+	i.PartSize = 1 << 10
+	ctx := context.Background()
+	c := client(t, i, clitest.Token)
+	r, err := c.CreateRepoWithResponse(ctx, gen.RepoCreate{Type: gen.RepoTypeSingularModel, Namespace: "acme", Name: "m"})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, r.StatusCode())
+
+	big := bytes.Repeat([]byte("weights!"), 400) // 3200 bytes, four parts
+	plan, err := c.PlanUploadsWithResponse(ctx, gen.Models, "acme", "m", gen.UploadPlanRequest{Files: []gen.UploadFile{
+		{Path: "model.safetensors", Size: int64(len(big)), Sha256: shaHex(big)},
+	}})
+	require.NoError(t, err)
+	urls := *plan.JSON200.Files[0].PartUrls
+	require.Len(t, urls, 4)
+	put := func(n int) int {
+		chunk := big[(n-1)*1024 : min(n*1024, len(big))]
+		req, _ := http.NewRequest(http.MethodPut, urls[n-1], bytes.NewReader(chunk))
+		req.Header.Set("Authorization", "Bearer "+clitest.Token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	i.FailPartLast(shaHex(big), 2, 1)
+	failed := make(chan int, 1)
+	go func() { failed <- put(2) }()
+	for _, n := range []int{1, 3} {
+		require.Equal(t, http.StatusOK, put(n))
+	}
+	select {
+	case code := <-failed:
+		t.Fatalf("part 2 was answered (%d) before part 4 was stored", code)
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.Equal(t, http.StatusOK, put(4))
+	select {
+	case code := <-failed:
+		require.Equal(t, http.StatusInternalServerError, code)
+	case <-time.After(clitest.PartFailureWait / 2):
+		t.Fatal("part 2 was not answered after the other parts were stored")
+	}
+	require.Equal(t, 3, i.PartPuts())
+
+	// The failure was used up: part 2 is now stored.
+	require.Equal(t, http.StatusOK, put(2))
+	require.Equal(t, 4, i.PartPuts())
 }

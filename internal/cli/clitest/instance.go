@@ -143,7 +143,9 @@ type Instance struct {
 	jobOrder    []uuid.UUID
 	ollamaKeys  []gen.OllamaKey
 	devices     map[string]*device
-	failedParts map[string]int
+	failedParts map[string]partFailure
+	// partStored is closed, and replaced, each time a part is stored.
+	partStored chan struct{}
 	// Requests counts requests by "METHOD path-template".
 	Requests map[string]int
 	partPuts int
@@ -171,7 +173,8 @@ func New(t testing.TB) *Instance {
 		uploads:      map[uuid.UUID]*upload{},
 		jobs:         map[uuid.UUID]*job{},
 		devices:      map[string]*device{},
-		failedParts:  map[string]int{},
+		failedParts:  map[string]partFailure{},
+		partStored:   make(chan struct{}),
 		Requests:     map[string]int{},
 	}
 	r := chi.NewRouter()
@@ -336,13 +339,38 @@ func (i *Instance) present(f File) bool {
 	return ok
 }
 
-// FailPart makes the next n uploads of part number n of a file fail, to
-// test resumed uploads. key is "<sha256>/<part>".
+// partFailure is an injected failure of one part of a file.
+type partFailure struct {
+	times int
+	// afterOthers holds each failure until the upload's other parts are
+	// stored.
+	afterOthers bool
+}
+
+// FailPart makes the next times uploads of part number part of the file
+// with this SHA-256 fail with 500, to test resumed uploads. Each failure is
+// answered at once.
 func (i *Instance) FailPart(sha string, part, times int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = times
+	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = partFailure{times: times}
 }
+
+// FailPartLast is FailPart, but each failure is answered only once every
+// other part of the upload is stored (or after PartFailureWait, or when the
+// request ends). A client that uploads parts in parallel then sees the
+// failure after the other parts succeeded, whatever order its requests
+// arrive in, so a test can count exactly which parts a resumed upload
+// sends again.
+func (i *Instance) FailPartLast(sha string, part, times int) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = partFailure{times: times, afterOthers: true}
+}
+
+// PartFailureWait is how long FailPartLast holds a failure for the other
+// parts at most.
+const PartFailureWait = 10 * time.Second
 
 // PartPuts returns how many upload parts were stored.
 func (i *Instance) PartPuts() int {
