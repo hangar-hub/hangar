@@ -40,9 +40,20 @@ const (
 	// pages long before this (pyarrow at 20,000 rows).
 	maxPageValues = 1 << 24
 	// maxPageBytes bounds the uncompressed size of one page, which
-	// parquet-go allocates in one piece.
-	maxPageBytes = 1 << 30
+	// parquet-go allocates in one piece, and the values built from a
+	// DELTA_BYTE_ARRAY page. It is the Viewer's per-request budget: a page
+	// larger than that could never be returned. pyarrow writes pages of
+	// about 1 MB.
+	maxPageBytes = DefaultBudgetBytes
+	// levelBytesPerValue is what Hangar counts against a Budget for each
+	// value of a page besides the page's bytes: parquet-go's repetition and
+	// definition levels and value offsets, and the values read from it.
+	levelBytesPerValue = 8
 )
+
+// errOverLimit means a column chunk decodes to more than the limit its
+// pages were checked with.
+var errOverLimit = errors.New("parquet: over the decoding limit")
 
 // readAt fills b from off. Unlike io.ReaderAt, it accepts io.EOF with a full
 // read.
@@ -246,36 +257,52 @@ func (p *thriftParser) value(typ byte, depth int) error {
 	return fmt.Errorf("unknown thrift type %d", typ)
 }
 
-// checkChunk checks the pages of a column chunk before parquet-go reads
-// it, once per chunk.
-func (f *File) checkChunk(rowGroup, leaf int) error {
-	key := [2]int{rowGroup, leaf}
-	f.mu.Lock()
-	err, ok := f.checked[key]
-	f.mu.Unlock()
-	if ok {
-		return err
-	}
-	err = f.walkChunk(rowGroup, leaf)
-	f.mu.Lock()
-	f.checked[key] = err
-	f.mu.Unlock()
-	return err
+// chunkCheck is the outcome of checking a column chunk: the bytes it
+// decodes to, as a Budget counts them, or why it cannot be read.
+type chunkCheck struct {
+	decoded int64
+	err     error
 }
 
-func (f *File) walkChunk(rowGroup, leaf int) error {
+// checkChunk checks the pages of a column chunk before parquet-go reads
+// it, once per chunk, and returns the bytes it decodes to. It decompresses
+// no more than b has left: a chunk that decodes to more fails with a
+// *TooBigError, which is not kept, because another request's Budget may
+// allow it.
+func (f *File) checkChunk(rowGroup, leaf int, b *Budget) (int64, error) {
+	key := [2]int{rowGroup, leaf}
+	f.mu.Lock()
+	c, ok := f.checked[key]
+	f.mu.Unlock()
+	if ok {
+		return c.decoded, c.err
+	}
+	decoded, err := f.walkChunk(rowGroup, leaf, b.remaining())
+	if errors.Is(err, errOverLimit) {
+		return 0, b.tooBig(decoded)
+	}
+	f.mu.Lock()
+	f.checked[key] = chunkCheck{decoded: decoded, err: err}
+	f.mu.Unlock()
+	return decoded, err
+}
+
+// walkChunk checks every page of a column chunk and returns the bytes the
+// chunk decodes to. It stops with errOverLimit before decompressing a page
+// that would take the total past limit.
+func (f *File) walkChunk(rowGroup, leaf int, limit int64) (int64, error) {
 	groups := f.f.Metadata().RowGroups
 	if rowGroup >= len(groups) || leaf >= len(groups[rowGroup].Columns) || leaf >= len(groups[0].Columns) {
-		return fmt.Errorf("%w: missing column chunk", ErrInvalid)
+		return 0, fmt.Errorf("%w: missing column chunk", ErrInvalid)
 	}
 	if leaf >= len(f.leaves) {
-		return fmt.Errorf("%w: column chunk %d has no column", ErrInvalid, leaf)
+		return 0, fmt.Errorf("%w: column chunk %d has no column", ErrInvalid, leaf)
 	}
 	m := groups[rowGroup].Columns[leaf].MetaData
 	// parquet-go decompresses every chunk of a column with the codec of
 	// the first chunk.
 	pages := pageChecker{codec: groups[0].Columns[leaf].MetaData.Codec, chunkValues: m.NumValues, chunkBytes: m.TotalUncompressedSize,
-		maxDef: f.leaves[leaf].maxDef, maxRep: f.leaves[leaf].maxRep}
+		maxDef: f.leaves[leaf].maxDef, maxRep: f.leaves[leaf].maxRep, limit: limit}
 	defer pages.close()
 	start := m.DataPageOffset
 	if m.DictionaryPageOffset != 0 {
@@ -283,26 +310,29 @@ func (f *File) walkChunk(rowGroup, leaf int) error {
 	}
 	end := start + m.TotalCompressedSize
 	if start < 0 || m.TotalCompressedSize < 0 || end < start || end > f.size || m.NumValues < 0 {
-		return fmt.Errorf("%w: column chunk %d of row group %d is outside the file", ErrInvalid, leaf, rowGroup)
+		return 0, fmt.Errorf("%w: column chunk %d of row group %d is outside the file", ErrInvalid, leaf, rowGroup)
 	}
 	for pos := start; pos < end; {
 		header, n, err := f.pageHeader(pos, end)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		data := pos + int64(n)
 		if header.CompressedPageSize < 0 || data+int64(header.CompressedPageSize) > end {
-			return fmt.Errorf("%w: page at %d runs past its column chunk", ErrInvalid, pos)
+			return 0, fmt.Errorf("%w: page at %d runs past its column chunk", ErrInvalid, pos)
 		}
 		if err := pages.check(header, func(off, n int64) ([]byte, error) {
 			b := make([]byte, n)
 			return b, readAt(f.r, b, data+off)
 		}); err != nil {
-			return fmt.Errorf("page at %d: %w", pos, err)
+			if errors.Is(err, errOverLimit) {
+				return pages.decoded, err
+			}
+			return 0, fmt.Errorf("page at %d: %w", pos, err)
 		}
 		pos = data + int64(header.CompressedPageSize)
 	}
-	return nil
+	return pages.decoded, nil
 }
 
 // pageHeader reads the page header at pos, reading more of the file only
@@ -336,6 +366,19 @@ type pageChecker struct {
 	chunkBytes     int64
 	maxDef, maxRep int
 	zstd           *zstd.Decoder
+	// decoded counts what the pages checked so far decode to, and limit
+	// bounds it; zero means no limit.
+	decoded, limit int64
+}
+
+// reserve counts n more decoded bytes, and fails with errOverLimit when
+// they take the total past the limit.
+func (c *pageChecker) reserve(n int64) error {
+	c.decoded += n
+	if c.limit > 0 && c.decoded > c.limit {
+		return errOverLimit
+	}
+	return nil
 }
 
 func (c *pageChecker) close() {
@@ -364,7 +407,11 @@ func (c *pageChecker) check(h *format.PageHeader, read func(off, n int64) ([]byt
 		case n > maxPageValues:
 			return fmt.Errorf("%w: a page of %d values is more than %d", ErrUnsupported, n, maxPageValues)
 		}
-		return nil
+		// The page's levels and values, counted before decompressing it.
+		return c.reserve(int64(n) * levelBytesPerValue)
+	}
+	if err := c.reserve(int64(h.UncompressedPageSize)); err != nil {
+		return err
 	}
 	if err := c.dictionary(h, read); err != nil {
 		return err
@@ -399,7 +446,7 @@ func (c *pageChecker) check(h *format.PageHeader, read func(off, n int64) ([]byt
 			}
 			off += k
 		}
-		return checkValues(body[off:], v.V.Encoding, n)
+		return c.values(body[off:], v.V.Encoding, n)
 	case format.DataPageV2:
 		v := h.DataPageHeaderV2
 		if !v.Valid {
@@ -435,7 +482,7 @@ func (c *pageChecker) check(h *format.PageHeader, read func(off, n int64) ([]byt
 		if err != nil {
 			return err
 		}
-		return checkValues(body, v.V.Encoding, n-int64(v.V.NumNulls))
+		return c.values(body, v.V.Encoding, n-int64(v.V.NumNulls))
 	case format.DictionaryPage, format.IndexPage:
 		return nil
 	}
@@ -458,6 +505,9 @@ func (c *pageChecker) dictionary(h *format.PageHeader, read func(off, n int64) (
 	case n > maxPageValues:
 		return fmt.Errorf("%w: a dictionary of %d values is more than %d", ErrUnsupported, n, maxPageValues)
 	}
+	if err := c.reserve(int64(v.V.NumValues) * levelBytesPerValue); err != nil {
+		return err
+	}
 	body, err := c.body(read, 0, int64(h.CompressedPageSize), size, c.codec != format.Uncompressed)
 	if err != nil {
 		return err
@@ -468,7 +518,17 @@ func (c *pageChecker) dictionary(h *format.PageHeader, read func(off, n int64) (
 	if enc == format.PlainDictionary { //nolint:staticcheck // older writers use PLAIN_DICTIONARY for dictionaries
 		enc = format.Plain
 	}
-	return checkValues(body, enc, int64(v.V.NumValues))
+	return c.values(body, enc, int64(v.V.NumValues))
+}
+
+// values checks a page's value streams, as checkValues does, and counts
+// the bytes of the values they build.
+func (c *pageChecker) values(b []byte, enc format.Encoding, n int64) error {
+	built, err := valueBytes(b, enc, n)
+	if err != nil {
+		return err
+	}
+	return c.reserve(built)
 }
 
 // body returns n bytes of page data from off, decompressed to size bytes
@@ -532,12 +592,24 @@ func (c *pageChecker) decompress(src []byte, size int64) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return io.ReadAll(io.LimitReader(r, size+1))
+		return readUpTo(r, size, len(src))
 	case format.Brotli:
-		return io.ReadAll(io.LimitReader(brotli.NewReader(bytes.NewReader(src)), size+1))
+		return readUpTo(brotli.NewReader(bytes.NewReader(src)), size, len(src))
 	}
 	// parquet-go has no decoder for the other codecs and fails on them.
 	return nil, fmt.Errorf("%w: compression codec %s", ErrUnsupported, c.codec)
+}
+
+// readUpTo decodes at most one byte past size from r, which decompresses
+// compressed bytes. The output grows with what r decodes, in one buffer,
+// rather than starting at the size a page header claims.
+func readUpTo(r io.Reader, size int64, compressed int) ([]byte, error) {
+	var out bytes.Buffer
+	out.Grow(int(min(size+1, 4*int64(compressed)+64<<10)))
+	if _, err := io.Copy(&out, io.LimitReader(r, size+1)); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
 // levelsV1 checks the levels at the start of a v1 data page and returns
@@ -566,58 +638,65 @@ func levelsV1(b []byte, enc format.Encoding, width int, n int64) (int, error) {
 // checkValues checks the run-length or delta streams that encode n values,
 // before parquet-go allocates what they claim.
 func checkValues(b []byte, enc format.Encoding, n int64) error {
+	_, err := valueBytes(b, enc, n)
+	return err
+}
+
+// valueBytes checks the streams as checkValues does, and returns the bytes
+// of the values parquet-go builds from DELTA_LENGTH_BYTE_ARRAY and
+// DELTA_BYTE_ARRAY pages, which can be more than the page holds.
+func valueBytes(b []byte, enc format.Encoding, n int64) (int64, error) {
 	switch enc {
 	case format.PlainDictionary, format.RLEDictionary: //nolint:staticcheck // older writers use PLAIN_DICTIONARY in data pages
-
 		if len(b) == 0 {
-			return nil
+			return 0, nil
 		}
 		if b[0] > 32 {
-			return fmt.Errorf("%w: dictionary indexes of %d bits", ErrInvalid, b[0])
+			return 0, fmt.Errorf("%w: dictionary indexes of %d bits", ErrInvalid, b[0])
 		}
-		return runs(b[1:], int(b[0]), n)
+		return 0, runs(b[1:], int(b[0]), n)
 	case format.RLE:
 		// Booleans, with a length first.
 		if len(b) < 4 {
-			return nil
+			return 0, nil
 		}
 		k := min(int64(binary.LittleEndian.Uint32(b)), int64(len(b)-4))
-		return runs(b[4:4+k], 1, n)
+		return 0, runs(b[4:4+k], 1, n)
 	case format.DeltaBinaryPacked:
 		if len(b) == 0 {
-			return nil
+			return 0, nil
 		}
 		// parquet-go allocates the number of values in the header before
 		// decoding them.
 		_, err := readDeltaHeader(&thriftParser{b: b}, "values", n)
-		return err
+		return 0, err
 	case format.DeltaLengthByteArray:
 		if len(b) == 0 {
-			return nil
+			return 0, nil
 		}
 		lengths, rest, err := deltaInts(b, "lengths", n)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		return checkSuffixes(lengths, nil, len(rest))
 	case format.DeltaByteArray:
 		if len(b) == 0 {
-			return nil
+			return 0, nil
 		}
 		prefixes, rest, err := deltaInts(b, "prefix lengths", n)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		suffixes, rest, err := deltaInts(rest, "suffix lengths", n)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if len(prefixes) != len(suffixes) {
-			return fmt.Errorf("%w: %d prefix lengths and %d suffix lengths", ErrInvalid, len(prefixes), len(suffixes))
+			return 0, fmt.Errorf("%w: %d prefix lengths and %d suffix lengths", ErrInvalid, len(prefixes), len(suffixes))
 		}
 		return checkSuffixes(suffixes, prefixes, len(rest))
 	}
-	return nil
+	return 0, nil
 }
 
 // checkSuffixes checks the lengths of DELTA_LENGTH_BYTE_ARRAY values, or the
@@ -625,8 +704,9 @@ func checkValues(b []byte, enc format.Encoding, n int64) error {
 // bytes of value data that follow them. parquet-go adds up the lengths and
 // allocates the sum before it checks any of them. A prefix repeats the
 // start of the value before it, so it can be no longer than that value.
-// prefixes is nil for DELTA_LENGTH_BYTE_ARRAY.
-func checkSuffixes(suffixes, prefixes []int32, size int) error {
+// prefixes is nil for DELTA_LENGTH_BYTE_ARRAY. It returns the bytes of the
+// values the lengths build.
+func checkSuffixes(suffixes, prefixes []int32, size int) (int64, error) {
 	var data, total, last int64
 	for i, s := range suffixes {
 		p := int64(0)
@@ -635,20 +715,20 @@ func checkSuffixes(suffixes, prefixes []int32, size int) error {
 		}
 		switch {
 		case s < 0:
-			return fmt.Errorf("%w: value %d has a length of %d", ErrInvalid, i, s)
+			return 0, fmt.Errorf("%w: value %d has a length of %d", ErrInvalid, i, s)
 		case p < 0 || p > last:
-			return fmt.Errorf("%w: value %d has a prefix of %d bytes after a value of %d", ErrInvalid, i, p, last)
+			return 0, fmt.Errorf("%w: value %d has a prefix of %d bytes after a value of %d", ErrInvalid, i, p, last)
 		}
 		data += int64(s)
 		if data > int64(size) {
-			return fmt.Errorf("%w: values of %d bytes or more in %d bytes of page data", ErrInvalid, data, size)
+			return 0, fmt.Errorf("%w: values of %d bytes or more in %d bytes of page data", ErrInvalid, data, size)
 		}
 		last = p + int64(s)
 		if total += last; total > maxPageBytes {
-			return fmt.Errorf("%w: a page of values longer than %d bytes", ErrUnsupported, int64(maxPageBytes))
+			return 0, fmt.Errorf("%w: a page of values longer than %d bytes", ErrUnsupported, int64(maxPageBytes))
 		}
 	}
-	return nil
+	return total, nil
 }
 
 // deltaHeader is the start of a DELTA_BINARY_PACKED stream.

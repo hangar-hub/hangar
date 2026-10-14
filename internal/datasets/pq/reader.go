@@ -69,7 +69,7 @@ type File struct {
 	size        int64
 	mu          sync.Mutex
 	// checked holds the result of checkChunk by row group and leaf column.
-	checked map[[2]int]error
+	checked map[[2]int]chunkCheck
 }
 
 // OpenOptions configure Open.
@@ -108,7 +108,7 @@ func Open(r io.ReaderAt, size int64) (*File, error) {
 		}
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	file := &File{f: f, r: r, size: size, checked: map[[2]int]error{}}
+	file := &File{f: f, r: r, size: size, checked: map[[2]int]chunkCheck{}}
 	if err := file.buildSchema(); err != nil {
 		return nil, err
 	}
@@ -752,6 +752,12 @@ type Scanner struct {
 	left    int64
 	readers []*leafReader
 	next    int64
+	// budget is charged with each column chunk the scanner opens; held is
+	// the charge for the open chunks. With keep, charges stay until the
+	// Budget is dropped, because the caller keeps the rows it read.
+	budget *Budget
+	held   int64
+	keep   bool
 }
 
 // Columns returns the indexes of top-level columns by name; an empty list
@@ -784,13 +790,21 @@ func (f *File) Columns(names []string) ([]int, error) {
 // Scan returns a Scanner over rows [start, start+n) of the given columns,
 // or to the end when n < 0.
 func (f *File) Scan(cols []int, start, n int64) (*Scanner, error) {
+	return f.ScanWithin(nil, cols, start, n)
+}
+
+// ScanWithin is Scan, with the decoded data of the row group being read
+// charged to b: the Scanner fails with a *TooBigError rather than decode
+// more than b has left, and gives the charge back as it moves to the next
+// row group and when it is closed. b may be nil.
+func (f *File) ScanWithin(b *Budget, cols []int, start, n int64) (*Scanner, error) {
 	if start < 0 || start > f.NumRows() {
 		return nil, fmt.Errorf("parquet: row %d is out of range", start)
 	}
 	if n < 0 || start+n > f.NumRows() {
 		n = f.NumRows() - start
 	}
-	s := &Scanner{f: f, cols: cols, left: n, next: start}
+	s := &Scanner{f: f, cols: cols, left: n, next: start, budget: b}
 	return s, nil
 }
 
@@ -799,6 +813,10 @@ func (s *Scanner) closeReaders() {
 		r.close()
 	}
 	s.readers = nil
+	if !s.keep {
+		s.budget.release(s.held)
+		s.held = 0
+	}
 }
 
 // Close releases the open pages.
@@ -822,11 +840,16 @@ func (s *Scanner) open() error {
 			if l >= len(chunks) {
 				return fmt.Errorf("%w: missing column chunk", ErrInvalid)
 			}
-			if err := s.f.checkChunk(rg, l); err != nil {
+			decoded, err := s.f.checkChunk(rg, l, s.budget)
+			if err != nil {
 				return err
 			}
+			if err := s.budget.charge(decoded); err != nil {
+				return err
+			}
+			s.held += decoded
 			var pages parquet.Pages
-			err := decode(func() error {
+			err = decode(func() error {
 				pages = chunks[l].Pages()
 				return pages.SeekToRow(local)
 			})
@@ -880,10 +903,20 @@ func (s *Scanner) Next() (int64, []any, error) {
 
 // ReadRows reads rows [start, start+n) of the given columns.
 func (f *File) ReadRows(cols []int, start, n int64) ([][]any, error) {
-	s, err := f.Scan(cols, start, n)
+	return f.ReadRowsWithin(nil, cols, start, n)
+}
+
+// ReadRowsWithin is ReadRows, with the decoded data of every row group it
+// reads charged to b and kept charged, because the rows it returns hold
+// values built from them: a request's reads together take no more than
+// the Budget. It fails with a *TooBigError rather than go over. b may be
+// nil.
+func (f *File) ReadRowsWithin(b *Budget, cols []int, start, n int64) ([][]any, error) {
+	s, err := f.ScanWithin(b, cols, start, n)
 	if err != nil {
 		return nil, err
 	}
+	s.keep = true
 	defer s.Close()
 	var out [][]any
 	for {

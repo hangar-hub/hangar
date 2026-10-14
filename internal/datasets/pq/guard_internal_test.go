@@ -177,7 +177,7 @@ func TestPageCheckerCodecs(t *testing.T) {
 	// Snappy, LZ4 and gzip cannot expand past their ratio, so a claim past
 	// it is refused before decoding.
 	c := &pageChecker{codec: format.Lz4Raw, chunkValues: 10, chunkBytes: 1 << 30}
-	err := c.check(dataPage(10, 1<<29, 10), reader(make([]byte, 10)))
+	err := c.check(dataPage(10, 1<<27, 10), reader(make([]byte, 10)))
 	require.ErrorContains(t, err, "cannot decode to")
 
 	// An uncompressed chunk is not decoded.
