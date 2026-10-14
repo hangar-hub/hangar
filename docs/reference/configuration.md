@@ -160,6 +160,7 @@ Xet upload ingestion.
 | `xet.cas_url`<br>`HANGAR_XET_CAS_URL` | string | `""` | URL of the Xet CAS endpoints. Default: <public_url>/xet-cas. |
 | `xet.token_ttl`<br>`HANGAR_XET_TOKEN_TTL` | duration | `1h` | Lifetime of Xet write tokens. |
 | `xet.xorb_retention`<br>`HANGAR_XET_XORB_RETENTION` | duration | `672h` | How long xorbs are kept after their last use, so clients can deduplicate against them. Keep it longer than hf_xet's 21-day shard cache. |
+| `xet.max_file_size`<br>`HANGAR_XET_MAX_FILE_SIZE` | size | `50GiB` | Largest file a Xet upload may describe. One shard may rebuild at most four times this, counting only files not uploaded before; larger uploads get 413. |
 
 ## `jobs`
 

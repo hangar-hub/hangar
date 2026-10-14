@@ -32,6 +32,8 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/google/uuid` | v1.6.0 | UUIDv7 row IDs. |
 | `github.com/gpustack/gguf-parser-go` | v0.26.4 | GGUF header parsing with ranged reads (MIT). Pinned until W7 imports it. |
 | `github.com/parquet-go/parquet-go` | v0.32.0 | Parquet reading and writing for datasets (Apache-2.0). Pinned until W10 imports it. |
+| `github.com/pierrec/lz4/v4` | v4.1.21 | Decodes the LZ4 frames in Xet xorb chunks (UP-7). Already in the module graph at this version; BSD-3-Clause. |
+| `github.com/zeebo/blake3` | v0.2.4 | Keyed BLAKE3 for Xet chunk, xorb, file and verification hashes (UP-7); CC0-1.0. |
 | `github.com/oapi-codegen/runtime` | v1.7.0 | Runtime helpers for the generated native API code. |
 | `github.com/oapi-codegen/oapi-codegen/v2` (tool) | v2.8.0 | Generates `internal/api/gen` from `api/openapi.yaml`. |
 | `github.com/getkin/kin-openapi` | v0.142.0 | OpenAPI document model used by the generated embedded spec. |

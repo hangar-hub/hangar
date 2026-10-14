@@ -106,14 +106,14 @@ func (f *Fake) PutXorb(_ context.Context, c *xet.Claims, hash string, r io.Reade
 	if !xet.ValidHash(hash) {
 		return false, fmt.Errorf("%w: hash %q", xet.ErrBadXorb, hash)
 	}
-	if size > xet.MaxObjectSize {
+	if size > xet.MaxXorbSize {
 		return false, xet.ErrTooLarge
 	}
-	b, err := io.ReadAll(io.LimitReader(r, xet.MaxObjectSize+1))
+	b, err := io.ReadAll(io.LimitReader(r, xet.MaxXorbSize+1))
 	if err != nil {
 		return false, err
 	}
-	if len(b) > xet.MaxObjectSize {
+	if len(b) > xet.MaxXorbSize {
 		return false, xet.ErrTooLarge
 	}
 	f.mu.Lock()
@@ -130,7 +130,7 @@ func (f *Fake) AcceptShard(_ context.Context, c *xet.Claims, r io.Reader, size i
 	if err := writable(c); err != nil {
 		return nil, err
 	}
-	if size > xet.MaxObjectSize {
+	if size > xet.MaxShardSize {
 		return nil, xet.ErrTooLarge
 	}
 	if _, err := io.Copy(io.Discard, r); err != nil {
@@ -146,7 +146,7 @@ func (f *Fake) AcceptShard(_ context.Context, c *xet.Claims, r io.Reader, size i
 	f.shards++
 	f.mu.Unlock()
 	emit(xet.ShardEvent{Type: xet.EventValidating, Verified: len(files), Total: len(files)})
-	emit(xet.ShardEvent{Type: xet.EventCommitting, Stage: "uploading"})
+	emit(xet.ShardEvent{Type: xet.EventCommitting, Stage: xet.StageUploading})
 	emit(xet.ShardEvent{Type: xet.EventResult, Result: 1})
 	return &xet.ShardResult{Result: 1, Files: files}, nil
 }
