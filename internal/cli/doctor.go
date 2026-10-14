@@ -45,6 +45,11 @@ downloads on S3, and the git version. Exits with 1 if any check fails.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			a := a.with(cmd)
 			cfg, err := config.Load(config.LoadOptions{File: f.file, Set: f.set})
+			if err == nil {
+				// The Instance key generated on first start lives in
+				// server.data_dir, as the server reads it.
+				err = config.LoadStoredSecrets(cfg)
+			}
 			results := a.doctor(cmd.Context(), cfg, err)
 			failed := 0
 			for _, r := range results {

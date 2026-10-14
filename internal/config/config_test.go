@@ -304,3 +304,27 @@ func TestParsePrefix(t *testing.T) {
 	_, err = config.ParsePrefix("nope")
 	require.Error(t, err)
 }
+
+func TestLoadStoredSecretsReadsWithoutWriting(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "data")
+	cfg := config.Default()
+	cfg.Server.DataDir = dir
+	require.NoError(t, config.LoadStoredSecrets(&cfg), "no file yet is not an error")
+	require.Empty(t, cfg.Security.InstanceKey)
+	_, err := os.Stat(dir)
+	require.ErrorIs(t, err, os.ErrNotExist, "nothing is created")
+
+	first := config.Default()
+	first.Server.DataDir = dir
+	_, err = config.EnsureSecrets(&first)
+	require.NoError(t, err)
+	require.NoError(t, config.LoadStoredSecrets(&cfg))
+	require.Equal(t, first.Security.InstanceKey, cfg.Security.InstanceKey)
+	require.Equal(t, first.Security.BootstrapAdmin.Password, cfg.Security.BootstrapAdmin.Password)
+
+	set := config.Default()
+	set.Server.DataDir = dir
+	set.Security.InstanceKey = "explicit"
+	require.NoError(t, config.LoadStoredSecrets(&set))
+	require.Equal(t, "explicit", set.Security.InstanceKey, "a configured key wins")
+}

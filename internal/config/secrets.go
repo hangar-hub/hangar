@@ -107,6 +107,37 @@ func EnsureSecrets(c *Config) (*Generated, error) {
 	return gen, nil
 }
 
+// LoadStoredSecrets fills an empty security.instance_key and bootstrap
+// admin password from secrets.yaml in server.data_dir, where the first
+// start saved them, without generating or writing anything. Commands that
+// inspect an Instance, such as hangar admin doctor, use it so the
+// configuration they check is the one the server runs with. A missing file
+// is not an error.
+func LoadStoredSecrets(c *Config) error {
+	if c.Security.InstanceKey != "" && c.Security.BootstrapAdmin.Password != "" {
+		return nil
+	}
+	path := filepath.Join(c.Server.DataDir, SecretsFileName)
+	b, err := os.ReadFile(path) //nolint:gosec // path is server.data_dir from the server config.
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	stored, err := yaml.Parser().Unmarshal(b)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if v, _ := stored["instance_key"].(string); v != "" && c.Security.InstanceKey == "" {
+		c.Security.InstanceKey = v
+	}
+	if v, _ := stored["bootstrap_admin_password"].(string); v != "" && c.Security.BootstrapAdmin.Password == "" {
+		c.Security.BootstrapAdmin.Password = v
+	}
+	return nil
+}
+
 const passwordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 // RandomPassword returns a password of n characters from an alphabet

@@ -399,12 +399,22 @@ func TestDoctor(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(r.stdout), &results))
 	require.False(t, results[0].OK, "the configuration has no Instance key or password, so it does not validate")
 
+	// Secrets the server generated on first start, in server.data_dir, are
+	// the ones doctor checks.
+	dataDir := t.TempDir()
+	generated := config.Default()
+	generated.Server.DataDir = dataDir
+	_, err := config.EnsureSecrets(&generated)
+	require.NoError(t, err)
+	r = e.run(append([]string{"admin", "doctor"}, dbFlags(t, "sqlite", dsn, dataDir)...)...)
+	require.NoError(t, r.err, r.stdout)
+
 	e.deps = AdminDeps{}
 	r = e.run(append([]string{"admin", "doctor"}, flags...)...)
 	require.Error(t, r.err)
 	require.Contains(t, r.stdout, "OpenBlobStore")
 
-	_, err := skewMessage(time.Now().Add(time.Hour), time.Now())
+	_, err = skewMessage(time.Now().Add(time.Hour), time.Now())
 	require.Error(t, err)
 	msg, err := skewMessage(time.Now(), time.Now())
 	require.NoError(t, err)
