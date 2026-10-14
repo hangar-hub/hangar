@@ -18,6 +18,9 @@ GOTESTFLAGS ?= -race -count=1
 # Postgres tests run with testcontainers (Docker). Set
 # HANGAR_TEST_POSTGRES_DSN to use an existing server instead.
 export HANGAR_TEST_POSTGRES ?= 1
+# S3 Blob store tests run against MinIO with testcontainers (Docker). Set
+# HANGAR_TEST_S3_ENDPOINT to use an existing S3-compatible server instead.
+export HANGAR_TEST_MINIO ?= 1
 
 .PHONY: help
 help: ## Show this help
@@ -54,14 +57,21 @@ dev: ## Run the server on :8080 and the UI with live reload on :5173
 ## Generated code ----------------------------------------------------------------
 
 .PHONY: generate
-generate: ## Regenerate the API code from api/openapi.yaml and the config reference
+generate: ## Regenerate the API code, the config, CLI and metrics references, and the dashboards
 	$(GO) tool oapi-codegen -config api/oapi-codegen.yaml api/openapi.yaml
 	cd ui && $(PNPM) run generate:api
 	$(GO) run ./cmd/hangar config reference > docs/reference/configuration.md
+	$(GO) run ./cmd/hangar reference cli > docs/reference/cli.md
+	$(GO) run ./cmd/hangar reference metrics > docs/reference/metrics.md
+	python3 scripts/hub-matrix.py
+	python3 scripts/dashboards.py
+
+GENERATED := internal/api/gen ui/src/api/schema.d.ts docs/reference/configuration.md docs/reference/cli.md \
+  docs/reference/metrics.md docs/reference/hub-api-compatibility.md deploy/dashboards/grafana deploy/dashboards/kibana/hangar-dashboard.json
 
 .PHONY: check-generate
 check-generate: generate ## Fail if generated files differ from what is committed
-	@git diff --exit-code -- internal/api/gen ui/src/api/schema.d.ts docs/reference/configuration.md \
+	@git diff --exit-code -- $(GENERATED) \
 	  || (echo "Generated files are out of date. Run make generate and commit the result." && exit 1)
 
 ## Lint ------------------------------------------------------------------------------
@@ -82,8 +92,10 @@ lint-ui: ui-deps
 lint-style:
 	@if grep -rn --binary-files=without-match $$'\xe2\x80\x94' \
 	    --include='*.go' --include='*.ts' --include='*.tsx' --include='*.md' --include='*.yaml' --include='*.yml' --include='*.py' \
+	    --include='*.js' --include='*.sh' --include='*.json' --include='*.tpl' --include='*.txt' \
 	    --exclude-dir=node_modules --exclude-dir=.venv --exclude-dir=.fixtures --exclude-dir=dist --exclude-dir=gen \
-	    cmd internal ui/src api compat docs/build docs/dependencies.md docs/reference README.md CLAUDE.md CONTEXT.md 2>/dev/null; then \
+	    --exclude-dir=spec --exclude-dir=research \
+	    cmd internal ui/src api compat docs deploy loadtest scripts .github README.md CLAUDE.md CONTEXT.md CONTRIBUTING.md SECURITY.md 2>/dev/null; then \
 	  echo "House style: replace the em dashes above."; exit 1; fi
 
 ## Test ------------------------------------------------------------------------------
@@ -122,15 +134,44 @@ e2e: ui-deps ## Run Playwright against HANGAR_URL (default http://localhost:8080
 
 ## Packaging ---------------------------------------------------------------------------
 
+DOCS_REQS := docs/requirements.txt
+PLATFORMS ?= linux/amd64,linux/arm64
+
 .PHONY: image
-image: Dockerfile ## Build the container image for the local platform
-	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t $(IMAGE) .
+image: ## Build the container image for the local platform
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t $(IMAGE) .
+
+.PHONY: image-multiarch
+image-multiarch: ## Build the image for linux/amd64 and linux/arm64 (no push)
+	docker buildx build --platform $(PLATFORMS) --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) \
+	  --build-arg DATE=$(DATE) -t $(IMAGE) .
+
+.PHONY: lint-deploy
+lint-deploy: ## Lint the Helm chart, validate it with kubeconform and check the Compose files
+	helm lint deploy/helm/hangar -f deploy/helm/hangar/ci/default-values.yaml
+	helm lint deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml
+	@for values in deploy/helm/hangar/ci/default-values.yaml deploy/helm/examples/scale-values.yaml; do \
+	  helm template hangar deploy/helm/hangar -f $$values | $(GO) run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 \
+	    -strict -summary -kubernetes-version 1.33.0 -schema-location default \
+	    -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'; \
+	done
+	@for f in deploy/compose/*.yaml; do HANGAR_INSTANCE_KEY=x HANGAR_ADMIN_PASSWORD=x docker compose -f $$f config -q && echo "$$f ok"; done
+	goreleaser check
+	shellcheck scripts/*.sh loadtest/*.sh
 
 .PHONY: docs
-docs: mkdocs.yml ## Build the documentation site
-	mkdocs build --strict
+docs: ## Build the documentation site into site/ (needs uv)
+	$(UV) run --no-project --with-requirements $(DOCS_REQS) mkdocs build --strict
+
+.PHONY: docs-serve
+docs-serve: ## Serve the documentation with live reload on :8000
+	$(UV) run --no-project --with-requirements $(DOCS_REQS) mkdocs serve
+
+.PHONY: smoke
+smoke: ## Run the smoke test against HANGAR_URL
+	./scripts/smoke.sh $${HANGAR_URL:-http://localhost:8080}
 
 .PHONY: clean
 clean: ## Remove build output
-	rm -rf bin coverage.out tmp
+	rm -rf bin coverage.out tmp site dist
 	find internal/web/dist -mindepth 1 ! -name .gitkeep -delete

@@ -1,0 +1,33 @@
+name: Docs
+
+# Publishes the documentation from main as the `dev` version, next to the
+# released versions that release.yml publishes (12-packaging-and-release.md).
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "mkdocs.yml", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "api/openapi.yaml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-gh-pages
+  cancel-in-progress: false
+
+jobs:
+  dev:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10
+      - name: Build with no broken links
+        run: make docs
+      - name: Publish as dev
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1 || true
+          uv run --no-project --with-requirements docs/requirements.txt mike deploy --push dev

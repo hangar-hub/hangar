@@ -418,7 +418,7 @@ func TestReferences(t *testing.T) {
 		require.Contains(t, r.stdout, s)
 	}
 	require.NotContains(t, r.stdout, "## hangar reference", "hidden commands stay out")
-	require.NotContains(t, r.stdout, "—", "house style: no em dashes")
+	require.NotContains(t, r.stdout, "\u2014", "house style: no em dashes")
 
 	r = e.ok("reference", "metrics")
 	require.Contains(t, r.stdout, "`hangar.download.bytes` | `hangar_download_bytes_total` | counter | `By`")

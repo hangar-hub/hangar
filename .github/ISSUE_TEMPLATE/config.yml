@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/jamesagarside/hangar/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.
+  - name: Documentation
+    url: https://jamesagarside.github.io/hangar/
+    about: Guides for every client and for running Hangar.

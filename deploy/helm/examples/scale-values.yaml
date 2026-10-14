@@ -1,5 +1,6 @@
-# Rendered and validated in CI (helm lint, kubeconform). Installing it needs
-# Postgres and S3, which the Compose scale example provides instead.
+# Scale-out values: Postgres, S3, autoscaled web Pods, workers, Ingress,
+# HTTPRoute, metrics and a NetworkPolicy. CI renders and validates them
+# (helm lint, kubeconform); installing them needs Postgres and S3.
 publicURL: https://hangar.example.test
 persistence:
   enabled: false

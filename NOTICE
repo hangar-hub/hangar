@@ -1,0 +1,21 @@
+Hangar
+Copyright 2026 James Garside
+
+Hangar is source-available under the Elastic License 2.0 (see LICENSE).
+
+This product includes third-party software and data under their own
+licences:
+
+- Ollama chat templates (template/index.json and *.gotmpl), vendored in
+  third_party/ollama/, from https://github.com/ollama/ollama.
+  MIT License, Copyright (c) Ollama. See third_party/ollama/LICENSE.
+
+- The common password list in internal/auth/common_passwords.txt, filtered
+  from SecLists, https://github.com/danielmiessler/SecLists.
+  MIT License, Copyright (c) 2018 Daniel Miessler.
+  See internal/auth/common_passwords_LICENSE.txt.
+
+- Go modules listed in go.mod, and npm packages listed in ui/package.json
+  and ui/pnpm-lock.yaml, each under its own licence. Release archives and
+  container images include an SPDX software bill of materials that lists
+  every component and its licence.

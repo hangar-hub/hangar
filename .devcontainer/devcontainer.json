@@ -1,0 +1,19 @@
+{
+  "name": "Hangar",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {"version": "1.27.2", "golangciLintVersion": "2.14.0"},
+    "ghcr.io/devcontainers/features/node:1": {"version": "24"},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/git-lfs:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {"minikube": "none"},
+    "ghcr.io/devcontainers/features/python:1": {"version": "3.12"}
+  },
+  "postCreateCommand": "pip install --user uv==0.13.0 && corepack enable && make ui-deps",
+  "forwardPorts": [8080, 5173],
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go", "biomejs.biome", "redhat.vscode-yaml", "ms-python.python"]
+    }
+  }
+}

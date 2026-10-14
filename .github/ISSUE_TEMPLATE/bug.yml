@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in Hangar does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations: {required: true}
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The smallest set of steps, commands or code that shows the problem.
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Hangar version
+      description: The output of `hangar version`.
+    validations: {required: true}
+  - type: dropdown
+    id: setup
+    attributes:
+      label: How you run Hangar
+      options: [Docker, Docker Compose, Helm, Binary, Other]
+    validations: {required: true}
+  - type: input
+    id: backends
+    attributes:
+      label: Database and Blob store
+      placeholder: SQLite and filesystem, or Postgres and MinIO, ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and `hangar admin doctor` output
+      description: Remove tokens and other secrets first.
+      render: text

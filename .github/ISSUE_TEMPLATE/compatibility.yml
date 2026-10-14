@@ -1,0 +1,28 @@
+name: Compatibility gap
+description: A client that works with huggingface.co (or git, Ollama, LM Studio) does not work with Hangar.
+labels: [compatibility]
+body:
+  - type: input
+    id: client
+    attributes:
+      label: Client and version
+      placeholder: huggingface_hub 2.2.0, transformers 5.19.0, git 2.47, Ollama 0.31.1, ...
+    validations: {required: true}
+  - type: textarea
+    id: call
+    attributes:
+      label: The call that fails
+      description: The code or command, and the error. Run it against huggingface.co too if you can, and say whether it works there.
+      render: text
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Hangar version
+      description: The output of `hangar version`.
+    validations: {required: true}
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: For example the HTTP request and response, from `HF_DEBUG=1` or `GIT_TRACE_CURL=1` with tokens removed.
