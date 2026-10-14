@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { keepGitkeep } from "./plugins/keep-gitkeep.ts";
 
 /**
  * With HANGAR_MOCK=1, `vite` and `vite preview` answer the API from the
@@ -43,6 +44,7 @@ export default defineConfig({
     tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
     tailwindcss(),
+    keepGitkeep(),
     ...(mock ? [mockApi()] : []),
   ],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
@@ -79,6 +81,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}", "mock/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}", "mock/**/*.test.ts", "plugins/**/*.test.ts"],
   },
 });
