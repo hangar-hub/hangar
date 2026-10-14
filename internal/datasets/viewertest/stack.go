@@ -34,6 +34,10 @@ type Options struct {
 	MaxConvertBytes int64
 	// Viewer options; PublicURL is set to the test server's URL.
 	Viewer viewer.Options
+	// ViewerRepos, when set, wraps the Repo service the Viewer uses (the
+	// pipeline keeps the fake). Load tests use it to give the Viewer a Repo
+	// service whose reads cost what the real one's do.
+	ViewerRepos func(*repotest.Fake) repo.Service
 }
 
 // Stack is a running pipeline and Viewer.
@@ -83,7 +87,11 @@ func New(t testing.TB, o Options) *Stack {
 	t.Cleanup(s.Server.Close)
 	vo := o.Viewer
 	vo.PublicURL = s.Server.URL
-	v, err := viewer.New(viewer.Deps{Repos: repos, Authz: s.Authz, Store: p.Store(), Jobs: q, Blobs: blobs, Signer: signer}, vo)
+	var viewerRepos repo.Service = repos
+	if o.ViewerRepos != nil {
+		viewerRepos = o.ViewerRepos(repos)
+	}
+	v, err := viewer.New(viewer.Deps{Repos: viewerRepos, Authz: s.Authz, Store: p.Store(), Jobs: q, Blobs: blobs, Signer: signer}, vo)
 	if err != nil {
 		t.Fatal(err)
 	}

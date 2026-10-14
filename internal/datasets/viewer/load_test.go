@@ -4,23 +4,31 @@ package viewer_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net/http"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/datasets/features"
 	"github.com/jamesagarside/hangar/internal/datasets/pq"
 	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
+	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/repo/repotest"
 )
 
 // The load targets of docs/spec/14-datasets.md "Tests": /rows p99 under
 // 200 ms on a 10 million row Split, and /filter over a 1 million row
-// Split within viewer.max_scan_seconds. Run them with
+// Split within viewer.max_scan_seconds. The Viewer gets a Repo service
+// with the real one's caches (see cachedRepos). Run them with
 // `go test -tags load -run TestLoad -timeout 30m ./internal/datasets/viewer`.
 
 // parquetRows writes a Parquet file of n rows with an integer, a string
@@ -49,6 +57,67 @@ func parquetRows(t *testing.T, n int) []byte {
 	return buf.Bytes()
 }
 
+// cachedRepos stands in for W2's Repo service, which resolves branches in
+// process and keeps tree entries in a cache. The fake runs git for every
+// Resolve and for every file read (to find the tree entry), and on a loaded
+// machine starting git costs more than the rest of a request, so without
+// these caches the test measures process start-up rather than the Viewer.
+// Branch heads do not move while the test measures, and entries are
+// addressed by Commit, so the caches stay correct.
+type cachedRepos struct {
+	*repotest.Fake
+	mu      sync.Mutex
+	heads   map[string]model.CommitSHA
+	entries map[string]model.Entry
+}
+
+func newCachedRepos(f *repotest.Fake) repo.Service {
+	return &cachedRepos{Fake: f, heads: map[string]model.CommitSHA{}, entries: map[string]model.Entry{}}
+}
+
+func (c *cachedRepos) Resolve(ctx context.Context, id model.RepoID, revision string) (model.CommitSHA, error) {
+	key := id.String() + "@" + revision
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if sha, ok := c.heads[key]; ok {
+		return sha, nil
+	}
+	sha, err := c.Fake.Resolve(ctx, id, revision)
+	if err != nil {
+		return "", err
+	}
+	c.heads[key] = sha
+	return sha, nil
+}
+
+// OpenFile reads LFS files from the LFS store through the entry cache, as
+// the real service reads them from the Blob store.
+func (c *cachedRepos) OpenFile(ctx context.Context, id model.RepoID, commit model.CommitSHA, path string, rng *blob.Range) (io.ReadCloser, model.Entry, error) {
+	key := id.String() + "@" + string(commit) + "/" + path
+	c.mu.Lock()
+	e, ok := c.entries[key]
+	c.mu.Unlock()
+	if !ok {
+		var err error
+		if e, err = c.Fake.Entry(ctx, id, commit, path); err != nil {
+			return nil, model.Entry{}, err
+		}
+		c.mu.Lock()
+		c.entries[key] = e
+		c.mu.Unlock()
+	}
+	if e.Type != model.EntryFile || e.LFS == nil || !e.Present {
+		return c.Fake.OpenFile(ctx, id, commit, path, rng)
+	}
+	rc, _, err := c.Fake.LFS.Open(ctx, e.LFS.OID, rng)
+	return rc, e, err
+}
+
+// loadOptions gives the Viewer the caches.
+func loadOptions() viewertest.Options {
+	return viewertest.Options{ViewerRepos: newCachedRepos}
+}
+
 func timedGet(t *testing.T, url string) time.Duration {
 	t.Helper()
 	start := time.Now()
@@ -72,7 +141,7 @@ func TestLoadRows(t *testing.T) {
 	start := time.Now()
 	data := parquetRows(t, rows)
 	t.Logf("wrote %d rows, %d MB, in %s", rows, len(data)>>20, time.Since(start).Round(time.Millisecond))
-	s := viewertest.New(t, viewertest.Options{})
+	s := viewertest.New(t, loadOptions())
 	r, sha := s.Dataset(t, "big", map[string][]byte{"data/train-00000-of-00001.parquet": data})
 	start = time.Now()
 	s.Convert(t, r, sha)
@@ -93,7 +162,7 @@ func TestLoadRows(t *testing.T) {
 func TestLoadFilter(t *testing.T) {
 	const rows = 1_000_000
 	data := parquetRows(t, rows)
-	s := viewertest.New(t, viewertest.Options{})
+	s := viewertest.New(t, loadOptions())
 	r, sha := s.Dataset(t, "filter", map[string][]byte{"data/train-00000-of-00001.parquet": data})
 	s.Convert(t, r, sha)
 

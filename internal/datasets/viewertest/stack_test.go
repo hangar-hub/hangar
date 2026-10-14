@@ -1,13 +1,18 @@
 package viewertest_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
+	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/repo/repotest"
 )
 
 func TestStackServesAConvertedDataset(t *testing.T) {
@@ -27,4 +32,32 @@ func TestStackServesAConvertedDataset(t *testing.T) {
 	require.NoError(t, json.NewDecoder(res.Body).Decode(&body))
 	require.Equal(t, 2, body.NumRowsTotal)
 	s.RunJobs(t)
+}
+
+// countingRepos counts the Resolve calls the Viewer makes.
+type countingRepos struct {
+	repo.Service
+	resolves atomic.Int64
+}
+
+func (c *countingRepos) Resolve(ctx context.Context, id model.RepoID, revision string) (model.CommitSHA, error) {
+	c.resolves.Add(1)
+	return c.Service.Resolve(ctx, id, revision)
+}
+
+func TestViewerReposWrapsOnlyTheViewer(t *testing.T) {
+	counter := &countingRepos{}
+	s := viewertest.New(t, viewertest.Options{ViewerRepos: func(r *repotest.Fake) repo.Service {
+		counter.Service = r
+		return counter
+	}})
+	r, sha := s.Dataset(t, "wrapped", map[string][]byte{"train.csv": []byte("a\n1\n")})
+	s.Convert(t, r, sha)
+	require.Zero(t, counter.resolves.Load(), "the pipeline uses the fake directly")
+
+	res, err := http.Get(s.URL + "/is-valid?dataset=ns/wrapped")
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	require.Positive(t, counter.resolves.Load())
 }
