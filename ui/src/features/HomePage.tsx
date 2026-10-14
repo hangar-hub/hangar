@@ -28,9 +28,12 @@ function Landing() {
   const host = window.location.host;
   const origin = window.location.origin;
   return (
+    // One explicit column below lg: an implicit grid track grows to the
+    // min-content width of the terminal's <pre>, which made the page scroll
+    // sideways on phones. minmax(0, 1fr) lets the terminal scroll instead.
     <section
       aria-labelledby="page-title"
-      className="grid items-center gap-10 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:py-16"
+      className="grid grid-cols-[minmax(0,1fr)] items-center gap-10 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:py-16"
     >
       <div className="max-w-xl">
         <Logo className="size-12" />

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { LazyMarkdown } from "./LazyMarkdown";
 import Markdown, { isExternal } from "./Markdown";
 
 describe("Markdown cards", () => {
@@ -54,5 +55,14 @@ describe("Markdown cards", () => {
     expect(screen.getByRole("link", { name: "anchor" })).toHaveAttribute("href", "#top");
     expect(isExternal("https://other.example/x", "http://localhost")).toBe(true);
     expect(isExternal("/x", "http://localhost")).toBe(false);
+  });
+});
+
+describe("LazyMarkdown", () => {
+  it("announces a loading status until the Markdown code loads", async () => {
+    render(<LazyMarkdown>{"# Loaded card"}</LazyMarkdown>);
+    expect(screen.getByRole("status", { name: "Loading Markdown" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Loaded card" })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Loading Markdown" })).toBeNull();
   });
 });

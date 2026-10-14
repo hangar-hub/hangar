@@ -61,3 +61,43 @@ export async function settled(page: Page): Promise<void> {
     timeout: 10_000,
   });
 }
+
+/**
+ * Fails when the page scrolls sideways: 09-web-ui.md asks for layouts that
+ * fit phone, tablet and desktop widths, so only regions built to scroll (code,
+ * tables) may be wider than the viewport. Names the widest elements that
+ * stick out, to say where to look.
+ */
+export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("The page has no viewport size.");
+  const result = await page.evaluate((width) => {
+    const describe = (el: Element) => {
+      const id = el.id ? `#${el.id}` : "";
+      const cls =
+        typeof el.className === "string" && el.className
+          ? `.${el.className.trim().split(/\s+/).slice(0, 3).join(".")}`
+          : "";
+      return `${el.tagName.toLowerCase()}${id}${cls} (right edge ${Math.round(el.getBoundingClientRect().right)} px)`;
+    };
+    const sticking = [...document.body.querySelectorAll("*")].filter((el) => {
+      if (el.getBoundingClientRect().right <= width + 1) return false;
+      // Report the outermost element that sticks out, not each descendant
+      // inside a region that already scrolls.
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const s = getComputedStyle(p);
+        if (s.overflowX !== "visible") return false;
+        if (p.getBoundingClientRect().right > width + 1) return false;
+      }
+      return true;
+    });
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      offenders: sticking.slice(0, 3).map(describe),
+    };
+  }, viewport.width);
+  expect(
+    result.scrollWidth,
+    `the page is ${result.scrollWidth} px wide in a ${viewport.width} px viewport; sticking out: ${result.offenders.join(", ")}`,
+  ).toBeLessThanOrEqual(viewport.width);
+}

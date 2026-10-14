@@ -173,11 +173,13 @@ body {
   padding: 0.1em 0.3em;
   border-radius: var(--radius-sm);
 }
+/* Code blocks in Markdown render through CodeView, whose focusable
+   ScrollRegion scrolls them. A pre that scrolled itself could not be
+   scrolled from the keyboard (axe scrollable-region-focusable). */
 .prose-hangar pre {
   background: var(--hg-raised);
   padding: 0.8em 1em;
   border-radius: var(--radius-md);
-  overflow-x: auto;
 }
 .prose-hangar pre code {
   background: none;

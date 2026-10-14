@@ -1,9 +1,17 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { expectAccessible, expectGlossaryTerms, settled, signIn, watchConsole } from "./helpers";
+import {
+  expectAccessible,
+  expectGlossaryTerms,
+  expectNoHorizontalOverflow,
+  settled,
+  signIn,
+  watchConsole,
+} from "./helpers";
 
-// Every page in 09-web-ui.md renders, has one h1, passes every axe rule and
-// avoids the glossary's "Avoid" terms at phone, tablet and desktop widths.
+// Every page in 09-web-ui.md renders, has one h1, passes every axe rule,
+// avoids the glossary's "Avoid" terms and fits the viewport without scrolling
+// sideways, at phone (390 px), tablet and desktop widths.
 
 /** A Commit SHA in the mock's fixture data (ui/mock/data.ts makeCommits). */
 const commitSha = (repo: string, title: string) =>
@@ -77,12 +85,13 @@ const signedOut = [
 ];
 
 for (const path of signedIn) {
-  test(`${path} renders and is accessible`, async ({ page }) => {
+  test(`${path} renders, fits the width and is accessible`, async ({ page }) => {
     const problems = watchConsole(page);
     await signIn(page);
     await page.goto(path);
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
+    await expectNoHorizontalOverflow(page);
     await expectAccessible(page);
     await expectGlossaryTerms(page);
     expect(problems).toEqual([]);
@@ -90,11 +99,12 @@ for (const path of signedIn) {
 }
 
 for (const path of signedOut) {
-  test(`${path} renders and is accessible when signed out`, async ({ page }) => {
+  test(`${path} renders, fits the width and is accessible when signed out`, async ({ page }) => {
     const problems = watchConsole(page);
     await page.goto(path);
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
+    await expectNoHorizontalOverflow(page);
     await expectAccessible(page);
     await expectGlossaryTerms(page);
     expect(problems).toEqual([]);
@@ -130,13 +140,17 @@ for (const path of darkPages) {
     await page.emulateMedia({ colorScheme: "dark" });
     await signIn(page);
     await page.goto(path);
+    // Wait for the page to render before settled(): with no loading
+    // placeholder on the page yet, settled() passes at once and axe would
+    // check an empty document.
+    await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expectAccessible(page);
   });
 }
 
-// Dialogs and panels that open over a page.
+// Dialogs and panels that open over a page, which must fit the width too.
 test("the upload panel with staged files passes axe", async ({ page }) => {
   await signIn(page);
   await page.goto("/ada/bert-tiny-finetune/tree/main");
@@ -148,6 +162,7 @@ test("the upload panel with staged files passes axe", async ({ page }) => {
     buffer: Buffer.from("hello"),
   });
   await expect(page.getByRole("list", { name: "Files to upload" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
   await expectAccessible(page);
 });
 
@@ -157,6 +172,7 @@ test("the Use this model dialog passes axe", async ({ page }) => {
   await settled(page);
   await page.getByRole("button", { name: "Use this model" }).click();
   await expect(page.getByRole("dialog", { name: "Use this model" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
   await expectAccessible(page);
 });
 
@@ -171,6 +187,7 @@ test("the search palette passes axe", async ({ page }) => {
   }).toPass();
   await dialog.getByRole("combobox", { name: "Search Hangar" }).fill("imdb");
   await expect(dialog.getByRole("option").first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
   await expectAccessible(page);
 });
 
@@ -180,5 +197,6 @@ test("the dataset card editor passes axe", async ({ page }) => {
   await settled(page);
   await page.getByRole("button", { name: "Edit card" }).click();
   await expect(page.getByLabel("Pretty name")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
   await expectAccessible(page);
 });
