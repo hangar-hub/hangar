@@ -29,7 +29,7 @@ make dev          # the server on :8080 and the UI with live reload on :5173
 | `make test` | Unit and integration tests, on SQLite and Postgres and against MinIO (needs Docker). |
 | `make test-compat` | The client compatibility suites in `compat/`. |
 | `make generate` | Regenerate the API code, the configuration, CLI and metrics references and the dashboards. CI fails if they are out of date. |
-| `make lint-deploy` | Lint the Helm chart and check the Compose files. |
+| `make lint-deploy` | Lint the Helm chart, check the Compose files, and check that every GitHub Action the workflows use exists at the version they name. |
 | `make image` | Build the container image. |
 | `make docs` | Build the documentation site. |
 | `make help` | Everything else. |
@@ -52,6 +52,13 @@ Never skip, disable or weaken a test to get a change through. No stubs, placehol
 - Use [Conventional Commits](https://www.conventionalcommits.org), such as `feat(hfapi): support list_repo_likers` or `fix(cli): resume downloads after a 416`. release-please builds the changelog from them.
 - Keep pull requests focused, and fill in the template.
 - Do not add attribution lines to commits or pull requests.
+
+## Releases
+
+release-please keeps a release pull request open on `main`. It proposes the next version from the Conventional Commits merged since the last release and writes the changelog entry. Merging it tags the release, and the release workflow publishes the binaries, the container image, the Helm chart and the documentation.
+
+- The first release is v1.0.0. `.release-please-manifest.json` starts at `0.0.0`, which release-please reads as "never released", and `initial-version` in `release-please-config.json` sets the version of that first release. It has no effect on later releases, so it can stay.
+- To release a version other than the one release-please proposes, add a `Release-As: x.y.z` footer to a commit on `main`, for example with `git commit --allow-empty -m "chore: release 1.2.0" -m "Release-As: 1.2.0"`.
 
 ## Contributor licence agreement
 
