@@ -281,6 +281,120 @@ func TestPullQuotaChecksATransferSharedWithAnotherNamespace(t *testing.T) {
 	})
 }
 
+// TestPullQuotaOfTheStartingNamespaceDoesNotFailAJoinedPull covers the
+// other direction: the Namespace whose Pull started the shared transfer
+// is full, and a Pull that joined it from a Namespace with room must
+// still complete, without seeing the other Namespace's usage or limit.
+func TestPullQuotaOfTheStartingNamespaceDoesNotFailAJoinedPull(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		w := bytes.Repeat([]byte("shared transfer "), 200)
+		commit := e.Seed(tiny, nil, map[string][]byte{"model.safetensors": w})
+		twin := model.RepoID{Type: model.RepoTypeModel, Namespace: "beta", Name: "twin"}
+		twinCommit := e.Seed(twin, nil, map[string][]byte{"model.safetensors": w})
+		acme := e.MirrorNamespace("acme")
+		const limit = 987654321
+		e.Quota.SetLimit(acme, limit)
+
+		e.SetSettings(upstream.Settings{Windows: []string{"01:00-07:00"}, AllowOverrideWindows: true})
+		a, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		b, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: twin, Actor: alice})
+		require.NoError(t, err)
+		e.Run(1)
+		fileOf := func(id jobs.JobID) map[string]any {
+			fs, _ := pullState(t, e.Job(id))["files"].([]any)
+			require.Len(t, fs, 1)
+			return fs[0].(map[string]any)
+		}
+		shared := fileOf(a)["job"]
+		require.Equal(t, shared, fileOf(b)["job"], "both Pulls share one transfer, started by acme's Pull")
+
+		// acme fills up before the shared transfer runs; beta has no quota.
+		e.Quota.SetUsed(acme, limit-8)
+		e.SetSettings(upstream.Settings{})
+		e.Run(20)
+		requireQuotaFailure(t, e, a, tiny)
+		require.Contains(t, e.Job(a).Error, "987654321", "acme sees its own figures")
+
+		jb := e.Job(b)
+		require.Equal(t, jobs.StatusSucceeded, jb.Status, "beta's Pull is not failed by acme's quota: %s", jb.Error)
+		require.Empty(t, jb.Error)
+		st := pullState(t, jb)
+		require.Nil(t, st["reason"])
+		f := fileOf(b)
+		require.Equal(t, "done", f["status"])
+		require.NotEqual(t, shared, f["job"], "beta's Pull queued a transfer of its own")
+		require.Nil(t, f["reason"])
+		require.Nil(t, f["error"])
+		require.NotContains(t, string(jb.Result), "987654321", "beta never sees acme's limit")
+
+		r, err := e.Repos.Get(e.Ctx, twin)
+		require.NoError(t, err)
+		m, _, err := e.Service.Mirror(e.Ctx, r)
+		require.NoError(t, err)
+		require.NotEqual(t, upstream.MirrorFailed, m.Status)
+		require.Empty(t, m.LastError)
+
+		require.Equal(t, w, readFile(t, e.Repos, twin, twinCommit, "model.safetensors"))
+		require.Contains(t, e.Repos.MarkedPresent(twin), sha(w))
+		require.NotContains(t, e.Repos.MarkedPresent(tiny), sha(w), "acme does not gain the object over its quota")
+		_, err = e.Repos.Entry(e.Ctx, tiny, commit, "model.safetensors")
+		require.NoError(t, err)
+		for _, fj := range pullFileJobs(t, e) {
+			if fj.ID.String() == shared {
+				continue
+			}
+			require.NotContains(t, fj.Error, "987654321", "only acme's own transfer carries its figures")
+		}
+	})
+}
+
+// TestPullQuotaRefusalsOfASharedTransferStayWithEachNamespace fills both
+// Namespaces: the joined Pull queues its own transfer once, which its own
+// quota refuses, and each Pull reports only its own Namespace's figures.
+func TestPullQuotaRefusalsOfASharedTransferStayWithEachNamespace(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		w := bytes.Repeat([]byte("shared transfer "), 200)
+		e.Seed(tiny, nil, map[string][]byte{"model.safetensors": w})
+		twin := model.RepoID{Type: model.RepoTypeModel, Namespace: "beta", Name: "twin"}
+		e.Seed(twin, nil, map[string][]byte{"model.safetensors": w})
+		acme, beta := e.MirrorNamespace("acme"), e.MirrorNamespace("beta")
+		const acmeLimit, betaLimit = 111111111, 222222222
+		e.Quota.SetLimit(acme, acmeLimit)
+		e.Quota.SetLimit(beta, betaLimit)
+
+		e.SetSettings(upstream.Settings{Windows: []string{"01:00-07:00"}, AllowOverrideWindows: true})
+		a, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		b, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: twin, Actor: alice})
+		require.NoError(t, err)
+		e.Run(1)
+		e.Quota.SetUsed(acme, acmeLimit-8)
+		e.Quota.SetUsed(beta, betaLimit-8)
+		e.SetSettings(upstream.Settings{})
+		e.Run(20)
+
+		requireQuotaFailure(t, e, a, tiny)
+		requireQuotaFailure(t, e, b, twin)
+		require.Contains(t, e.Job(a).Error, "111111111")
+		require.NotContains(t, e.Job(a).Error, "222222222")
+		require.Contains(t, e.Job(b).Error, "222222222", "beta's Pull reports its own quota")
+		require.NotContains(t, e.Job(b).Error, "111111111", "beta never sees acme's limit")
+		r, err := e.Repos.Get(e.Ctx, twin)
+		require.NoError(t, err)
+		m, _, err := e.Service.Mirror(e.Ctx, r)
+		require.NoError(t, err)
+		require.NotContains(t, m.LastError, "111111111")
+		require.Len(t, pullFileJobs(t, e), 2, "beta's Pull queued one transfer of its own, then stopped")
+		require.Empty(t, e.Repos.MarkedPresent(tiny))
+		require.Empty(t, e.Repos.MarkedPresent(twin))
+	})
+}
+
 func TestPullQuotaCheckFailuresAreRetried(t *testing.T) {
 	forEachDB(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d, upstreamtest.HarnessOptions{})

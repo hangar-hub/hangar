@@ -261,14 +261,9 @@ func (s *Service) plan(ctx context.Context, j *jobs.Job, prog jobs.Progress, p *
 		}
 	}
 	for i := range st.Files {
-		f := &st.Files[i]
-		id, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: f.OID, ParentID: j.ID, CreatedBy: p.RequestedBy,
-			Payload: filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: upID.String(), Type: r.ID.Type, Repo: r.ID.String(),
-				RepoUUID: r.UUID, Commit: commit, Path: f.Path, OID: f.OID, Size: f.Size, RequestedBy: p.RequestedBy, Now: p.Now}})
-		if err != nil {
-			return fmt.Errorf("queue the transfer of %s: %w", f.Path, err)
+		if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, commit, &st.Files[i]); err != nil {
+			return err
 		}
-		f.Job = id
 	}
 	if _, err := s.mirrors.update(ctx, r.UUID, r.ID.Type, func(m *Mirror) error {
 		m.Selection = m.Selection.Union(p.Selection)
@@ -290,6 +285,20 @@ func (s *Service) plan(ctx context.Context, j *jobs.Job, prog jobs.Progress, p *
 	}
 	st.Phase = phaseTransfer
 	return prog.SetResult(ctx, st)
+}
+
+// queueTransfer queues the pull.file Job that transfers f into r at
+// commit, or joins the Job already transferring the object (Pulls of the
+// same object share one Job by OID).
+func (s *Service) queueTransfer(ctx context.Context, parent jobs.JobID, p *pullPayload, up *Upstream, upID model.RepoID, r *repo.Repo, commit model.CommitSHA, f *fileState) error {
+	id, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: f.OID, ParentID: parent, CreatedBy: p.RequestedBy,
+		Payload: filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: upID.String(), Type: r.ID.Type, Repo: r.ID.String(),
+			RepoUUID: r.UUID, Commit: commit, Path: f.Path, OID: f.OID, Size: f.Size, RequestedBy: p.RequestedBy, Now: p.Now}})
+	if err != nil {
+		return fmt.Errorf("queue the transfer of %s: %w", f.Path, err)
+	}
+	f.Job = id
+	return nil
 }
 
 // ensureMirror returns the Mirror Repo for the Pull, creating it (and its
@@ -488,7 +497,7 @@ func (s *Service) advance(ctx context.Context, j *jobs.Job, prog jobs.Progress, 
 		return err
 	}
 	if st.Phase == phaseTransfer {
-		active, err := s.checkFiles(ctx, r, st)
+		active, err := s.checkFiles(ctx, j, p, r, st)
 		if err != nil {
 			return err
 		}
@@ -547,7 +556,7 @@ func (s *Service) advance(ctx context.Context, j *jobs.Job, prog jobs.Progress, 
 
 // checkFiles updates file states from their Jobs and marks finished
 // objects present in this Repo. It returns how many are still active.
-func (s *Service) checkFiles(ctx context.Context, r *repo.Repo, st *pullState) (int, error) {
+func (s *Service) checkFiles(ctx context.Context, j *jobs.Job, p *pullPayload, r *repo.Repo, st *pullState) (int, error) {
 	active := 0
 	var present []repo.LFSRef
 	for i := range st.Files {
@@ -574,9 +583,20 @@ func (s *Service) checkFiles(ctx context.Context, r *repo.Repo, st *pullState) (
 				present = append(present, repo.LFSRef{OID: f.OID, Size: f.Size, Present: true})
 			}
 		case jobs.StatusFailed:
-			f.Status, f.Error = fileFailed, fj.Error
 			var fr fileResult
-			if len(fj.Result) > 0 && json.Unmarshal(fj.Result, &fr) == nil && fr.Reason == reasonQuotaExceeded {
+			refused := len(fj.Result) > 0 && json.Unmarshal(fj.Result, &fr) == nil && fr.Reason == reasonQuotaExceeded
+			if refused {
+				queued, err := s.requeueRefusedTransfer(ctx, j, p, r, st, fj, f)
+				if err != nil {
+					return 0, err
+				}
+				if queued {
+					active++
+					continue
+				}
+			}
+			f.Status, f.Error = fileFailed, fj.Error
+			if refused {
 				f.Reason = reasonQuotaExceeded
 			}
 		case jobs.StatusCancelled:
@@ -617,6 +637,36 @@ func (s *Service) markJoinedTransfer(ctx context.Context, r *repo.Repo, fj *jobs
 		return true, err
 	}
 	return true, s.opts.Repos.SetLFSPresence(ctx, r.ID, []repo.LFSRef{{OID: f.OID, Size: f.Size, Present: true}})
+}
+
+// requeueRefusedTransfer handles a transfer that the Namespace quota
+// refused. When the refused pull.file Job was started by a Pull into
+// another Repo (the Jobs are shared by OID), the refusal was that Repo's
+// Namespace quota, not this one's: this Pull queues a transfer of its own,
+// whose quota check is its own Namespace's, and never takes the other
+// Namespace's reason or message. queued is false when the refused Job was
+// this Repo's own, so the refusal stands.
+func (s *Service) requeueRefusedTransfer(ctx context.Context, j *jobs.Job, p *pullPayload, r *repo.Repo, st *pullState, fj *jobs.Job, f *fileState) (queued bool, err error) {
+	var fp filePayload
+	if err := fj.DecodePayload(&fp); err != nil {
+		return false, err
+	}
+	if fp.RepoUUID == r.UUID {
+		return false, nil
+	}
+	upID, err := p.upstreamID()
+	if err != nil {
+		return false, jobs.Permanent(err)
+	}
+	up, err := s.opts.Registry.Get(ctx, p.UpstreamID)
+	if err != nil {
+		return false, err
+	}
+	if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, st.Commit, f); err != nil {
+		return false, err
+	}
+	f.Status, f.BytesDone, f.Error, f.Reason = fileQueued, 0, "", ""
+	return true, nil
 }
 
 // quotaFailure returns the error that fails a Pull whose files the
