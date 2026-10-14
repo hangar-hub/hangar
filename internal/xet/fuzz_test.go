@@ -53,9 +53,12 @@ var fuzzLimits = xet.Limits{MaxFileSize: 1 << 20, MaxFileTerms: 16, MaxFileChunk
 
 // fuzzIndex stands in for stored xorbs: each has 1 to 64 chunks, taken
 // from its hash.
-func fuzzIndex(h xet.Hash) *xet.XorbIndex {
-	return &xet.XorbIndex{Chunks: make([]xet.XorbChunk, 1+int(h[0])%64)}
+func fuzzIndex(h xet.Hash) (*xet.XorbIndex, error) {
+	return &xet.XorbIndex{Chunks: make([]xet.XorbChunk, 1+int(h[0])%64)}, nil
 }
+
+// fuzzChunks is the chunk count of fuzzIndex's xorb h.
+func fuzzChunks(h xet.Hash) int { return 1 + int(h[0])%64 }
 
 // FuzzParseShard checks the shard parser never panics or over-allocates,
 // that a parsed shard survives serialising and parsing again, and that a
@@ -139,8 +142,8 @@ func checkShardLimits(t *testing.T, sh *xet.Shard) {
 	}
 	for i, f := range sh.Files {
 		for _, tm := range f.Terms {
-			if int(tm.End) > len(fuzzIndex(tm.Xorb).Chunks) {
-				t.Fatalf("file %d names chunk %d of a xorb with %d", i, tm.End, len(fuzzIndex(tm.Xorb).Chunks))
+			if int(tm.End) > fuzzChunks(tm.Xorb) {
+				t.Fatalf("file %d names chunk %d of a xorb with %d", i, tm.End, fuzzChunks(tm.Xorb))
 			}
 		}
 	}

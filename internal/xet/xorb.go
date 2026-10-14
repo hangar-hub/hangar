@@ -227,7 +227,13 @@ func (x *XorbIndex) Leaves() []Chunk {
 }
 
 // Hash returns the xorb hash of the indexed chunks.
-func (x *XorbIndex) Hash() Hash { return XorbHash(x.Leaves()) }
+func (x *XorbIndex) Hash() Hash {
+	var b merkleBuilder
+	for _, c := range x.Chunks {
+		b.add(Chunk{Hash: c.Hash, Size: uint64(c.Size)})
+	}
+	return b.root()
+}
 
 // ParseXorb reads a serialised xorb (chunk headers and payloads, optionally
 // followed by a footer) from r, which must end where the xorb ends. It
@@ -333,15 +339,25 @@ func (x *XorbIndex) MarshalIndex() []byte {
 // dataStart returns where chunk data starts in the stored object.
 func (x *XorbIndex) dataStart() int64 { return int64(indexHeaderSize + len(x.Chunks)*indexEntrySize) }
 
+// indexChunkCount reads the chunk count from a stored index header, so a
+// caller can account for an index before it reads the entries.
+func indexChunkCount(hdr []byte) (int, error) {
+	if len(hdr) < indexHeaderSize || string(hdr[:8]) != indexMagic {
+		return 0, errors.New("xet: stored xorb has no index header")
+	}
+	n := int(binary.LittleEndian.Uint32(hdr[8:]))
+	if n == 0 || n > MaxXorbChunks {
+		return 0, fmt.Errorf("xet: stored xorb index has %d chunks", n)
+	}
+	return n, nil
+}
+
 // UnmarshalIndex parses the start of a stored xorb object. b may run past
 // the index; it must hold at least the header and every entry.
 func UnmarshalIndex(b []byte) (*XorbIndex, error) {
-	if len(b) < indexHeaderSize || string(b[:8]) != indexMagic {
-		return nil, errors.New("xet: stored xorb has no index header")
-	}
-	n := int(binary.LittleEndian.Uint32(b[8:]))
-	if n == 0 || n > MaxXorbChunks {
-		return nil, fmt.Errorf("xet: stored xorb index has %d chunks", n)
+	n, err := indexChunkCount(b)
+	if err != nil {
+		return nil, err
 	}
 	if len(b) < indexHeaderSize+n*indexEntrySize {
 		return nil, errors.New("xet: stored xorb index is truncated")

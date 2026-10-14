@@ -22,7 +22,7 @@ type fileReader struct {
 	ctx   context.Context
 	blobs blob.Store
 	file  *ShardFile
-	index func(Hash) *XorbIndex
+	index IndexFunc
 
 	term  int        // next term to open
 	cur   Term       // the open term
@@ -43,7 +43,7 @@ type fileReader struct {
 	err     error
 }
 
-func (s *Service) newFileReader(ctx context.Context, f *ShardFile, index func(Hash) *XorbIndex) *fileReader {
+func (s *Service) newFileReader(ctx context.Context, f *ShardFile, index IndexFunc) *fileReader {
 	return &fileReader{
 		ctx: ctx, blobs: s.blobs, file: f, index: index,
 		payload: make([]byte, MaxCompressedChunkSize), raw: make([]byte, MaxChunkSize),
@@ -86,7 +86,10 @@ func (fr *fileReader) openTerm() error {
 	}
 	t := fr.file.Terms[fr.term]
 	fr.term++
-	x := fr.index(t.Xorb)
+	x, err := fr.index(t.Xorb)
+	if err != nil {
+		return err
+	}
 	if x == nil || t.Start >= t.End || int(t.End) > len(x.Chunks) {
 		return fmt.Errorf("%w: file %s refers to chunks xorb %s does not have", ErrBadShard, fr.file.Hash, t.Xorb)
 	}

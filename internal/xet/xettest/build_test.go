@@ -79,7 +79,7 @@ func TestBuildUpload(t *testing.T) {
 		indexes[x.Hash] = idx
 	}
 	for i := range sh.Files {
-		require.NoError(t, xet.CheckFile(&sh.Files[i], func(h xet.Hash) *xet.XorbIndex { return indexes[h] }))
+		require.NoError(t, xet.CheckFile(&sh.Files[i], func(h xet.Hash) (*xet.XorbIndex, error) { return indexes[h], nil }))
 	}
 
 	// Known xorbs whose chunks are exactly a file's are referenced, not sent.

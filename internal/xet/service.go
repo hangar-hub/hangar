@@ -337,17 +337,34 @@ func (s *Service) touchXorbs(ctx context.Context, hashes []Hash) (map[Hash]bool,
 }
 
 // loadIndex reads a stored xorb's index and checks it describes the xorb.
-func (s *Service) loadIndex(ctx context.Context, h Hash) (*XorbIndex, error) {
+// It reads the header first and passes the chunk count to charge before it
+// reads or decodes any entry, so a shard over its index limits never loads
+// the index.
+func (s *Service) loadIndex(ctx context.Context, h Hash, charge func(chunks int) error) (*XorbIndex, error) {
 	rc, _, err := s.blobs.Get(ctx, XorbKey(h), &blob.Range{Start: 0, End: indexReadSize - 1})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
-	b, err := io.ReadAll(io.LimitReader(rc, indexReadSize))
-	if err != nil {
+	var hdr [indexHeaderSize]byte
+	got, err := io.ReadFull(rc, hdr[:])
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("xet: read xorb %s: %w", h, err)
 	}
-	idx, err := UnmarshalIndex(b)
+	n, err := indexChunkCount(hdr[:got])
+	if err != nil {
+		return nil, fmt.Errorf("xet: xorb %s: %w", h, err)
+	}
+	if err := charge(n); err != nil {
+		return nil, err
+	}
+	b := make([]byte, indexHeaderSize+n*indexEntrySize)
+	copy(b, hdr[:])
+	got, err = io.ReadFull(rc, b[indexHeaderSize:])
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("xet: read xorb %s: %w", h, err)
+	}
+	idx, err := UnmarshalIndex(b[:indexHeaderSize+got])
 	if err != nil {
 		return nil, fmt.Errorf("xet: xorb %s: %w", h, err)
 	}
@@ -410,21 +427,25 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 	if err != nil {
 		return nil, err
 	}
-	indexes := make(map[Hash]*XorbIndex, len(hashes))
 	for _, h := range hashes {
 		if !found[h] {
 			return nil, unknownXorb(h)
 		}
-		idx, err := s.loadIndex(ctx, h)
+	}
+	// Indexes are loaded as each check needs them, within the shard's
+	// index limits, rather than all held until the shard is done.
+	cache := newIndexCache(s.limits, func(h Hash, charge func(int) error) (*XorbIndex, error) {
+		idx, err := s.loadIndex(ctx, h, charge)
 		if errors.Is(err, blob.ErrNotFound) {
 			return nil, unknownXorb(h)
 		}
-		if err != nil {
-			return nil, err
-		}
-		indexes[h] = idx
-	}
-	index := func(h Hash) *XorbIndex { return indexes[h] }
+		return idx, err
+	})
+	defer func() {
+		span.SetAttributes(attribute.Int64("xet.shard.index_chunks_loaded", cache.loaded),
+			attribute.Int64("xet.shard.index_chunks_peak", cache.peak))
+	}()
+	index := IndexFunc(cache.get)
 	// Every term must fit its stored xorb before any file is checked.
 	if err := CheckRanges(sh, index); err != nil {
 		return nil, err
@@ -432,7 +453,11 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 
 	verified := 0
 	for i := range sh.Xorbs {
-		if err := CheckXorb(&sh.Xorbs[i], indexes[sh.Xorbs[i].Hash]); err != nil {
+		idx, err := index(sh.Xorbs[i].Hash)
+		if err != nil {
+			return nil, err
+		}
+		if err := CheckXorb(&sh.Xorbs[i], idx); err != nil {
 			return nil, err
 		}
 		verified++
@@ -465,7 +490,7 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 // reassemble rebuilds one file as an LFS object and records its Xet hash.
 // Every rebuild is paid for from budget, the bytes the shard may still
 // rebuild, before it starts.
-func (s *Service) reassemble(ctx context.Context, f *ShardFile, index func(Hash) *XorbIndex, budget *int64) (out ReassembledFile, err error) {
+func (s *Service) reassemble(ctx context.Context, f *ShardFile, index IndexFunc, budget *int64) (out ReassembledFile, err error) {
 	start := time.Now()
 	oid := f.SHA256.String()
 	size := f.Size()

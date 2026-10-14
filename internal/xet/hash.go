@@ -126,25 +126,39 @@ func XorbHash(chunks []Chunk) Hash { return merkleRoot(chunks) }
 // FileHash returns the Xet file hash of a file made of chunks, in order
 // across every term. It is the zero hash for an empty file.
 func FileHash(chunks []Chunk) Hash {
-	if len(chunks) == 0 {
-		return Hash{}
+	var b merkleBuilder
+	for _, c := range chunks {
+		b.add(c)
 	}
-	root := merkleRoot(chunks)
-	return keyedHash(&fileKey, root[:])
+	return b.fileHash()
 }
 
 // RangeHash returns the verification hash of a term: keyed BLAKE3 over the
 // raw bytes of the chunk hashes it covers.
 func RangeHash(hashes []Hash) Hash {
-	hasher, err := blake3.NewKeyed(verificationKey[:])
+	r := newRangeHasher()
+	for i := range hashes {
+		r.add(hashes[i])
+	}
+	return r.sum()
+}
+
+// rangeHasher computes RangeHash one chunk hash at a time, so checking a
+// term needs no copy of its chunk hashes.
+type rangeHasher struct{ h *blake3.Hasher }
+
+func newRangeHasher() rangeHasher {
+	h, err := blake3.NewKeyed(verificationKey[:])
 	if err != nil {
 		panic(err)
 	}
-	for i := range hashes {
-		_, _ = hasher.Write(hashes[i][:])
-	}
-	var h Hash
-	hasher.Sum(h[:0])
+	return rangeHasher{h: h}
+}
+
+func (r rangeHasher) reset()     { r.h.Reset() }
+func (r rangeHasher) add(h Hash) { _, _ = r.h.Write(h[:]) }
+func (r rangeHasher) sum() (h Hash) {
+	r.h.Sum(h[:0])
 	return h
 }
 
@@ -158,42 +172,91 @@ const (
 // of 2 to 9 nodes, cutting after a node whose hash is 0 modulo 4, until one
 // node remains. A single chunk is its own root.
 func merkleRoot(chunks []Chunk) Hash {
-	if len(chunks) == 0 {
-		return Hash{}
+	var b merkleBuilder
+	for _, c := range chunks {
+		b.add(c)
 	}
-	nodes := append([]Chunk(nil), chunks...)
-	buf := make([]byte, 0, maxGroup*88)
-	for len(nodes) > 1 {
-		out := nodes[:0]
-		for i := 0; i < len(nodes); {
-			cut := nextMergeCut(nodes[i:])
-			var merged Chunk
-			merged, buf = mergeNodes(nodes[i:i+cut], buf)
-			out = append(out, merged)
-			i += cut
-		}
-		nodes = out
-	}
-	return nodes[0].Hash
+	return b.root()
 }
 
-func nextMergeCut(nodes []Chunk) int {
-	if len(nodes) <= 2 {
-		return len(nodes)
+// merkleBuilder computes the same root as xet-core's aggregated_node_hash
+// one leaf at a time. Each level of the tree keeps only the nodes it has
+// not merged yet, at most maxGroup of them, so hashing a file holds a few
+// hundred bytes per level instead of every chunk the file names.
+//
+// A level cuts a group after its third or later node whose hash is 0
+// modulo 4, or after maxGroup nodes, exactly as nextMergeCut does over a
+// whole level; whatever is left when the leaves end is the level's last
+// group. A level that only ever receives one node is the root.
+type merkleBuilder struct {
+	levels []merkleLevel
+	buf    []byte
+	node   *blake3.Hasher // keyed with internalNodeKey, reused for every merge
+}
+
+type merkleLevel struct {
+	pending []Chunk // nodes not merged yet, at most maxGroup
+	count   int64   // nodes added to the level in all
+}
+
+// add appends a leaf.
+func (b *merkleBuilder) add(c Chunk) { b.push(0, c) }
+
+func (b *merkleBuilder) push(k int, c Chunk) {
+	if k == len(b.levels) {
+		b.levels = append(b.levels, merkleLevel{pending: make([]Chunk, 0, maxGroup)})
 	}
-	end := min(maxGroup, len(nodes))
-	for i := 2; i < end; i++ {
-		if nodes[i].Hash.mod4() == 0 {
-			return i + 1
+	l := &b.levels[k]
+	l.pending = append(l.pending, c)
+	l.count++
+	if n := len(l.pending); n == maxGroup || (n > 2 && c.Hash.mod4() == 0) {
+		b.merge(k)
+	}
+}
+
+// merge hashes level k's pending nodes into one node of level k+1.
+func (b *merkleBuilder) merge(k int) {
+	merged := b.mergeNodes(b.levels[k].pending)
+	b.levels[k].pending = b.levels[k].pending[:0]
+	b.push(k+1, merged)
+}
+
+// root returns the merkle root of the leaves added so far, or the zero
+// hash for none. It finishes the tree, so add must not be called after it.
+func (b *merkleBuilder) root() Hash {
+	for k := 0; k < len(b.levels); k++ {
+		l := &b.levels[k]
+		if l.count == 1 {
+			return l.pending[0].Hash
+		}
+		if len(l.pending) > 0 {
+			b.merge(k)
 		}
 	}
-	return end
+	return Hash{}
+}
+
+// fileHash returns the Xet file hash of the leaves added so far: the zero
+// hash for none. Like root, it finishes the tree.
+func (b *merkleBuilder) fileHash() Hash {
+	if len(b.levels) == 0 {
+		return Hash{}
+	}
+	root := b.root()
+	return keyedHash(&fileKey, root[:])
 }
 
 // mergeNodes hashes "<api hex> : <size>\n" for each node with the internal
-// node key. It reuses buf and returns it for the next call.
-func mergeNodes(group []Chunk, buf []byte) (Chunk, []byte) {
-	buf = buf[:0]
+// node key.
+func (b *merkleBuilder) mergeNodes(group []Chunk) Chunk {
+	if b.node == nil {
+		h, err := blake3.NewKeyed(internalNodeKey[:])
+		if err != nil {
+			panic(err)
+		}
+		b.node = h
+	}
+	buf := b.buf[:0]
 	var total uint64
 	for _, n := range group {
 		buf = n.Hash.appendAPIHex(buf)
@@ -202,5 +265,11 @@ func mergeNodes(group []Chunk, buf []byte) (Chunk, []byte) {
 		buf = append(buf, '\n')
 		total += n.Size
 	}
-	return Chunk{Hash: keyedHash(&internalNodeKey, buf), Size: total}, buf
+	b.buf = buf
+	b.node.Reset()
+	_, _ = b.node.Write(buf)
+	var out Chunk
+	b.node.Sum(out.Hash[:0])
+	out.Size = total
+	return out
 }

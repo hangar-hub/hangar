@@ -28,6 +28,14 @@ const (
 	shardBytesFactor = 4
 	// shardChunksFactor is how many times MaxFileChunks one shard may name.
 	shardChunksFactor = 8
+	// DefaultMaxShardIndexChunks is the default limit on the xorb index
+	// chunks one shard holds in memory at once: 16 whole xorbs, about
+	// 5.5 MiB at 44 bytes a chunk.
+	DefaultMaxShardIndexChunks = 16 * MaxXorbChunks
+	// indexLoadsFactor is how many times MaxShardChunks of index one shard
+	// may load in all. A shard is checked in passes (ranges, CAS info,
+	// files, rebuilds), and each may load every index again.
+	indexLoadsFactor = 4
 )
 
 // Limits bound the work one shard can cause. Zero fields take their
@@ -47,12 +55,25 @@ type Limits struct {
 	// MaxShardChunks is the most chunk references all the files of one
 	// shard may make.
 	MaxShardChunks int64
+	// MaxShardIndexChunks is the most xorb index chunks one shard may hold
+	// in memory at once. One 48-byte term can name a whole xorb, whose
+	// index takes about 44 bytes a chunk, so indexes are loaded as they
+	// are needed and the least recently used are dropped to stay within
+	// this. A xorb with more chunks than this cannot be named at all, so
+	// it should be at least MaxXorbChunks.
+	MaxShardIndexChunks int64
+	// MaxShardIndexLoads is the most xorb index chunks one shard may load
+	// in all, reloads after a drop included. It bounds the reading and
+	// hashing a shard can cause by naming many xorbs.
+	MaxShardIndexLoads int64
 }
 
 // WithDefaults fills the zero fields: MaxFileSize with DefaultMaxFileSize,
 // MaxFileTerms with DefaultMaxFileTerms, MaxFileChunks with one chunk per
 // 16 KiB of MaxFileSize (at least MaxXorbChunks), MaxShardBytes with four
-// times MaxFileSize and MaxShardChunks with eight times MaxFileChunks.
+// times MaxFileSize, MaxShardChunks with eight times MaxFileChunks,
+// MaxShardIndexChunks with DefaultMaxShardIndexChunks and
+// MaxShardIndexLoads with four times MaxShardChunks.
 func (l Limits) WithDefaults() Limits {
 	if l.MaxFileSize <= 0 {
 		l.MaxFileSize = DefaultMaxFileSize
@@ -68,6 +89,12 @@ func (l Limits) WithDefaults() Limits {
 	}
 	if l.MaxShardChunks <= 0 {
 		l.MaxShardChunks = satMul(shardChunksFactor, l.MaxFileChunks)
+	}
+	if l.MaxShardIndexChunks <= 0 {
+		l.MaxShardIndexChunks = DefaultMaxShardIndexChunks
+	}
+	if l.MaxShardIndexLoads <= 0 {
+		l.MaxShardIndexLoads = satMul(indexLoadsFactor, l.MaxShardChunks)
 	}
 	return l
 }
@@ -119,11 +146,14 @@ func (s *Shard) CheckLimits(l Limits) error {
 // CheckRanges checks that every term of every file ends within the stored
 // xorb it names. It reads only the chunk counts, so it runs before any
 // file is checked or rebuilt.
-func CheckRanges(s *Shard, index func(Hash) *XorbIndex) error {
+func CheckRanges(s *Shard, index IndexFunc) error {
 	for i := range s.Files {
 		f := &s.Files[i]
 		for j, t := range f.Terms {
-			x := index(t.Xorb)
+			x, err := index(t.Xorb)
+			if err != nil {
+				return err
+			}
 			if x == nil {
 				return fmt.Errorf("%w: %s", errNoIndex, t.Xorb)
 			}

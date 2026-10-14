@@ -22,10 +22,27 @@ type chunkRange [2]uint32
 // hash right, as a hostile client could build to name the same chunks many
 // times over. It returns the file block and the file's bytes.
 func buildFile(x xettest.Xorb, ranges ...chunkRange) (xet.ShardFile, []byte) {
+	parts := make([]xorbPart, len(ranges))
+	for i, r := range ranges {
+		parts[i] = xorbPart{x, r}
+	}
+	return buildFileFrom(parts...)
+}
+
+// xorbPart is one term of a file: a chunk range of a xorb.
+type xorbPart struct {
+	x xettest.Xorb
+	r chunkRange
+}
+
+// buildFileFrom describes a file made of chunk ranges of any xorbs, with
+// every hash right.
+func buildFileFrom(parts ...xorbPart) (xet.ShardFile, []byte) {
 	f := xet.ShardFile{Flags: xet.FileFlagVerification | xet.FileFlagMetadataExt}
 	var leaves []xet.Chunk
 	var data []byte
-	for _, r := range ranges {
+	for _, p := range parts {
+		x, r := p.x, p.r
 		var size uint32
 		var hashes []xet.Hash
 		for i := r[0]; i < r[1]; i++ {
@@ -76,14 +93,19 @@ func TestLimitsDefaults(t *testing.T) {
 	require.Equal(t, xet.Limits{
 		MaxFileSize: 50 << 30, MaxFileTerms: 1 << 18, MaxFileChunks: 50 << 30 / (16 << 10),
 		MaxShardBytes: 4 * 50 << 30, MaxShardChunks: 8 * 50 << 30 / (16 << 10),
+		MaxShardIndexChunks: 16 * 8192, MaxShardIndexLoads: 4 * 8 * 50 << 30 / (16 << 10),
 	}, l)
 	// Small files still allow a whole xorb of chunks, and nothing overflows.
 	require.Equal(t, int64(xet.MaxXorbChunks), xet.Limits{MaxFileSize: 1 << 20}.WithDefaults().MaxFileChunks)
 	big := xet.Limits{MaxFileSize: math.MaxInt64 / 2, MaxFileChunks: math.MaxInt64 / 3}.WithDefaults()
 	require.Equal(t, int64(math.MaxInt64), big.MaxShardBytes)
 	require.Equal(t, int64(math.MaxInt64), big.MaxShardChunks)
+	require.Equal(t, int64(math.MaxInt64), big.MaxShardIndexLoads)
 	// Set fields are kept.
-	set := xet.Limits{MaxFileSize: 1, MaxFileTerms: 2, MaxFileChunks: 3, MaxShardBytes: 4, MaxShardChunks: 5}
+	set := xet.Limits{
+		MaxFileSize: 1, MaxFileTerms: 2, MaxFileChunks: 3, MaxShardBytes: 4, MaxShardChunks: 5,
+		MaxShardIndexChunks: 6, MaxShardIndexLoads: 7,
+	}
 	require.Equal(t, set, set.WithDefaults())
 }
 

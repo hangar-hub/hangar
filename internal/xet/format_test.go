@@ -109,11 +109,11 @@ func refIndex(t testing.TB) *xet.XorbIndex {
 
 func TestReferenceShards(t *testing.T) {
 	idx := refIndex(t)
-	index := func(h xet.Hash) *xet.XorbIndex {
+	index := func(h xet.Hash) (*xet.XorbIndex, error) {
 		if h.String() == refXorbHash {
-			return idx
+			return idx, nil
 		}
-		return nil
+		return nil, nil
 	}
 	for _, name := range []string{".shard.verification-no-footer", ".shard.verification"} {
 		t.Run(name, func(t *testing.T) {
@@ -359,7 +359,7 @@ func TestBuildUploadAndCheck(t *testing.T) {
 		require.Equal(t, x.Hash, idx.Hash())
 		indexes[x.Hash] = idx
 	}
-	index := func(h xet.Hash) *xet.XorbIndex { return indexes[h] }
+	index := func(h xet.Hash) (*xet.XorbIndex, error) { return indexes[h], nil }
 	for i := range parsed.Files {
 		require.NoError(t, xet.CheckFile(&parsed.Files[i], index))
 	}

@@ -295,38 +295,46 @@ func (f *ShardFile) Size() int64 {
 // errNoIndex is returned by CheckFile when a xorb's index is missing.
 var errNoIndex = errors.New("xet: xorb index missing")
 
+// IndexFunc returns the stored index of a xorb. A nil index with a nil
+// error means the xorb has none.
+type IndexFunc func(Hash) (*XorbIndex, error)
+
 // CheckFile checks a file block against the stored xorb indexes: every
 // term's range fits its xorb, its unpacked bytes and verification hash
 // match the chunks, and the file hash matches all the chunks in order. It
-// reads no chunk data.
-func CheckFile(f *ShardFile, index func(Hash) *XorbIndex) error {
-	var leaves []Chunk
+// reads no chunk data, and its memory does not grow with the number of
+// chunks the file names.
+func CheckFile(f *ShardFile, index IndexFunc) error {
+	var tree merkleBuilder
+	rh := newRangeHasher()
 	for j, t := range f.Terms {
-		x := index(t.Xorb)
+		x, err := index(t.Xorb)
+		if err != nil {
+			return err
+		}
 		if x == nil {
 			return fmt.Errorf("%w: %s", errNoIndex, t.Xorb)
 		}
-		if int(t.End) > len(x.Chunks) {
-			return fmt.Errorf("%w: file %s term %d ends at chunk %d, but xorb %s has %d chunks",
-				ErrBadShard, f.Hash, j, t.End, t.Xorb, len(x.Chunks))
+		if t.Start >= t.End || int(t.End) > len(x.Chunks) {
+			return fmt.Errorf("%w: file %s term %d is chunks %d to %d, but xorb %s has %d chunks",
+				ErrBadShard, f.Hash, j, t.Start, t.End, t.Xorb, len(x.Chunks))
 		}
-		chunks := x.Chunks[t.Start:t.End]
 		var size uint64
-		hashes := make([]Hash, len(chunks))
-		for k, c := range chunks {
+		rh.reset()
+		for _, c := range x.Chunks[t.Start:t.End] {
 			size += uint64(c.Size)
-			hashes[k] = c.Hash
-			leaves = append(leaves, Chunk{Hash: c.Hash, Size: uint64(c.Size)})
+			rh.add(c.Hash)
+			tree.add(Chunk{Hash: c.Hash, Size: uint64(c.Size)})
 		}
 		if size != uint64(t.UnpackedBytes) {
 			return fmt.Errorf("%w: file %s term %d declares %d bytes, its chunks hold %d",
 				ErrBadShard, f.Hash, j, t.UnpackedBytes, size)
 		}
-		if len(f.Verification) > j && RangeHash(hashes) != f.Verification[j] {
+		if len(f.Verification) > j && rh.sum() != f.Verification[j] {
 			return fmt.Errorf("%w: file %s term %d has the wrong verification hash", ErrBadShard, f.Hash, j)
 		}
 	}
-	if got := FileHash(leaves); got != f.Hash {
+	if got := tree.fileHash(); got != f.Hash {
 		return fmt.Errorf("%w: file hash %s does not match its chunks (%s)", ErrBadShard, f.Hash, got)
 	}
 	return nil
