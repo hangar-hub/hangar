@@ -47,7 +47,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.2
       - uses: anchore/sbom-action/download-syft@v0
       - uses: goreleaser/goreleaser-action@v7
         with:
@@ -111,7 +111,7 @@ jobs:
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: Sign the image (keyless, GitHub OIDC)
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -169,8 +169,17 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.1.3
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.2
+      # cosign reads registry credentials from ~/.docker/config.json, which
+      # helm registry login does not write (Helm keeps its own registry
+      # config), so log in for cosign as well as for Helm.
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Package and push
+        shell: bash
         env:
           ACTOR: ${{ github.actor }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -179,7 +188,11 @@ jobs:
           echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
           helm package deploy/helm/hangar --version "$version" --app-version "$version" --destination dist
           helm push "dist/hangar-$version.tgz" "$CHARTS" 2>&1 | tee push.log
-          digest="$(grep -o 'sha256:[0-9a-f]*' push.log | head -1)"
+          digest="$(grep -o 'sha256:[0-9a-f]\{64\}' push.log | head -1)"
+          if [ -z "$digest" ]; then
+            echo "helm push printed no digest" >&2
+            exit 1
+          fi
           cosign sign --yes "ghcr.io/jamesagarside/charts/hangar@$digest"
 
   docs:
@@ -193,7 +206,7 @@ jobs:
         with:
           ref: ${{ env.TAG }}
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       - name: Publish this version as latest
         run: |
           git config user.name "github-actions[bot]"
