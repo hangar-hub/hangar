@@ -33,6 +33,12 @@ type HandlerOptions struct {
 	CASURL string
 	// Heartbeat is the /v2/shards heartbeat interval. Zero means DefaultHeartbeat.
 	Heartbeat time.Duration
+	// ShardIngests is how many shard uploads one Namespace may have in
+	// progress at once. Zero means DefaultShardIngests.
+	ShardIngests int
+	// ShardQueueWait is how long a shard upload waits for one of its
+	// Namespace's slots before it gets 429. Zero means DefaultShardQueueWait.
+	ShardQueueWait time.Duration
 	// Log receives errors; nil discards them.
 	Log *slog.Logger
 }
@@ -46,11 +52,18 @@ type HandlerOptions struct {
 //	POST /v1/telemetry                       200, body discarded
 //
 // It authenticates every call with the CAS token itself, so it must be
-// mounted where Hub authentication does not reject CAS tokens.
+// mounted where Hub authentication does not reject CAS tokens. Bodies are
+// bounded as they are read (MaxXorbSize, MaxShardSize). A shard upload
+// takes one of its Namespace's ShardIngests slots before its body is read
+// and keeps it until the shard is processed; one that finds no free slot
+// within ShardQueueWait gets 429, which hf_xet retries. The slots are per
+// process.
 type Handler struct {
 	ing       Ingestor
 	prefix    string
 	heartbeat time.Duration
+	slots     *ingestSlots
+	queueWait time.Duration
 	log       *slog.Logger
 }
 
@@ -66,6 +79,15 @@ func NewHandler(ing Ingestor, o HandlerOptions) (*Handler, error) {
 	h := &Handler{ing: ing, prefix: strings.TrimRight(u.EscapedPath(), "/"), heartbeat: o.Heartbeat, log: o.Log}
 	if h.heartbeat <= 0 {
 		h.heartbeat = DefaultHeartbeat
+	}
+	ingests := o.ShardIngests
+	if ingests <= 0 {
+		ingests = DefaultShardIngests
+	}
+	h.slots = newIngestSlots(ingests)
+	h.queueWait = o.ShardQueueWait
+	if h.queueWait <= 0 {
+		h.queueWait = DefaultShardQueueWait
 	}
 	if h.log == nil {
 		h.log = slog.New(slog.DiscardHandler)
@@ -146,7 +168,12 @@ func (h *Handler) status(err error) (int, string) {
 		return http.StatusBadRequest, RejectMessage
 	case errors.Is(err, ErrUnknownXorb):
 		return http.StatusBadRequest, UnknownXorbMessage
+	case errors.Is(err, ErrBusy):
+		return http.StatusTooManyRequests, "Too many uploads are being processed for this Namespace. Try again shortly."
 	case errors.Is(err, ErrTooLarge):
+		if detail, ok := strings.CutPrefix(err.Error(), ErrTooLarge.Error()+": "); ok {
+			return http.StatusRequestEntityTooLarge, "The upload is too large: " + detail + "."
+		}
 		return http.StatusRequestEntityTooLarge, "The upload is too large."
 	case errors.Is(err, ErrBadXorb), errors.Is(err, ErrBadShard):
 		return http.StatusBadRequest, strings.TrimPrefix(err.Error(), "xet: ")
@@ -167,6 +194,9 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if status >= 500 {
 		h.log.ErrorContext(r.Context(), "Xet CAS request failed", "path", r.URL.Path, "error", err)
 	}
+	if status == http.StatusTooManyRequests {
+		w.Header().Set("Retry-After", shardRetryAfter)
+	}
 	httpx.WriteError(w, r, status, "", msg)
 }
 
@@ -185,6 +215,8 @@ func (h *Handler) xorb(w http.ResponseWriter, r *http.Request, c *Claims, hash s
 		h.fail(w, r, ErrTooLarge)
 		return
 	}
+	// Bound the body as it is read, so no Ingestor can read past the limit
+	// whatever the declared length (chunked bodies declare none).
 	body := http.MaxBytesReader(w, r.Body, MaxXorbSize)
 	inserted, err := h.ing.PutXorb(r.Context(), c, hash, body, r.ContentLength)
 	if err != nil {
@@ -194,26 +226,37 @@ func (h *Handler) xorb(w http.ResponseWriter, r *http.Request, c *Claims, hash s
 	httpx.WriteJSON(w, r, http.StatusOK, map[string]bool{"was_inserted": inserted})
 }
 
-// readShard reads the whole shard body before any response is written:
-// HTTP/1.1 bodies may become unreadable once a streamed response starts.
-func (h *Handler) readShard(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+// readShard takes one of the Namespace's shard ingest slots, then reads
+// the whole shard body, bounded by MaxShardSize as it is read, before any
+// response is written: HTTP/1.1 bodies may become unreadable once a
+// streamed response starts. The slot is taken first, so uploads waiting
+// for one hold no body in memory. The caller calls release when the shard
+// is processed.
+func (h *Handler) readShard(w http.ResponseWriter, r *http.Request, c *Claims) (b []byte, release func(), ok bool) {
 	if r.ContentLength > MaxShardSize {
 		h.fail(w, r, ErrTooLarge)
-		return nil, false
+		return nil, nil, false
 	}
-	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxShardSize))
+	release, err := h.slots.acquire(r.Context(), c.Repo.Namespace, h.queueWait)
 	if err != nil {
 		h.fail(w, r, err)
-		return nil, false
+		return nil, nil, false
 	}
-	return b, true
+	b, err = io.ReadAll(http.MaxBytesReader(w, r.Body, MaxShardSize))
+	if err != nil {
+		release()
+		h.fail(w, r, err)
+		return nil, nil, false
+	}
+	return b, release, true
 }
 
 func (h *Handler) shardV1(w http.ResponseWriter, r *http.Request, c *Claims) {
-	b, ok := h.readShard(w, r)
+	b, release, ok := h.readShard(w, r, c)
 	if !ok {
 		return
 	}
+	defer release()
 	if _, err := h.ing.AcceptShard(r.Context(), c, bytes.NewReader(b), int64(len(b)), nil); err != nil {
 		h.fail(w, r, err)
 		return
@@ -227,10 +270,13 @@ func (h *Handler) shardV1(w http.ResponseWriter, r *http.Request, c *Claims) {
 // last frame is repeated every heartbeat interval, so proxies with idle
 // timeouts (such as Cloudflare's 100 seconds) keep the connection open.
 func (h *Handler) shardV2(w http.ResponseWriter, r *http.Request, c *Claims) {
-	b, ok := h.readShard(w, r)
+	b, release, ok := h.readShard(w, r, c)
 	if !ok {
 		return
 	}
+	// Every return below waits for the ingest goroutine, so the slot is
+	// held until the shard is processed.
+	defer release()
 	ctx := r.Context()
 	events := make(chan ShardEvent, 64)
 	type outcome struct{ err error }

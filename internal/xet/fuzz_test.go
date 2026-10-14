@@ -48,13 +48,28 @@ func FuzzParseXorb(f *testing.F) {
 	})
 }
 
+// fuzzLimits are small limits, so fuzzed shards reach both sides of them.
+var fuzzLimits = xet.Limits{MaxFileSize: 1 << 20, MaxFileTerms: 16, MaxFileChunks: 256, MaxShardBytes: 2 << 20, MaxShardChunks: 512}
+
+// fuzzIndex stands in for stored xorbs: each has 1 to 64 chunks, taken
+// from its hash.
+func fuzzIndex(h xet.Hash) *xet.XorbIndex {
+	return &xet.XorbIndex{Chunks: make([]xet.XorbChunk, 1+int(h[0])%64)}
+}
+
 // FuzzParseShard checks the shard parser never panics or over-allocates,
-// and that a parsed shard survives serialising and parsing again. Records
-// have unused bytes the parser ignores (xet-core's own test builds fill
-// them), so the bytes themselves may differ.
+// that a parsed shard survives serialising and parsing again, and that a
+// shard passing the upload rules and limits stays within every limit and
+// every stored xorb. Records have unused bytes the parser ignores
+// (xet-core's own test builds fill them), so the bytes themselves may
+// differ.
 func FuzzParseShard(f *testing.F) {
 	u := xettest.BuildUpload([][]byte{textBytes(5000, 1), {}}, xettest.UploadOptions{ChunkSize: 1000, ChunksPerXorb: 3})
 	f.Add(u.ShardBytes())
+	// The same xorb range named many times over.
+	x := u.Xorbs[0]
+	rep, _ := buildFile(x, repeat(chunkRange{0, 3}, 20)...)
+	f.Add(xet.MarshalShard(&xet.Shard{Files: []xet.ShardFile{rep}}))
 	for _, name := range []string{".shard", ".shard.verification-no-footer"} {
 		f.Add(readRef(f, refFile+name))
 	}
@@ -66,8 +81,8 @@ func FuzzParseShard(f *testing.F) {
 			}
 			return
 		}
-		_ = sh.CheckUpload()
 		_ = sh.XorbHashes()
+		checkShardLimits(t, sh)
 		again, err := xet.ParseShard(xet.MarshalShard(sh))
 		if err != nil {
 			t.Fatalf("a serialised shard does not parse: %v", err)
@@ -77,6 +92,58 @@ func FuzzParseShard(f *testing.F) {
 			t.Fatal("a shard does not survive a round trip")
 		}
 	})
+}
+
+// checkShardLimits asserts that a shard accepted by CheckUpload and
+// CheckLimits is within fuzzLimits, and one accepted by CheckRanges too is
+// within its xorbs.
+func checkShardLimits(t *testing.T, sh *xet.Shard) {
+	t.Helper()
+	if err := sh.CheckUpload(); err != nil {
+		if !errors.Is(err, xet.ErrBadShard) {
+			t.Fatalf("unexpected upload rule error class: %v", err)
+		}
+		return
+	}
+	if err := sh.CheckLimits(fuzzLimits); err != nil {
+		if !errors.Is(err, xet.ErrTooLarge) {
+			t.Fatalf("unexpected limit error class: %v", err)
+		}
+		return
+	}
+	var shardChunks int64
+	for i, f := range sh.Files {
+		if len(f.Terms) > fuzzLimits.MaxFileTerms || f.Size() > fuzzLimits.MaxFileSize {
+			t.Fatalf("file %d is over the limits: %d terms, %d bytes", i, len(f.Terms), f.Size())
+		}
+		var chunks int64
+		for _, tm := range f.Terms {
+			if tm.Start >= tm.End || tm.End > xet.MaxXorbChunks {
+				t.Fatalf("file %d has the chunk range %d to %d", i, tm.Start, tm.End)
+			}
+			chunks += int64(tm.End - tm.Start)
+		}
+		if chunks > fuzzLimits.MaxFileChunks {
+			t.Fatalf("file %d names %d chunks", i, chunks)
+		}
+		shardChunks += chunks
+	}
+	if shardChunks > fuzzLimits.MaxShardChunks {
+		t.Fatalf("the shard names %d chunks", shardChunks)
+	}
+	if err := xet.CheckRanges(sh, fuzzIndex); err != nil {
+		if !errors.Is(err, xet.ErrBadShard) {
+			t.Fatalf("unexpected range error class: %v", err)
+		}
+		return
+	}
+	for i, f := range sh.Files {
+		for _, tm := range f.Terms {
+			if int(tm.End) > len(fuzzIndex(tm.Xorb).Chunks) {
+				t.Fatalf("file %d names chunk %d of a xorb with %d", i, tm.End, len(fuzzIndex(tm.Xorb).Chunks))
+			}
+		}
+	}
 }
 
 // normalise makes empty and nil slices compare equal.

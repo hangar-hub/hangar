@@ -246,6 +246,7 @@ func TestNewAndOptionsFromConfig(t *testing.T) {
 	require.True(t, o.Reject)
 	require.Equal(t, time.Hour, o.TokenTTL)
 	require.Equal(t, 672*time.Hour, o.XorbRetention)
+	require.Equal(t, xet.Limits{MaxFileSize: xet.DefaultMaxFileSize}, o.Limits)
 	require.Len(t, o.InstanceKey, 32)
 	cfg.Xet.CASURL = "https://cas.example.com"
 	o, err = xet.OptionsFromConfig(&cfg)

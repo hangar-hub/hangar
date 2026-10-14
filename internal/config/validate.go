@@ -255,6 +255,7 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	if c.Xet.XorbRetention < 0 {
 		e.addf("xet.xorb_retention cannot be negative")
 	}
+	positiveSize(&e, "xet.max_file_size", c.Xet.MaxFileSize)
 
 	// jobs and gc
 	if c.Jobs.Workers < 1 {

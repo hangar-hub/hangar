@@ -215,6 +215,7 @@ type XetConfig struct {
 	CASURL        string        `koanf:"cas_url" desc:"URL of the Xet CAS endpoints. Default: <public_url>/xet-cas."`
 	TokenTTL      time.Duration `koanf:"token_ttl" desc:"Lifetime of Xet write tokens."`
 	XorbRetention time.Duration `koanf:"xorb_retention" desc:"How long xorbs are kept after their last use, so clients can deduplicate against them. Keep it longer than hf_xet's 21-day shard cache."`
+	MaxFileSize   ByteSize      `koanf:"max_file_size" desc:"Largest file a Xet upload may describe. One shard may rebuild at most four times this, counting only files not uploaded before; larger uploads get 413."`
 }
 
 // JobsConfig configures Job workers.
@@ -315,7 +316,7 @@ func Default() Config {
 			VerifyWait:         10 * time.Minute,
 		},
 		HFAPI: HFAPIConfig{RegularUploadMax: 10 * MiB, Xet: XetIngest},
-		Xet:   XetConfig{TokenTTL: time.Hour, XorbRetention: 672 * time.Hour},
+		Xet:   XetConfig{TokenTTL: time.Hour, XorbRetention: 672 * time.Hour, MaxFileSize: 50 * GiB},
 		Jobs:  JobsConfig{Workers: 4, Lease: 60 * time.Second},
 		GC:    GCConfig{Schedule: "0 3 * * *", GracePeriod: 168 * time.Hour},
 		Repos: ReposConfig{RestoreWindow: 168 * time.Hour},

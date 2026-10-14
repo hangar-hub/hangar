@@ -35,8 +35,12 @@ var (
 	// ErrUnknownXorb means a shard refers to a xorb Hangar does not have (400
 	// with UnknownXorbMessage).
 	ErrUnknownXorb = errors.New("xet: shard refers to an unknown xorb")
-	// ErrTooLarge means a xorb or shard is over its size limit (413).
+	// ErrTooLarge means a xorb or shard is over its size limit, or a shard
+	// describes more work than Limits allow (413).
 	ErrTooLarge = errors.New("xet: object too large")
+	// ErrBusy means the Namespace has as many shard uploads in progress as
+	// it may (429, which hf_xet retries).
+	ErrBusy = errors.New("xet: too many shard uploads in progress")
 )
 
 // Messages users see.

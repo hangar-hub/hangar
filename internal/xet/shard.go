@@ -230,7 +230,8 @@ func (p *shardParser) xorbs(sh *Shard) error {
 // CheckUpload applies the rules for uploaded shards that need no stored
 // data: every file has verification entries and the metadata extension
 // with its SHA-256 (required for model and dataset Repos), every term is a
-// non-empty range, and an empty file has the zero hash.
+// non-empty range that fits in a xorb, and an empty file has the zero
+// hash. CheckLimits bounds the work the shard describes.
 func (s *Shard) CheckUpload() error {
 	for i, f := range s.Files {
 		if f.Flags&FileFlagVerification == 0 {
@@ -245,6 +246,10 @@ func (s *Shard) CheckUpload() error {
 		for j, t := range f.Terms {
 			if t.Start >= t.End {
 				return fmt.Errorf("%w: file %d term %d has an empty chunk range", ErrBadShard, i, j)
+			}
+			if t.End > MaxXorbChunks {
+				return fmt.Errorf("%w: file %d term %d ends at chunk %d, but a xorb has at most %d chunks",
+					ErrBadShard, i, j, t.End, MaxXorbChunks)
 			}
 		}
 	}

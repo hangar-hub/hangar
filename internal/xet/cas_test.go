@@ -31,14 +31,25 @@ type casEnv struct {
 // httpx.Dispatch would, with the Ingestor wrapped by wrap if given.
 func newCAS(t *testing.T, casURL string, heartbeat time.Duration, wrap func(xet.Ingestor) xet.Ingestor) *casEnv {
 	t.Helper()
+	return newCASWith(t, xet.HandlerOptions{CASURL: casURL, Heartbeat: heartbeat}, wrap, nil)
+}
+
+// newCASWith is newCAS with every handler option, and middleware run
+// inside the request ID middleware when mw is given.
+func newCASWith(t *testing.T, o xet.HandlerOptions, wrap func(xet.Ingestor) xet.Ingestor, mw func(http.Handler) http.Handler) *casEnv {
+	t.Helper()
 	e := newEnv(t, dbtest.SQLite(t))
 	var ing xet.Ingestor = e.svc
 	if wrap != nil {
 		ing = wrap(ing)
 	}
-	h, err := xet.NewHandler(ing, xet.HandlerOptions{CASURL: casURL, Heartbeat: heartbeat})
+	h, err := xet.NewHandler(ing, o)
 	require.NoError(t, err)
-	srv := httptest.NewServer(httpx.RequestIDs(h))
+	var inner http.Handler = h
+	if mw != nil {
+		inner = mw(h)
+	}
+	srv := httptest.NewServer(httpx.RequestIDs(inner))
 	t.Cleanup(srv.Close)
 	tok, err := e.svc.IssueWriteToken(context.Background(), xet.TokenRequest{Principal: alice(), Repo: aliceRepo, Revision: "main"})
 	require.NoError(t, err)

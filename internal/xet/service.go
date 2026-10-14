@@ -55,6 +55,9 @@ type Options struct {
 	// ClockSkew is how long after its expiry a token is still accepted, for
 	// replicas whose clocks differ. Zero means DefaultClockSkew.
 	ClockSkew time.Duration
+	// Limits bound the work one shard can cause. Zero fields take their
+	// defaults (Limits.WithDefaults); MaxFileSize is xet.max_file_size.
+	Limits Limits
 	// TempDir is where xorb bodies are spooled while they are verified.
 	// Empty means the system temporary directory.
 	TempDir string
@@ -81,6 +84,7 @@ func OptionsFromConfig(c *config.Config) (Options, error) {
 		TokenTTL:      c.Xet.TokenTTL,
 		XorbRetention: c.Xet.XorbRetention,
 		Reject:        c.HFAPI.Xet == config.XetReject,
+		Limits:        Limits{MaxFileSize: int64(c.Xet.MaxFileSize)},
 		TempDir:       os.TempDir(),
 	}, nil
 }
@@ -97,6 +101,7 @@ type Service struct {
 	reject    bool
 	skew      time.Duration
 	tempDir   string
+	limits    Limits
 	inst      *telemetry.Instruments
 	tracer    trace.Tracer
 	log       *slog.Logger
@@ -130,7 +135,7 @@ func New(o Options) (*Service, error) {
 	s := &Service{
 		db: o.DB, blobs: o.Blobs, lfs: o.LFS, signer: signer, casURL: strings.TrimRight(o.CASURL, "/"),
 		ttl: o.TokenTTL, retention: o.XorbRetention, reject: o.Reject, skew: o.ClockSkew, tempDir: o.TempDir,
-		inst: o.Instruments, tracer: o.Tracer, log: o.Log, now: o.Now,
+		limits: o.Limits.WithDefaults(), inst: o.Instruments, tracer: o.Tracer, log: o.Log, now: o.Now,
 	}
 	if s.ttl <= 0 {
 		s.ttl = DefaultTokenTTL
@@ -388,6 +393,11 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 	if err := sh.CheckUpload(); err != nil {
 		return nil, err
 	}
+	// The limits need only the shard, so a shard describing too much work
+	// is refused before any xorb is touched.
+	if err := sh.CheckLimits(s.limits); err != nil {
+		return nil, err
+	}
 	total := len(sh.Files) + len(sh.Xorbs)
 	span.SetAttributes(attribute.Int("xet.shard.files", len(sh.Files)), attribute.Int("xet.shard.xorbs", len(sh.Xorbs)))
 	emit(ShardEvent{Type: EventValidating, Verified: 0, Total: total})
@@ -415,6 +425,10 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 		indexes[h] = idx
 	}
 	index := func(h Hash) *XorbIndex { return indexes[h] }
+	// Every term must fit its stored xorb before any file is checked.
+	if err := CheckRanges(sh, index); err != nil {
+		return nil, err
+	}
 
 	verified := 0
 	for i := range sh.Xorbs {
@@ -434,8 +448,9 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 
 	emit(ShardEvent{Type: EventCommitting, Stage: StageUploading})
 	res = &ShardResult{Result: 1}
+	budget := s.limits.MaxShardBytes
 	for i := range sh.Files {
-		f, err := s.reassemble(ctx, &sh.Files[i], index)
+		f, err := s.reassemble(ctx, &sh.Files[i], index, &budget)
 		if err != nil {
 			return nil, err
 		}
@@ -448,7 +463,9 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 }
 
 // reassemble rebuilds one file as an LFS object and records its Xet hash.
-func (s *Service) reassemble(ctx context.Context, f *ShardFile, index func(Hash) *XorbIndex) (out ReassembledFile, err error) {
+// Every rebuild is paid for from budget, the bytes the shard may still
+// rebuild, before it starts.
+func (s *Service) reassemble(ctx context.Context, f *ShardFile, index func(Hash) *XorbIndex, budget *int64) (out ReassembledFile, err error) {
 	start := time.Now()
 	oid := f.SHA256.String()
 	size := f.Size()
@@ -457,7 +474,7 @@ func (s *Service) reassemble(ctx context.Context, f *ShardFile, index func(Hash)
 	defer func() {
 		if err != nil {
 			outcome = "error"
-			if errors.Is(err, ErrBadShard) {
+			if errors.Is(err, ErrBadShard) || errors.Is(err, ErrTooLarge) {
 				outcome = "rejected"
 			}
 		}
@@ -485,6 +502,9 @@ func (s *Service) reassemble(ctx context.Context, f *ShardFile, index func(Hash)
 		}
 		// The object exists, but nothing proves this file's chunks are
 		// its bytes: rebuild them and compare without storing.
+		if err := spend(budget, f, size, s.limits.MaxShardBytes); err != nil {
+			return out, err
+		}
 		fr := s.newFileReader(ctx, f, index)
 		defer fr.Close()
 		if err := fr.verify(oid, size); err != nil {
@@ -493,6 +513,9 @@ func (s *Service) reassemble(ctx context.Context, f *ShardFile, index func(Hash)
 	case statErr != nil && !errors.Is(statErr, repo.ErrNotFound) && !errors.Is(statErr, blob.ErrNotFound):
 		return out, fmt.Errorf("xet: look up LFS object: %w", statErr)
 	default:
+		if err := spend(budget, f, size, s.limits.MaxShardBytes); err != nil {
+			return out, err
+		}
 		fr := s.newFileReader(ctx, f, index)
 		defer fr.Close()
 		_, ierr := s.lfs.Ingest(ctx, oid, size, fr)
