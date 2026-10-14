@@ -17,11 +17,11 @@ import (
 	"github.com/jamesagarside/hangar/internal/audit/audittest"
 	"github.com/jamesagarside/hangar/internal/auth/authtest"
 	"github.com/jamesagarside/hangar/internal/collections"
-	"github.com/jamesagarside/hangar/internal/community"
+	"github.com/jamesagarside/hangar/internal/community/communitydb"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/index"
+	"github.com/jamesagarside/hangar/internal/index/indexdb"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
 	"github.com/jamesagarside/hangar/internal/index/safetensors"
 	"github.com/jamesagarside/hangar/internal/jobs"
@@ -53,7 +53,7 @@ type metaEnv struct {
 	db         *db.DB
 	repos      *repotest.Fake
 	authz      *authtest.Authz
-	index      *index.Service
+	index      *indexdb.Service
 	queue      *jobstest.Fake
 	audit      *audittest.Fake
 	receiver   *httptest.Server
@@ -99,10 +99,10 @@ func newMetaEnv(t *testing.T) *metaEnv {
 	e.queue = jobstest.NewFake(reg)
 	hooks := webhook.New(webhook.Options{DB: d, Queue: e.queue, Sealer: sealer})
 	require.NoError(t, hooks.Register(reg))
-	e.index = index.New(index.Options{DB: d, Repos: e.repos})
+	e.index = indexdb.New(indexdb.Options{DB: d, Repos: e.repos})
 	deps := api.MetaDeps{
 		Repos: e.repos, Authz: e.authz, Orgs: orgs, Index: e.index, Scanner: scan.New(scan.Options{DB: d, Repos: e.repos}),
-		Community:   community.New(community.Options{DB: d, Repos: e.repos, Webhooks: hooks}),
+		Community:   communitydb.New(communitydb.Options{DB: d, Repos: e.repos, Webhooks: hooks}),
 		Collections: collections.New(collections.Options{DB: d, Orgs: orgs, Repos: e.repos, Authz: e.authz}),
 		Webhooks:    hooks, Audit: e.audit,
 	}
@@ -212,7 +212,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	e.json("DELETE", base+"/like", "bob-token", nil, http.StatusOK, &like)
 	require.Equal(t, gen.LikeStatus{Liked: false, Likes: 0}, like)
 
-	require.NoError(t, community.New(community.Options{DB: e.db, Repos: e.repos}).RecordDownload(context.Background(), e.model.UUID, time.Now()))
+	require.NoError(t, communitydb.New(communitydb.Options{DB: e.db, Repos: e.repos}).RecordDownload(context.Background(), e.model.UUID, time.Now()))
 	var stats gen.RepoStats
 	e.json("GET", base+"/stats?days=7", "bob-token", nil, http.StatusOK, &stats)
 	require.Len(t, stats.Days, 7)

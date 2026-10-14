@@ -14,6 +14,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/index"
 	"github.com/jamesagarside/hangar/internal/index/gguf"
+	"github.com/jamesagarside/hangar/internal/index/indexdb"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
 	"github.com/jamesagarside/hangar/internal/index/safetensors"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -176,7 +177,7 @@ func indexFixture(t *testing.T, d *db.DB, f fixture) *index.Summary {
 	layout := func(context.Context, model.RepoID, model.CommitSHA) ([]string, map[string]int, error) {
 		return []string{"default"}, map[string]int{"default": 2}, nil
 	}
-	svc := index.New(index.Options{DB: d, Repos: fake, Layout: layout, Window: 64})
+	svc := indexdb.New(indexdb.Options{DB: d, Repos: fake, Layout: layout, Window: 64})
 	sum, err := svc.Index(ctx, r.UUID, id, sha)
 	require.NoError(t, err)
 	got, err := svc.Get(ctx, r.UUID, sha)

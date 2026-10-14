@@ -1,4 +1,9 @@
-package index
+// Package indexdb is the database-backed index.Indexer: it runs the index
+// Job for each new branch head, stores results in the metadata table, and
+// serves file headers and GGUF quant groups (META-1, META-3). It lives
+// apart from package index because the Repo service imports index for its
+// interface, and this implementation reads files through the Repo service.
+package indexdb
 
 import (
 	"context"
@@ -18,6 +23,7 @@ import (
 
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/jamesagarside/hangar/internal/index"
 	"github.com/jamesagarside/hangar/internal/index/gguf"
 	"github.com/jamesagarside/hangar/internal/index/rangeio"
 	"github.com/jamesagarside/hangar/internal/index/safetensors"
@@ -27,19 +33,6 @@ import (
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/webhook"
 )
-
-// CommitJob is the payload of the index and scan Jobs that run for every
-// Commit that becomes the head of a branch. Its JSON matches
-// repo.CommitJob, which the Repo service enqueues.
-type CommitJob struct {
-	RepoUUID uuid.UUID       `json:"repo_uuid"`
-	Repo     string          `json:"repo"`
-	Type     model.RepoType  `json:"type"`
-	Commit   model.CommitSHA `json:"commit"`
-}
-
-// DedupeKey is the Job dedupe key the Repo service uses: `<uuid>:<commit>`.
-func (j CommitJob) DedupeKey() string { return j.RepoUUID.String() + ":" + string(j.Commit) }
 
 // Options configure the Service.
 type Options struct {
@@ -55,7 +48,7 @@ type Options struct {
 	Layout func(ctx context.Context, id model.RepoID, commit model.CommitSHA) ([]string, map[string]int, error)
 	// AfterIndex runs after a Job stores results, for example to enqueue
 	// dataset.convert; optional. Its error fails the Job so it is retried.
-	AfterIndex func(ctx context.Context, job CommitJob, s *Summary) error
+	AfterIndex func(ctx context.Context, job index.CommitJob, s *index.Summary) error
 	// Window is the ranged read size; zero means 1 MiB.
 	Window int64
 }
@@ -65,7 +58,7 @@ type Service struct {
 	o Options
 }
 
-var _ Indexer = (*Service)(nil)
+var _ index.Indexer = (*Service)(nil)
 
 // New returns a Service.
 func New(o Options) *Service {
@@ -94,7 +87,7 @@ func (s repoSource) ReadAll(ctx context.Context, p string, limit int64) ([]byte,
 		return nil, err
 	}
 	if int64(len(b)) > limit {
-		return nil, fmt.Errorf("%w: %s is larger than %d bytes", errTooLarge, p, limit)
+		return nil, fmt.Errorf("%s is larger than %d bytes", p, limit)
 	}
 	return b, nil
 }
@@ -107,22 +100,22 @@ func (s repoSource) ReaderAt(ctx context.Context, p string, size int64) io.Reade
 }
 
 // Index implements Indexer.
-func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (*Summary, error) {
+func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (*index.Summary, error) {
 	entries, err := s.o.Repos.Tree(ctx, id, commit, "", repo.TreeOpts{Recursive: true})
 	if err != nil {
 		return nil, err
 	}
-	files := make([]File, 0, len(entries))
+	files := make([]index.File, 0, len(entries))
 	for _, e := range entries {
 		if e.Type == model.EntryFile {
-			files = append(files, File{Path: e.Path, Size: e.Size, Present: e.Present})
+			files = append(files, index.File{Path: e.Path, Size: e.Size, Present: e.Present})
 		}
 	}
-	var layout DatasetLayout
+	var layout index.DatasetLayout
 	if id.Type == model.RepoTypeDataset && s.o.Layout != nil {
 		layout = func(ctx context.Context) ([]string, map[string]int, error) { return s.o.Layout(ctx, id, commit) }
 	}
-	sum, err := Extract(ctx, id.Type, files, repoSource{repos: s.o.Repos, id: id, commit: commit, window: s.o.Window}, layout)
+	sum, err := index.Extract(ctx, id.Type, files, repoSource{repos: s.o.Repos, id: id, commit: commit, window: s.o.Window}, layout)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +124,7 @@ func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 		return nil, err
 	}
 	now := db.Now()
-	row := &db.Metadata{RepoID: repoUUID, Commit: string(commit), IndexerVersion: Version, Summary: raw, IndexedAt: now}
+	row := &db.Metadata{RepoID: repoUUID, Commit: string(commit), IndexerVersion: index.Version, Summary: raw, IndexedAt: now}
 	_, err = s.o.DB.NewInsert().Model(row).
 		On("CONFLICT (repo_id, commit_sha, indexer_version) DO UPDATE").
 		Set("summary = EXCLUDED.summary").Set("indexed_at = EXCLUDED.indexed_at").Set("updated_at = EXCLUDED.updated_at").
@@ -144,30 +137,30 @@ func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 
 // Get implements Indexer. It returns the newest stored version, so results
 // from an older indexer stay visible while re-indexing runs.
-func (s *Service) Get(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) (*Summary, error) {
+func (s *Service) Get(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) (*index.Summary, error) {
 	var row db.Metadata
 	err := s.o.DB.NewSelect().Model(&row).Where("repo_id = ?", repoUUID).Where("commit_sha = ?", string(commit)).
 		Order("indexer_version DESC").Limit(1).Scan(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrNotIndexed, commit)
+		return nil, fmt.Errorf("%w: %s", index.ErrNotIndexed, commit)
 	}
 	if err != nil {
 		return nil, err
 	}
-	var sum Summary
+	var sum index.Summary
 	if err := json.Unmarshal(row.Summary, &sum); err != nil {
 		return nil, fmt.Errorf("decode index results: %w", err)
 	}
 	return &sum, nil
 }
 
-// IndexedAt returns when a Commit was indexed, or ErrNotIndexed.
+// IndexedAt returns when a Commit was indexed, or index.ErrNotIndexed.
 func (s *Service) IndexedAt(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) (time.Time, error) {
 	var row db.Metadata
 	err := s.o.DB.NewSelect().Model(&row).Column("indexed_at").Where("repo_id = ?", repoUUID).Where("commit_sha = ?", string(commit)).
 		Order("indexer_version DESC").Limit(1).Scan(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, ErrNotIndexed
+		return time.Time{}, index.ErrNotIndexed
 	}
 	return row.IndexedAt, err
 }
@@ -195,14 +188,14 @@ type HeaderTensor struct {
 func (s *Service) FileHeader(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string) (json.RawMessage, error) {
 	ext := strings.ToLower(path.Ext(p))
 	if ext != ".safetensors" && ext != ".gguf" {
-		return nil, fmt.Errorf("%w: %s", ErrNoHeader, p)
+		return nil, fmt.Errorf("%w: %s", index.ErrNoHeader, p)
 	}
 	e, err := s.o.Repos.Entry(ctx, id, commit, p)
 	if err != nil {
 		return nil, err
 	}
 	if e.Type != model.EntryFile {
-		return nil, fmt.Errorf("%w: %s is a directory", ErrNoHeader, p)
+		return nil, fmt.Errorf("%w: %s is a directory", index.ErrNoHeader, p)
 	}
 	if !e.Present {
 		return nil, fmt.Errorf("%w: %s", repo.ErrNotPresent, p)
@@ -211,13 +204,13 @@ func (s *Service) FileHeader(ctx context.Context, id model.RepoID, commit model.
 	if ext == ".safetensors" {
 		h, err := safetensors.Read(ra, e.Size)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrNoHeader, err)
+			return nil, fmt.Errorf("%w: %w", index.ErrNoHeader, err)
 		}
 		return h.Raw, nil
 	}
 	f, err := gguf.Read(ra, e.Size)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNoHeader, err)
+		return nil, fmt.Errorf("%w: %w", index.ErrNoHeader, err)
 	}
 	view := HeaderView{Version: f.Version, TensorCount: f.TensorCount, Alignment: f.Alignment, DataOffset: f.DataOffset, Metadata: f.Metadata}
 	for _, t := range f.Tensors {
@@ -227,7 +220,7 @@ func (s *Service) FileHeader(ctx context.Context, id model.RepoID, commit model.
 }
 
 // Quants implements Indexer.
-func (s *Service) Quants(ctx context.Context, id model.RepoID, commit model.CommitSHA) ([]QuantGroup, error) {
+func (s *Service) Quants(ctx context.Context, id model.RepoID, commit model.CommitSHA) ([]index.QuantGroup, error) {
 	entries, err := s.o.Repos.Tree(ctx, id, commit, "", repo.TreeOpts{Recursive: true})
 	if err != nil {
 		return nil, err
@@ -238,7 +231,7 @@ func (s *Service) Quants(ctx context.Context, id model.RepoID, commit model.Comm
 			sizes[e.Path] = e.Size
 		}
 	}
-	return GroupQuants(sizes), nil
+	return index.GroupQuants(sizes), nil
 }
 
 // Register adds the index Job handler.
@@ -249,7 +242,7 @@ func (s *Service) Register(reg *jobs.Registry) error {
 // HandleJob runs an index Job: it indexes the Commit, stores the results
 // and emits index.completed. Deleted Repos are skipped.
 func (s *Service) HandleJob(ctx context.Context, j *jobs.Job, _ jobs.Progress) error {
-	var p CommitJob
+	var p index.CommitJob
 	if err := j.DecodePayload(&p); err != nil {
 		return jobs.Permanent(err)
 	}
@@ -308,7 +301,7 @@ func (s *Service) ReindexStale(ctx context.Context, q jobs.Queue) (int, error) {
 		Commit string    `bun:"commit_sha"`
 	}
 	err := s.o.DB.NewSelect().TableExpr("metadata").ColumnExpr("repo_id, commit_sha").
-		GroupExpr("repo_id, commit_sha").Having("MAX(indexer_version) < ?", Version).Scan(ctx, &rows)
+		GroupExpr("repo_id, commit_sha").Having("MAX(indexer_version) < ?", index.Version).Scan(ctx, &rows)
 	if err != nil {
 		return 0, err
 	}
@@ -340,7 +333,7 @@ func (s *Service) ReindexStale(ctx context.Context, q jobs.Queue) (int, error) {
 		if r == nil || r.DeletedAt != nil || !heads[row.RepoID][model.CommitSHA(row.Commit)] {
 			continue
 		}
-		job := CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: model.CommitSHA(row.Commit)}
+		job := index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: model.CommitSHA(row.Commit)}
 		if _, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: job.DedupeKey(), Payload: job, Priority: jobs.PriorityLow}); err != nil {
 			return queued, err
 		}

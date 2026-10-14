@@ -1,4 +1,4 @@
-package community_test
+package communitydb_test
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/community"
+	"github.com/jamesagarside/hangar/internal/community/communitydb"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
@@ -24,7 +25,7 @@ type env struct {
 	db    *db.DB
 	repos *repotest.Fake
 	hooks *webhooktest.Fake
-	svc   *community.DB
+	svc   *communitydb.DB
 	repo  *repo.Repo
 	alice model.Principal
 	bob   model.Principal
@@ -40,7 +41,7 @@ func newEnv(t *testing.T, d *db.DB) *env {
 	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "tiny"}
 	e.repo = indextest.CreateRepo(t, e.repos, id, model.VisibilityPublic)
 	indextest.InsertRepoRow(t, d, e.repo)
-	e.svc = community.New(community.Options{DB: d, Repos: e.repos, Webhooks: e.hooks})
+	e.svc = communitydb.New(communitydb.Options{DB: d, Repos: e.repos, Webhooks: e.hooks})
 	return e
 }
 
@@ -188,7 +189,7 @@ func TestMergeAppliesThePullRequest(t *testing.T) {
 		// main moves on without touching the same files.
 		e.commit(t, "main", "", map[string]string{"other.txt": "other"})
 
-		changes, err := community.PRChanges(ctx, e.repos, e.repo.ID, pr, "main")
+		changes, err := communitydb.PRChanges(ctx, e.repos, e.repo.ID, pr, "main")
 		require.NoError(t, err)
 		status := map[string]repo.ChangeStatus{}
 		for _, c := range changes {
@@ -234,7 +235,7 @@ func TestMergeAppliesThePullRequest(t *testing.T) {
 		require.NoError(t, err)
 		_, err = e.svc.Merge(ctx, e.repo.UUID, disc.Num, "", e.alice)
 		require.ErrorIs(t, err, community.ErrNotPullRequest)
-		_, err = community.PRChanges(ctx, e.repos, e.repo.ID, disc, "main")
+		_, err = communitydb.PRChanges(ctx, e.repos, e.repo.ID, disc, "main")
 		require.ErrorIs(t, err, community.ErrNotPullRequest)
 	})
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/api/gen"
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/community"
+	"github.com/jamesagarside/hangar/internal/community/communitydb"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/repo"
 )
@@ -183,7 +184,7 @@ func (a *CommunityAPI) withChanges(r *http.Request, rp *repo.Repo, d *community.
 	if !d.IsPullRequest() {
 		return out, nil
 	}
-	changes, err := community.PRChanges(r.Context(), a.d.Repos, rp.ID, d, rp.DefaultBranch)
+	changes, err := communitydb.PRChanges(r.Context(), a.d.Repos, rp.ID, d, rp.DefaultBranch)
 	if err != nil && !errors.Is(err, community.ErrConflict) {
 		return out, err
 	}

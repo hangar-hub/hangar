@@ -1,4 +1,9 @@
-package community
+// Package communitydb is the database-backed community.Service:
+// discussions and pull requests with merges through the Repo service,
+// likes and daily download counts (REPO-6, REPO-7). It lives apart from
+// package community because the Repo service imports community for its
+// interface.
+package communitydb
 
 import (
 	"bytes"
@@ -17,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 
+	"github.com/jamesagarside/hangar/internal/community"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
@@ -39,13 +45,13 @@ type Options struct {
 	Log      *slog.Logger
 }
 
-// DB is the database-backed Service. Discussion and event authors are
+// DB is the database-backed community.Service. Discussion and event authors are
 // shown by username, read from the users and namespaces tables.
 type DB struct {
 	o Options
 }
 
-var _ Service = (*DB)(nil)
+var _ community.Service = (*DB)(nil)
 
 // New returns a DB service.
 func New(o Options) *DB {
@@ -73,8 +79,8 @@ func (s *DB) selectDiscussions(dst *[]discussionRow) *bun.SelectQuery {
 		Join(fmt.Sprintf(authorJoin, "discussion"))
 }
 
-func toDiscussion(r *discussionRow) Discussion {
-	d := Discussion{Num: r.Num, Kind: r.Kind, Title: r.Title, Status: r.Status, Author: r.AuthorName.String, CreatedAt: r.CreatedAt.UTC()}
+func toDiscussion(r *discussionRow) community.Discussion {
+	d := community.Discussion{Num: r.Num, Kind: r.Kind, Title: r.Title, Status: r.Status, Author: r.AuthorName.String, CreatedAt: r.CreatedAt.UTC()}
 	if r.PRRef != nil {
 		d.PRRef = *r.PRRef
 	}
@@ -84,8 +90,8 @@ func toDiscussion(r *discussionRow) Discussion {
 	return d
 }
 
-func toEvent(r *eventRow) Event {
-	e := Event{ID: r.ID, Type: r.Type, Author: r.AuthorName.String, Body: r.Body, Hidden: r.Hidden, CreatedAt: r.CreatedAt.UTC()}
+func toEvent(r *eventRow) community.Event {
+	e := community.Event{ID: r.ID, Type: r.Type, Author: r.AuthorName.String, Body: r.Body, Hidden: r.Hidden, CreatedAt: r.CreatedAt.UTC()}
 	if len(r.Data) > 0 {
 		_ = json.Unmarshal(r.Data, &e.Data)
 	}
@@ -105,18 +111,18 @@ func toEvent(r *eventRow) Event {
 	return e
 }
 
-// List implements Service, newest first.
-func (s *DB) List(ctx context.Context, repoUUID uuid.UUID, o ListOptions) ([]Discussion, int, error) {
+// List implements community.Service, newest first.
+func (s *DB) List(ctx context.Context, repoUUID uuid.UUID, o community.ListOptions) ([]community.Discussion, int, error) {
 	var rows []discussionRow
 	q := s.selectDiscussions(&rows).Where("discussion.repo_id = ?", repoUUID)
 	if o.Type != "" {
 		q = q.Where("discussion.kind = ?", o.Type)
 	}
 	switch o.Status {
-	case StatusOpen:
-		q = q.Where("discussion.status IN (?)", bun.List([]string{StatusOpen, StatusDraft}))
-	case StatusClosed:
-		q = q.Where("discussion.status IN (?)", bun.List([]string{StatusClosed, StatusMerged}))
+	case community.StatusOpen:
+		q = q.Where("discussion.status IN (?)", bun.List([]string{community.StatusOpen, community.StatusDraft}))
+	case community.StatusClosed:
+		q = q.Where("discussion.status IN (?)", bun.List([]string{community.StatusClosed, community.StatusMerged}))
 	}
 	if o.Author != "" {
 		q = q.Where("lower(an.name) = lower(?)", o.Author)
@@ -132,7 +138,7 @@ func (s *DB) List(ctx context.Context, repoUUID uuid.UUID, o ListOptions) ([]Dis
 	if err := q.Scan(ctx); err != nil {
 		return nil, 0, err
 	}
-	out := make([]Discussion, 0, len(rows))
+	out := make([]community.Discussion, 0, len(rows))
 	for i := range rows {
 		out = append(out, toDiscussion(&rows[i]))
 	}
@@ -148,12 +154,12 @@ func (s *DB) row(ctx context.Context, idb bun.IDB, repoUUID uuid.UUID, num int) 
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("%w: #%d", ErrNotFound, num)
+		return nil, fmt.Errorf("%w: #%d", community.ErrNotFound, num)
 	}
 	return &rows[0], nil
 }
 
-func (s *DB) events(ctx context.Context, discussionID uuid.UUID) ([]Event, error) {
+func (s *DB) events(ctx context.Context, discussionID uuid.UUID) ([]community.Event, error) {
 	var rows []eventRow
 	err := s.o.DB.NewSelect().Model(&rows).ModelTableExpr("discussion_events AS discussion_event").ColumnExpr("discussion_event.*").ColumnExpr("an.name AS author_name").
 		Join(fmt.Sprintf(authorJoin, "discussion_event")).
@@ -161,15 +167,15 @@ func (s *DB) events(ctx context.Context, discussionID uuid.UUID) ([]Event, error
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Event, 0, len(rows))
+	out := make([]community.Event, 0, len(rows))
 	for i := range rows {
 		out = append(out, toEvent(&rows[i]))
 	}
 	return out, nil
 }
 
-// Get implements Service.
-func (s *DB) Get(ctx context.Context, repoUUID uuid.UUID, num int) (*Discussion, error) {
+// Get implements community.Service.
+func (s *DB) Get(ctx context.Context, repoUUID uuid.UUID, num int) (*community.Discussion, error) {
 	r, err := s.row(ctx, s.o.DB, repoUUID, num)
 	if err != nil {
 		return nil, err
@@ -202,23 +208,23 @@ func eventData(data map[string]any, actor model.Principal) db.JSON {
 
 func checkText(title, body string) error {
 	if len(title) > MaxTitle {
-		return fmt.Errorf("%w: the title is longer than %d characters", ErrInvalid, MaxTitle)
+		return fmt.Errorf("%w: the title is longer than %d characters", community.ErrInvalid, MaxTitle)
 	}
 	if len(body) > MaxComment {
-		return fmt.Errorf("%w: the text is longer than %d bytes", ErrInvalid, MaxComment)
+		return fmt.Errorf("%w: the text is longer than %d bytes", community.ErrInvalid, MaxComment)
 	}
 	return nil
 }
 
-// Create implements Service. Numbers are allocated per Repo; a race for
+// Create implements community.Service. Numbers are allocated per Repo; a race for
 // the same number retries.
-func (s *DB) Create(ctx context.Context, p CreateParams) (*Discussion, error) {
+func (s *DB) Create(ctx context.Context, p community.CreateParams) (*community.Discussion, error) {
 	title := strings.TrimSpace(p.Title)
 	if title == "" {
-		return nil, fmt.Errorf("%w: a title is required", ErrInvalid)
+		return nil, fmt.Errorf("%w: a title is required", community.ErrInvalid)
 	}
 	if p.Author.IsAnonymous() {
-		return nil, fmt.Errorf("%w: sign in to open a discussion", ErrInvalid)
+		return nil, fmt.Errorf("%w: sign in to open a discussion", community.ErrInvalid)
 	}
 	if err := checkText(title, p.Description); err != nil {
 		return nil, err
@@ -231,7 +237,7 @@ func (s *DB) Create(ctx context.Context, p CreateParams) (*Discussion, error) {
 				return err
 			}
 			num = int(maxNum.Int64) + 1
-			row := &db.Discussion{ID: db.NewID(), RepoID: p.RepoUUID, Num: num, Kind: KindDiscussion, Title: title, Status: StatusOpen, AuthorID: authorID(p.Author)}
+			row := &db.Discussion{ID: db.NewID(), RepoID: p.RepoUUID, Num: num, Kind: community.KindDiscussion, Title: title, Status: community.StatusOpen, AuthorID: authorID(p.Author)}
 			if p.PullRequest {
 				ref, base := model.PRRef(num), p.Base
 				if base == "" {
@@ -240,7 +246,7 @@ func (s *DB) Create(ctx context.Context, p CreateParams) (*Discussion, error) {
 				if r, err := s.o.Repos.GetByUUID(ctx, p.RepoUUID); err == nil && p.Base == "" {
 					base = r.DefaultBranch
 				}
-				row.Kind, row.Status, row.PRRef, row.PRBase = KindPullRequest, StatusDraft, &ref, &base
+				row.Kind, row.Status, row.PRRef, row.PRBase = community.KindPullRequest, community.StatusDraft, &ref, &base
 			}
 			if _, err := tx.NewInsert().Model(row).Exec(ctx); err != nil {
 				return err
@@ -248,7 +254,7 @@ func (s *DB) Create(ctx context.Context, p CreateParams) (*Discussion, error) {
 			if p.Description == "" {
 				return nil
 			}
-			ev := &db.DiscussionEvent{ID: db.NewID(), DiscussionID: row.ID, Type: EventComment, AuthorID: authorID(p.Author),
+			ev := &db.DiscussionEvent{ID: db.NewID(), DiscussionID: row.ID, Type: community.EventComment, AuthorID: authorID(p.Author),
 				Body: p.Description, Data: eventData(nil, p.Author)}
 			_, err := tx.NewInsert().Model(ev).Exec(ctx)
 			return err
@@ -284,7 +290,7 @@ func (s *DB) emit(ctx context.Context, name webhook.EventName, actor model.Princ
 
 // addEvent records an event, after change (if any) updates the discussion
 // row in the same transaction.
-func (s *DB) addEvent(ctx context.Context, repoUUID uuid.UUID, num int, ev *db.DiscussionEvent, change func(ctx context.Context, tx bun.Tx, d *discussionRow) error) (*Event, error) {
+func (s *DB) addEvent(ctx context.Context, repoUUID uuid.UUID, num int, ev *db.DiscussionEvent, change func(ctx context.Context, tx bun.Tx, d *discussionRow) error) (*community.Event, error) {
 	err := s.o.DB.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
 		d, err := s.row(ctx, tx, repoUUID, num)
 		if err != nil {
@@ -306,18 +312,18 @@ func (s *DB) addEvent(ctx context.Context, repoUUID uuid.UUID, num int, ev *db.D
 	return &out, nil
 }
 
-// Comment implements Service.
-func (s *DB) Comment(ctx context.Context, repoUUID uuid.UUID, num int, body string, author model.Principal) (*Event, error) {
+// Comment implements community.Service.
+func (s *DB) Comment(ctx context.Context, repoUUID uuid.UUID, num int, body string, author model.Principal) (*community.Event, error) {
 	if strings.TrimSpace(body) == "" {
-		return nil, fmt.Errorf("%w: the comment is empty", ErrInvalid)
+		return nil, fmt.Errorf("%w: the comment is empty", community.ErrInvalid)
 	}
 	if author.IsAnonymous() {
-		return nil, fmt.Errorf("%w: sign in to comment", ErrInvalid)
+		return nil, fmt.Errorf("%w: sign in to comment", community.ErrInvalid)
 	}
 	if err := checkText("", body); err != nil {
 		return nil, err
 	}
-	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: EventComment, AuthorID: authorID(author), Body: body, Data: eventData(nil, author)}, nil)
+	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: community.EventComment, AuthorID: authorID(author), Body: body, Data: eventData(nil, author)}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -332,19 +338,19 @@ func setStatus(ctx context.Context, tx bun.Tx, d *discussionRow, status string) 
 	return err
 }
 
-// SetStatus implements Service: open or close a discussion or pull
+// SetStatus implements community.Service: open or close a discussion or pull
 // request. Merged pull requests cannot change status.
-func (s *DB) SetStatus(ctx context.Context, repoUUID uuid.UUID, num int, status, comment string, actor model.Principal) (*Event, error) {
-	if status != StatusOpen && status != StatusClosed {
-		return nil, fmt.Errorf("%w: status must be open or closed", ErrInvalid)
+func (s *DB) SetStatus(ctx context.Context, repoUUID uuid.UUID, num int, status, comment string, actor model.Principal) (*community.Event, error) {
+	if status != community.StatusOpen && status != community.StatusClosed {
+		return nil, fmt.Errorf("%w: status must be open or closed", community.ErrInvalid)
 	}
 	if err := checkText("", comment); err != nil {
 		return nil, err
 	}
-	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: EventStatusChange, AuthorID: authorID(actor), Body: comment,
+	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: community.EventStatusChange, AuthorID: authorID(actor), Body: comment,
 		Data: eventData(map[string]any{"status": status}, actor)}, func(ctx context.Context, tx bun.Tx, d *discussionRow) error {
-		if d.Status == StatusMerged {
-			return ErrNotOpen
+		if d.Status == community.StatusMerged {
+			return community.ErrNotOpen
 		}
 		return setStatus(ctx, tx, d, status)
 	})
@@ -356,17 +362,17 @@ func (s *DB) SetStatus(ctx context.Context, repoUUID uuid.UUID, num int, status,
 	return e, nil
 }
 
-// Rename implements Service.
-func (s *DB) Rename(ctx context.Context, repoUUID uuid.UUID, num int, title string, actor model.Principal) (*Event, error) {
+// Rename implements community.Service.
+func (s *DB) Rename(ctx context.Context, repoUUID uuid.UUID, num int, title string, actor model.Principal) (*community.Event, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
-		return nil, fmt.Errorf("%w: a title is required", ErrInvalid)
+		return nil, fmt.Errorf("%w: a title is required", community.ErrInvalid)
 	}
 	if err := checkText(title, ""); err != nil {
 		return nil, err
 	}
 	data := map[string]any{"to": title}
-	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: EventTitleChange, AuthorID: authorID(actor)},
+	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: community.EventTitleChange, AuthorID: authorID(actor)},
 		func(ctx context.Context, tx bun.Tx, d *discussionRow) error {
 			data["from"] = d.Title
 			d.Title = title
@@ -390,28 +396,28 @@ func (s *DB) eventRow(ctx context.Context, repoUUID uuid.UUID, num int, eventID 
 		return nil, err
 	}
 	var ev db.DiscussionEvent
-	err = s.o.DB.NewSelect().Model(&ev).Where("id = ?", eventID).Where("discussion_id = ?", d.ID).Where("type = ?", EventComment).Scan(ctx)
+	err = s.o.DB.NewSelect().Model(&ev).Where("id = ?", eventID).Where("discussion_id = ?", d.ID).Where("type = ?", community.EventComment).Scan(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: comment %s", ErrNotFound, eventID)
+		return nil, fmt.Errorf("%w: comment %s", community.ErrNotFound, eventID)
 	}
 	return &ev, err
 }
 
-func (s *DB) eventByID(ctx context.Context, id uuid.UUID) (*Event, error) {
+func (s *DB) eventByID(ctx context.Context, id uuid.UUID) (*community.Event, error) {
 	var rows []eventRow
 	err := s.o.DB.NewSelect().Model(&rows).ModelTableExpr("discussion_events AS discussion_event").ColumnExpr("discussion_event.*").ColumnExpr("an.name AS author_name").
 		Join(fmt.Sprintf(authorJoin, "discussion_event")).Where("discussion_event.id = ?", id).Scan(ctx)
 	if err != nil || len(rows) == 0 {
-		return nil, fmt.Errorf("%w: event %s", ErrNotFound, id)
+		return nil, fmt.Errorf("%w: event %s", community.ErrNotFound, id)
 	}
 	e := toEvent(&rows[0])
 	return &e, nil
 }
 
-// EditComment implements Service.
-func (s *DB) EditComment(ctx context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, body string, _ model.Principal) (*Event, error) {
+// EditComment implements community.Service.
+func (s *DB) EditComment(ctx context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, body string, _ model.Principal) (*community.Event, error) {
 	if strings.TrimSpace(body) == "" {
-		return nil, fmt.Errorf("%w: the comment is empty", ErrInvalid)
+		return nil, fmt.Errorf("%w: the comment is empty", community.ErrInvalid)
 	}
 	if err := checkText("", body); err != nil {
 		return nil, err
@@ -421,7 +427,7 @@ func (s *DB) EditComment(ctx context.Context, repoUUID uuid.UUID, num int, event
 		return nil, err
 	}
 	if ev.Hidden {
-		return nil, fmt.Errorf("%w: the comment is hidden", ErrInvalid)
+		return nil, fmt.Errorf("%w: the comment is hidden", community.ErrInvalid)
 	}
 	var data map[string]any
 	_ = json.Unmarshal(ev.Data, &data)
@@ -437,8 +443,8 @@ func (s *DB) EditComment(ctx context.Context, repoUUID uuid.UUID, num int, event
 	return s.eventByID(ctx, eventID)
 }
 
-// HideComment implements Service. The text is removed, not kept.
-func (s *DB) HideComment(ctx context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, _ model.Principal) (*Event, error) {
+// HideComment implements community.Service. The text is removed, not kept.
+func (s *DB) HideComment(ctx context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, _ model.Principal) (*community.Event, error) {
 	if _, err := s.eventRow(ctx, repoUUID, num, eventID); err != nil {
 		return nil, err
 	}
@@ -449,53 +455,53 @@ func (s *DB) HideComment(ctx context.Context, repoUUID uuid.UUID, num int, event
 	return s.eventByID(ctx, eventID)
 }
 
-// Discard implements Service.
+// Discard implements community.Service.
 func (s *DB) Discard(ctx context.Context, repoUUID uuid.UUID, num int) error {
 	d, err := s.Get(ctx, repoUUID, num)
 	if err != nil {
 		return err
 	}
 	if !d.IsPullRequest() {
-		return ErrNotPullRequest
+		return community.ErrNotPullRequest
 	}
-	if len(d.Events) > 1 || (len(d.Events) == 1 && d.Events[0].Type != EventComment) {
-		return ErrNotDiscardable
+	if len(d.Events) > 1 || (len(d.Events) == 1 && d.Events[0].Type != community.EventComment) {
+		return community.ErrNotDiscardable
 	}
 	if r, err := s.o.Repos.GetByUUID(ctx, repoUUID); err == nil {
 		if _, err := s.o.Repos.Resolve(ctx, r.ID, d.PRRef); err == nil {
-			return ErrNotDiscardable
+			return community.ErrNotDiscardable
 		}
 	}
 	_, err = s.o.DB.NewDelete().Model((*db.Discussion)(nil)).Where("repo_id = ?", repoUUID).Where("num = ?", num).Exec(ctx)
 	return err
 }
 
-// Like implements Service. Liking twice is not an error.
+// Like implements community.Service. Liking twice is not an error.
 func (s *DB) Like(ctx context.Context, userID, repoUUID uuid.UUID) error {
 	if userID == uuid.Nil {
-		return fmt.Errorf("%w: sign in to like a Repo", ErrInvalid)
+		return fmt.Errorf("%w: sign in to like a Repo", community.ErrInvalid)
 	}
 	_, err := s.o.DB.NewInsert().Model(&db.Like{UserID: userID, RepoID: repoUUID}).On("CONFLICT DO NOTHING").Exec(ctx)
 	return err
 }
 
-// Unlike implements Service.
+// Unlike implements community.Service.
 func (s *DB) Unlike(ctx context.Context, userID, repoUUID uuid.UUID) error {
 	_, err := s.o.DB.NewDelete().Model((*db.Like)(nil)).Where("user_id = ?", userID).Where("repo_id = ?", repoUUID).Exec(ctx)
 	return err
 }
 
-// Likes implements Service.
+// Likes implements community.Service.
 func (s *DB) Likes(ctx context.Context, repoUUID uuid.UUID) (int64, error) {
 	return s.o.DB.NewSelect().Model((*db.Like)(nil)).Where("repo_id = ?", repoUUID).Count(ctx)
 }
 
-// Liked implements Service.
+// Liked implements community.Service.
 func (s *DB) Liked(ctx context.Context, userID, repoUUID uuid.UUID) (bool, error) {
 	return s.o.DB.NewSelect().Model((*db.Like)(nil)).Where("user_id = ?", userID).Where("repo_id = ?", repoUUID).Exists(ctx)
 }
 
-// Likers implements Service.
+// Likers implements community.Service.
 func (s *DB) Likers(ctx context.Context, repoUUID uuid.UUID) ([]string, error) {
 	var names []string
 	err := s.o.DB.NewSelect().TableExpr("likes AS l").ColumnExpr("n.name").
@@ -507,7 +513,7 @@ func (s *DB) Likers(ctx context.Context, repoUUID uuid.UUID) ([]string, error) {
 	return names, err
 }
 
-// LikedBy implements Service.
+// LikedBy implements community.Service.
 func (s *DB) LikedBy(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	var rows []db.Like
 	if err := s.o.DB.NewSelect().Model(&rows).Where("user_id = ?", userID).Order("created_at DESC").Scan(ctx); err != nil {
@@ -525,7 +531,7 @@ func dayOf(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// RecordDownload implements Service.
+// RecordDownload implements community.Service.
 func (s *DB) RecordDownload(ctx context.Context, repoUUID uuid.UUID, at time.Time) error {
 	row := &db.DownloadCount{RepoID: repoUUID, Day: dayOf(at), Count: 1}
 	_, err := s.o.DB.NewInsert().Model(row).
@@ -534,8 +540,8 @@ func (s *DB) RecordDownload(ctx context.Context, repoUUID uuid.UUID, at time.Tim
 	return err
 }
 
-// Downloads implements Service.
-func (s *DB) Downloads(ctx context.Context, repoUUID uuid.UUID, since time.Time) ([]DayCount, error) {
+// Downloads implements community.Service.
+func (s *DB) Downloads(ctx context.Context, repoUUID uuid.UUID, since time.Time) ([]community.DayCount, error) {
 	var rows []db.DownloadCount
 	q := s.o.DB.NewSelect().Model(&rows).Where("repo_id = ?", repoUUID).Order("day ASC")
 	if !since.IsZero() {
@@ -544,9 +550,9 @@ func (s *DB) Downloads(ctx context.Context, repoUUID uuid.UUID, since time.Time)
 	if err := q.Scan(ctx); err != nil {
 		return nil, err
 	}
-	out := make([]DayCount, 0, len(rows))
+	out := make([]community.DayCount, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, DayCount{Day: dayOf(r.Day), Count: r.Count})
+		out = append(out, community.DayCount{Day: dayOf(r.Day), Count: r.Count})
 	}
 	return out, nil
 }
@@ -610,14 +616,14 @@ func MergeBase(ctx context.Context, repos repo.Service, id model.RepoID, base, h
 			return c.SHA, nil
 		}
 	}
-	return "", fmt.Errorf("%w: the pull request shares no history with its base", ErrConflict)
+	return "", fmt.Errorf("%w: the pull request shares no history with its base", community.ErrConflict)
 }
 
-// Merge implements Service. The pull request's changes since it branched
+// Merge implements community.Service. The pull request's changes since it branched
 // from its base are applied to the base branch as one Commit titled
 // "<title> (#N)", as the Hub does. If the base changed any of the same
-// files since then, Merge returns ErrConflict and changes nothing.
-func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment string, actor model.Principal) (*Event, error) {
+// files since then, Merge returns community.ErrConflict and changes nothing.
+func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment string, actor model.Principal) (*community.Event, error) {
 	if err := checkText("", comment); err != nil {
 		return nil, err
 	}
@@ -626,10 +632,10 @@ func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment str
 		return nil, err
 	}
 	if !d.IsPullRequest() {
-		return nil, ErrNotPullRequest
+		return nil, community.ErrNotPullRequest
 	}
-	if d.Status != StatusOpen && d.Status != StatusDraft {
-		return nil, ErrNotOpen
+	if d.Status != community.StatusOpen && d.Status != community.StatusDraft {
+		return nil, community.ErrNotOpen
 	}
 	r, err := s.o.Repos.GetByUUID(ctx, repoUUID)
 	if err != nil {
@@ -637,7 +643,7 @@ func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment str
 	}
 	head, err := s.o.Repos.Resolve(ctx, r.ID, d.PRRef)
 	if errors.Is(err, repo.ErrRevisionNotFound) {
-		return nil, fmt.Errorf("%w: the pull request has no commits", ErrInvalid)
+		return nil, fmt.Errorf("%w: the pull request has no commits", community.ErrInvalid)
 	}
 	if err != nil {
 		return nil, err
@@ -655,7 +661,7 @@ func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment str
 		return nil, err
 	}
 	if fork == head {
-		return nil, fmt.Errorf("%w: the pull request has no changes to merge", ErrInvalid)
+		return nil, fmt.Errorf("%w: the pull request has no changes to merge", community.ErrInvalid)
 	}
 	forkFiles, err := s.treeFiles(ctx, r.ID, fork)
 	if err != nil {
@@ -682,7 +688,7 @@ func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment str
 			}
 		}
 		if len(conflicts) > 0 {
-			return nil, fmt.Errorf("%w: %s", ErrConflict, strings.Join(conflicts, ", "))
+			return nil, fmt.Errorf("%w: %s", community.ErrConflict, strings.Join(conflicts, ", "))
 		}
 	}
 	var ops []repo.Operation
@@ -707,20 +713,20 @@ func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment str
 		}
 	}
 	if len(ops) == 0 {
-		return nil, fmt.Errorf("%w: the pull request has no changes to merge", ErrInvalid)
+		return nil, fmt.Errorf("%w: the pull request has no changes to merge", community.ErrInvalid)
 	}
 	res, err := s.o.Repos.Commit(ctx, repo.CommitParams{Repo: r.ID, Revision: baseBranch, ParentCommit: baseTip,
 		Summary: d.Title + " (#" + strconv.Itoa(num) + ")", Description: comment, Operations: ops, Actor: actor})
 	if err != nil {
 		return nil, err
 	}
-	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: EventStatusChange, AuthorID: authorID(actor), Body: comment,
-		Data: eventData(map[string]any{"status": StatusMerged, "oid": string(res.SHA)}, actor)},
+	e, err := s.addEvent(ctx, repoUUID, num, &db.DiscussionEvent{Type: community.EventStatusChange, AuthorID: authorID(actor), Body: comment,
+		Data: eventData(map[string]any{"status": community.StatusMerged, "oid": string(res.SHA)}, actor)},
 		func(ctx context.Context, tx bun.Tx, row *discussionRow) error {
-			if row.Status != StatusOpen && row.Status != StatusDraft {
-				return ErrNotOpen
+			if row.Status != community.StatusOpen && row.Status != community.StatusDraft {
+				return community.ErrNotOpen
 			}
-			return setStatus(ctx, tx, row, StatusMerged)
+			return setStatus(ctx, tx, row, community.StatusMerged)
 		})
 	if err != nil {
 		return nil, err
@@ -732,15 +738,15 @@ func (s *DB) Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment str
 
 // Changes summarises the files a pull request changes since it branched
 // from its base, for the files-changed view.
-func (s *DB) Changes(ctx context.Context, id model.RepoID, d *Discussion, defaultBranch string) ([]repo.FileChange, error) {
+func (s *DB) Changes(ctx context.Context, id model.RepoID, d *community.Discussion, defaultBranch string) ([]repo.FileChange, error) {
 	return PRChanges(ctx, s.o.Repos, id, d, defaultBranch)
 }
 
 // PRChanges summarises the files a pull request changes since it branched
 // from its base. A pull request with no commits has no changes.
-func PRChanges(ctx context.Context, repos repo.Service, id model.RepoID, d *Discussion, defaultBranch string) ([]repo.FileChange, error) {
+func PRChanges(ctx context.Context, repos repo.Service, id model.RepoID, d *community.Discussion, defaultBranch string) ([]repo.FileChange, error) {
 	if !d.IsPullRequest() {
-		return nil, ErrNotPullRequest
+		return nil, community.ErrNotPullRequest
 	}
 	head, err := repos.Resolve(ctx, id, d.PRRef)
 	if errors.Is(err, repo.ErrRevisionNotFound) {
