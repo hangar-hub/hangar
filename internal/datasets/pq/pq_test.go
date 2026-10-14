@@ -4,9 +4,15 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"math/rand/v2"
 	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -236,21 +242,132 @@ func TestOpenErrors(t *testing.T) {
 	}
 }
 
-// FuzzOpenAndRead checks that corrupt files give errors, not panics.
-func FuzzOpenAndRead(f *testing.F) {
-	for _, name := range []string{"legacy.parquet"} {
-		b, err := os.ReadFile("testdata/" + name)
-		if err != nil {
-			f.Fatal(err)
+// TestDictionaryIndexOutOfRange reads a copy of legacy.parquet whose first
+// dictionary-encoded data page refers past the end of its dictionary. These
+// two bytes are the input the fuzzer first found panicking in parquet-go's
+// dictionary lookup.
+func TestDictionaryIndexOutOfRange(t *testing.T) {
+	b, err := os.ReadFile("testdata/legacy.parquet")
+	require.NoError(t, err)
+	require.Equal(t, []byte{0xd3, 0x4e}, b[3304:3306], "testdata/legacy.parquet changed; find a new offset")
+	b[3304], b[3305] = 0xff, 0x80
+	f, err := pq.Open(bytes.NewReader(b), int64(len(b)))
+	require.NoError(t, err)
+	cols, err := f.Columns(nil)
+	require.NoError(t, err)
+	_, err = f.ReadRows(cols, 0, 10)
+	require.ErrorIs(t, err, pq.ErrInvalid)
+	require.ErrorContains(t, err, "dictionary index")
+}
+
+// TestCorruptBytesGiveErrors flips bytes of legacy.parquet and the fuzz
+// seeds at fixed, pseudo-random places and reads every row, so the regular
+// test run covers what FuzzOpenAndRead checks. No read may allocate more
+// than 64 MiB: parquet-go allocates what corrupt sizes and counts claim
+// unless pq checks them first.
+func TestCorruptBytesGiveErrors(t *testing.T) {
+	files := seeds(t)
+	legacy, err := os.ReadFile("testdata/legacy.parquet")
+	require.NoError(t, err)
+	files["legacy.parquet"] = legacy
+	names := slices.Sorted(maps.Keys(files))
+	rng := rand.New(rand.NewPCG(1, 2)) //nolint:gosec // reproducible test input, not a secret
+	var before, after runtime.MemStats
+	for _, name := range names {
+		for i := range 400 {
+			b := bytes.Clone(files[name])
+			for range 1 + rng.IntN(3) {
+				b[rng.IntN(len(b))] = byte(rng.IntN(256))
+			}
+			runtime.ReadMemStats(&before)
+			require.NotPanics(t, func() { readAll(t, b, -1) }, "%s mutation %d", name, i)
+			runtime.ReadMemStats(&after)
+			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20), "%s mutation %d", name, i)
 		}
+	}
+}
+
+// seeds returns the small files compat/viewer/oracle/parquet_seeds.py
+// writes with pyarrow.
+func seeds(tb testing.TB) map[string][]byte {
+	tb.Helper()
+	names, err := filepath.Glob("testdata/seeds/*.parquet")
+	require.NoError(tb, err)
+	require.NotEmpty(tb, names)
+	out := map[string][]byte{}
+	for _, n := range names {
+		b, err := os.ReadFile(n)
+		require.NoError(tb, err)
+		out[filepath.Base(n)] = b
+	}
+	return out
+}
+
+// TestSeedsRead checks that the fuzz seeds are valid files the reader
+// reads in full, so the fuzzer starts from inputs that reach the pages, and
+// that the checks before parquet-go reads a file accept every codec and
+// encoding pyarrow writes.
+func TestSeedsRead(t *testing.T) {
+	all := map[string][][]any{}
+	for name, b := range seeds(t) {
+		f, err := pq.Open(bytes.NewReader(b), int64(len(b)))
+		require.NoError(t, err, name)
+		cols, err := f.Columns(nil)
+		require.NoError(t, err)
+		rows, err := f.ReadRows(cols, 0, -1)
+		require.NoError(t, err, name)
+		require.Len(t, rows, int(f.NumRows()), name)
+		require.Positive(t, f.NumRows(), name)
+		all[name] = rows
+	}
+	// The same table in each codec.
+	want := all["list-dict.parquet"]
+	require.Equal(t, []any{int64(3), []any{int64(0), int64(1), nil}}, want[3])
+	for _, name := range []string{"codec-brotli.parquet", "codec-gzip.parquet", "codec-lz4.parquet", "codec-zstd.parquet", "list-v2-snappy.parquet"} {
+		require.Equal(t, want, all[name], name)
+	}
+	enc := all["encodings.parquet"]
+	require.Equal(t, []any{nil, int64(1 << 20), uint64(0), nil, nil, math.Inf(1)}, enc[1])
+	require.Equal(t, []any{false, int64(-5), nil, "é"}, enc[2][:4])
+	require.Empty(t, enc[2][4])
+	require.True(t, math.Signbit(enc[2][5].(float64)))
+}
+
+// FuzzOpenAndRead checks that corrupt files give errors, not panics. The
+// seeds are a few kilobytes each: Go minimises every input that finds new
+// coverage, and minimising a file of tens of kilobytes takes so long that
+// the fuzzer runs almost no inputs.
+func FuzzOpenAndRead(f *testing.F) {
+	for _, b := range seeds(f) {
 		f.Add(b)
 	}
-	f.Fuzz(func(t *testing.T, b []byte) {
-		file, err := pq.Open(bytes.NewReader(b), int64(len(b)))
-		if err != nil {
-			return
+	f.Fuzz(func(t *testing.T, b []byte) { readAll(t, b, 10) })
+}
+
+// readAll opens b and reads its statistics, the first n rows (every row
+// when n < 0) and the last row. Open may fail, but only with ErrInvalid or
+// ErrUnsupported; reads may fail; nothing may panic.
+func readAll(t *testing.T, b []byte, n int64) {
+	t.Helper()
+	f, err := pq.Open(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		if !errors.Is(err, pq.ErrUnsupported) {
+			require.ErrorIs(t, err, pq.ErrInvalid)
 		}
-		cols, _ := file.Columns(nil)
-		_, _ = file.ReadRows(cols, 0, 10)
-	})
+		return
+	}
+	cols, err := f.Columns(nil)
+	require.NoError(t, err)
+	for g := range f.NumRowGroups() {
+		for _, c := range cols {
+			start, count := f.LeafRange(c)
+			for leaf := start; leaf < start+count; leaf++ {
+				f.ColumnStats(g, leaf)
+			}
+		}
+	}
+	_, _ = f.ReadRows(cols, 0, n)
+	if f.NumRows() > 0 {
+		_, _ = f.ReadRows(cols, f.NumRows()-1, 1)
+	}
 }

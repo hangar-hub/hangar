@@ -9,9 +9,11 @@ import (
 	"io"
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/parquet-go/parquet-go"
 	"github.com/parquet-go/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/encoding"
 	"github.com/parquet-go/parquet-go/format"
 
 	"github.com/jamesagarside/hangar/internal/datasets/arrowipc"
@@ -42,8 +44,11 @@ type pnode struct {
 	elem                 *pnode
 	leaf                 int
 	leafStart, leafCount int
-	arrow                *features.Arrow
-	el                   format.SchemaElement
+	// maxDef and maxRep are a leaf's highest definition and repetition
+	// levels.
+	maxDef, maxRep int
+	arrow          *features.Arrow
+	el             format.SchemaElement
 }
 
 // File is an open Parquet file.
@@ -58,7 +63,13 @@ type File struct {
 	// HasFeatures is true when the `huggingface` metadata gave Features.
 	HasFeatures bool
 	cols        []*pnode
+	leaves      []*pnode
 	rowStarts   []int64
+	r           io.ReaderAt
+	size        int64
+	mu          sync.Mutex
+	// checked holds the result of checkChunk by row group and leaf column.
+	checked map[[2]int]error
 }
 
 // OpenOptions configure Open.
@@ -67,20 +78,50 @@ type OpenOptions struct {
 	ReadBufferSize int
 }
 
+// decode runs fn, which calls into parquet-go, and turns a panic into
+// ErrInvalid. parquet-go trusts the lengths, offsets and indexes it reads
+// from a file, so some corrupt files make it index past the end of a
+// buffer. Every caller discards the parquet-go state fn used.
+func decode(fn func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%w: %v", ErrInvalid, r)
+		}
+	}()
+	return fn()
+}
+
 // Open opens a Parquet file and reads its footer.
 func Open(r io.ReaderAt, size int64) (*File, error) {
-	f, err := parquet.OpenFile(r, size, parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
+	if err := checkFooter(r, size); err != nil {
+		return nil, err
+	}
+	var f *parquet.File
+	err := decode(func() error {
+		var err error
+		f, err = parquet.OpenFile(r, size, parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
+		return err
+	})
 	if err != nil {
+		if errors.Is(err, ErrInvalid) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	file := &File{f: f}
+	file := &File{f: f, r: r, size: size, checked: map[[2]int]error{}}
 	if err := file.buildSchema(); err != nil {
 		return nil, err
 	}
 	var start int64
 	for _, rg := range f.RowGroups() {
+		if rg.NumRows() < 0 || start+rg.NumRows() < start {
+			return nil, fmt.Errorf("%w: row group of %d rows", ErrInvalid, rg.NumRows())
+		}
 		file.rowStarts = append(file.rowStarts, start)
 		start += rg.NumRows()
+	}
+	if start != f.NumRows() {
+		return nil, fmt.Errorf("%w: the row groups hold %d rows but the footer says %d", ErrInvalid, start, f.NumRows())
 	}
 	return file, nil
 }
@@ -117,7 +158,8 @@ func (f *File) MaxRowGroupBytes() int64 {
 }
 
 // ColumnStats returns the min and max statistics of a leaf column in a row
-// group when the writer recorded them.
+// group when the writer recorded them. Statistics that cannot be decoded
+// count as not recorded.
 func (f *File) ColumnStats(rowGroup, column int) (minV, maxV parquet.Value, ok bool) {
 	rg := f.f.RowGroups()[rowGroup]
 	chunks := rg.ColumnChunks()
@@ -127,10 +169,17 @@ func (f *File) ColumnStats(rowGroup, column int) (minV, maxV parquet.Value, ok b
 	type bounded interface {
 		Bounds() (min, max parquet.Value, ok bool)
 	}
-	if b, ok := chunks[column].(bounded); ok {
-		return b.Bounds()
+	b, isBounded := chunks[column].(bounded)
+	if !isBounded {
+		return parquet.Value{}, parquet.Value{}, false
 	}
-	return parquet.Value{}, parquet.Value{}, false
+	if err := decode(func() error {
+		minV, maxV, ok = b.Bounds()
+		return nil
+	}); err != nil {
+		return parquet.Value{}, parquet.Value{}, false
+	}
+	return minV, maxV, ok
 }
 
 // LeafRange returns the first leaf column index and count of a top-level column.
@@ -170,6 +219,7 @@ func (f *File) buildSchema() error {
 	}
 	for _, c := range f.cols {
 		f.Schema.Fields = append(f.Schema.Fields, features.ArrowField{Name: c.name, Type: c.arrow})
+		f.leaves = appendLeaves(f.leaves, c)
 	}
 	f.Features = features.FromArrowSchema(f.Schema)
 	if meta, ok := f.f.Lookup(MetadataKey); ok {
@@ -195,6 +245,20 @@ func (f *File) buildSchema() error {
 		}
 	}
 	return nil
+}
+
+// appendLeaves appends n's leaf columns in file order.
+func appendLeaves(out []*pnode, n *pnode) []*pnode {
+	switch n.kind {
+	case kindLeaf:
+		return append(out, n)
+	case kindList:
+		return appendLeaves(out, n.elem)
+	}
+	for _, c := range n.children {
+		out = appendLeaves(out, c)
+	}
+	return out
 }
 
 // compatible reports whether values read as a can be read as b: the same
@@ -289,7 +353,7 @@ func buildBody(els []format.SchemaElement, el format.SchemaElement, pos, leaf *i
 		if err != nil {
 			return nil, err
 		}
-		n := &pnode{name: el.Name, kind: kindLeaf, leaf: *leaf, leafStart: *leaf, leafCount: 1, arrow: a, el: el}
+		n := &pnode{name: el.Name, kind: kindLeaf, leaf: *leaf, leafStart: *leaf, leafCount: 1, arrow: a, el: el, maxDef: def, maxRep: rep}
 		*leaf++
 		return n, nil
 	}
@@ -534,62 +598,107 @@ func convert(v parquet.Value, el format.SchemaElement, a *features.Arrow) any {
 	return nil
 }
 
-// leafReader streams one leaf column's values of a row group.
+// leafReader streams one leaf column's values of a row group, a batch at
+// a time, so its memory does not grow with the size of a page.
 type leafReader struct {
 	pages parquet.Pages
-	buf   []parquet.Value
-	pos   int
-	done  bool
+	// page is the page being read and values its reader; both are nil
+	// between pages.
+	page   parquet.Page
+	values parquet.ValueReader
+	batch  []parquet.Value
+	buf    []parquet.Value
+	pos    int
+	done   bool
+}
+
+// batchSize is the number of values read from a page at a time.
+const batchSize = 1024
+
+func (l *leafReader) release() {
+	if l.page != nil {
+		parquet.Release(l.page)
+	}
+	l.page, l.values = nil, nil
 }
 
 func (l *leafReader) close() {
+	l.release()
 	if l.pages != nil {
-		_ = l.pages.Close()
+		_ = decode(l.pages.Close)
 	}
 }
 
-// fill reads the next page's values.
+// fill reads the next batch of values. After an error the reader is done.
 func (l *leafReader) fill() error {
+	err := decode(l.readBatch)
+	if err != nil {
+		l.release()
+		l.done, l.buf, l.pos = true, nil, 0
+	}
+	return err
+}
+
+// readBatch reads values until it has some or the column ends.
+func (l *leafReader) readBatch() error {
+	if l.batch == nil {
+		l.batch = make([]parquet.Value, batchSize)
+	}
 	for {
-		page, err := l.pages.ReadPage()
-		if errors.Is(err, io.EOF) {
-			l.done = true
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		n := page.NumValues()
-		if n > 1<<28 {
-			parquet.Release(page)
-			return fmt.Errorf("%w: page with %d values", ErrInvalid, n)
-		}
-		vals := make([]parquet.Value, n)
-		got := 0
-		r := page.Values()
-		for got < len(vals) {
-			k, err := r.ReadValues(vals[got:])
-			got += k
+		if l.values == nil {
+			page, err := l.pages.ReadPage()
 			if errors.Is(err, io.EOF) {
-				break
+				l.done = true
+				l.buf, l.pos = nil, 0
+				return nil
 			}
 			if err != nil {
-				parquet.Release(page)
 				return err
 			}
-			if k == 0 {
-				break
+			l.page = page
+			if err := checkDictionaryIndexes(page); err != nil {
+				return err
 			}
+			l.values = page.Values()
 		}
-		for i := range vals[:got] {
-			vals[i] = vals[i].Clone()
+		k, err := l.values.ReadValues(l.batch)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
 		}
-		parquet.Release(page)
-		l.buf, l.pos = vals[:got], 0
-		if got > 0 {
+		// Values can point into the page, which is released when read.
+		l.buf, l.pos = l.buf[:0], 0
+		for _, v := range l.batch[:k] {
+			l.buf = append(l.buf, v.Clone())
+		}
+		if errors.Is(err, io.EOF) || k == 0 {
+			l.release()
+		}
+		if k > 0 {
 			return nil
 		}
 	}
+}
+
+// checkDictionaryIndexes reports ErrInvalid when a dictionary-encoded page
+// refers to a value past the end of its dictionary. parquet-go looks the
+// indexes up without checking them, so a corrupt page would otherwise panic
+// with an index out of range.
+func checkDictionaryIndexes(page parquet.Page) error {
+	dict := page.Dictionary()
+	if dict == nil {
+		return nil
+	}
+	data := page.Data()
+	if data.Kind() != encoding.Int32 {
+		return fmt.Errorf("%w: dictionary page without indexes", ErrInvalid)
+	}
+	size := dict.Len()
+	for _, i := range data.Int32() {
+		if i < 0 || int(i) >= size {
+			return fmt.Errorf("%w: dictionary index %d is out of range for %d values", ErrInvalid, i, size)
+		}
+	}
+	return nil
 }
 
 // row returns the values of the next row.
@@ -696,9 +805,18 @@ func (s *Scanner) open() error {
 			if l >= len(chunks) {
 				return fmt.Errorf("%w: missing column chunk", ErrInvalid)
 			}
-			pages := chunks[l].Pages()
-			if err := pages.SeekToRow(local); err != nil {
-				_ = pages.Close()
+			if err := s.f.checkChunk(rg, l); err != nil {
+				return err
+			}
+			var pages parquet.Pages
+			err := decode(func() error {
+				pages = chunks[l].Pages()
+				return pages.SeekToRow(local)
+			})
+			if err != nil {
+				if pages != nil {
+					_ = decode(pages.Close)
+				}
 				return err
 			}
 			s.readers = append(s.readers, &leafReader{pages: pages})
