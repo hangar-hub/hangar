@@ -1,0 +1,49 @@
+{
+ "builder": "audiofolder",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.wav",
+   "b.wav",
+   "metadata.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 293,
+   "embedded_nbytes": 2540,
+   "rows": [
+    {
+     "audio": {
+      "media": "a.wav",
+      "size": 844
+     },
+     "speaker": "x",
+     "dur": 0.1
+    },
+    {
+     "audio": {
+      "media": "b.wav",
+      "size": 1644
+     },
+     "speaker": "y",
+     "dur": 0.2
+    }
+   ]
+  }
+ },
+ "features": {
+  "audio": {
+   "_type": "Audio"
+  },
+  "speaker": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "dur": {
+   "dtype": "float64",
+   "_type": "Value"
+  }
+ }
+}

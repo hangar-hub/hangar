@@ -1,0 +1,37 @@
+{
+ "builder": "csv",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 1,
+   "num_bytes": 42,
+   "embedded_nbytes": 42,
+   "rows": [
+    {
+     "x": "a \"quoted\" value",
+     "x.1": "multi\nline",
+     "Unnamed: 2": 9
+    }
+   ]
+  }
+ },
+ "features": {
+  "x": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "x.1": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "Unnamed: 2": {
+   "dtype": "int64",
+   "_type": "Value"
+  }
+ }
+}

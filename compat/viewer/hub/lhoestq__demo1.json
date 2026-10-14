@@ -1,0 +1,894 @@
+{
+ "dataset": "lhoestq/demo1",
+ "responses": {
+  "is-valid": {
+   "preview": true,
+   "viewer": true,
+   "search": true,
+   "filter": true,
+   "statistics": true
+  },
+  "splits": {
+   "splits": [
+    {
+     "dataset": "lhoestq/demo1",
+     "config": "default",
+     "split": "train"
+    },
+    {
+     "dataset": "lhoestq/demo1",
+     "config": "default",
+     "split": "test"
+    }
+   ],
+   "pending": [],
+   "failed": []
+  },
+  "info": {
+   "dataset_info": {
+    "default": {
+     "description": "",
+     "citation": "",
+     "homepage": "",
+     "license": "",
+     "features": {
+      "id": {
+       "dtype": "string",
+       "_type": "Value"
+      },
+      "package_name": {
+       "dtype": "string",
+       "_type": "Value"
+      },
+      "review": {
+       "dtype": "string",
+       "_type": "Value"
+      },
+      "date": {
+       "dtype": "string",
+       "_type": "Value"
+      },
+      "star": {
+       "dtype": "int64",
+       "_type": "Value"
+      },
+      "version_id": {
+       "dtype": "int64",
+       "_type": "Value"
+      }
+     },
+     "builder_name": "csv",
+     "dataset_name": "demo1",
+     "config_name": "default",
+     "version": {
+      "version_str": "0.0.0",
+      "major": 0,
+      "minor": 0,
+      "patch": 0
+     },
+     "splits": {
+      "train": {
+       "name": "train",
+       "num_bytes": 1508,
+       "num_examples": 5,
+       "dataset_name": "demo1"
+      },
+      "test": {
+       "name": "test",
+       "num_bytes": 956,
+       "num_examples": 5,
+       "dataset_name": "demo1"
+      }
+     },
+     "download_checksums": {
+      "hf://datasets/lhoestq/demo1@87ecf163bedca9d80598b528940a9c4f99e14c11/data/train.csv": {
+       "num_bytes": 1446,
+       "checksum": null
+      },
+      "hf://datasets/lhoestq/demo1@87ecf163bedca9d80598b528940a9c4f99e14c11/data/test.csv": {
+       "num_bytes": 894,
+       "checksum": null
+      }
+     },
+     "download_size": 2340,
+     "dataset_size": 2464,
+     "size_in_bytes": 4804
+    }
+   },
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "size": {
+   "size": {
+    "dataset": {
+     "dataset": "lhoestq/demo1",
+     "num_bytes_original_files": 2340,
+     "num_bytes_parquet_files": 9453,
+     "num_bytes_memory": 2464,
+     "num_rows": 10,
+     "estimated_num_rows": null
+    },
+    "configs": [
+     {
+      "dataset": "lhoestq/demo1",
+      "config": "default",
+      "num_bytes_original_files": 2340,
+      "num_bytes_parquet_files": 9453,
+      "num_bytes_memory": 2464,
+      "num_rows": 10,
+      "num_columns": 6,
+      "estimated_num_rows": null
+     }
+    ],
+    "splits": [
+     {
+      "dataset": "lhoestq/demo1",
+      "config": "default",
+      "split": "train",
+      "num_bytes_parquet_files": 5038,
+      "num_bytes_memory": 1508,
+      "num_rows": 5,
+      "num_columns": 6,
+      "estimated_num_rows": null
+     },
+     {
+      "dataset": "lhoestq/demo1",
+      "config": "default",
+      "split": "test",
+      "num_bytes_parquet_files": 4415,
+      "num_bytes_memory": 956,
+      "num_rows": 5,
+      "num_columns": 6,
+      "estimated_num_rows": null
+     }
+    ]
+   },
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "parquet": {
+   "parquet_files": [
+    {
+     "dataset": "lhoestq/demo1",
+     "config": "default",
+     "split": "test",
+     "url": "https://huggingface.co/datasets/lhoestq/demo1/resolve/refs%2Fconvert%2Fparquet/default/test/0000.parquet",
+     "filename": "0000.parquet",
+     "size": 4415
+    },
+    {
+     "dataset": "lhoestq/demo1",
+     "config": "default",
+     "split": "train",
+     "url": "https://huggingface.co/datasets/lhoestq/demo1/resolve/refs%2Fconvert%2Fparquet/default/train/0000.parquet",
+     "filename": "0000.parquet",
+     "size": 5038
+    }
+   ],
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "first-rows default/train": {
+   "dataset": "lhoestq/demo1",
+   "config": "default",
+   "split": "train",
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "id",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "package_name",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 2,
+     "name": "review",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 3,
+     "name": "date",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 4,
+     "name": "star",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 5,
+     "name": "version_id",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "id": "7bd227d9-afc9-11e6-aba1-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Great app! The new version now works on my Bravia Android TV which is great as it's right by my rooftop aerial cable. The scan feature would be useful...any ETA on when this will be available? Also the option to import a list of bookmarks e.g. from a simple properties file would be useful.",
+      "date": "October 12 2016",
+      "star": 4,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "id": "7bd22905-afc9-11e6-a5dc-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Great It's not fully optimised and has some issues with crashing but still a nice app  especially considering the price and it's open source.",
+      "date": "August 23 2016",
+      "star": 4,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 2,
+     "row": {
+      "id": "7bd2299c-afc9-11e6-85d6-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works on a Nexus 6p I'm still messing around with my hackrf but it works with my Nexus 6p  Trond usb-c to usb host adapter. Thanks!",
+      "date": "August 04 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 3,
+     "row": {
+      "id": "7bd22a26-afc9-11e6-9309-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "The bandwidth seemed to be limited to maximum 2 MHz or so. I tried to increase the bandwidth but not possible. I purchased this is because one of the pictures in the advertisement showed the 2.4GHz band with around 10MHz or more bandwidth. Is it not possible to increase the bandwidth? If not  it is just the same performance as other free APPs.",
+      "date": "July 25 2016",
+      "star": 3,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 4,
+     "row": {
+      "id": "7bd22aba-afc9-11e6-8293-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works well with my Hackrf Hopefully new updates will arrive for extra functions",
+      "date": "July 22 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    }
+   ],
+   "truncated": false
+  },
+  "rows default/train 0": {
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "id",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "package_name",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 2,
+     "name": "review",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 3,
+     "name": "date",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 4,
+     "name": "star",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 5,
+     "name": "version_id",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "id": "7bd227d9-afc9-11e6-aba1-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Great app! The new version now works on my Bravia Android TV which is great as it's right by my rooftop aerial cable. The scan feature would be useful...any ETA on when this will be available? Also the option to import a list of bookmarks e.g. from a simple properties file would be useful.",
+      "date": "October 12 2016",
+      "star": 4,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "id": "7bd22905-afc9-11e6-a5dc-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Great It's not fully optimised and has some issues with crashing but still a nice app  especially considering the price and it's open source.",
+      "date": "August 23 2016",
+      "star": 4,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 2,
+     "row": {
+      "id": "7bd2299c-afc9-11e6-85d6-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works on a Nexus 6p I'm still messing around with my hackrf but it works with my Nexus 6p  Trond usb-c to usb host adapter. Thanks!",
+      "date": "August 04 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 3,
+     "row": {
+      "id": "7bd22a26-afc9-11e6-9309-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "The bandwidth seemed to be limited to maximum 2 MHz or so. I tried to increase the bandwidth but not possible. I purchased this is because one of the pictures in the advertisement showed the 2.4GHz band with around 10MHz or more bandwidth. Is it not possible to increase the bandwidth? If not  it is just the same performance as other free APPs.",
+      "date": "July 25 2016",
+      "star": 3,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 4,
+     "row": {
+      "id": "7bd22aba-afc9-11e6-8293-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works well with my Hackrf Hopefully new updates will arrive for extra functions",
+      "date": "July 22 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    }
+   ],
+   "num_rows_total": 5,
+   "num_rows_per_page": 100,
+   "partial": false
+  },
+  "statistics default/train": {
+   "num_examples": 5,
+   "statistics": [
+    {
+     "column_name": "date",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 5,
+      "frequencies": {
+       "July 22 2016": 1,
+       "July 25 2016": 1,
+       "October 12 2016": 1,
+       "August 04 2016": 1,
+       "August 23 2016": 1
+      }
+     }
+    },
+    {
+     "column_name": "id",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 5,
+      "frequencies": {
+       "7bd22a26-afc9-11e6-9309-c4b301cdf627": 1,
+       "7bd22905-afc9-11e6-a5dc-c4b301cdf627": 1,
+       "7bd2299c-afc9-11e6-85d6-c4b301cdf627": 1,
+       "7bd22aba-afc9-11e6-8293-c4b301cdf627": 1,
+       "7bd227d9-afc9-11e6-aba1-c4b301cdf627": 1
+      }
+     }
+    },
+    {
+     "column_name": "package_name",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 1,
+      "frequencies": {
+       "com.mantz_it.rfanalyzer": 5
+      }
+     }
+    },
+    {
+     "column_name": "review",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 5,
+      "frequencies": {
+       "Works on a Nexus 6p I'm still messing around with my hackrf but it works with my Nexus 6p  Trond usb-c to usb host adapter. Thanks!": 1,
+       "The bandwidth seemed to be limited to maximum 2 MHz or so. I tried to increase the bandwidth but not possible. I purchased this is because one of the pictures in the advertisement showed the 2.4GHz band with around 10MHz or more bandwidth. Is it not possible to increase the bandwidth? If not  it is just the same performance as other free APPs.": 1,
+       "Great app! The new version now works on my Bravia Android TV which is great as it's right by my rooftop aerial cable. The scan feature would be useful...any ETA on when this will be available? Also the option to import a list of bookmarks e.g. from a simple properties file would be useful.": 1,
+       "Works well with my Hackrf Hopefully new updates will arrive for extra functions": 1,
+       "Great It's not fully optimised and has some issues with crashing but still a nice app  especially considering the price and it's open source.": 1
+      }
+     }
+    },
+    {
+     "column_name": "star",
+     "column_type": "int",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 3,
+      "max": 5,
+      "mean": 4.2,
+      "median": 4.0,
+      "std": 0.83666,
+      "histogram": {
+       "hist": [
+        1,
+        2,
+        2
+       ],
+       "bin_edges": [
+        3,
+        4,
+        5,
+        5
+       ]
+      }
+     }
+    },
+    {
+     "column_name": "version_id",
+     "column_type": "int",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 1487,
+      "max": 1487,
+      "mean": 1487.0,
+      "median": 1487.0,
+      "std": 0.0,
+      "histogram": {
+       "hist": [
+        5
+       ],
+       "bin_edges": [
+        1487,
+        1487
+       ]
+      }
+     }
+    }
+   ],
+   "partial": false
+  },
+  "first-rows default/test": {
+   "dataset": "lhoestq/demo1",
+   "config": "default",
+   "split": "test",
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "id",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "package_name",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 2,
+     "name": "review",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 3,
+     "name": "date",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 4,
+     "name": "star",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 5,
+     "name": "version_id",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "id": "7bd22c54-afc9-11e6-98dc-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works with RTL and Nextbook Aries 8. Demod stops working if the scan width is changed requiring restart.",
+      "date": "May 19 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "id": "7bd22cd9-afc9-11e6-9322-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works with RTL SDR Works but no audio when demodulating",
+      "date": "April 24 2016",
+      "star": 3,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 2,
+     "row": {
+      "id": "7bd22d59-afc9-11e6-a7a7-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Awsome App! Easy to use  works great on Notes w / Realtek dongle.",
+      "date": "April 16 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 3,
+     "row": {
+      "id": "7bd22ddc-afc9-11e6-9a16-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "I'll forgo the refund. But no go with Watson dongle... Nexus 9. Yet to try on Nexus 6p. So very disappointed!!! :-(",
+      "date": "March 31 2016",
+      "star": 1,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 4,
+     "row": {
+      "id": "7bd22e5c-afc9-11e6-8a41-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "looks like a great program  1 of its kind I don't have the necessary hardware to utilize it though.",
+      "date": "March 30 2016",
+      "star": 4,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    }
+   ],
+   "truncated": false
+  },
+  "rows default/test 0": {
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "id",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "package_name",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 2,
+     "name": "review",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 3,
+     "name": "date",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 4,
+     "name": "star",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    },
+    {
+     "feature_idx": 5,
+     "name": "version_id",
+     "type": {
+      "dtype": "int64",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "id": "7bd22c54-afc9-11e6-98dc-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works with RTL and Nextbook Aries 8. Demod stops working if the scan width is changed requiring restart.",
+      "date": "May 19 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "id": "7bd22cd9-afc9-11e6-9322-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Works with RTL SDR Works but no audio when demodulating",
+      "date": "April 24 2016",
+      "star": 3,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 2,
+     "row": {
+      "id": "7bd22d59-afc9-11e6-a7a7-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "Awsome App! Easy to use  works great on Notes w / Realtek dongle.",
+      "date": "April 16 2016",
+      "star": 5,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 3,
+     "row": {
+      "id": "7bd22ddc-afc9-11e6-9a16-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "I'll forgo the refund. But no go with Watson dongle... Nexus 9. Yet to try on Nexus 6p. So very disappointed!!! :-(",
+      "date": "March 31 2016",
+      "star": 1,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 4,
+     "row": {
+      "id": "7bd22e5c-afc9-11e6-8a41-c4b301cdf627",
+      "package_name": "com.mantz_it.rfanalyzer",
+      "review": "looks like a great program  1 of its kind I don't have the necessary hardware to utilize it though.",
+      "date": "March 30 2016",
+      "star": 4,
+      "version_id": 1487
+     },
+     "truncated_cells": []
+    }
+   ],
+   "num_rows_total": 5,
+   "num_rows_per_page": 100,
+   "partial": false
+  },
+  "statistics default/test": {
+   "num_examples": 5,
+   "statistics": [
+    {
+     "column_name": "date",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 5,
+      "frequencies": {
+       "April 16 2016": 1,
+       "April 24 2016": 1,
+       "March 30 2016": 1,
+       "May 19 2016": 1,
+       "March 31 2016": 1
+      }
+     }
+    },
+    {
+     "column_name": "id",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 5,
+      "frequencies": {
+       "7bd22d59-afc9-11e6-a7a7-c4b301cdf627": 1,
+       "7bd22e5c-afc9-11e6-8a41-c4b301cdf627": 1,
+       "7bd22ddc-afc9-11e6-9a16-c4b301cdf627": 1,
+       "7bd22cd9-afc9-11e6-9322-c4b301cdf627": 1,
+       "7bd22c54-afc9-11e6-98dc-c4b301cdf627": 1
+      }
+     }
+    },
+    {
+     "column_name": "package_name",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 1,
+      "frequencies": {
+       "com.mantz_it.rfanalyzer": 5
+      }
+     }
+    },
+    {
+     "column_name": "review",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 5,
+      "frequencies": {
+       "Awsome App! Easy to use  works great on Notes w / Realtek dongle.": 1,
+       "Works with RTL SDR Works but no audio when demodulating": 1,
+       "I'll forgo the refund. But no go with Watson dongle... Nexus 9. Yet to try on Nexus 6p. So very disappointed!!! :-(": 1,
+       "looks like a great program  1 of its kind I don't have the necessary hardware to utilize it though.": 1,
+       "Works with RTL and Nextbook Aries 8. Demod stops working if the scan width is changed requiring restart.": 1
+      }
+     }
+    },
+    {
+     "column_name": "star",
+     "column_type": "int",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 1,
+      "max": 5,
+      "mean": 3.6,
+      "median": 4.0,
+      "std": 1.67332,
+      "histogram": {
+       "hist": [
+        1,
+        0,
+        1,
+        1,
+        2
+       ],
+       "bin_edges": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        5
+       ]
+      }
+     }
+    },
+    {
+     "column_name": "version_id",
+     "column_type": "int",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 1487,
+      "max": 1487,
+      "mean": 1487.0,
+      "median": 1487.0,
+      "std": 0.0,
+      "histogram": {
+       "hist": [
+        5
+       ],
+       "bin_edges": [
+        1487,
+        1487
+       ]
+      }
+     }
+    }
+   ],
+   "partial": false
+  }
+ },
+ "revision": "87ecf163bedca9d80598b528940a9c4f99e14c11"
+}

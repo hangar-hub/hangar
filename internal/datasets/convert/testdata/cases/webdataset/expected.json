@@ -1,0 +1,99 @@
+{
+ "builder": "webdataset",
+ "options": {},
+ "data_files": {
+  "train": [
+   "shard-0000.tar"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 453,
+   "embedded_nbytes": 447,
+   "rows": [
+    {
+     "png": {
+      "media": "000.png",
+      "size": 79
+     },
+     "json": {
+      "label": 1,
+      "tags": [
+       "a"
+      ]
+     },
+     "txt": "hello",
+     "cls": 3,
+     "__key__": "s/000",
+     "__url__": "shard-0000.tar"
+    },
+    {
+     "png": {
+      "media": "001.png",
+      "size": 75
+     },
+     "json": {
+      "label": 0,
+      "tags": []
+     },
+     "txt": "world",
+     "cls": 4,
+     "__key__": "s/001",
+     "__url__": "shard-0000.tar"
+    },
+    {
+     "png": {
+      "media": "002.png",
+      "size": 69
+     },
+     "json": {
+      "label": 2,
+      "tags": [
+       "b",
+       "c"
+      ]
+     },
+     "txt": "!",
+     "cls": 5,
+     "__key__": "s/002",
+     "__url__": "shard-0000.tar"
+    }
+   ]
+  }
+ },
+ "features": {
+  "png": {
+   "_type": "Image"
+  },
+  "json": {
+   "label": {
+    "dtype": "int64",
+    "_type": "Value"
+   },
+   "tags": {
+    "feature": {
+     "dtype": "string",
+     "_type": "Value"
+    },
+    "_type": "List"
+   }
+  },
+  "txt": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "cls": {
+   "dtype": "int64",
+   "_type": "Value"
+  },
+  "__key__": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "__url__": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

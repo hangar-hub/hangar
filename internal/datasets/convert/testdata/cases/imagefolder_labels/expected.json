@@ -1,0 +1,70 @@
+{
+ "builder": "imagefolder",
+ "options": {},
+ "data_files": {
+  "train": [
+   "train/cat/a.png",
+   "train/cat/b.png",
+   "train/dog/c.png"
+  ],
+  "test": [
+   "test/dog/d.png"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 457,
+   "embedded_nbytes": 346,
+   "rows": [
+    {
+     "image": {
+      "media": "a.png",
+      "size": 85
+     },
+     "label": 0
+    },
+    {
+     "image": {
+      "media": "b.png",
+      "size": 117
+     },
+     "label": 0
+    },
+    {
+     "image": {
+      "media": "c.png",
+      "size": 81
+     },
+     "label": 1
+    }
+   ]
+  },
+  "test": {
+   "num_examples": 1,
+   "num_bytes": 152,
+   "embedded_nbytes": 100,
+   "rows": [
+    {
+     "image": {
+      "media": "d.png",
+      "size": 79
+     },
+     "label": 1
+    }
+   ]
+  }
+ },
+ "features": {
+  "image": {
+   "_type": "Image"
+  },
+  "label": {
+   "names": [
+    "cat",
+    "dog"
+   ],
+   "_type": "ClassLabel"
+  }
+ }
+}

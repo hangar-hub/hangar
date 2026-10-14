@@ -1,0 +1,356 @@
+{
+ "dataset": "datasets-examples/doc-audio-6",
+ "responses": {
+  "is-valid": {
+   "preview": true,
+   "viewer": true,
+   "search": true,
+   "filter": true,
+   "statistics": true
+  },
+  "splits": {
+   "splits": [
+    {
+     "dataset": "datasets-examples/doc-audio-6",
+     "config": "default",
+     "split": "train"
+    }
+   ],
+   "pending": [],
+   "failed": []
+  },
+  "info": {
+   "dataset_info": {
+    "default": {
+     "description": "",
+     "citation": "",
+     "homepage": "",
+     "license": "",
+     "features": {
+      "audio": {
+       "_type": "Audio"
+      },
+      "animal": {
+       "dtype": "string",
+       "_type": "Value"
+      }
+     },
+     "builder_name": "audiofolder",
+     "dataset_name": "doc-audio-6",
+     "config_name": "default",
+     "version": {
+      "version_str": "0.0.0",
+      "major": 0,
+      "minor": 0,
+      "patch": 0
+     },
+     "splits": {
+      "train": {
+       "name": "train",
+       "num_bytes": 324262,
+       "num_examples": 4,
+       "dataset_name": "doc-audio-6"
+      }
+     },
+     "download_checksums": {
+      "hf://datasets/datasets-examples/doc-audio-6@c8f51c4264ab394e9d4b602dafcb5b0c0113ff5b/1.wav": {
+       "num_bytes": 162988,
+       "checksum": null
+      },
+      "hf://datasets/datasets-examples/doc-audio-6@c8f51c4264ab394e9d4b602dafcb5b0c0113ff5b/2.wav": {
+       "num_bytes": 100136,
+       "checksum": null
+      },
+      "hf://datasets/datasets-examples/doc-audio-6@c8f51c4264ab394e9d4b602dafcb5b0c0113ff5b/3.wav": {
+       "num_bytes": 33632,
+       "checksum": null
+      },
+      "hf://datasets/datasets-examples/doc-audio-6@c8f51c4264ab394e9d4b602dafcb5b0c0113ff5b/4.wav": {
+       "num_bytes": 27190,
+       "checksum": null
+      },
+      "hf://datasets/datasets-examples/doc-audio-6@c8f51c4264ab394e9d4b602dafcb5b0c0113ff5b/metadata.jsonl": {
+       "num_bytes": 156,
+       "checksum": null
+      }
+     },
+     "download_size": 324102,
+     "dataset_size": 324262,
+     "size_in_bytes": 648364
+    }
+   },
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "size": {
+   "size": {
+    "dataset": {
+     "dataset": "datasets-examples/doc-audio-6",
+     "num_bytes_original_files": 324102,
+     "num_bytes_parquet_files": 326080,
+     "num_bytes_memory": 324262,
+     "num_rows": 4,
+     "estimated_num_rows": null
+    },
+    "configs": [
+     {
+      "dataset": "datasets-examples/doc-audio-6",
+      "config": "default",
+      "num_bytes_original_files": 324102,
+      "num_bytes_parquet_files": 326080,
+      "num_bytes_memory": 324262,
+      "num_rows": 4,
+      "num_columns": 2,
+      "estimated_num_rows": null
+     }
+    ],
+    "splits": [
+     {
+      "dataset": "datasets-examples/doc-audio-6",
+      "config": "default",
+      "split": "train",
+      "num_bytes_parquet_files": 326080,
+      "num_bytes_memory": 324262,
+      "num_rows": 4,
+      "num_columns": 2,
+      "estimated_num_rows": null
+     }
+    ]
+   },
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "parquet": {
+   "parquet_files": [
+    {
+     "dataset": "datasets-examples/doc-audio-6",
+     "config": "default",
+     "split": "train",
+     "url": "https://huggingface.co/datasets/datasets-examples/doc-audio-6/resolve/refs%2Fconvert%2Fparquet/default/train/0000.parquet",
+     "filename": "0000.parquet",
+     "size": 326080
+    }
+   ],
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "first-rows default/train": {
+   "dataset": "datasets-examples/doc-audio-6",
+   "config": "default",
+   "split": "train",
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "audio",
+     "type": {
+      "_type": "Audio"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "animal",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/0/audio/audio.wav?Expires=1791936059&Signature=ryKhuzSvjlh7OopIuAnXRxS9iC8fMWbrAl~QN1Ub5n3XTmQmNl7Q9gCSshcwfiTbHbCOTtde3KJOivxRLXw86ZdPbHxjIP9nhgUJLyM5IC9J1pI0EN5giFfkQxoj2y-p3vYsVDQBmRKQX2iwInI994-uHmc4UlamxgLM6UWNJUSLIWvL-ejzQ6gAT-4pSciemwzz0e4a1INJzP3mAHzHI8Rrh6QdHDwY4ctRHN2ruEwmytoasH8EJ~TQVxBsCSBW8ArXx6aSZ9uitAxXCu7AhbSZsVHqts-ADL-4rKPXNOMQLdvBnVid7x~uq0By1VE8TKIjFhrI-hH7slqhGVVlww__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "cat"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/1/audio/audio.wav?Expires=1791936059&Signature=ItDt-0wZPKWwdD-mQ6ec9ChyGpCvo8aKD9e2kVxEdvyuEheNoY8xQlEhDUlagRIh22-15BTyzgGx6djcP9lv8CmTvOFdFv~dPjuQXNgukjMlVy97FfFp14JbCjGMgaXS6d2uSrQxUmB9MUZWbu2XVgbHWJtKkIt69tZzVLjtcemGvwTJ-GVN1YsNO8M6ajKwt7oTBHQvBFhaS7Gq5GXTx5jolXq9TkS1dz5JTyCTlV9ciYwyt~C34K1SUiNuIa7ebeY~nycpK4UGUVM2WJAdO1ZwSJwpxphpEdjqdkzmmXD02-pKF1nKTGb6oe8xL3H-cKUe6ZcmYlAZVocmfUCD4A__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "cat"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 2,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/2/audio/audio.wav?Expires=1791936059&Signature=ihz90GNO0fZij9rRPSi4w80xG9jMZ~pzGcj8SaK17TO7GZiu6xeSOmAUtp7ziK1Zzmv1h4Hy9rkhYZR4mTHLMkIi0Nz4OixicDemrHwr2z~jUQnKanUXx8gcq-qYse2xHz1cZePBB9JWPLP8IaclZ3jVsmeh6t9LMT~6M-VEOuOYpb7t7TmEYHD7ec68ZvDhj03HsJ88L1emOQkB91u7oWMBLdX5vXZk1FHt1dH305Tr4bK779i5ZJDsRkoGlHjesvPwC1YRfOdN4PCm-7nZb-iF4N2mP8Hbkn5piJDYiYZBDsw3MdfDhxLKSnExtdW6cy~awZOa~MLvtiqiu5dBvA__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "dog"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 3,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/3/audio/audio.wav?Expires=1791936059&Signature=wNI9N-VgrKc07DeUykW8O3TYG2m7uZLqR6lfiZHuaekvSnjeF0~CxeziaN7M1378fC0OkrkH0MFSWMvmysXLhMWXKgArX8oM0EKgEhGO3bhP0nDMw1SjQToFiZctHwQQ-HPJMjK7lzEWctD9igGi3BezBLTFg99f3VlqB9IjLlPWS1~K-yB0ONyKmyD35wTN3C6~-gHiD-OB9yolR6PbxBUrkV-3ZPlpr2CaVo76rlTd1l48-bTMo9SNLjkp2mIkBORdofwyUmlg8wFS~MLMNNbeSQcFCgZSxbuFY-lt3r4s7yxA591ztdGHLh3boEZDAzk8yejz~NTOVyjMKCV8Lg__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "dog"
+     },
+     "truncated_cells": []
+    }
+   ],
+   "truncated": false
+  },
+  "rows default/train 0": {
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "audio",
+     "type": {
+      "_type": "Audio"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "animal",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/cached-assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/0/audio/audio.wav?Expires=1791936060&Signature=JEja~SVMuGCVUNUbttMYB8wmb5jG9vq57tmMFFRhirxOyEYr2RCFfA1b1rx6Y0af3J1PfXoFQ98NcsIbTZY6FxTv70qyFwyp~08du9ww1zELN~yf1XcuUf4FcN2Yg7FYyci76hRP7~CAxU3ylF58xAEVuxEs2dBYAwzufGFMiW9KbpXqi~-0qZFJnCpzTDUXtbeta1IHBjBcsXckXj0du6f72VC1kII~FLw~wlNVrldwh9slRIdupJfHUMlz3HbrjZS-SHMXePRoL7-mYZa1UhKMvb5GdB3Zx-AGqbB0uYxZ4qEO1ZmXWV95Wd02GE7lUA3NZkyKMPPnhVZw4Goh7Q__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "cat"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/cached-assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/1/audio/audio.wav?Expires=1791936060&Signature=w8c63WH8v~s~XjFwslDIeOf0qESXZZRWlLRwQmw9ByXgdCQ99RKI9Hes4PwzopQ~fF7RvLY2jjfBU7D5Gsrn0bqDz2lMzeH30uIETdWsd0l1D2EvVS-z6zlqZvXX1ZqI-Q7maLnWohxwshxRsTzpByFcp4y6-hMPWGSGJesrUd-p1avfsSXMFRFkZYlQrBFvV5uQh5L~95j3dkq4BRwkXOwJH624gx5SKBsi3j5b~vYo3zgPJOFCNjx5JbtxXCu5a-T3akhZTC8JQEZf64t9H3VrWGIWxlvxxnPo8tnHlHro3f5AvmLxCieN-IiO2ykH1WRiEut6-1ycTe4AhCmRUg__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "cat"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 2,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/cached-assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/2/audio/audio.wav?Expires=1791936060&Signature=L2T6ZjXebtL4jJF2j374aC7lKGmedH8U5h0Iw6cnffOYzyNrN0TJna5L9GyRvW6GW5nkvu1jpEKDHXp~wlxqQHARG8499Jty2gK0i3eOxeMdUyC~NFBM5KfFKj4ndTlgD3IHqwuyp5jI0frRN-Zq3wkcWHX7rtDEgw8V6s7gaxHrSQ6jS7MM8j-PII77GM6oxtWMLVturICDwonhpskjV~rQMqO~qX13pFC08WMx8dq1YVKI4-6Emj0T6i2d4wyO0SC-3Aq5MQMLJbgKs7XYut1GmvHrJrUCdz7MhrxdFN8nG9o9nkp0Tv1T9SFFzAeaRomx2H-5sF1Jnq1qYgAzIQ__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "dog"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 3,
+     "row": {
+      "audio": [
+       {
+        "src": "https://datasets-server.huggingface.co/cached-assets/datasets-examples/doc-audio-6/--/3df2a299c973238b13a4e1e018789b8fd9002746/--/default/train/3/audio/audio.wav?Expires=1791936060&Signature=IQfzEsZM1d0sa-~zS3Tu5LQ0Z7cxizQDdv1u-aeRgN-n006LFstDvtc~VaJnW1wSFFZ~KtVzbdbjZzkhUbkqrstgOpslqjYDSnWamg9RnObXyNR1M9FmE1~IR3XDK70-4S5h6tolTJTugPv7Mk0ucfjJoPhEuDZRTS4nVxLGso7F~sDbp~Ae8haUyR0ujRbnDsWLHrqEUtFwayMXNmcY702zTxYwGPjPKdfG-kd2hEPRiEkbd-CJqj56HfuXOAGqwAXj30dQzNNN18d9NBrJcsdps3A0rw7txufSyaPXWzv3s89hdnvIzGoBzZ2OoJtr-X4RXjJTC1V0MjEw2Y49Dw__&Key-Pair-Id=K3C0L9WB6U5DUC",
+        "type": "audio/wav"
+       }
+      ],
+      "animal": "dog"
+     },
+     "truncated_cells": []
+    }
+   ],
+   "num_rows_total": 4,
+   "num_rows_per_page": 100,
+   "partial": false
+  },
+  "statistics default/train": {
+   "num_examples": 4,
+   "statistics": [
+    {
+     "column_name": "animal",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 2,
+      "frequencies": {
+       "dog": 2,
+       "cat": 2
+      }
+     }
+    },
+    {
+     "column_name": "audio",
+     "column_type": "audio",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 0.19041,
+      "max": 0.84867,
+      "mean": 0.47857,
+      "median": 0.4376,
+      "std": 0.29273,
+      "histogram": {
+       "hist": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+       ],
+       "bin_edges": [
+        0.19041,
+        0.25624,
+        0.32206,
+        0.38789,
+        0.45371,
+        0.51954,
+        0.58537,
+        0.65119,
+        0.71702,
+        0.78284,
+        0.84867
+       ]
+      }
+     }
+    }
+   ],
+   "partial": false
+  }
+ },
+ "revision": "3df2a299c973238b13a4e1e018789b8fd9002746"
+}

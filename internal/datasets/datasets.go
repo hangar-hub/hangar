@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 
+	"github.com/jamesagarside/hangar/internal/datasets/features"
 	"github.com/jamesagarside/hangar/internal/model"
 )
 
@@ -39,14 +41,27 @@ type Config struct {
 	// DataFiles maps a Split name to path patterns relative to the Repo root.
 	DataFiles map[string][]string `json:"data_files"`
 	DataDir   string              `json:"data_dir,omitempty"`
-	// Builder is the format: parquet, csv, json, text, arrow, webdataset,
-	// imagefolder or audiofolder.
+	// Builder is the `datasets` packaged builder that reads the files:
+	// parquet, csv, json, text, arrow, webdataset, imagefolder, audiofolder,
+	// or another name Hangar lists but cannot convert.
 	Builder        string         `json:"builder,omitempty"`
 	BuilderOptions map[string]any `json:"builder_options,omitempty"`
+	// SplitOrder is the order of the Splits, as `datasets` reports them.
+	SplitOrder []string `json:"split_order,omitempty"`
+	// Files maps a Split name to the data files its patterns matched at the
+	// Commit, in the order `datasets` reads them.
+	Files map[string][]string `json:"files,omitempty"`
+	// Features are declared by the card (the config's `features` or its
+	// `dataset_info`); nil means they are inferred from the data.
+	Features features.Features `json:"features,omitempty"`
 }
 
-// Splits returns the Config's Split names.
+// Splits returns the Config's Split names: SplitOrder when set, otherwise
+// train, validation and test first and the rest sorted.
 func (c Config) Splits() []string {
+	if len(c.SplitOrder) > 0 {
+		return slices.Clone(c.SplitOrder)
+	}
 	out := make([]string, 0, len(c.DataFiles))
 	for _, s := range []string{"train", "validation", "test"} {
 		if _, ok := c.DataFiles[s]; ok {

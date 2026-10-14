@@ -1,0 +1,38 @@
+{
+ "builder": "csv",
+ "options": {
+  "sep": "\t"
+ },
+ "data_files": {
+  "train": [
+   "a.tsv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 36,
+   "embedded_nbytes": 36,
+   "rows": [
+    {
+     "x": "q\tq,1",
+     "y": null
+    },
+    {
+     "x": "Ã©,2",
+     "y": null
+    }
+   ]
+  }
+ },
+ "features": {
+  "x": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "y": {
+   "dtype": "float64",
+   "_type": "Value"
+  }
+ }
+}

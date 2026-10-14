@@ -1,0 +1,12 @@
+{
+  "comment": "Small public datasets for compat/viewer (docs/spec/14-datasets.md Tests). snapshot.py records the Hub's Dataset Viewer responses into hub/ and downloads the source files at the same Revision into compat/.fixtures/viewer.",
+  "datasets": [
+    {"repo": "lhoestq/demo1", "format": "csv"},
+    {"repo": "cornell-movie-review-data/rotten_tomatoes", "format": "parquet"},
+    {"repo": "HuggingFaceH4/MATH-500", "format": "json"},
+    {"repo": "hf-internal-testing/dataset_with_data_files", "format": "text"},
+    {"repo": "hf-internal-testing/imagefolder_with_metadata", "format": "imagefolder"},
+    {"repo": "datasets-examples/doc-audio-6", "format": "audiofolder"},
+    {"repo": "compl-ai/human_deception", "format": "arrow"}
+  ]
+}

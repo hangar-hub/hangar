@@ -1,0 +1,4 @@
+id,name,score,flag,mixed,empty,when
+1,a,1.5,True,x,,2020-01-01
+2,b,,False,1,,2020-01-02
+3,,2.25,True,2.5,,

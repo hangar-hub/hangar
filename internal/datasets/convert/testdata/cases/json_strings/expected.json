@@ -1,0 +1,30 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.json"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 14,
+   "embedded_nbytes": 14,
+   "rows": [
+    {
+     "text": "one"
+    },
+    {
+     "text": "two"
+    }
+   ]
+  }
+ },
+ "features": {
+  "text": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

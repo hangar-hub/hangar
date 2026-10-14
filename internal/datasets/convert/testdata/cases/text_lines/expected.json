@@ -1,0 +1,46 @@
+{
+ "builder": "text",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.txt",
+   "b.txt"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 7,
+   "num_bytes": 45,
+   "embedded_nbytes": 45,
+   "rows": [
+    {
+     "text": "foo"
+    },
+    {
+     "text": "bar"
+    },
+    {
+     "text": ""
+    },
+    {
+     "text": "baz"
+    },
+    {
+     "text": "qux"
+    },
+    {
+     "text": "last"
+    },
+    {
+     "text": "x"
+    }
+   ]
+  }
+ },
+ "features": {
+  "text": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

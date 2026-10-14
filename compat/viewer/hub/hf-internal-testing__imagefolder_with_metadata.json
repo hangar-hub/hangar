@@ -1,0 +1,491 @@
+{
+ "dataset": "hf-internal-testing/imagefolder_with_metadata",
+ "responses": {
+  "is-valid": {
+   "preview": true,
+   "viewer": true,
+   "search": true,
+   "filter": true,
+   "statistics": true
+  },
+  "splits": {
+   "splits": [
+    {
+     "dataset": "hf-internal-testing/imagefolder_with_metadata",
+     "config": "default",
+     "split": "train"
+    },
+    {
+     "dataset": "hf-internal-testing/imagefolder_with_metadata",
+     "config": "default",
+     "split": "test"
+    }
+   ],
+   "pending": [],
+   "failed": []
+  },
+  "info": {
+   "dataset_info": {
+    "default": {
+     "description": "",
+     "citation": "",
+     "homepage": "",
+     "license": "",
+     "features": {
+      "image": {
+       "_type": "Image"
+      },
+      "caption": {
+       "dtype": "string",
+       "_type": "Value"
+      }
+     },
+     "builder_name": "imagefolder",
+     "dataset_name": "imagefolder_with_metadata",
+     "config_name": "default",
+     "version": {
+      "version_str": "0.0.0",
+      "major": 0,
+      "minor": 0,
+      "patch": 0
+     },
+     "splits": {
+      "train": {
+       "name": "train",
+       "num_bytes": 29138,
+       "num_examples": 2,
+       "dataset_name": "imagefolder_with_metadata"
+      },
+      "test": {
+       "name": "test",
+       "num_bytes": 61304,
+       "num_examples": 2,
+       "dataset_name": "imagefolder_with_metadata"
+      }
+     },
+     "download_checksums": {
+      "hf://datasets/hf-internal-testing/imagefolder_with_metadata@507fa72044169a5a1802b7ac2d6bd38d5f310739/train/0.jpg": {
+       "num_bytes": 12213,
+       "checksum": null
+      },
+      "hf://datasets/hf-internal-testing/imagefolder_with_metadata@507fa72044169a5a1802b7ac2d6bd38d5f310739/train/1.jpg": {
+       "num_bytes": 16868,
+       "checksum": null
+      },
+      "hf://datasets/hf-internal-testing/imagefolder_with_metadata@507fa72044169a5a1802b7ac2d6bd38d5f310739/test/metadata.jsonl": {
+       "num_bytes": 99,
+       "checksum": null
+      },
+      "hf://datasets/hf-internal-testing/imagefolder_with_metadata@507fa72044169a5a1802b7ac2d6bd38d5f310739/train/metadata.jsonl": {
+       "num_bytes": 99,
+       "checksum": null
+      },
+      "hf://datasets/hf-internal-testing/imagefolder_with_metadata@507fa72044169a5a1802b7ac2d6bd38d5f310739/test/0.jpg": {
+       "num_bytes": 34448,
+       "checksum": null
+      },
+      "hf://datasets/hf-internal-testing/imagefolder_with_metadata@507fa72044169a5a1802b7ac2d6bd38d5f310739/test/1.jpg": {
+       "num_bytes": 26799,
+       "checksum": null
+      }
+     },
+     "download_size": 90526,
+     "dataset_size": 90442,
+     "size_in_bytes": 180968
+    }
+   },
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "size": {
+   "size": {
+    "dataset": {
+     "dataset": "hf-internal-testing/imagefolder_with_metadata",
+     "num_bytes_original_files": 90526,
+     "num_bytes_parquet_files": 93059,
+     "num_bytes_memory": 90442,
+     "num_rows": 4,
+     "estimated_num_rows": null
+    },
+    "configs": [
+     {
+      "dataset": "hf-internal-testing/imagefolder_with_metadata",
+      "config": "default",
+      "num_bytes_original_files": 90526,
+      "num_bytes_parquet_files": 93059,
+      "num_bytes_memory": 90442,
+      "num_rows": 4,
+      "num_columns": 2,
+      "estimated_num_rows": null
+     }
+    ],
+    "splits": [
+     {
+      "dataset": "hf-internal-testing/imagefolder_with_metadata",
+      "config": "default",
+      "split": "train",
+      "num_bytes_parquet_files": 30586,
+      "num_bytes_memory": 29138,
+      "num_rows": 2,
+      "num_columns": 2,
+      "estimated_num_rows": null
+     },
+     {
+      "dataset": "hf-internal-testing/imagefolder_with_metadata",
+      "config": "default",
+      "split": "test",
+      "num_bytes_parquet_files": 62473,
+      "num_bytes_memory": 61304,
+      "num_rows": 2,
+      "num_columns": 2,
+      "estimated_num_rows": null
+     }
+    ]
+   },
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "parquet": {
+   "parquet_files": [
+    {
+     "dataset": "hf-internal-testing/imagefolder_with_metadata",
+     "config": "default",
+     "split": "test",
+     "url": "https://huggingface.co/datasets/hf-internal-testing/imagefolder_with_metadata/resolve/refs%2Fconvert%2Fparquet/default/test/0000.parquet",
+     "filename": "0000.parquet",
+     "size": 62473
+    },
+    {
+     "dataset": "hf-internal-testing/imagefolder_with_metadata",
+     "config": "default",
+     "split": "train",
+     "url": "https://huggingface.co/datasets/hf-internal-testing/imagefolder_with_metadata/resolve/refs%2Fconvert%2Fparquet/default/train/0000.parquet",
+     "filename": "0000.parquet",
+     "size": 30586
+    }
+   ],
+   "pending": [],
+   "failed": [],
+   "partial": false
+  },
+  "first-rows default/train": {
+   "dataset": "hf-internal-testing/imagefolder_with_metadata",
+   "config": "default",
+   "split": "train",
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "image",
+     "type": {
+      "_type": "Image"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "caption",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/train/0/image/image.jpg?Expires=1791936034&Signature=I50KQyynzqGAzC~7eX-E~I0zQ4WhY8~2s7zJ-8auQFWGSGfYi0x0h9fOimYV5vFZN8Q-wT1JHwapx6RI6Um1eP8vp61SGsuJmyMzuiJkw5MmDo4TVtPq0fIdlYhXPYnbWDVGdmTWP7u2JcPJCcheR-AWXTO3d6kOW7eHHjkQK0DB5-lj2wE2hSxVVvHyd33aYhna027M-2lNXzVDJ8xHh-so9QRm70inH9MOGadrpskxBYrJ7u1IFuQq8-InWGu1~EIaikDDRM0193So4gu60I1F-TbNlqhbfLh6LfB4HHZB2sIrCNyZve1InSmLtK2CWVMWp9deLR98KxicpbjrLQ__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 375,
+       "width": 500
+      },
+      "caption": "Nice cat"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/train/1/image/image.jpg?Expires=1791936034&Signature=QjQ4XHhJ7NBofwul5PXALIae7EHoGXy3vQWO-CjOX1O0bp9lkMGer3RIfjI0UIhZIR449fY5CjxvMLxjbPUqZ2X43If1uknvRBeLCY7R4OfdvG6xMXKT4WqtxQGiVJFd6x2aEceiOPnJ7PcFiVPxduk45ILE40JK9061SAXWDtcmXevE4Md7hdCptnHej5bZKx5juZdx6XAkFFy8mTr8nT6qXRlQbF6K9t3MAsRWIg-rwGv3exUA58EwWhJ9~NVxwsYDbB5nygnePqt7xpdNpkHFfJ3TWgOmmczT-VZ1FqBN650PbbxANmh0wDYYuoF47kDmo8PkSvAvWQbR54Tp8w__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 281,
+       "width": 300
+      },
+      "caption": "Nice second cat"
+     },
+     "truncated_cells": []
+    }
+   ],
+   "truncated": false
+  },
+  "rows default/train 0": {
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "image",
+     "type": {
+      "_type": "Image"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "caption",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/cached-assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/train/0/image/image.jpg?Expires=1791936036&Signature=eE~h~AUwKSRk9NP4VpsQG08ntH114zBhYCwVAJGExYpBWgK7DQIqmaU-VLQqkXilppAXFjwqPJwo-lyPyAq67Iw15u4jBP~kKCjncBe59rcndxKI9EbeQEfGUnwG4gMZdntCBba03xehrd~-l7ajMQj1UPRcg8zcdT8yuuaSvCPIYoKRi-Cyn--SKphx9Da7Ve5UTyI9IMJrXAjHSHrSRXm-9btIOvfAShFuVql2NsHOeWgpmg1bqwkLZhfJUIR9kcIMzXkUCKlazs5TY4zXRxj12O-j-4tEi9GKQgrX1gDqBgaklPrDp5DqtwJPEmeGwgmXJQV5139AIPQebN-2gQ__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 375,
+       "width": 500
+      },
+      "caption": "Nice cat"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/cached-assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/train/1/image/image.jpg?Expires=1791936036&Signature=lBn77EuBwiOps~wh8e0Gxff1s9RzVq5nQZzXJFoXsstymaJzJIZuBwIOxTWi-4oOlnLg6W7W8ekKCYM7hv68HMM1zWeewmvJUb1gohQZdirf0RS-QfrtWCIGpbpPI80V2nsmpbeSOD7KeVZwwIaxc3YO5EuoLZ4QlQcRZ56o4AeoeOmpjOb86f6m9~59vap2PCynZVgfzv8LP82OoMygezUpXvm6svS7yz7bSAGsvBB6p2i3IErCXt6EOUdm3VBquuTdddVFCN-5Brv2lzXLxBaPmKF~j-zDEcK245mcR~Md73d0lU5GvwoxG3BPWd27NPuqSpRQUt2N7GmkiSu7Cw__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 281,
+       "width": 300
+      },
+      "caption": "Nice second cat"
+     },
+     "truncated_cells": []
+    }
+   ],
+   "num_rows_total": 2,
+   "num_rows_per_page": 100,
+   "partial": false
+  },
+  "statistics default/train": {
+   "num_examples": 2,
+   "statistics": [
+    {
+     "column_name": "caption",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 2,
+      "frequencies": {
+       "Nice cat": 1,
+       "Nice second cat": 1
+      }
+     }
+    },
+    {
+     "column_name": "image",
+     "column_type": "image",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 300,
+      "max": 500,
+      "mean": 400.0,
+      "median": 400.0,
+      "std": 141.42136,
+      "histogram": {
+       "hist": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+       ],
+       "bin_edges": [
+        300,
+        321,
+        342,
+        363,
+        384,
+        405,
+        426,
+        447,
+        468,
+        489,
+        500
+       ]
+      }
+     }
+    }
+   ],
+   "partial": false
+  },
+  "first-rows default/test": {
+   "dataset": "hf-internal-testing/imagefolder_with_metadata",
+   "config": "default",
+   "split": "test",
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "image",
+     "type": {
+      "_type": "Image"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "caption",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/test/0/image/image.jpg?Expires=1791936039&Signature=iv3CYt4Qyv0jfq8j~~WN8tLZh7Yd4qjH4iJvDV7Aez4SeDNxEZYwvuzhfeE3aWM9Z-4ciaUw6NCnpTyC8Y~hGDiwMicZk9xjk7E4BfixPznFKm9J59KCIrcaHev0pgk9lh6W3MQ43xBmJe5Vb2FRfLm8GQP8yMjp4ox-N2giKuneWSakK9bku2T9u6A9G-i6urPbG5RdxXxdrmDLer2YXZQh3OKGrjHfhVhfX-66kAeXThLEY~wS-uWhjTO64EYSbGp42MtHaTHECUjgTHzy6JWcfIxOVLTVSeVba6kPsNjHwWooc7fP3ceddcpBA74vXYmRqzp3yLHIxLGkdz7WyQ__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 375,
+       "width": 500
+      },
+      "caption": "Nice dog"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/test/1/image/image.jpg?Expires=1791936039&Signature=agBDuYhqTXxSzmpjXCO3PB4~HqF5dnCGByoBY3J0qRV61qvWnFavjvJ9LSX6cJjxPcrmLTnt9rGQSYiI0Feu6okEQrB0y84-U6Q74gfem6U1hp8Y5fFWkV3uF0~HIX4r8P6PD6r3zIkQyTfVcti91oUbICoIRYQN-~HE-T46297DI1etV9hEI2zooFqHy2hBbWXPqWT~-hnmML8tJZWzyH3Ng-diPxxNpjjZxPCGxkUeeXVYRZ5zNyF00rF2-N5Pts5w92vmEqBOqXjJa0DMhrWA8uDu0oCaqDjlks5vJ1fra6oQRd40Gtth6P00p0aZn5uV~VI7BipTlFd7s4ExNA__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 500,
+       "width": 327
+      },
+      "caption": "Nice second dog"
+     },
+     "truncated_cells": []
+    }
+   ],
+   "truncated": false
+  },
+  "rows default/test 0": {
+   "features": [
+    {
+     "feature_idx": 0,
+     "name": "image",
+     "type": {
+      "_type": "Image"
+     }
+    },
+    {
+     "feature_idx": 1,
+     "name": "caption",
+     "type": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    }
+   ],
+   "rows": [
+    {
+     "row_idx": 0,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/cached-assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/test/0/image/image.jpg?Expires=1791936040&Signature=iRChgH~vWtvAqilL4mibDSpFXhd~YpoTSXqDHA8yQpbehjlq44sW23I2kviq95seAMm~phOOCc4omz6O~k1xWwOwNWmlkjY5nVv7M-Mb58-L3G1R6vtpPLOPN1LHe9R4~uDbKdc6JbV0wLtdQcUGEHTG9AfZP7KYEQQlPca1~VG8S2Odgefg5w0ONyhjEkw9MH8OJbEaIvg6gz7-h3ZcfroNaO~fCIu~OoWVJnBE8KQlc6KWiLy59auKezE0bVYhpLg8FEdWhPGGmXSehK2ACJ09xkBi4vKARrt8yGimO-BulYke4oX9tW-0RIQ0DjwIPC2p9AvBqnrPF-rmexFqrQ__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 375,
+       "width": 500
+      },
+      "caption": "Nice dog"
+     },
+     "truncated_cells": []
+    },
+    {
+     "row_idx": 1,
+     "row": {
+      "image": {
+       "src": "https://datasets-server.huggingface.co/cached-assets/hf-internal-testing/imagefolder_with_metadata/--/507fa72044169a5a1802b7ac2d6bd38d5f310739/--/default/test/1/image/image.jpg?Expires=1791936040&Signature=MD9uKWUqtZ0dBggPP5X-xOMiwZJ5xklHlSGLPhKTcW-OIy7AYiNHdpgs5B9EeCeqqVUtNYVtk4XVDA-iPwSFBLjKN166byNuZM9D0~-iRCPu9zd5KwsNEmC-8xI4zAlMxSsGtAxBxSOH4piLX56VUxLCgF6BdqHimzJDGzWkwY5Lmwblt6D-Le3erW8FAMk3rWLQvuXR4FbIbgIKOYFEPGgC6ukIBybsVL0fsu6pYafv-p0U6wpTgKBifI2gkcFz0FD8JTPq8WQcBeHZwydeqSIc5glBLxqh25BiX9igU~NW6Z04IFPMZLFrXK9Xzmvky-fXjoUaWArc03hulucBDA__&Key-Pair-Id=K3C0L9WB6U5DUC",
+       "height": 500,
+       "width": 327
+      },
+      "caption": "Nice second dog"
+     },
+     "truncated_cells": []
+    }
+   ],
+   "num_rows_total": 2,
+   "num_rows_per_page": 100,
+   "partial": false
+  },
+  "statistics default/test": {
+   "num_examples": 2,
+   "statistics": [
+    {
+     "column_name": "caption",
+     "column_type": "string_label",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "no_label_count": 0,
+      "no_label_proportion": 0.0,
+      "n_unique": 2,
+      "frequencies": {
+       "Nice dog": 1,
+       "Nice second dog": 1
+      }
+     }
+    },
+    {
+     "column_name": "image",
+     "column_type": "image",
+     "column_statistics": {
+      "nan_count": 0,
+      "nan_proportion": 0.0,
+      "min": 327,
+      "max": 500,
+      "mean": 413.5,
+      "median": 413.5,
+      "std": 122.32947,
+      "histogram": {
+       "hist": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+       ],
+       "bin_edges": [
+        327,
+        345,
+        363,
+        381,
+        399,
+        417,
+        435,
+        453,
+        471,
+        489,
+        500
+       ]
+      }
+     }
+    }
+   ],
+   "partial": false
+  }
+ },
+ "revision": "507fa72044169a5a1802b7ac2d6bd38d5f310739"
+}
