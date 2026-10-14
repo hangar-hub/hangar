@@ -19,6 +19,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/repo/repotest"
+	"github.com/jamesagarside/hangar/internal/scan"
 )
 
 const configJSON = `{"model_type": "bert"}` + "\n"
@@ -77,6 +78,36 @@ func TestResolveNeverRendersUploads(t *testing.T) {
 			require.True(t, strings.HasPrefix(r.Header.Get("Content-Disposition"), "attachment;"), f)
 		}
 	}
+}
+
+func TestResolveBlocksUnsafeDownloads(t *testing.T) {
+	t.Parallel()
+	block := false
+	e := newEnv(t, func(o *hfapitest.Options) {
+		o.Deps = func(d *hfapi.Deps) {
+			d.BlockUnsafe = func(context.Context) (bool, error) { return block, nil }
+		}
+	})
+	rp, sha := seed(t, e, "alice", modelID("alice", "pickles"), model.VisibilityPublic, map[string]string{
+		"evil.pkl": "cos\nsystem\n.", "config.json": configJSON,
+	})
+	e.Scan.SetResult("evil.pkl", scan.StatusUnsafe, scan.Finding{Module: "os", Name: "system", Status: scan.StatusUnsafe})
+	_, err := e.Scan.ScanCommit(context.Background(), rp.UUID, rp.ID, sha)
+	require.NoError(t, err)
+
+	get := func(path string) *http.Response {
+		t.Helper()
+		return e.Request(t, http.MethodGet, "/alice/pickles/resolve/main/"+path, "", "")
+	}
+	require.Equal(t, http.StatusOK, get("evil.pkl").StatusCode, "the setting is off by default")
+	block = true
+	r := get("evil.pkl")
+	require.Equal(t, http.StatusForbidden, r.StatusCode)
+	require.Contains(t, r.Header.Get("X-Error-Message"), "accept_risk=1")
+	require.Equal(t, http.StatusOK, get("evil.pkl?accept_risk=1").StatusCode)
+	require.Equal(t, http.StatusOK, get("config.json").StatusCode, "safe files download")
+	head := e.Request(t, http.MethodHead, "/alice/pickles/resolve/main/evil.pkl", "", "")
+	require.Equal(t, http.StatusOK, head.StatusCode, "metadata stays readable")
 }
 
 func TestResolveRanges(t *testing.T) {

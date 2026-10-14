@@ -268,7 +268,11 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	}
 	hubDeps := hfapi.Deps{Settings: hfapi.FromConfig(cfg), Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), Orgs: in.orgs,
 		Community: in.community, Collections: in.collections, Index: in.indexer, Scan: in.scanner, Xet: in.xet,
-		Devices: in.auth.DeviceFlow(), PullThrough: hubPullThrough{in.pulls.PullThrough()}, Instruments: inst, Log: in.log}
+		Devices: in.auth.DeviceFlow(), PullThrough: hubPullThrough{in.pulls.PullThrough()}, Instruments: inst, Log: in.log,
+		BlockUnsafe: func(ctx context.Context) (bool, error) {
+			s, err := in.auth.Settings.Get(ctx)
+			return s.ScanBlockUnsafeDownloads, err
+		}}
 	if in.viewer != nil {
 		hubDeps.Viewer = in.viewer
 	} else {

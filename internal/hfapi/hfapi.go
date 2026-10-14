@@ -118,6 +118,11 @@ type Deps struct {
 	Viewer      datasets.Viewer
 	Devices     auth.DeviceFlow
 	PullThrough PullThrough
+	// BlockUnsafe reads the Instance setting scan.block_unsafe_downloads
+	// (07-indexing-and-scanning.md). When it is true, a GET of a file the
+	// scan marked unsafe answers 403 unless the request has accept_risk=1.
+	// Nil never blocks.
+	BlockUnsafe func(ctx context.Context) (bool, error)
 	Instruments *telemetry.Instruments
 	Log         *slog.Logger
 	// Now returns the current time; nil means time.Now.

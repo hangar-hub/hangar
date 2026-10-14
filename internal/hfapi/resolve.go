@@ -20,6 +20,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -106,6 +107,9 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	blob.SetDownloadHeaders(hdr, path.Base(clean))
 	hdr.Set("Content-Disposition", contentDisposition(path.Base(clean)))
 
+	if r.Method == http.MethodGet && !h.allowDownload(w, r, rp, sha, clean) {
+		return
+	}
 	if e.IsLFS() && !e.Present {
 		h.serveNotPresent(w, r, rp, sha, e)
 		return
@@ -166,6 +170,41 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	if err != nil && !errors.Is(err, context.Canceled) {
 		h.log.WarnContext(ctx, "download interrupted", "error", err, "bytes", n, "size", length)
 	}
+}
+
+// allowDownload enforces scan.block_unsafe_downloads: with the setting
+// on, a file the scan marked unsafe downloads only with accept_risk=1, and
+// otherwise gets 403 with a message that says why and how to go ahead.
+func (h *Handler) allowDownload(w http.ResponseWriter, r *http.Request, rp *repo.Repo, sha model.CommitSHA, filePath string) bool {
+	if h.d.BlockUnsafe == nil || httpx.QueryBool(r.URL.Query(), "accept_risk", false) {
+		return true
+	}
+	ctx := r.Context()
+	block, err := h.d.BlockUnsafe(ctx)
+	if err != nil {
+		h.internalError(w, r, err)
+		return false
+	}
+	if !block {
+		return true
+	}
+	res, err := h.d.Scan.Results(ctx, rp.UUID, sha)
+	if errors.Is(err, scan.ErrNotScanned) {
+		return true
+	}
+	if err != nil {
+		h.internalError(w, r, err)
+		return false
+	}
+	for _, f := range res.Files {
+		if f.Path == filePath && f.Status == scan.StatusUnsafe {
+			httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusForbidden,
+				Message: filePath + " is marked unsafe by Hangar's security scan: loading it can run code. " +
+					"An admin blocks unsafe downloads on this Instance. To download it anyway, add accept_risk=1 to the URL."})
+			return false
+		}
+	}
+	return true
 }
 
 // serveNotPresent answers a request for a file of a Partial mirror whose
