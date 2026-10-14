@@ -1,11 +1,10 @@
-//go:build compat && w6real
+//go:build compat
 
 // The scenarios of this suite on the real pieces: internal/repo (W2) on
 // the filesystem Blob store (W1), the database Job queue, worker and
 // shared bandwidth limiter (W1), Organisations from the database (W5),
 // and a second Instance built from W2's Repo service, W3's git server and
-// W4's Hub API. It needs those workstreams merged, so it only builds with
-// the w6real tag: go test -tags 'compat w6real' ./compat/upstream/
+// W4's Hub API: go test -tags compat ./compat/upstream/
 package upstreamcompat
 
 import (
