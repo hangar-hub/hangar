@@ -1,5 +1,8 @@
 # Build output
 /bin/
+# go build ./cmd/hangar at the repository root
+/hangar
+/hangar.exe
 /dist/
 /coverage.out
 /coverage/
