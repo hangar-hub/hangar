@@ -1,0 +1,147 @@
+# Hangar scaled out: two web replicas behind Traefik, two workers, Postgres,
+# MinIO, and an OpenTelemetry Collector that prints what it receives.
+#
+# Every replica needs the same Instance key and the same first admin
+# password, so set them first:
+#
+#   export HANGAR_INSTANCE_KEY="$(openssl rand -base64 32)"
+#   export HANGAR_ADMIN_PASSWORD="$(openssl rand -base64 18)"
+#   docker compose -f scale.yaml up -d
+#   docker compose -f scale.yaml logs -f otel-collector   # traces, metrics and logs
+#
+# Hangar is at http://localhost:8080; the Traefik dashboard at http://localhost:8082.
+name: hangar-scale
+
+x-minio-image: &minio-image pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+
+x-hangar: &hangar
+  image: ${HANGAR_IMAGE:-ghcr.io/jamesagarside/hangar:latest}
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /var/cache/hangar:uid=65532,gid=65532
+    - /var/lib/hangar:uid=65532,gid=65532
+  environment: &hangar-env
+    HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:8080}
+    # Traefik is on the Compose network, in one of the private ranges.
+    HANGAR_SERVER_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    HANGAR_SECURITY_INSTANCE_KEY: ${HANGAR_INSTANCE_KEY:?Set HANGAR_INSTANCE_KEY, for example with openssl rand -base64 32}
+    HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD: ${HANGAR_ADMIN_PASSWORD:?Set HANGAR_ADMIN_PASSWORD, at least 10 characters}
+    HANGAR_DATABASE_DRIVER: postgres
+    HANGAR_DATABASE_DSN: postgres://hangar:${POSTGRES_PASSWORD:-hangar-example-password}@postgres:5432/hangar?sslmode=disable
+    HANGAR_STORAGE_BACKEND: s3
+    HANGAR_STORAGE_S3_ENDPOINT: http://minio:9000
+    HANGAR_STORAGE_S3_REGION: us-east-1
+    HANGAR_STORAGE_S3_BUCKET: hangar
+    HANGAR_STORAGE_S3_USE_PATH_STYLE: "true"
+    HANGAR_STORAGE_S3_ACCESS_KEY_ID: hangar
+    HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-hangar-example-secret}
+    HANGAR_STORAGE_S3_DOWNLOAD_MODE: proxy
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    HANGAR_TELEMETRY_ENVIRONMENT: compose-scale
+
+services:
+  traefik:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:8080
+      # Streaming uploads and downloads have no total timeout.
+      - --entrypoints.web.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.web.transport.respondingTimeouts.writeTimeout=0
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --entrypoints.traefik.address=:8082
+    ports:
+      - "${HANGAR_PORT:-8080}:8080"
+      - "8082:8082"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hangar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hangar-example-password}
+      POSTGRES_DB: hangar
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "hangar", "-d", "hangar"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: *minio-image
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: hangar
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hangar-example-secret}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio-init:
+    image: *minio-image
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["sh", "-c"]
+    command:
+      - mc alias set local http://minio:9000 hangar "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing local/hangar
+    environment:
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hangar-example-secret}
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel/collector.yaml:/etc/otelcol/config.yaml:ro
+
+  # Applies database migrations once, before web and worker start.
+  migrate:
+    <<: *hangar
+    restart: "no"
+    command: ["admin", "migrate"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  web:
+    <<: *hangar
+    command: ["server", "--role", "web"]
+    deploy:
+      replicas: 2
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      minio-init: {condition: service_completed_successfully}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.hangar.entrypoints: web
+      traefik.http.routers.hangar.rule: PathPrefix(`/`)
+      traefik.http.services.hangar.loadbalancer.server.port: "8080"
+      traefik.http.services.hangar.loadbalancer.healthcheck.path: /readyz
+      traefik.http.services.hangar.loadbalancer.healthcheck.interval: 5s
+
+  worker:
+    <<: *hangar
+    command: ["server", "--role", "worker"]
+    deploy:
+      replicas: 2
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      minio-init: {condition: service_completed_successfully}
+
+volumes:
+  postgres-data:
+  minio-data:

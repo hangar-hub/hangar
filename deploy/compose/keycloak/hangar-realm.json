@@ -1,0 +1,71 @@
+{
+  "realm": "hangar",
+  "enabled": true,
+  "displayName": "Hangar example",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "groups": [
+    {"name": "hangar-admins"},
+    {"name": "ml-team"}
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "attributes": {"include.in.token.scope": "true"},
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "hangar",
+      "name": "Hangar",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "hangar-example-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/auth/oidc/keycloak/callback"],
+      "webOrigins": ["http://localhost:8080"],
+      "attributes": {"pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "http://localhost:8080/*"},
+      "defaultClientScopes": ["profile", "email", "groups"]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Admin",
+      "credentials": [{"type": "password", "value": "alice-password", "temporary": false}],
+      "groups": ["hangar-admins"]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Builder",
+      "credentials": [{"type": "password", "value": "bob-password", "temporary": false}],
+      "groups": ["ml-team"]
+    }
+  ]
+}
