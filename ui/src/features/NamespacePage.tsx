@@ -207,13 +207,22 @@ export function NamespacePage({ ns }: { ns: string }) {
             ) : repos.data.items.length === 0 ? (
               <EmptyState title="No Repos you can see" />
             ) : (
-              <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {repos.data.items.map((r) => (
-                  <li key={`${r.type}/${r.id}`}>
-                    <RepoCard repo={r} />
-                  </li>
-                ))}
-              </ul>
+              <>
+                {/* Each card has an h3 title, so the grid needs an h2 above it. */}
+                <h2 id="namespace-repos" className="sr-only">
+                  Repos
+                </h2>
+                <ul
+                  aria-labelledby="namespace-repos"
+                  className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+                >
+                  {repos.data.items.map((r) => (
+                    <li key={`${r.type}/${r.id}`}>
+                      <RepoCard repo={r} />
+                    </li>
+                  ))}
+                </ul>
+              </>
             ),
           },
           {

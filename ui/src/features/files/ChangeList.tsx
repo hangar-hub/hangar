@@ -30,7 +30,7 @@ function Diff({ repo, sha, change }: { repo: RepoRef; sha: string; change: FileC
   if (diff.isPending) return <Skeleton className="m-3 h-20" />;
   if (diff.isError) return <ErrorState error={diff.error} onRetry={() => diff.refetch()} />;
   if (!diff.data.patch) return <SizeChange change={change} />;
-  return <DiffView patch={diff.data.patch} />;
+  return <DiffView patch={diff.data.patch} label={`Diff of ${change.path}`} />;
 }
 
 /** For LFS, binary and large files: the size and SHA change instead of a text diff (REPO-3). */

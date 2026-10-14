@@ -29,11 +29,13 @@ export function watchConsole(page: Page): string[] {
   return problems;
 }
 
-/** Runs axe with the WCAG 2.2 AA rules (09-web-ui.md "Accessibility"). */
+/**
+ * Runs every axe rule, as phase 0's shell test did: the WCAG 2.2 AA rules
+ * (09-web-ui.md "Accessibility") and axe's best practices, such as heading
+ * order.
+ */
 export async function expectAccessible(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
+  const results = await new AxeBuilder({ page }).analyze();
   const summary = results.violations.map(
     (v) =>
       `${v.id}: ${v.help} (${v.nodes

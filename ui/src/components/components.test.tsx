@@ -74,7 +74,8 @@ describe("DiffView", () => {
     expect(
       diffLines("--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n same").map((l) => l.kind),
     ).toEqual(["meta", "meta", "hunk", "del", "add", "ctx"]);
-    render(<DiffView patch={"-old\n+new"} />);
+    render(<DiffView patch={"-old\n+new"} label="Diff of a.txt" />);
+    expect(screen.getByRole("region", { name: "Diff of a.txt" })).toBeInTheDocument();
     expect(screen.getByText("-old")).toBeInTheDocument();
     expect(screen.getByText("+new")).toBeInTheDocument();
   });

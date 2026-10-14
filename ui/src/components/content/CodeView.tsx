@@ -62,7 +62,7 @@ export function CodeView({
               {lineNumbers ? (
                 <span
                   aria-hidden="true"
-                  className="tabular w-12 shrink-0 select-none pr-3 text-right text-muted/70"
+                  className="tabular w-12 shrink-0 select-none pr-3 text-right text-muted"
                 >
                   {i + 1}
                 </span>

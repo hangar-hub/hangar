@@ -349,8 +349,12 @@ export function CollectionPage({ ns, slug }: { ns: string; slug: string }) {
         </EmptyState>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          {/* Each item's card has an h3 title, so the list needs an h2 above it. */}
+          <h2 id="collection-items" className="sr-only">
+            Items
+          </h2>
           <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            <ol aria-label="Items" className="space-y-2">
+            <ol aria-labelledby="collection-items" className="space-y-2">
               {items.map((i) => (
                 <SortableItem
                   key={i.id}

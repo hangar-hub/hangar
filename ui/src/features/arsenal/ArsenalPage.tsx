@@ -107,7 +107,7 @@ function Filters({
         </div>
       </fieldset>
       <fieldset className="space-y-1">
-        <legend className="mb-1 text-xs font-semibold text-muted">Source</legend>
+        <legend className="mb-1 text-xs font-semibold text-muted">Mirror or local</legend>
         <div className="flex flex-wrap gap-1">
           {[
             { v: undefined, l: "Any" },
@@ -355,6 +355,8 @@ export function ArsenalPage() {
             )
           ) : (
             <>
+              {/* Each card has an h3 title, so the grid needs an h2 above it. */}
+              <h2 className="sr-only">Repos</h2>
               <VirtualGrid
                 label="Repos"
                 items={items}

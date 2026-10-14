@@ -297,7 +297,7 @@ export function CardEditor({
       </div>
       <div className="space-y-4">
         <div>
-          <h3 className="mb-2 text-sm font-medium">YAML metadata</h3>
+          <h2 className="mb-2 text-sm font-medium">YAML metadata</h2>
           <CodeView code={yaml || "# No metadata"} lang="yaml" lineNumbers={false} />
         </div>
         {errors.length ? (

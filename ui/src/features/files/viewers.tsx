@@ -148,9 +148,9 @@ export function SafetensorsView({ repo, rev, path }: { repo: RepoRef; rev: strin
       </dl>
       {Object.keys(s.metadata).length ? (
         <section aria-labelledby="st-meta">
-          <h3 id="st-meta" className="mb-1 text-sm font-semibold">
+          <h2 id="st-meta" className="mb-1 text-sm font-semibold">
             Metadata
-          </h3>
+          </h2>
           <dl className="grid gap-x-4 font-mono text-xs sm:grid-cols-[max-content_1fr]">
             {Object.entries(s.metadata).map(([k, v]) => (
               <div key={k} className="contents">
@@ -189,9 +189,9 @@ export function GgufView({ repo, rev, path }: { repo: RepoRef; rev: string; path
         <Stat label="Tensors" value={formatCount(g.tensors.length)} />
       </dl>
       <section aria-labelledby="gguf-tok">
-        <h3 id="gguf-tok" className="mb-1 text-sm font-semibold">
+        <h2 id="gguf-tok" className="mb-1 text-sm font-semibold">
           Tokenizer
-        </h3>
+        </h2>
         <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Model" value={g.tokenizer.model ?? "Unknown"} />
           <Stat
@@ -206,16 +206,16 @@ export function GgufView({ repo, rev, path }: { repo: RepoRef; rev: string; path
       </section>
       {g.chatTemplate ? (
         <section aria-labelledby="gguf-tpl">
-          <h3 id="gguf-tpl" className="mb-1 text-sm font-semibold">
+          <h2 id="gguf-tpl" className="mb-1 text-sm font-semibold">
             Chat template
-          </h3>
+          </h2>
           <CodeView code={g.chatTemplate} lang="jinja" lineNumbers={false} />
         </section>
       ) : null}
       <section aria-labelledby="gguf-meta">
-        <h3 id="gguf-meta" className="mb-1 text-sm font-semibold">
+        <h2 id="gguf-meta" className="mb-1 text-sm font-semibold">
           Metadata
-        </h3>
+        </h2>
         <dl className="grid gap-x-4 gap-y-0.5 font-mono text-xs sm:grid-cols-[max-content_1fr]">
           {meta.map(([k, v]) => (
             <div key={k} className="contents">
@@ -235,9 +235,9 @@ export function GgufView({ repo, rev, path }: { repo: RepoRef; rev: string; path
         ) : null}
       </section>
       <section aria-labelledby="gguf-tensors">
-        <h3 id="gguf-tensors" className="mb-1 text-sm font-semibold">
+        <h2 id="gguf-tensors" className="mb-1 text-sm font-semibold">
           Tensors
-        </h3>
+        </h2>
         <TensorTable tensors={g.tensors} label="Tensors in this file" />
       </section>
     </div>

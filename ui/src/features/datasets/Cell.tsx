@@ -43,7 +43,7 @@ function TextCell({ text, truncated }: { text: string; truncated: boolean }) {
       </button>
       {open && truncated ? (
         <p className="mt-1 text-xs text-muted">
-          The server shortened this cell. Download the Parquet file for the full value.
+          The Dataset Viewer shortened this cell. Download the Parquet file for the full value.
         </p>
       ) : null}
     </div>

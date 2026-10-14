@@ -28,7 +28,7 @@ describe("Viewer cells", () => {
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "Show more" }));
-    expect(screen.getByText(/The server shortened this cell/)).toBeInTheDocument();
+    expect(screen.getByText(/The Dataset Viewer shortened this cell/)).toBeInTheDocument();
   });
 
   it("renders images, nulls, numbers and structs", () => {

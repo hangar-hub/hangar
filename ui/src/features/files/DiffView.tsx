@@ -16,11 +16,12 @@ export function diffLines(
 
 /**
  * A unified diff. Added and removed lines keep their + and - signs, so
- * the colour is never the only signal.
+ * the colour is never the only signal. Give each diff on a page its own
+ * label, because each is a landmark region.
  */
-export function DiffView({ patch }: { patch: string }) {
+export function DiffView({ patch, label = "Diff" }: { patch: string; label?: string }) {
   return (
-    <ScrollRegion label="Diff" className="overflow-y-hidden">
+    <ScrollRegion label={label} className="overflow-y-hidden">
       <pre className="font-mono text-[12px] leading-5">
         <code>
           {diffLines(patch).map((l, i) => (
