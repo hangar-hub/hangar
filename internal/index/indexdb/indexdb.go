@@ -167,12 +167,15 @@ func (s *Service) IndexedAt(ctx context.Context, repoUUID uuid.UUID, commit mode
 
 // HeaderView is the GGUF header as FileHeader returns it.
 type HeaderView struct {
-	Version     uint32                `json:"version"`
-	TensorCount uint64                `json:"tensor_count"`
-	Alignment   uint64                `json:"alignment"`
-	DataOffset  int64                 `json:"data_offset"`
-	Metadata    map[string]gguf.Value `json:"metadata"`
-	Tensors     []HeaderTensor        `json:"tensors"`
+	Version     uint32 `json:"version"`
+	TensorCount uint64 `json:"tensor_count"`
+	Alignment   uint64 `json:"alignment"`
+	DataOffset  int64  `json:"data_offset"`
+	// Metadata maps each key to its plain value. Arrays are listed whole
+	// when the header keeps every item, and otherwise summarised as
+	// {"type": "array", "length": N}, the shape the UI reads.
+	Metadata map[string]any `json:"metadata"`
+	Tensors  []HeaderTensor `json:"tensors"`
 }
 
 // HeaderTensor is one tensor in a GGUF HeaderView.
@@ -212,7 +215,11 @@ func (s *Service) FileHeader(ctx context.Context, id model.RepoID, commit model.
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", index.ErrNoHeader, err)
 	}
-	view := HeaderView{Version: f.Version, TensorCount: f.TensorCount, Alignment: f.Alignment, DataOffset: f.DataOffset, Metadata: f.Metadata}
+	view := HeaderView{Version: f.Version, TensorCount: f.TensorCount, Alignment: f.Alignment, DataOffset: f.DataOffset,
+		Metadata: make(map[string]any, len(f.Metadata))}
+	for k, v := range f.Metadata {
+		view.Metadata[k] = plainValue(v)
+	}
 	for _, t := range f.Tensors {
 		view.Tensors = append(view.Tensors, HeaderTensor{Name: t.Name, Shape: t.Dims, Type: t.TypeName(), Offset: t.Offset})
 	}
@@ -340,4 +347,20 @@ func (s *Service) ReindexStale(ctx context.Context, q jobs.Queue) (int, error) {
 		queued++
 	}
 	return queued, nil
+}
+
+// plainValue turns a GGUF metadata value into what the header viewer shows:
+// the scalar itself, an array's items when all of them were kept, or a
+// summary of a long array.
+func plainValue(v gguf.Value) any {
+	if v.Type != gguf.TypeArray {
+		return v.Scalar
+	}
+	if int64(len(v.Items)) == v.Len {
+		if v.Items == nil {
+			return []any{}
+		}
+		return v.Items
+	}
+	return map[string]any{"type": "array", "length": v.Len}
 }

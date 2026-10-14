@@ -88,7 +88,13 @@ func TestFileHeaderAndQuants(t *testing.T) {
 		require.NoError(t, json.Unmarshal(h, &view))
 		require.Equal(t, uint32(3), view.Version)
 		require.Equal(t, "Q4_0", view.Tensors[0].Type)
-		require.Equal(t, "llama", view.Metadata["general.architecture"].Scalar)
+		require.Equal(t, "llama", view.Metadata["general.architecture"], "metadata values are plain values")
+		for k, v := range view.Metadata {
+			if m, ok := v.(map[string]any); ok {
+				require.Equal(t, "array", m["type"], k)
+				require.NotNil(t, m["length"], k)
+			}
+		}
 
 		_, err = e.svc.FileHeader(ctx, e.id, e.sha, "dir/notes.txt")
 		require.ErrorIs(t, err, index.ErrNoHeader)
