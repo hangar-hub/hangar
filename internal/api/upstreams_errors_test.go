@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/api"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -131,5 +132,32 @@ func TestUpstreamsAPIErrors(t *testing.T) {
 		h.SetSettings(upstream.Settings{AllowOverrideWindows: false})
 		code, _ = e.do(t, "alice", http.MethodPost, "/pulls", map[string]any{"upstream": "huggingface", "repo": "acme/data", "type": "dataset", "now": true})
 		require.Equal(t, http.StatusForbidden, code)
+	})
+}
+
+func TestUpstreamMirrorSummary(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		e := newUpstreamsEnv(t, d)
+		h := e.h
+		alice := h.User("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "sum"}
+		h.Seed(id, map[string][]byte{"a.txt": []byte("a")}, nil)
+		_, _, err := h.Service.StartPull(h.Ctx, upstream.PullRequest{Repo: id, Actor: alice})
+		require.NoError(t, err)
+		h.Run(10)
+		r, err := h.Repos.Get(h.Ctx, id)
+		require.NoError(t, err)
+		s, err := api.UpstreamMirrorSummary(h.Ctx, h.Service, r)
+		require.NoError(t, err)
+		require.Equal(t, "huggingface", s.Upstream)
+		require.Equal(t, "acme/sum", s.UpstreamRepo)
+		require.Equal(t, "ok", s.Status)
+		require.NotNil(t, s.LastSyncedAt)
+		mine := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "plain"}
+		pr, err := h.Repos.Create(h.Ctx, repo.CreateParams{ID: mine, Actor: alice})
+		require.NoError(t, err)
+		s, err = api.UpstreamMirrorSummary(h.Ctx, h.Service, pr)
+		require.NoError(t, err)
+		require.Nil(t, s)
 	})
 }

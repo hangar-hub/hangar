@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -152,4 +153,22 @@ func upRepoResource(rp *repo.Repo) gen.Repo {
 		out.Licence = ptr(rp.Licence)
 	}
 	return out
+}
+
+// UpstreamMirrorSummary returns the `mirror_status` of a Repo for the
+// native Repo responses in repos.go (W2), or nil when the Repo is not a
+// Mirror. It reads only the database: it never asks the Upstream.
+func UpstreamMirrorSummary(ctx context.Context, svc *upstream.Service, rp *repo.Repo) (*gen.MirrorSummary, error) {
+	m, up, err := svc.Mirror(ctx, rp)
+	if errors.Is(err, upstream.ErrNotMirror) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if m.DetachedAt != nil {
+		return nil, nil
+	}
+	return &gen.MirrorSummary{Upstream: up.Name, UpstreamRepo: m.UpstreamRepo.String(), Status: m.Status, LastSyncedAt: m.LastSyncedAt,
+		UpstreamUrl: ptr(up.BaseURL + "/" + m.UpstreamRepo.Path())}, nil
 }
