@@ -72,6 +72,8 @@ func TestImportFromHFCache(t *testing.T) {
 	require.True(t, e.inst.Present(id, commit, "Tiny-Q4_K_M.gguf"))
 	require.False(t, e.inst.Present(id, commit, "Tiny-Q8_0.gguf"))
 	require.Zero(t, e.inst.RequestCount("GET /{ns}/{name}/resolve/{rev}/*"), "nothing is downloaded")
+	require.Equal(t, 1, e.inst.RequestCount("POST /api/hangar/v1/repos/{type}/{ns}/{name}/mirror/pull"),
+		"the uploaded files are pulled into the Mirror, which marks them present")
 
 	local := byRepo["acme/private-ft"]
 	require.Equal(t, "local", local.Mode, local.Error)

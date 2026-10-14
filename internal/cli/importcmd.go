@@ -400,6 +400,19 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	}
 	up.prog.finish()
 	res.Uploaded = paths(upload)
+	if len(upload) > 0 {
+		// Pull the uploaded files into the Mirror: the Instance holds their
+		// objects now, so the Pull marks them present without a transfer,
+		// within the Namespace's quota.
+		sel := res.Uploaded
+		job, err := c.pullIntoMirror(ctx, id, gen.Selection{Paths: &sel})
+		if err != nil {
+			return res, err
+		}
+		if _, err := a.watchJob(ctx, c, job.Id, "Adding the files to "+display(id)); err != nil {
+			return res, err
+		}
+	}
 	return res, nil
 }
 
