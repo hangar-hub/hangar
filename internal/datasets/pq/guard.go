@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/bits"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/snappy"
 	"github.com/klauspost/compress/zstd"
+	"github.com/parquet-go/parquet-go/encoding/delta"
 	"github.com/parquet-go/parquet-go/encoding/thrift"
 	"github.com/parquet-go/parquet-go/format"
 	"github.com/pierrec/lz4/v4"
@@ -345,8 +347,9 @@ func (c *pageChecker) close() {
 // check checks one page: its header against the column chunk, that its
 // compressed data decodes to exactly the size the header gives (which
 // parquet-go allocates before decoding), and that the run-length and delta
-// headers in a data page claim no more values than the page holds (parquet-go
-// allocates what they claim). read reads n bytes of the page's data from off.
+// streams in a data or dictionary page claim no more values or bytes than
+// the page holds (parquet-go allocates what they claim). read reads n bytes
+// of the page's data from off.
 func (c *pageChecker) check(h *format.PageHeader, read func(off, n int64) ([]byte, error)) error {
 	if h.UncompressedPageSize < 0 || int64(h.UncompressedPageSize) > c.chunkBytes {
 		return fmt.Errorf("%w: uncompressed size %d in a column chunk of %d bytes", ErrInvalid, h.UncompressedPageSize, c.chunkBytes)
@@ -455,8 +458,17 @@ func (c *pageChecker) dictionary(h *format.PageHeader, read func(off, n int64) (
 	case n > maxPageValues:
 		return fmt.Errorf("%w: a dictionary of %d values is more than %d", ErrUnsupported, n, maxPageValues)
 	}
-	_, err := c.body(read, 0, int64(h.CompressedPageSize), size, c.codec != format.Uncompressed)
-	return err
+	body, err := c.body(read, 0, int64(h.CompressedPageSize), size, c.codec != format.Uncompressed)
+	if err != nil {
+		return err
+	}
+	// parquet-go decodes a dictionary with the encoding its header names,
+	// reading PLAIN_DICTIONARY as PLAIN.
+	enc := v.V.Encoding
+	if enc == format.PlainDictionary { //nolint:staticcheck // older writers use PLAIN_DICTIONARY for dictionaries
+		enc = format.Plain
+	}
+	return checkValues(body, enc, int64(v.V.NumValues))
 }
 
 // body returns n bytes of page data from off, decompressed to size bytes
@@ -551,7 +563,8 @@ func levelsV1(b []byte, enc format.Encoding, width int, n int64) (int, error) {
 	return 0, fmt.Errorf("%w: levels encoded as %s", ErrUnsupported, enc)
 }
 
-// checkValues checks the run-length or delta header of n values.
+// checkValues checks the run-length or delta streams that encode n values,
+// before parquet-go allocates what they claim.
 func checkValues(b []byte, enc format.Encoding, n int64) error {
 	switch enc {
 	case format.PlainDictionary, format.RLEDictionary: //nolint:staticcheck // older writers use PLAIN_DICTIONARY in data pages
@@ -570,26 +583,158 @@ func checkValues(b []byte, enc format.Encoding, n int64) error {
 		}
 		k := min(int64(binary.LittleEndian.Uint32(b)), int64(len(b)-4))
 		return runs(b[4:4+k], 1, n)
-	case format.DeltaBinaryPacked, format.DeltaLengthByteArray, format.DeltaByteArray:
+	case format.DeltaBinaryPacked:
 		if len(b) == 0 {
 			return nil
 		}
-		// Each starts with a binary-packed header: block size, miniblocks
-		// per block, then the number of values, which parquet-go allocates.
-		p := thriftParser{b: b}
-		var total uint64
-		for range 3 {
-			v, err := p.uvarint()
-			if err != nil {
-				return fmt.Errorf("%w: delta header: %w", ErrInvalid, err)
-			}
-			total = v
+		// parquet-go allocates the number of values in the header before
+		// decoding them.
+		_, err := readDeltaHeader(&thriftParser{b: b}, "values", n)
+		return err
+	case format.DeltaLengthByteArray:
+		if len(b) == 0 {
+			return nil
 		}
-		if total > uint64(max(n, 0)) {
-			return fmt.Errorf("%w: delta header of %d values in a page of %d", ErrInvalid, total, n)
+		lengths, rest, err := deltaInts(b, "lengths", n)
+		if err != nil {
+			return err
+		}
+		return checkSuffixes(lengths, nil, len(rest))
+	case format.DeltaByteArray:
+		if len(b) == 0 {
+			return nil
+		}
+		prefixes, rest, err := deltaInts(b, "prefix lengths", n)
+		if err != nil {
+			return err
+		}
+		suffixes, rest, err := deltaInts(rest, "suffix lengths", n)
+		if err != nil {
+			return err
+		}
+		if len(prefixes) != len(suffixes) {
+			return fmt.Errorf("%w: %d prefix lengths and %d suffix lengths", ErrInvalid, len(prefixes), len(suffixes))
+		}
+		return checkSuffixes(suffixes, prefixes, len(rest))
+	}
+	return nil
+}
+
+// checkSuffixes checks the lengths of DELTA_LENGTH_BYTE_ARRAY values, or the
+// prefix and suffix lengths of DELTA_BYTE_ARRAY values, against the size
+// bytes of value data that follow them. parquet-go adds up the lengths and
+// allocates the sum before it checks any of them. A prefix repeats the
+// start of the value before it, so it can be no longer than that value.
+// prefixes is nil for DELTA_LENGTH_BYTE_ARRAY.
+func checkSuffixes(suffixes, prefixes []int32, size int) error {
+	var data, total, last int64
+	for i, s := range suffixes {
+		p := int64(0)
+		if prefixes != nil {
+			p = int64(prefixes[i])
+		}
+		switch {
+		case s < 0:
+			return fmt.Errorf("%w: value %d has a length of %d", ErrInvalid, i, s)
+		case p < 0 || p > last:
+			return fmt.Errorf("%w: value %d has a prefix of %d bytes after a value of %d", ErrInvalid, i, p, last)
+		}
+		data += int64(s)
+		if data > int64(size) {
+			return fmt.Errorf("%w: values of %d bytes or more in %d bytes of page data", ErrInvalid, data, size)
+		}
+		last = p + int64(s)
+		if total += last; total > maxPageBytes {
+			return fmt.Errorf("%w: a page of values longer than %d bytes", ErrUnsupported, int64(maxPageBytes))
 		}
 	}
 	return nil
+}
+
+// deltaHeader is the start of a DELTA_BINARY_PACKED stream.
+type deltaHeader struct {
+	blockSize, miniBlocks, values uint64
+}
+
+// readDeltaHeader reads the block size, miniblocks per block and number of
+// values that start a DELTA_BINARY_PACKED stream. The number of values must
+// be no more than n: parquet-go allocates it before decoding them. what
+// names the stream in errors.
+func readDeltaHeader(p *thriftParser, what string, n int64) (deltaHeader, error) {
+	var h [3]uint64
+	for i := range h {
+		v, err := p.uvarint()
+		if err != nil {
+			return deltaHeader{}, fmt.Errorf("%w: %s: delta header: %w", ErrInvalid, what, err)
+		}
+		h[i] = v
+	}
+	if h[2] > uint64(max(n, 0)) {
+		return deltaHeader{}, fmt.Errorf("%w: %s: delta header of %d values in a page of %d", ErrInvalid, what, h[2], n)
+	}
+	return deltaHeader{blockSize: h[0], miniBlocks: h[1], values: h[2]}, nil
+}
+
+// deltaInts decodes a DELTA_BINARY_PACKED stream of 32-bit integers that
+// holds no more than n values, and returns the values and the bytes after
+// the stream. It finds the end of the stream as parquet-go does, because a
+// second stream or the value data follows it, then has parquet-go decode
+// the values. what names the stream in errors.
+func deltaInts(b []byte, what string, n int64) ([]int32, []byte, error) {
+	invalid := func(format string, args ...any) ([]int32, []byte, error) {
+		return nil, nil, fmt.Errorf("%w: %s: "+format, append([]any{ErrInvalid, what}, args...)...)
+	}
+	p := thriftParser{b: b}
+	h, err := readDeltaHeader(&p, what, n)
+	if err != nil {
+		return nil, nil, err
+	}
+	first, k := binary.Varint(b[p.pos:])
+	if k <= 0 {
+		return invalid("delta header: no first value")
+	}
+	p.pos += k
+	switch {
+	case h.miniBlocks == 0 || h.blockSize == 0 || h.blockSize%128 != 0 || h.blockSize > 65536 || (h.blockSize/h.miniBlocks)%32 != 0:
+		return invalid("delta blocks of %d values in %d miniblocks", h.blockSize, h.miniBlocks)
+	case first < math.MinInt32 || first > math.MaxInt32:
+		return invalid("first value %d is not a 32-bit integer", first)
+	case h.values == 0:
+		return nil, b[p.pos:], nil
+	}
+	// The values after the first come in blocks: the smallest delta, a bit
+	// width for each miniblock, then each miniblock packed at its width.
+	// parquet-go reads no further than the miniblock with the last value,
+	// and takes a miniblock cut short by the end of the data as it is.
+	perMiniBlock := h.blockSize / h.miniBlocks
+	left := h.values - 1
+	for left > 0 && p.pos < len(b) {
+		_, k := binary.Varint(b[p.pos:])
+		if k <= 0 {
+			return invalid("delta block header")
+		}
+		p.pos += k
+		widths := b[p.pos:min(uint64(p.pos)+h.miniBlocks, uint64(len(b)))] //nolint:gosec // neither p.pos nor len(b) is negative
+		p.pos += len(widths)
+		for _, w := range widths {
+			if w > 32 {
+				return invalid("miniblock of %d-bit deltas", w)
+			}
+			p.pos += int(min(perMiniBlock*uint64(w)/8, uint64(len(b)-p.pos))) //nolint:gosec // at most the bytes left
+			left -= min(perMiniBlock, left)
+			if left == 0 {
+				break
+			}
+		}
+	}
+	if left > 0 {
+		return invalid("%d of %d values missing", left, h.values)
+	}
+	values, err := new(delta.BinaryPackedEncoding).DecodeInt32(nil, b[:p.pos])
+	if err != nil {
+		return invalid("%w", err)
+	}
+	return values, b[p.pos:], nil
 }
 
 // runs checks a run-length and bit-packed hybrid stream of values of width

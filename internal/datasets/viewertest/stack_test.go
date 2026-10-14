@@ -3,7 +3,10 @@ package viewertest_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 
@@ -60,4 +63,32 @@ func TestViewerReposWrapsOnlyTheViewer(t *testing.T) {
 	require.NoError(t, res.Body.Close())
 	require.Equal(t, http.StatusOK, res.StatusCode)
 	require.Positive(t, counter.resolves.Load())
+}
+
+// TestCorruptParquetUpload uploads a 978-byte Parquet file whose
+// DELTA_BYTE_ARRAY page claims 268 million suffix lengths (see
+// pq.TestCorruptDeltaByteArray). Converting it and computing its statistics
+// allocated about 2 GiB, and each /first-rows request 1 GiB, before pq
+// checked those lengths.
+func TestCorruptParquetUpload(t *testing.T) {
+	b, err := os.ReadFile("../pq/testdata/seeds/encodings.parquet")
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x02, 0x02, 0x02, 0x00}, b[248:252], "the encodings seed changed; find a new offset")
+	copy(b[248:252], []byte{0xff, 0xff, 0xff, 0xff})
+	s := viewertest.New(t, viewertest.Options{})
+	r, sha := s.Dataset(t, "corrupt", map[string][]byte{"train.parquet": b})
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	s.Convert(t, r, sha)
+	for range 3 {
+		res, err := http.Get(s.URL + "/first-rows?dataset=ns/corrupt&config=default&split=train")
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, res.Body)
+		require.NoError(t, err)
+		require.NoError(t, res.Body.Close())
+		require.NotEqual(t, http.StatusOK, res.StatusCode)
+	}
+	runtime.ReadMemStats(&after)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<20))
 }

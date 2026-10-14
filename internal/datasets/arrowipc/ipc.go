@@ -867,8 +867,8 @@ func DecimalString(le []byte, scale int) string {
 	}
 	neg := strings.HasPrefix(s, "-")
 	s = strings.TrimPrefix(s, "-")
-	for len(s) <= scale {
-		s = "0" + s
+	if len(s) <= scale {
+		s = strings.Repeat("0", scale-len(s)+1) + s
 	}
 	s = s[:len(s)-scale] + "." + s[len(s)-scale:]
 	if neg {

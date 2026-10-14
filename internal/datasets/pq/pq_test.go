@@ -260,7 +260,42 @@ func TestDictionaryIndexOutOfRange(t *testing.T) {
 	require.ErrorContains(t, err, "dictionary index")
 }
 
-// TestCorruptBytesGiveErrors flips bytes of legacy.parquet and the fuzz
+// TestCorruptDeltaByteArray reads a copy of the encodings seed whose
+// DELTA_BYTE_ARRAY page in column "s" has bytes 248 to 251 set to ff. They
+// are the suffix lengths' header: it then claims 268 million lengths, and
+// parquet-go allocated 1 GiB for them each time it decoded the page. An
+// independent verifier found this input; it allocated 3.2 GB in one read.
+func TestCorruptDeltaByteArray(t *testing.T) {
+	b := seeds(t)["encodings.parquet"]
+	require.Equal(t, []byte{0x02, 0x02, 0x02, 0x00}, b[248:252], "testdata/seeds/encodings.parquet changed; find a new offset")
+	copy(b[248:252], []byte{0xff, 0xff, 0xff, 0xff})
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f, err := pq.Open(bytes.NewReader(b), int64(len(b)))
+	require.NoError(t, err)
+	cols, err := f.Columns(nil)
+	require.NoError(t, err)
+	_, err = f.ReadRows(cols, 0, -1)
+	runtime.ReadMemStats(&after)
+	require.ErrorIs(t, err, pq.ErrInvalid)
+	require.ErrorContains(t, err, "suffix lengths: delta header of 268435455 values")
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20))
+}
+
+// TestCorruptDecimalScale reads a copy of the decimals seed with bytes 373
+// and 374 set to 0x80. That lengthens the varint of column "d64"'s scale
+// over its precision, giving a scale of 294,912 digits. Formatting each
+// value to that scale, one zero at a time, allocated 124 GiB.
+func TestCorruptDecimalScale(t *testing.T) {
+	b := seeds(t)["decimals.parquet"]
+	require.Equal(t, []byte{0x15, 0x04, 0x15}, b[372:375], "testdata/seeds/decimals.parquet changed; find a new offset")
+	b[373], b[374] = 0x80, 0x80
+	_, err := pq.Open(bytes.NewReader(b), int64(len(b)))
+	require.ErrorIs(t, err, pq.ErrInvalid)
+	require.ErrorContains(t, err, `column "d64" has decimal precision 0 and scale 294912`)
+}
+
+// TestCorruptBytesGiveErrors changes bytes of legacy.parquet and the fuzz
 // seeds at fixed, pseudo-random places and reads every row, so the regular
 // test run covers what FuzzOpenAndRead checks. No read may allocate more
 // than 64 MiB: parquet-go allocates what corrupt sizes and counts claim
@@ -274,10 +309,19 @@ func TestCorruptBytesGiveErrors(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2)) //nolint:gosec // reproducible test input, not a secret
 	var before, after runtime.MemStats
 	for _, name := range names {
-		for i := range 400 {
+		for i := range 800 {
 			b := bytes.Clone(files[name])
-			for range 1 + rng.IntN(3) {
-				b[rng.IntN(len(b))] = byte(rng.IntN(256))
+			if i%2 == 0 {
+				for range 1 + rng.IntN(3) {
+					b[rng.IntN(len(b))] = byte(rng.IntN(256))
+				}
+			} else {
+				// A run of bytes that lengthens or ends varints, as in
+				// TestCorruptDeltaByteArray and TestCorruptDecimalScale.
+				at, v := rng.IntN(len(b)), []byte{0x00, 0x7f, 0x80, 0xff}[rng.IntN(4)]
+				for k := at; k < min(len(b), at+1+rng.IntN(5)); k++ {
+					b[k] = v
+				}
 			}
 			runtime.ReadMemStats(&before)
 			require.NotPanics(t, func() { readAll(t, b, -1) }, "%s mutation %d", name, i)

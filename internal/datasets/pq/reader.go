@@ -412,6 +412,23 @@ func unitOf(u format.TimeUnit) string {
 	return "ms"
 }
 
+// maxDecimalPrecision is the most digits pyarrow reads a Parquet decimal
+// with, as decimal256.
+const maxDecimalPrecision = 76
+
+// decimalArrow returns the type of a decimal column, checking its
+// precision and scale as Arrow does: a corrupt scale of millions of digits
+// would otherwise reach every value formatted.
+func decimalArrow(name string, precision, scale int64) (*features.Arrow, error) {
+	switch {
+	case precision < 1 || scale < 0 || scale > precision:
+		return nil, fmt.Errorf("%w: column %q has decimal precision %d and scale %d", ErrInvalid, name, precision, scale)
+	case precision > maxDecimalPrecision:
+		return nil, fmt.Errorf("%w: column %q has decimal precision %d, more than %d", ErrUnsupported, name, precision, maxDecimalPrecision)
+	}
+	return &features.Arrow{ID: features.Decimal128, Precision: int(precision), Scale: int(scale)}, nil
+}
+
 // leafArrow returns the Arrow type pyarrow reads a Parquet leaf as.
 func leafArrow(el format.SchemaElement) (*features.Arrow, error) {
 	phys, ok := el.Type.Get()
@@ -448,7 +465,7 @@ func leafArrow(el format.SchemaElement) (*features.Arrow, error) {
 		}
 		return &features.Arrow{ID: features.Time64, Unit: u}, nil
 	case *format.DecimalType:
-		return &features.Arrow{ID: features.Decimal128, Precision: int(lt.Precision), Scale: int(lt.Scale)}, nil
+		return decimalArrow(el.Name, int64(lt.Precision), int64(lt.Scale))
 	case *format.Float16Type:
 		return p(features.Float16), nil
 	case *format.NullType:
@@ -487,7 +504,7 @@ func leafArrow(el format.SchemaElement) (*features.Arrow, error) {
 		case deprecated.Decimal:
 			prec, _ := el.Precision.Get()
 			sc, _ := el.Scale.Get()
-			return &features.Arrow{ID: features.Decimal128, Precision: int(prec), Scale: int(sc)}, nil
+			return decimalArrow(el.Name, int64(prec), int64(sc))
 		}
 	}
 	switch phys {

@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/binary"
+	"math"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/snappy"
 	"github.com/klauspost/compress/zstd"
+	"github.com/parquet-go/parquet-go/encoding"
+	"github.com/parquet-go/parquet-go/encoding/delta"
 	"github.com/parquet-go/parquet-go/encoding/thrift"
 	"github.com/parquet-go/parquet-go/format"
 	"github.com/pierrec/lz4/v4"
@@ -300,13 +304,181 @@ func TestCheckValues(t *testing.T) {
 	require.NoError(t, checkValues(nil, format.RLE, 10))
 	require.NoError(t, checkValues([]byte{2, 0, 0, 0, 0x14, 0x01}, format.RLE, 10))
 	require.ErrorContains(t, checkValues([]byte{9, 0, 0, 0, 0x80, 0x01, 0x01}, format.RLE, 10), "runs of more than 10")
-	// Delta headers: block size, miniblocks, values, first value.
+	// Delta headers: block size, miniblocks, values, first value. For
+	// integers only the header is checked; the byte-array encodings are
+	// checked in full by TestCheckDeltaByteArrays.
+	require.NoError(t, checkValues([]byte{0x80, 0x01, 0x04, 0x0a, 0x02}, format.DeltaBinaryPacked, 10))
 	for _, enc := range []format.Encoding{format.DeltaBinaryPacked, format.DeltaLengthByteArray, format.DeltaByteArray} {
-		require.NoError(t, checkValues([]byte{0x80, 0x01, 0x04, 0x0a, 0x02}, enc, 10))
 		require.NoError(t, checkValues(nil, enc, 0))
 		require.ErrorContains(t, checkValues([]byte{0x80, 0x01, 0x04, 0x80, 0x80, 0x80, 0x80, 0x08}, enc, 10), "2147483648 values")
 		require.ErrorContains(t, checkValues([]byte{0x80, 0x01}, enc, 10), "delta header")
 	}
 	require.NoError(t, checkValues([]byte(strings.Repeat("x", 10)), format.Plain, 10))
 	require.NoError(t, checkValues([]byte(strings.Repeat("x", 10)), format.ByteStreamSplit, 10))
+}
+
+// byteArrays returns the values and offsets parquet-go's byte-array
+// encoders take.
+func byteArrays(values ...string) ([]byte, []uint32) {
+	data, offsets := []byte{}, []uint32{0}
+	for _, v := range values {
+		data = append(data, v...)
+		offsets = append(offsets, uint32(len(data))) //nolint:gosec // test values are short
+	}
+	return data, offsets
+}
+
+// deltaStream encodes 32-bit integers as DELTA_BINARY_PACKED.
+func deltaStream(t *testing.T, v ...int32) []byte {
+	t.Helper()
+	b, err := new(delta.BinaryPackedEncoding).EncodeInt32(nil, v)
+	require.NoError(t, err)
+	return b
+}
+
+func TestCheckDeltaByteArrays(t *testing.T) {
+	// Valid pages from parquet-go's encoders, with more values than one
+	// block of 128 holds.
+	values := []string{"", "a", "ab", "abc", "b", "", "été"}
+	for i := range 300 {
+		values = append(values, strings.Repeat("x", i%40)+"y")
+	}
+	data, offsets := byteArrays(values...)
+	dlba, err := new(delta.LengthByteArrayEncoding).EncodeByteArray(nil, data, offsets)
+	require.NoError(t, err)
+	dba, err := new(delta.ByteArrayEncoding).EncodeByteArray(nil, data, offsets)
+	require.NoError(t, err)
+	n := int64(len(values))
+	require.NoError(t, checkValues(dlba, format.DeltaLengthByteArray, n))
+	require.NoError(t, checkValues(dba, format.DeltaByteArray, n))
+	lengths, rest, err := deltaInts(dlba, "lengths", n)
+	require.NoError(t, err)
+	require.Len(t, lengths, len(values))
+	require.Equal(t, data, rest)
+
+	// Value data cut short.
+	require.ErrorContains(t, checkValues(dlba[:len(dlba)-1], format.DeltaLengthByteArray, n), "bytes of page data")
+	require.ErrorContains(t, checkValues(dba[:len(dba)-1], format.DeltaByteArray, n), "bytes of page data")
+	// More values than the page.
+	require.ErrorContains(t, checkValues(dlba, format.DeltaLengthByteArray, n-1), "lengths: delta header of 307 values in a page of 306")
+	require.ErrorContains(t, checkValues(dba, format.DeltaByteArray, n-1), "prefix lengths: delta header of 307 values")
+
+	// Lengths that do not fit, each the only fault in its page.
+	dlbaOf := func(lengths []int32, data string) []byte { return append(deltaStream(t, lengths...), data...) }
+	dbaOf := func(prefixes, suffixes []int32, data string) []byte {
+		return append(append(deltaStream(t, prefixes...), deltaStream(t, suffixes...)...), data...)
+	}
+	require.NoError(t, checkValues(dlbaOf([]int32{1, 2}, "abc"), format.DeltaLengthByteArray, 2))
+	require.ErrorContains(t, checkValues(dlbaOf([]int32{1, -1}, "abc"), format.DeltaLengthByteArray, 2), "value 1 has a length of -1")
+	require.ErrorContains(t, checkValues(dlbaOf([]int32{1, math.MaxInt32}, "abc"), format.DeltaLengthByteArray, 2), "in 3 bytes of page data")
+	require.NoError(t, checkValues(dbaOf([]int32{0, 2, 3}, []int32{3, 1, 0}, "abcd"), format.DeltaByteArray, 3))
+	require.ErrorContains(t, checkValues(dbaOf([]int32{1, 0}, []int32{1, 1}, "ab"), format.DeltaByteArray, 2), "value 0 has a prefix of 1 bytes after a value of 0")
+	require.ErrorContains(t, checkValues(dbaOf([]int32{0, 2}, []int32{1, 1}, "ab"), format.DeltaByteArray, 2), "value 1 has a prefix of 2 bytes after a value of 1")
+	require.ErrorContains(t, checkValues(dbaOf([]int32{0, -1}, []int32{1, 1}, "ab"), format.DeltaByteArray, 2), "prefix of -1 bytes")
+	require.ErrorContains(t, checkValues(dbaOf([]int32{0, 0}, []int32{1, math.MaxInt32}, "ab"), format.DeltaByteArray, 2), "in 2 bytes of page data")
+	require.ErrorContains(t, checkValues(dbaOf([]int32{0, 0}, []int32{1}, "ab"), format.DeltaByteArray, 2), "2 prefix lengths and 1 suffix lengths")
+	require.ErrorContains(t, checkValues(deltaStream(t, 0, 0), format.DeltaByteArray, 2), "suffix lengths: delta header")
+
+	// Prefixes that repeat a value build values larger than the page.
+	// parquet-go allocates their total, so it is limited like a page.
+	const long, repeats = 1024, maxPageBytes / 1024
+	prefixes, suffixes := make([]int32, repeats+1), make([]int32, repeats+1)
+	suffixes[0] = long
+	for i := 1; i <= repeats; i++ {
+		prefixes[i] = long
+	}
+	huge := dbaOf(prefixes, suffixes, strings.Repeat("z", long))
+	require.ErrorIs(t, checkValues(huge, format.DeltaByteArray, repeats+1), ErrUnsupported)
+	require.NoError(t, checkValues(dbaOf(prefixes[:repeats], suffixes[:repeats], strings.Repeat("z", long)), format.DeltaByteArray, repeats))
+
+	// Faults in the integer streams themselves.
+	header := []byte{0x80, 0x01, 0x04, 0x03, 0x00} // 128 per block, 4 miniblocks, 3 values, first 0
+	for name, c := range map[string]struct {
+		b    []byte
+		want string
+	}{
+		"no first value":   {header[:4], "no first value"},
+		"block size":       {[]byte{0x40, 0x04, 0x03, 0x00}, "delta blocks of 64 values in 4 miniblocks"},
+		"no miniblocks":    {[]byte{0x80, 0x01, 0x00, 0x03, 0x00}, "in 0 miniblocks"},
+		"miniblock size":   {[]byte{0x80, 0x01, 0x03, 0x03, 0x00}, "in 3 miniblocks"},
+		"block too large":  {[]byte{0x80, 0x80, 0x08, 0x04, 0x03, 0x00}, "delta blocks of 131072"},
+		"first value":      {[]byte{0x80, 0x01, 0x04, 0x01, 0x80, 0x80, 0x80, 0x80, 0x10}, "not a 32-bit integer"},
+		"block header":     {append(bytes.Clone(header), 0x80), "delta block header"},
+		"wide miniblock":   {append(bytes.Clone(header), 0x00, 33, 0, 0, 0), "33-bit deltas"},
+		"missing values":   {append(bytes.Clone(header), 0x00), "2 of 3 values missing"},
+		"no blocks at all": {header, "2 of 3 values missing"},
+	} {
+		_, _, err := deltaInts(c.b, "lengths", 10)
+		require.ErrorIs(t, err, ErrInvalid, name)
+		require.ErrorContains(t, err, c.want, name)
+	}
+	// A smallest delta of 1, then the first miniblock at 2 bits with deltas
+	// of 1 above it. Bit widths of miniblocks after the last value are not
+	// read.
+	v, rest, err := deltaInts(append(bytes.Clone(header), 0x02, 0x02, 0xff, 0xff, 0xff, 0x55, 0, 0, 0, 0, 0, 0, 0, 'x'), "lengths", 10)
+	require.NoError(t, err)
+	require.Equal(t, []int32{0, 2, 4}, v)
+	require.Equal(t, []byte("x"), rest)
+
+	// A dictionary page is decoded with the encoding its header names.
+	c := &pageChecker{codec: format.Uncompressed, chunkValues: 100, chunkBytes: 1000}
+	page := dlbaOf([]int32{1, 900}, "ab")
+	h := &format.PageHeader{Type: format.DictionaryPage, UncompressedPageSize: int32(len(page)), CompressedPageSize: int32(len(page))}
+	h.DictionaryPageHeader.Valid = true
+	h.DictionaryPageHeader.V = format.DictionaryPageHeader{NumValues: 2, Encoding: format.DeltaLengthByteArray}
+	require.ErrorContains(t, c.check(h, reader(page)), "in 2 bytes of page data")
+	h.DictionaryPageHeader.V.Encoding = format.PlainDictionary //nolint:staticcheck // older writers use it
+	require.NoError(t, c.check(h, reader(page)))
+}
+
+// TestDeltaByteArrayChecksMatchParquetGo changes bytes of valid
+// DELTA_BYTE_ARRAY and DELTA_LENGTH_BYTE_ARRAY pages at random. Whenever
+// the checks accept a page, parquet-go must decode it, and to no more than
+// its estimate, which the checks bound: they must read the streams as
+// parquet-go reads them.
+func TestDeltaByteArrayChecksMatchParquetGo(t *testing.T) {
+	values := []string{"apple", "apricot", "banana", "band", "bandana", "", "c"}
+	for i := range 200 {
+		values = append(values, strings.Repeat("q", i%7)+string(rune('a'+i%26)))
+	}
+	data, offsets := byteArrays(values...)
+	rng := rand.New(rand.NewPCG(3, 4)) //nolint:gosec // reproducible test input, not a secret
+	for _, enc := range []interface {
+		encoding.Encoding
+		EncodeByteArray([]byte, []byte, []uint32) ([]byte, error)
+	}{new(delta.LengthByteArrayEncoding), new(delta.ByteArrayEncoding)} {
+		page, err := enc.EncodeByteArray(nil, data, offsets)
+		require.NoError(t, err)
+		accepted := 0
+		for i := range 20000 {
+			b := bytes.Clone(page)
+			for range 1 + rng.IntN(3) {
+				b[rng.IntN(len(b))] = byte(rng.IntN(256))
+			}
+			if checkValues(b, enc.Encoding(), int64(len(values))) != nil {
+				continue
+			}
+			accepted++
+			estimate := enc.EstimateDecodeByteArraySize(b)
+			require.LessOrEqual(t, estimate, maxPageBytes, "%s mutation %d", enc, i)
+			out, _, err := enc.DecodeByteArray(nil, b, nil)
+			require.NoError(t, err, "%s mutation %d", enc, i)
+			require.LessOrEqual(t, len(out), maxPageBytes, "%s mutation %d", enc, i)
+		}
+		require.Positive(t, accepted, enc)
+	}
+}
+
+func TestDecimalArrow(t *testing.T) {
+	a, err := decimalArrow("d", 38, 38)
+	require.NoError(t, err)
+	require.Equal(t, 38, a.Scale)
+	_, err = decimalArrow("d", 76, 0)
+	require.NoError(t, err)
+	for _, c := range [][2]int64{{0, 0}, {5, -1}, {5, 6}, {18, 1 << 31}} {
+		_, err := decimalArrow("d", c[0], c[1])
+		require.ErrorIs(t, err, ErrInvalid, c)
+	}
+	_, err = decimalArrow("d", 77, 2)
+	require.ErrorIs(t, err, ErrUnsupported)
 }

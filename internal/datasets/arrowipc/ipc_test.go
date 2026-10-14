@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -186,6 +187,7 @@ func TestHelpers(t *testing.T) {
 	require.Equal(t, "500", arrowipc.DecimalString(le, -2))
 	neg := bytes.Repeat([]byte{0xff}, 16)
 	require.Equal(t, "-0.001", arrowipc.DecimalString(neg, 3))
+	require.Equal(t, "-0."+strings.Repeat("0", 37)+"1", arrowipc.DecimalString(neg, 38))
 }
 
 // FuzzReader checks that no input makes the reader panic or loop.
