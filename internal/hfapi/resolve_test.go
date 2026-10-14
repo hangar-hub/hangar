@@ -337,6 +337,13 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 	require.Equal(t, http.StatusConflict, r.StatusCode)
 	require.Contains(t, r.Header.Get("X-Error-Message"), "not in the arsenal")
 
+	// A policy refusal, such as the Namespace's storage quota, is a 403
+	// with the message.
+	pt.fileErr = &repo.PolicyError{Message: "This change needs 64 B more than the storage quota allows."}
+	r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "")
+	require.Equal(t, http.StatusForbidden, r.StatusCode)
+	require.Contains(t, r.Header.Get("X-Error-Message"), "storage quota")
+
 	pt.fileErr, pt.content = nil, weights
 	r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "")
 	require.Equal(t, http.StatusOK, r.StatusCode)
@@ -346,6 +353,10 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 	r = e.Request(t, http.MethodGet, "/api/models/upstream/thing", "", "")
 	require.Equal(t, http.StatusServiceUnavailable, r.StatusCode)
 	require.Equal(t, "10", r.Header.Get("Retry-After"))
+	pt.repoErr = &repo.PolicyError{Message: "The Namespace is over its storage quota."}
+	r = e.Request(t, http.MethodGet, "/api/models/upstream/thing", "bob", "")
+	require.Equal(t, http.StatusForbidden, r.StatusCode)
+	require.Contains(t, r.Header.Get("X-Error-Message"), "storage quota")
 	pt.repoErr = repo.ErrNotFound
 	requireHubError(t, e.Request(t, http.MethodGet, "/api/models/upstream/thing", "bob", ""), http.StatusNotFound, "RepoNotFound")
 	pt.repoErr, pt.created = nil, rp

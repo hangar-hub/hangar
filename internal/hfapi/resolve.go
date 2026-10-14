@@ -195,7 +195,7 @@ func (h *Handler) serveNotPresent(w http.ResponseWriter, r *http.Request, rp *re
 			return
 		}
 		if !errors.Is(err, repo.ErrNotPresent) {
-			h.internalError(w, r, err)
+			h.serviceError(w, r, rp.ID, err)
 			return
 		}
 	}

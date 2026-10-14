@@ -51,7 +51,9 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, ref repoRef, acti
 			w.Header().Set("Retry-After", "10")
 			httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusServiceUnavailable, Message: "Hangar is pulling " + ref.id.Path() + " into the arsenal. Try again shortly."})
 		default:
-			h.internalError(w, r, err)
+			// A Pull-through refused by policy, such as the Namespace's
+			// storage quota, is a *repo.PolicyError: 403 with its message.
+			h.serviceError(w, r, ref.id, err)
 		}
 		return nil, false
 	}
