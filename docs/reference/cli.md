@@ -643,8 +643,14 @@ Settings, Tokens.
 Usage:
 
 ```sh
-hangar logout
+hangar logout [flags]
 ```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `--json` | print JSON instead of text |  |
 
 ## hangar ollama
 

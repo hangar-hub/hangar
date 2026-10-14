@@ -258,6 +258,9 @@ Settings, Tokens.`,
 				return err
 			}
 			if s.URL == "" {
+				if a.json {
+					return a.printJSON(logoutResult{})
+				}
 				a.printf("You are not signed in.\n")
 				return nil
 			}
@@ -266,11 +269,22 @@ Settings, Tokens.`,
 			if err := s.save(path); err != nil {
 				return err
 			}
+			if a.json {
+				return a.printJSON(logoutResult{URL: s.URL, SignedOut: true})
+			}
 			a.printf("Signed out of %s.\n", s.URL)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&a.json, "json", false, "print JSON instead of text")
 	return cmd
+}
+
+// logoutResult is what hangar logout --json prints. SignedOut is false when
+// there was no saved login.
+type logoutResult struct {
+	URL       string `json:"url"`
+	SignedOut bool   `json:"signed_out"`
 }
 
 func (a *app) whoamiCommand() *cobra.Command {

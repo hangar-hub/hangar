@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/zalando/go-keyring"
 
@@ -160,4 +161,45 @@ func TestQuoting(t *testing.T) {
 	require.Equal(t, "bash", defaultShell())
 	t.Setenv("PSModulePath", "x")
 	require.Equal(t, "powershell", defaultShell())
+}
+
+func TestLogoutJSON(t *testing.T) {
+	e := newEnv(t)
+	var res logoutResult
+	r := e.ok("logout", "--json")
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	require.Equal(t, logoutResult{}, res, "not signed in")
+
+	e.login()
+	r = e.ok("logout", "--json")
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	require.Equal(t, logoutResult{URL: e.inst.URL, SignedOut: true}, res)
+	require.Equal(t, ExitAuth, e.run("whoami").code)
+}
+
+// TestEveryCommandTakesJSON checks 08-local-tools.md: --json on every
+// command.
+func TestEveryCommandTakesJSON(t *testing.T) {
+	root := &cobra.Command{Use: "hangar"}
+	Register(root, Options{Version: "test"})
+	var walk func(c *cobra.Command)
+	var checked int
+	var missing []string
+	walk = func(c *cobra.Command) {
+		for _, sub := range c.Commands() {
+			if sub.Hidden || sub.Name() == "help" || sub.Name() == "completion" {
+				continue
+			}
+			if sub.Runnable() {
+				checked++
+				if sub.Flag("json") == nil {
+					missing = append(missing, sub.CommandPath())
+				}
+			}
+			walk(sub)
+		}
+	}
+	walk(root)
+	require.Empty(t, missing, "commands without --json")
+	require.Greater(t, checked, 20)
 }
