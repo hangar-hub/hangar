@@ -10,7 +10,7 @@ The research behind this page, with tests against real `git`, git-lfs and huggin
 | Source of truth | The `refs` and `packs` tables plus the pack bytes. A ref may only point at a Commit whose closure is in `live` packs. |
 | Fetch and clone | The real `git` binary: `git upload-pack --stateless-rpc [--advertise-refs]`, protocol v0 and v2, shallow, `filter`, bitmaps. |
 | Push | go-git v6 `transport.ReceivePack` (pinned to an exact v6 pre-release or commit, wrapped behind `internal/gitstore` interfaces), with an in-memory ref snapshot and a `PreReceive` hook that makes the push atomic. |
-| Server-side Commits (Hub API, UI, Pulls of local Repos) | go-git with a memory storer, encode a pack of only the new objects, then the same upload-and-CAS path as a push. |
+| Server-side Commits (Hub API, UI, Pulls of local Repos) | The git binary in a temporary staging repository whose alternates point at the pack cache (`hash-object`, `update-index` on a temporary index, `write-tree`, `commit-tree`), then `pack-objects` of only the new objects and the same upload-and-CAS path as a push. Objects are byte-identical to git's by construction (decided in phase 2, `docs/build/requests/w2.md` item 1). |
 | Mirrors | Fetch upstream packs with go-git v6 (client) and store them verbatim, so Commit SHAs are identical to the Upstream. |
 | Replicas | Stateless apart from a disposable local pack cache (`server.git_cache_dir`, default `/var/cache/hangar/git`, LRU-bounded by `server.git_cache_size`, default 10 GiB). |
 | git-lfs | Batch API with `basic` transfer and Hugging Face's `multipart` custom transfer; `verify`; `/locks*` return 404. |
@@ -79,7 +79,7 @@ The single function `gitstore.UpdateRefs(ctx, repoID, []RefUpdate{Name, Old, New
 `repo.Service.Commit`:
 
 1. Resolve the parent: `parent_commit` if given (Hub API `parentCommit`), else the branch tip.
-2. Build blobs (pointer files for LFS paths), trees and the Commit with go-git in memory. LFS pointer files must be byte-exact with what `git lfs pointer` produces (see the research doc, section 3.6). Author and committer come from the user's display name and email, and the time is the server time in UTC.
+2. Build blobs (pointer files for LFS paths), trees and the Commit with the git binary in a staging repository. LFS pointer files must be byte-exact with what `git lfs pointer` produces (see the research doc, section 3.6). Author and committer come from the user's display name and email, and the time is the server time in UTC.
 3. Decide LFS or regular per path using the Repo's `.gitattributes` at the parent Commit, falling back to the Hub's default patterns.
 4. Encode a pack of the new objects only, then follow push steps 2 to 4 with `Old = parent`.
 5. A compare-and-swap conflict when the client sent `parent_commit` returns the Hub's 412 error. Without `parent_commit`, retry up to 3 times on the new tip if the change still applies cleanly (no path in the Commit was changed in between), else 409.

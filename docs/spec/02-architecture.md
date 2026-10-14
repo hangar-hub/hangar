@@ -16,7 +16,7 @@
 | Logging | `log/slog` | JSON to stdout and OTLP. |
 | CLI | `github.com/spf13/cobra` | One binary: `hangar server`, `hangar worker`, client commands. |
 | Config | `github.com/knadh/koanf/v2` | YAML file, then `HANGAR_*` env vars, then flags. |
-| GGUF parsing | `github.com/gpustack/gguf-parser-go` (MIT) | Range reads only; see [07](07-indexing-and-scanning.md). |
+| GGUF parsing | Hangar's own header reader in `internal/index/gguf` over 1 MiB ranged reads, with `github.com/gpustack/gguf-parser-go` (MIT) for ggml type sizes and file type names | `gguf-parser-go` reads only local paths or URLs, not an `io.ReaderAt` (`docs/build/requests/w7.md` item 8); see [07](07-indexing-and-scanning.md). |
 | Native API contract | OpenAPI 3.1 in `api/openapi.yaml`, types from `github.com/oapi-codegen/oapi-codegen/v2` | The UI client is generated from the same file. |
 | Web UI | React, TypeScript, Vite, TanStack Router and Query, Tailwind CSS, shadcn/ui | Built assets embedded with `go:embed`. See [09](09-web-ui.md). |
 

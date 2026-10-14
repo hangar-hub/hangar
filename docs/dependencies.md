@@ -32,7 +32,7 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/robfig/cron/v3` | v3.0.1 | Parsing the 5-field cron schedules in configuration and the `schedules` table. |
 | `go.yaml.in/yaml/v3` | v3.0.5 | Model card front matter (`base_model`, `datasets`) for Dependency resolution. Already in the module graph through koanf. |
 | `github.com/google/uuid` | v1.6.0 | UUIDv7 row IDs. |
-| `github.com/gpustack/gguf-parser-go` | v0.26.4 | GGUF header parsing with ranged reads (MIT). Pinned until W7 imports it. |
+| `github.com/gpustack/gguf-parser-go` | v0.26.4 | ggml tensor type sizes and GGUF file type names (MIT). `internal/index/gguf` reads the header itself over ranged reads, because the library parses only local paths and URLs. |
 | `github.com/parquet-go/parquet-go` | v0.32.0 | Parquet reading and writing for datasets (Apache-2.0). |
 | `github.com/klauspost/compress` | v1.20.1 | zstd for zstd-compressed dataset files and Arrow IPC buffers, and Snappy and zstd for checking Parquet pages before parquet-go reads them (Apache-2.0, BSD-3-Clause). Already required by parquet-go. |
 | `github.com/pierrec/lz4/v4` | v4.1.21 | Decodes the LZ4 frames in Xet xorb chunks (UP-7) and checks LZ4_RAW Parquet pages before parquet-go reads them (BSD-3-Clause). Already required by parquet-go. |

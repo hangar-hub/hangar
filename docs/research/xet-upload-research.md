@@ -346,11 +346,12 @@ A sequence of file blocks, ended by a bookend: 32×`0xFF` followed by 16×`0x00`
 | `FileDataSequenceHeader` | `file_hash[32]`, `file_flags u32`, `num_entries u32`, `_unused[8]` |
 | `FileDataSequenceEntry` × `num_entries` | `xorb_hash[32]`, `cas_flags u32` (0), `unpacked_segment_bytes u32`, `chunk_index_start u32`, `chunk_index_end u32` (exclusive) |
 | If `flags & 0x80000000`: `FileVerificationEntry` × `num_entries` | `range_hash[32]`, `_unused[16]` |
-| If `flags & 0x40000000`: `FileMetadataExt` × 1 | `sha256[32]` (raw digest bytes of the file content), `_unused[16]` |
+| If `flags & 0x40000000`: `FileMetadataExt` × 1 | `sha256[32]`: the file content's SHA-256, stored as four little-endian 64-bit words like every other hash (`Sha256::from_be_bytes`), so its API string form is the hex digest; `_unused[16]` |
 
 - Real hf_xet clients set **both** flags (`file_flags = 0xC0000000`). Verification is always on (`file_deduplication.rs` `FileDataSequenceHeader::new(file_hash, n, true, metadata_ext.is_some())`). The guilt capture confirms this.
 - **The metadata extension carries the SHA-256.** It is present whenever `Sha256Policy` is `Compute` or `Provided` (`file_cleaner.rs` around line 246: `metadata_ext = sha256.map(FileMetadataExt::new)`). huggingface_hub always passes one of these two: the sha256 hex when it already knows it, otherwise `hf_xet.COMPUTE_SHA256`.
 - **A `Provided` sha256 is not checked by the client.** Hangar must recompute it (§5).
+- **Correction (phase 2, `docs/build/requests/w11.md` item 5):** an earlier version of this note said the extension holds the raw digest bytes. The xet-core source and the reference shard `...csv.shard.verification-no-footer` (whose extension reads as `f41255b2...`, the CSV's SHA-256, only in the word-reversed form) show otherwise.
 
 ### 4.3 CAS info section
 
@@ -512,6 +513,7 @@ Option B (virtual xorbs) adds about another week.
    - File hash `118a5332…` and xorb hash `eea25d6e…` from `.chunks`.
    - Range hash `d81c11b1…`.
    - Parse `eea25d6e….xorb` (decompress every chunk, recompute the xorb hash) and the `.shard.verification-no-footer` shard, then reassemble the CSV and compare its SHA-256 with the file.
+     The published `.xorb` file ends with a 4-byte `XETB` remnant after the last chunk, which xet-core's own chunk reader also rejects; strip it before parsing (correction from phase 2, `docs/build/requests/w11.md` item 5). Real uploads send no footer.
 2. **Format edge cases:**
    - Xorb with footer and without.
    - Mixed schemes in one xorb.

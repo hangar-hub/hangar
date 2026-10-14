@@ -48,3 +48,4 @@ Rules for pushes:
 - Force-pushes to a Repo's default branch are refused unless `git.allow_force_push` is on; Instance admins can always force-push.
 - Mirrors are read-only, so pushes to them are refused. Detach a Mirror first to make it an ordinary Repo.
 - If two pushes to the same branch race, one wins and the other gets git's usual non-fast-forward rejection.
+- `git push --atomic` fails with "the receiving end does not support --atomic push", because Hangar does not advertise the capability. Every push is applied all or nothing anyway, so push without `--atomic`.

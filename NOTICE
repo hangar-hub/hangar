@@ -7,8 +7,8 @@ This product includes third-party software and data under their own
 licences:
 
 - Ollama chat templates (template/index.json and *.gotmpl), vendored in
-  third_party/ollama/, from https://github.com/ollama/ollama.
-  MIT License, Copyright (c) Ollama. See third_party/ollama/LICENSE.
+  internal/ollama/third_party/ollama/, from https://github.com/ollama/ollama.
+  MIT License, Copyright (c) Ollama. See internal/ollama/third_party/ollama/LICENSE.
 
 - The common password list in internal/auth/common_passwords.txt, filtered
   from SecLists, https://github.com/danielmiessler/SecLists.
