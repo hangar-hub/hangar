@@ -1827,6 +1827,8 @@ export interface components {
             local_login: boolean;
             /** @enum {string} */
             registration: "open" | "invite" | "closed";
+            /** @description The Instance setting ui.external_images. When false, the UI loads no images from other hosts in Model cards. */
+            ui_external_images: boolean;
             providers: {
                 id: string;
                 name: string;
@@ -2315,7 +2317,7 @@ export interface components {
             from_card: boolean;
             configs: components["schemas"]["DatasetConfig"][];
         };
-        /** @description Files to Pull. Empty means every file. */
+        /** @description Files to Pull. An absent or empty object means every file. An explicitly empty `paths` list with nothing else selected means no files: the Pull fetches the history only. */
         Selection: {
             include?: string[];
             exclude?: string[];

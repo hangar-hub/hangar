@@ -1314,10 +1314,13 @@ components:
         password: {type: string, format: password}
     AuthProviders:
       type: object
-      required: [local_login, providers, registration]
+      required: [local_login, providers, registration, ui_external_images]
       properties:
         local_login: {type: boolean}
         registration: {type: string, enum: [open, invite, closed]}
+        ui_external_images:
+          type: boolean
+          description: The Instance setting ui.external_images. When false, the UI loads no images from other hosts in Model cards.
         providers:
           type: array
           items:
@@ -1835,7 +1838,9 @@ components:
     # Mirrors, Upstreams, Discover, Pulls
     Selection:
       type: object
-      description: Files to Pull. Empty means every file.
+      description: >-
+        Files to Pull. An absent or empty object means every file. An explicitly empty `paths` list
+        with nothing else selected means no files: the Pull fetches the history only.
       properties:
         include: {type: array, items: {type: string}}
         exclude: {type: array, items: {type: string}}

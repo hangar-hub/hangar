@@ -141,7 +141,8 @@ func (h *Identity) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	out := gen.AuthProviders{LocalLogin: st.LocalLogin, Registration: gen.AuthProvidersRegistration(st.Registration)}
+	out := gen.AuthProviders{LocalLogin: st.LocalLogin, Registration: gen.AuthProvidersRegistration(st.Registration),
+		UiExternalImages: st.UIExternalImages}
 	out.Providers = []struct {
 		Id       string `json:"id"`
 		LoginUrl string `json:"login_url"`

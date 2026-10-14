@@ -340,6 +340,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     ok({
       local_login: state.settings.local_login ?? true,
       registration: state.settings.registration ?? "closed",
+      ui_external_images: state.settings.ui_external_images ?? true,
       providers: [{ id: "unifi", name: "UniFi", login_url: "/auth/oidc/unifi" }],
     }),
   listMySessions: ({ state }) => ok({ items: state.sessions }),

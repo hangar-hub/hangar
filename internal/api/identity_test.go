@@ -202,6 +202,7 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		require.Equal(t, gen.AuthProvidersRegistrationClosed, providers.Registration)
 		require.Len(t, providers.Providers, 1)
 		require.Equal(t, "/auth/oidc/sso", providers.Providers[0].LoginUrl)
+		require.True(t, providers.UiExternalImages, "ui.external_images is on by default and readable by everyone")
 
 		anon.do(http.MethodPost, "/api/hangar/v1/auth/login", map[string]string{"username": "alice", "password": "wrong-password-1"}, http.StatusUnauthorized, nil)
 		anon.do(http.MethodPost, "/api/hangar/v1/auth/login", "not an object", http.StatusBadRequest, nil)
