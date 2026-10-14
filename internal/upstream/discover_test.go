@@ -17,6 +17,7 @@ import (
 
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
@@ -375,5 +376,46 @@ func TestPullThroughGitLFSURL(t *testing.T) {
 		require.NoError(t, err)
 		_ = resp.Body.Close()
 		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+}
+
+// TestPullThroughPullFiles covers the Ollama registry's entry point: it
+// queues a Pull of the missing files for the request's Principal.
+func TestPullThroughPullFiles(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		w := []byte("gguf weights for ollama")
+		commit := e.Seed(tiny, nil, map[string][]byte{"model-Q4_K_M.gguf": w})
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice, Selection: upstream.Selection{None: true}})
+		require.NoError(t, err)
+		e.Run(5)
+		require.Equal(t, jobs.StatusSucceeded, e.Job(id).Status, e.Job(id).Error)
+		r, err := e.Repos.Get(e.Ctx, tiny)
+		require.NoError(t, err)
+		pt := e.Service.PullThrough()
+		ctx := httpx.WithInfo(e.Ctx, "req")
+		httpx.SetPrincipal(ctx, alice)
+
+		require.ErrorIs(t, pt.PullFiles(ctx, r, commit, []string{"model-Q4_K_M.gguf"}), repo.ErrNotPresent, "Pull-through is off")
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"other/*"}, PullThroughMinRole: "user"})
+		require.ErrorIs(t, pt.PullFiles(ctx, r, commit, []string{"model-Q4_K_M.gguf"}), repo.ErrNotPresent, "not in the allowlist")
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"acme/*"}, PullThroughMinRole: "user"})
+		anon := httpx.WithInfo(e.Ctx, "anon")
+		httpx.SetPrincipal(anon, model.Anonymous())
+		require.ErrorIs(t, pt.PullFiles(anon, r, commit, []string{"model-Q4_K_M.gguf"}), repo.ErrNotPresent, "anonymous callers need min_role anonymous")
+
+		require.NoError(t, pt.PullFiles(ctx, r, commit, []string{"model-Q4_K_M.gguf"}))
+		e.Run(10)
+		en, err := e.Repos.Entry(e.Ctx, tiny, commit, "model-Q4_K_M.gguf")
+		require.NoError(t, err)
+		require.True(t, en.Present, "the Pull stored the file")
+		js, _, err := e.Queue.List(e.Ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPull}})
+		require.NoError(t, err)
+		scoped := false
+		for _, j := range js {
+			scoped = scoped || (j.Repo == r.UUID && j.CreatedBy == alice.UserID)
+		}
+		require.True(t, scoped, "the Pull belongs to the caller and is scoped to the Mirror")
 	})
 }

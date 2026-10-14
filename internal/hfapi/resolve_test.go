@@ -60,6 +60,25 @@ func TestResolveRegularFile(t *testing.T) {
 	require.Equal(t, "hello", string(readBody(t, r)))
 }
 
+// TestResolveNeverRendersUploads checks that files which a browser would
+// render, such as HTML and SVG, download as attachments on Hangar's origin.
+func TestResolveNeverRendersUploads(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	seed(t, e, "alice", modelID("alice", "xss"), model.VisibilityPublic, map[string]string{
+		"page.html": "<script>alert(1)</script>", "image.svg": `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>`,
+	})
+	for _, f := range []string{"page.html", "image.svg"} {
+		for _, method := range []string{http.MethodHead, http.MethodGet} {
+			r := e.Request(t, method, "/alice/xss/resolve/main/"+f, "", "")
+			require.Equal(t, http.StatusOK, r.StatusCode)
+			require.Equal(t, "application/octet-stream", r.Header.Get("Content-Type"), f)
+			require.Equal(t, "nosniff", r.Header.Get("X-Content-Type-Options"), f)
+			require.True(t, strings.HasPrefix(r.Header.Get("Content-Disposition"), "attachment;"), f)
+		}
+	}
+}
+
 func TestResolveRanges(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

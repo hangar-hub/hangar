@@ -113,7 +113,7 @@ type fixture struct {
 	users  map[string]model.Principal
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T, tweaks ...func(*api.RepoDeps)) *fixture {
 	t.Helper()
 	d := dbtest.SQLite(t)
 	real := repotest.NewReal(t, d)
@@ -131,6 +131,9 @@ func newFixture(t *testing.T) *fixture {
 	o := orgs{DBNamespaces: real.Namespaces}
 	deps := api.RepoDeps{Repos: real, LFS: real.LFS, Authz: f.authz, Orgs: o, Jobs: f.jobs, Collections: f.colls, NamespaceSearch: o,
 		Community: communitytest.NewFake(), Index: f.index, Scanner: f.scans, PublicURL: f.srv.URL + "/"}
+	for _, tw := range tweaks {
+		tw(&deps)
+	}
 	var s reposServer
 	s.ReposAPI, err = api.NewReposAPI(deps)
 	require.NoError(t, err)
@@ -533,3 +536,26 @@ func TestUploadCommitAndBrowseEndpoints(t *testing.T) {
 func ptr(s string) *string { return &s }
 func i64(n int64) *int64   { return &n }
 func ptrBool(b bool) *bool { return &b }
+
+func TestRepoMirrorStatus(t *testing.T) {
+	var asked []string
+	f := newFixture(t, func(d *api.RepoDeps) {
+		d.MirrorStatus = func(_ context.Context, r *repo.Repo) (*gen.MirrorSummary, error) {
+			asked = append(asked, r.ID.String())
+			return &gen.MirrorSummary{Upstream: "huggingface", UpstreamRepo: r.ID.String(), Status: "ok"}, nil
+		}
+	})
+	f.user("alice")
+	f.createRepo("alice", gen.RepoCreate{Type: "model", Namespace: "alice", Name: "local"})
+	mirrored := f.createRepo("alice", gen.RepoCreate{Type: "model", Namespace: "alice", Name: "mirrored"})
+	require.NoError(t, f.real.SetMirrorState(f.ctx, model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "mirrored"}, true))
+
+	var got gen.Repo
+	f.expect(http.StatusOK, http.MethodGet, "alice", "/repos/models/alice/local", nil).json(t, &got)
+	require.Nil(t, got.MirrorStatus, "an ordinary Repo has no mirror_status")
+	require.Empty(t, asked)
+	f.expect(http.StatusOK, http.MethodGet, "alice", "/repos/models/"+mirrored.Id, nil).json(t, &got)
+	require.NotNil(t, got.MirrorStatus)
+	require.Equal(t, "huggingface", got.MirrorStatus.Upstream)
+	require.Equal(t, []string{"alice/mirrored"}, asked)
+}

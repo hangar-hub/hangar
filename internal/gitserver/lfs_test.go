@@ -167,6 +167,9 @@ func TestLFSBasicUploadDownloadAndPush(t *testing.T) {
 	dl := o.Actions["download"]
 	resp = call(t, http.MethodGet, dl, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "application/octet-stream", resp.Header.Get("Content-Type"))
+	require.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
+	require.Equal(t, "attachment", resp.Header.Get("Content-Disposition"))
 	require.Equal(t, content, []byte(readAll(t, resp.Body)))
 	req, _ := http.NewRequest(http.MethodGet, dl.Href, nil)
 	req.Header.Set("Range", "bytes=10-19")

@@ -65,7 +65,11 @@ type RepoDeps struct {
 	InlineMax int64
 	// Facets asks List for facet counts; it needs the index.
 	Facets bool
-	Log    *slog.Logger
+	// MirrorStatus, when set, fills mirror_status for Mirrors, for example
+	// with UpstreamMirrorSummary over the Upstream service. A nil answer
+	// leaves it out.
+	MirrorStatus func(ctx context.Context, r *repo.Repo) (*gen.MirrorSummary, error)
+	Log          *slog.Logger
 }
 
 func (d *RepoDeps) validate() error {
@@ -241,6 +245,13 @@ func (d *RepoDeps) toRepo(ctx context.Context, p model.Principal, r *repo.Repo) 
 			for _, day := range days {
 				out.Downloads += day.Count
 			}
+		}
+	}
+	if r.Mirror && d.MirrorStatus != nil {
+		if ms, err := d.MirrorStatus(ctx, r); err == nil {
+			out.MirrorStatus = ms
+		} else if d.Log != nil {
+			d.Log.WarnContext(ctx, "mirror status", "repo.id", r.ID.String(), "error", err.Error())
 		}
 	}
 	perms := gen.RepoPermissions{}

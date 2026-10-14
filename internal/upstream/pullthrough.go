@@ -161,6 +161,32 @@ func (pt *PullThrough) File(ctx context.Context, p model.Principal, r *repo.Repo
 	return pt.stream(ctx, r, m, up, commit, e.Path, e.LFS.OID, e.LFS.Size, p.UserID)
 }
 
+// PullFiles starts, or joins, a Pull of paths at commit into a Partial
+// mirror, for clients that retry until the files arrive (the Ollama
+// registry). The caller is the request's Principal. It returns
+// repo.ErrNotPresent when Pull-through does not apply: the Repo is not an
+// attached Mirror of an enabled Upstream, Pull-through is off, or the
+// allowlist or minimum role leaves the caller out.
+func (pt *PullThrough) PullFiles(ctx context.Context, r *repo.Repo, commit model.CommitSHA, paths []string) error {
+	p := httpx.Principal(ctx)
+	m, up, err := pt.s.Mirror(ctx, r)
+	if errors.Is(err, ErrNotMirror) || (err == nil && (m.DetachedAt != nil || !up.Enabled)) {
+		return repo.ErrNotPresent
+	}
+	if err != nil {
+		return err
+	}
+	if ok, err := pt.allowed(ctx, p, m.UpstreamRepo); err != nil {
+		return err
+	} else if !ok {
+		return repo.ErrNotPresent
+	}
+	pl := pullPayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: m.UpstreamRepo.String(), Type: r.ID.Type, Repo: r.ID.String(),
+		Revision: string(commit), Selection: Selection{Paths: slices.Clone(paths)}, RequestedBy: p.UserID, PullThrough: true}
+	_, err = pt.s.enqueuePull(ctx, pl, uuid.Nil, jobs.PriorityHigh)
+	return err
+}
+
 func (pt *PullThrough) stream(ctx context.Context, r *repo.Repo, m *Mirror, up *Upstream, commit model.CommitSHA, path, oid string, size int64, user uuid.UUID) (io.ReadCloser, error) {
 	s := pt.s
 	if done, err := s.markIfStored(ctx, r.ID, r.NamespaceID, oid, size); err != nil {

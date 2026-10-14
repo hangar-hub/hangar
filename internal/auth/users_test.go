@@ -279,3 +279,33 @@ func TestSettings(t *testing.T) {
 		require.Len(t, rec.Actions(), before, "no change, no audit event")
 	})
 }
+
+func TestSetPassword(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		rec := audittest.NewFake()
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Audit: rec})
+		u, err := s.Users.Create(ctx, auth.NewUser{Username: "Locked", Password: "first good password 1"}, model.System())
+		require.NoError(t, err)
+		_, _, err = s.Sessions.Create(ctx, u.ID, "", "")
+		require.NoError(t, err)
+		for range 6 {
+			_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "locked", Password: "wrong password here", IP: "10.0.0.9"})
+			require.Error(t, err)
+		}
+
+		_, err = s.Users.SetPassword(ctx, u.ID, "short", model.System())
+		require.ErrorIs(t, err, auth.ErrInvalid, "the password policy applies")
+		_, err = s.Users.SetPassword(ctx, uuid.New(), "second good password 2", model.System())
+		require.ErrorIs(t, err, auth.ErrNotFound)
+
+		_, err = s.Users.SetPassword(ctx, u.ID, "second good password 2", model.System())
+		require.NoError(t, err)
+		require.Equal(t, audit.UserPasswordReset, rec.Actions()[len(rec.Actions())-1])
+		sessions, err := s.Sessions.List(ctx, u.ID)
+		require.NoError(t, err)
+		require.Empty(t, sessions, "the User is signed out everywhere")
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "locked", Password: "second good password 2", IP: "10.0.0.10"})
+		require.NoError(t, err, "the throttle is cleared and the new password works")
+	})
+}

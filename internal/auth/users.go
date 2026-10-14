@@ -390,6 +390,36 @@ func (us *UserStore) Update(ctx context.Context, id uuid.UUID, up UserUpdate, ac
 	return us.Get(ctx, id)
 }
 
+// SetPassword sets a User's password directly, for `hangar admin
+// reset-password` on the server host. It checks the password policy, signs
+// the User out everywhere, clears sign-in throttling for the username and
+// records user.password_reset with actor.
+func (us *UserStore) SetPassword(ctx context.Context, id uuid.UUID, password string, actor model.Principal) (*User, error) {
+	var u *User
+	err := us.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		if u, err = us.one(ctx, tx, "u.id = ?", id); err != nil {
+			return err
+		}
+		if u.IsSystem {
+			return fmt.Errorf("%w: the system user has no password", ErrInvalid)
+		}
+		if err := us.setPasswordTx(ctx, tx, u, password); err != nil {
+			return err
+		}
+		if _, err := tx.NewDelete().Model((*db.Session)(nil)).Where("user_id = ?", id).Exec(ctx); err != nil {
+			return err
+		}
+		_, err = tx.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", throttleKeys(u.Username, "")[0]).Exec(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	us.s.record(ctx, audit.Event{Action: audit.UserPasswordReset, Actor: actor, TargetType: "user", TargetID: u.Username})
+	return us.Get(ctx, id)
+}
+
 // setPasswordTx stores a new password hash after checking the policy.
 func (us *UserStore) setPasswordTx(ctx context.Context, tx bun.IDB, u *User, pw string) error {
 	if err := CheckPasswordPolicy(pw, u.Username); err != nil {

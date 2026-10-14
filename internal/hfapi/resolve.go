@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -101,6 +100,10 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	hdr.Set("ETag", etag)
 	hdr.Set(headerLinkedEtag, etag)
 	hdr.Set("Accept-Ranges", "bytes")
+	// Every download is an attachment of type application/octet-stream
+	// with nosniff, whatever the file name says, so an uploaded HTML or
+	// SVG file is never rendered on Hangar's origin.
+	blob.SetDownloadHeaders(hdr, path.Base(clean))
 	hdr.Set("Content-Disposition", contentDisposition(path.Base(clean)))
 
 	if e.IsLFS() && !e.Present {
@@ -125,7 +128,6 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 		}
 	}
 	hdr.Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
-	hdr.Set("Content-Type", contentType(clean))
 	if r.Method == http.MethodHead {
 		hdr.Set("Content-Length", strconv.FormatInt(e.Size, 10))
 		w.WriteHeader(http.StatusOK)
@@ -175,7 +177,6 @@ func (h *Handler) serveNotPresent(w http.ResponseWriter, r *http.Request, rp *re
 	if r.Method == http.MethodHead {
 		w.Header().Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
 		w.Header().Set("Content-Length", strconv.FormatInt(e.Size, 10))
-		w.Header().Set("Content-Type", contentType(e.Path))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -185,7 +186,6 @@ func (h *Handler) serveNotPresent(w http.ResponseWriter, r *http.Request, rp *re
 			defer func() { _ = rc.Close() }()
 			w.Header().Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
 			w.Header().Set("Content-Length", strconv.FormatInt(e.Size, 10))
-			w.Header().Set("Content-Type", contentType(e.Path))
 			w.WriteHeader(http.StatusOK)
 			n, err := io.Copy(w, io.LimitReader(rc, e.Size))
 			h.recordDownload(ctx, rp.ID.Type, "proxy", n, true)
@@ -272,14 +272,7 @@ func contentDisposition(name string) string {
 		}
 		return r
 	}, name)
-	return `inline; filename*=UTF-8''` + url.PathEscape(name) + `; filename="` + ascii + `";`
-}
-
-func contentType(p string) string {
-	if ct := mime.TypeByExtension(path.Ext(p)); ct != "" {
-		return ct
-	}
-	return "application/octet-stream"
+	return `attachment; filename*=UTF-8''` + url.PathEscape(name) + `; filename="` + ascii + `";`
 }
 
 // dataExtensions are the file types counted as a dataset's data files.

@@ -181,7 +181,7 @@ func TestSmallHelpers(t *testing.T) {
 	require.Equal(t, 0, rest.len())
 	require.Contains(t, contentDisposition("Ü.txt"), "filename*=UTF-8''%C3%9C.txt")
 	require.Contains(t, contentDisposition(`a"b.txt`), `filename="a_b.txt"`)
-	require.Equal(t, "application/octet-stream", contentType("weights.gguf"))
+	require.True(t, strings.HasPrefix(contentDisposition("weights.gguf"), "attachment;"))
 	g := gatedValue(repo.Gating{Mode: "auto"})
 	require.Equal(t, "auto", g)
 }

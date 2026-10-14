@@ -572,7 +572,7 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request, rp repoPath, o
 	h := w.Header()
 	h.Set("Accept-Ranges", "bytes")
 	h.Set("ETag", `"`+oid+`"`)
-	h.Set("Content-Type", "application/octet-stream")
+	blob.SetDownloadHeaders(h, "")
 	h.Set("Cache-Control", "private, max-age=0")
 	length, status := obj.Size, http.StatusOK
 	if rng != nil {
