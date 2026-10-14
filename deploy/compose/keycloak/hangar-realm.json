@@ -37,7 +37,7 @@
       "protocol": "openid-connect",
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "hangar-example-client-secret",
+      "secret": "${HANGAR_OIDC_CLIENT_SECRET}",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": ["http://localhost:8080/auth/oidc/keycloak/callback"],

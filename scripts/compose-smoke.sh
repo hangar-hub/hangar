@@ -13,8 +13,13 @@ shift
 file="deploy/compose/${example}.yaml"
 [[ -f "$file" ]] || { echo "no such example: $file" >&2; exit 2; }
 
+# The examples have no default secrets, so generate fresh ones for each run.
 export HANGAR_ADMIN_PASSWORD="${HANGAR_ADMIN_PASSWORD:-smoke-$(openssl rand -hex 12)}"
 export HANGAR_INSTANCE_KEY="${HANGAR_INSTANCE_KEY:-$(openssl rand -base64 32)}"
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -hex 24)}"
+export MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(openssl rand -hex 24)}"
+export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-$(openssl rand -hex 24)}"
+export HANGAR_OIDC_CLIENT_SECRET="${HANGAR_OIDC_CLIENT_SECRET:-$(openssl rand -hex 24)}"
 export HANGAR_PORT="${HANGAR_PORT:-18080}"
 export HANGAR_PUBLIC_URL="http://localhost:${HANGAR_PORT}"
 project="hangar-smoke-${example}"

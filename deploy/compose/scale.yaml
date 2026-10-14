@@ -1,15 +1,26 @@
 # Hangar scaled out: two web replicas behind Traefik, two workers, Postgres,
 # MinIO, and an OpenTelemetry Collector that prints what it receives.
 #
-# Every replica needs the same Instance key and the same first admin
-# password, so set them first:
+# Every replica needs the same Instance key and first admin password, so
+# they are set here instead of generated. The secrets have no defaults, so
+# Compose stops if one is missing. Create them once, in a .env file next to
+# this file that every example here reads (set -C refuses to overwrite one
+# you already have):
 #
-#   export HANGAR_INSTANCE_KEY="$(openssl rand -base64 32)"
-#   export HANGAR_ADMIN_PASSWORD="$(openssl rand -base64 18)"
+#   (umask 077 && set -C && cat > .env) <<EOF
+#   HANGAR_INSTANCE_KEY=$(openssl rand -base64 32)
+#   HANGAR_ADMIN_PASSWORD=$(openssl rand -base64 18)
+#   POSTGRES_PASSWORD=$(openssl rand -hex 24)
+#   MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)
+#   KEYCLOAK_ADMIN_PASSWORD=$(openssl rand -hex 24)
+#   HANGAR_OIDC_CLIENT_SECRET=$(openssl rand -hex 24)
+#   EOF
+#
 #   docker compose -f scale.yaml up -d
 #   docker compose -f scale.yaml logs -f otel-collector   # traces, metrics and logs
 #
-# Hangar is at http://localhost:8080; the Traefik dashboard at http://localhost:8082.
+# Hangar is at http://localhost:8080. The Traefik dashboard answers on
+# http://127.0.0.1:8082 on this machine only.
 name: hangar-scale
 
 x-minio-image: &minio-image pgsty/minio:RELEASE.2026-08-04T00-00-00Z
@@ -26,17 +37,17 @@ x-hangar: &hangar
     HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:8080}
     # Traefik is on the Compose network, in one of the private ranges.
     HANGAR_SERVER_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-    HANGAR_SECURITY_INSTANCE_KEY: ${HANGAR_INSTANCE_KEY:?Set HANGAR_INSTANCE_KEY, for example with openssl rand -base64 32}
-    HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD: ${HANGAR_ADMIN_PASSWORD:?Set HANGAR_ADMIN_PASSWORD, at least 10 characters}
+    HANGAR_SECURITY_INSTANCE_KEY: ${HANGAR_INSTANCE_KEY:?Set HANGAR_INSTANCE_KEY in .env, for example with openssl rand -base64 32}
+    HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD: ${HANGAR_ADMIN_PASSWORD:?Set HANGAR_ADMIN_PASSWORD in .env, at least 10 characters, for example with openssl rand -base64 18}
     HANGAR_DATABASE_DRIVER: postgres
-    HANGAR_DATABASE_DSN: postgres://hangar:${POSTGRES_PASSWORD:-hangar-example-password}@postgres:5432/hangar?sslmode=disable
+    HANGAR_DATABASE_DSN: postgres://hangar:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env, for example with openssl rand -hex 24}@postgres:5432/hangar?sslmode=disable
     HANGAR_STORAGE_BACKEND: s3
     HANGAR_STORAGE_S3_ENDPOINT: http://minio:9000
     HANGAR_STORAGE_S3_REGION: us-east-1
     HANGAR_STORAGE_S3_BUCKET: hangar
     HANGAR_STORAGE_S3_USE_PATH_STYLE: "true"
     HANGAR_STORAGE_S3_ACCESS_KEY_ID: hangar
-    HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-hangar-example-secret}
+    HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
     HANGAR_STORAGE_S3_DOWNLOAD_MODE: proxy
     OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -58,7 +69,8 @@ services:
       - --entrypoints.traefik.address=:8082
     ports:
       - "${HANGAR_PORT:-8080}:8080"
-      - "8082:8082"
+      # The dashboard is read-only but unauthenticated, so this machine only.
+      - "127.0.0.1:8082:8082"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -67,7 +79,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: hangar
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hangar-example-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env, for example with openssl rand -hex 24}
       POSTGRES_DB: hangar
     volumes:
       - postgres-data:/var/lib/postgresql
@@ -83,7 +95,7 @@ services:
     command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: hangar
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hangar-example-secret}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
     volumes:
       - minio-data:/data
     healthcheck:
@@ -100,7 +112,7 @@ services:
     command:
       - mc alias set local http://minio:9000 hangar "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing local/hangar
     environment:
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hangar-example-secret}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.161.0

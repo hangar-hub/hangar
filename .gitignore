@@ -26,6 +26,9 @@ __pycache__/
 .pytest_cache/
 *.pyc
 
+# Secrets for the Compose examples (docs/get-started/compose.md)
+.env
+
 # Local data and fixtures cache
 /.cache/
 /compat/.fixtures/

@@ -4,13 +4,29 @@
 # users: alice (admin, password alice-password) and bob (ml-team, password
 # bob-password).
 #
+# The Keycloak admin password and the client secret have no defaults, so
+# Compose stops if one is missing. Create them once, in a .env file next to
+# this file that every example here reads (set -C refuses to overwrite one
+# you already have):
+#
+#   (umask 077 && set -C && cat > .env) <<EOF
+#   HANGAR_INSTANCE_KEY=$(openssl rand -base64 32)
+#   HANGAR_ADMIN_PASSWORD=$(openssl rand -base64 18)
+#   POSTGRES_PASSWORD=$(openssl rand -hex 24)
+#   MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)
+#   KEYCLOAK_ADMIN_PASSWORD=$(openssl rand -hex 24)
+#   HANGAR_OIDC_CLIENT_SECRET=$(openssl rand -hex 24)
+#   EOF
+#
 #   docker compose -f oidc-keycloak.yaml up -d
 #
 # Open http://localhost:8080 and choose "Sign in with Keycloak". Keycloak
 # answers at http://keycloak.localhost:8081 (browsers resolve any
 # *.localhost name to this machine), and Hangar reaches it at the same
-# address, so the issuer matches on both sides. The Keycloak admin console
-# is at http://keycloak.localhost:8081/admin (admin, admin).
+# address through a network alias, so the issuer matches on both sides.
+# Keycloak's port is published on this machine only, so nobody else can
+# reach its admin console (http://keycloak.localhost:8081/admin, user admin,
+# KEYCLOAK_ADMIN_PASSWORD) or sign in as alice or bob.
 name: hangar-oidc-keycloak
 
 services:
@@ -19,11 +35,17 @@ services:
     command: ["start-dev", "--import-realm", "--http-port=8081"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env, for example with openssl rand -hex 24}
+      # Read by the realm file's ${HANGAR_OIDC_CLIENT_SECRET} placeholder.
+      HANGAR_OIDC_CLIENT_SECRET: ${HANGAR_OIDC_CLIENT_SECRET:?Set HANGAR_OIDC_CLIENT_SECRET in .env, for example with openssl rand -hex 24}
       KC_HOSTNAME: http://keycloak.localhost:8081
       KC_HEALTH_ENABLED: "true"
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
+    networks:
+      default:
+        # Hangar reaches Keycloak at the issuer address the browser uses.
+        aliases: [keycloak.localhost]
     volumes:
       - ./keycloak/hangar-realm.json:/opt/keycloak/data/import/hangar-realm.json:ro
     healthcheck:
@@ -40,15 +62,13 @@ services:
       keycloak: {condition: service_healthy}
     ports:
       - "${HANGAR_PORT:-8080}:8080"
-    extra_hosts:
-      - "keycloak.localhost:host-gateway"
     environment:
       HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:8080}
       # Empty generates a password on first start and prints it once.
       HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD: ${HANGAR_ADMIN_PASSWORD:-}
       HANGAR_OIDC_PROVIDERS: >-
         [{"id": "keycloak", "name": "Keycloak", "issuer": "http://keycloak.localhost:8081/realms/hangar",
-          "client_id": "hangar", "client_secret": "hangar-example-client-secret",
+          "client_id": "hangar", "client_secret": "${HANGAR_OIDC_CLIENT_SECRET:?Set HANGAR_OIDC_CLIENT_SECRET in .env, for example with openssl rand -hex 24}",
           "scopes": ["openid", "profile", "email", "groups"],
           "claims": {"username": "preferred_username", "email": "email", "name": "name", "groups": "groups"},
           "admin_groups": ["hangar-admins"],
