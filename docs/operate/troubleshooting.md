@@ -27,6 +27,10 @@ It exits with 1 if any check fails, so you can use it in scripts.
 
 **"database is in use by another Hangar process".** SQLite allows one process. Stop the other one, or move to Postgres to run several.
 
+**Every admin is locked out.** On the server host, set a new password with `hangar admin reset-password <username>`, which prints a generated password once (or reads one with `--password-stdin`), signs the user out everywhere and clears sign-in throttling. `hangar admin create-user <username> --admin` creates another Instance admin. With SQLite, stop the server first.
+
+**Index or scan results look out of date.** `hangar admin reindex` queues index and scan Jobs for every branch head, or for the Repos you name; the workers run them.
+
 **`/readyz` answers 503.** The body lists the failed checks: usually the database, a pending migration (run `hangar admin migrate`) or the Blob store.
 
 **Downloads fail with a 403 from the store, or a TLS error.** In S3 `redirect` mode, clients download straight from the store, so they must reach `storage.s3.endpoint` and trust its certificate, and the clocks must agree. Use `download_mode: proxy` if clients cannot reach the store.

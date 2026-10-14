@@ -52,3 +52,12 @@ An upload that a client abandons is aborted when its row expires (`lfs.upload_ur
 ## Garbage collection and quotas
 
 A scheduled `gc` Job (`gc.schedule`, 03:00 daily by default) deletes LFS objects no Repo references once they are older than `gc.grace_period` (7 days), and git data that is no longer reachable. Admins can see usage by Namespace and set quotas under **Admin**, **Storage**.
+
+To collect at once, select **Run GC** on that page, or run it on the server host with the server configuration:
+
+```sh
+hangar admin gc            # LFS objects and git data; add --git or --lfs for one of them
+hangar admin gc --queue    # queue a gc Job for the running Instance's workers (Postgres)
+```
+
+`hangar admin gc` reports what it deleted and how much the Blob store holds afterwards. With SQLite, stop the server first.
