@@ -26,6 +26,7 @@ const (
 	UserEnabled           Action = "user.enabled"
 	UserAdminChanged      Action = "user.admin_changed"
 	UserPasswordReset     Action = "user.password_reset"
+	IdentityLinked        Action = "user.identity_linked"
 	InviteCreated         Action = "invite.created"
 	MembershipChanged     Action = "membership.changed"
 	MembershipRemoved     Action = "membership.removed"

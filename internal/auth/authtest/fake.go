@@ -223,8 +223,13 @@ func (a *Authz) canRepo(p model.Principal, action auth.Action, r *auth.RepoTarge
 			return auth.ErrForbidden
 		}
 		return nil
-	case auth.ActionWrite, auth.ActionPullMirror:
+	case auth.ActionWrite:
 		if role.Includes(model.RoleWrite) {
+			return nil
+		}
+	case auth.ActionPullMirror:
+		// Only the Namespace Role counts, as in auth.Authorizer.
+		if a.roleIn(p, r.NamespaceID, r.ID.Namespace, uuid.Nil).Includes(model.RoleWrite) {
 			return nil
 		}
 	case auth.ActionAdmin:
