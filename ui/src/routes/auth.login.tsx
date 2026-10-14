@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { LoginPage } from "@/features/auth/LoginPage";
 
 export const Route = createFileRoute("/auth/login")({
-  component: () => <PageShell title="Sign in to Hangar" />,
+  component: () => <LoginPage />,
 });

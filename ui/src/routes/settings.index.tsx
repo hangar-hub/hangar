@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/settings/")({
-  component: () => <PageShell title="Settings" />,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/profile" });
+  },
 });

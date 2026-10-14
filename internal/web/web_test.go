@@ -3,6 +3,7 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -21,28 +22,43 @@ func serve(h http.Handler, method, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
+var nonceMeta = regexp.MustCompile(`<meta name="csp-nonce" content="([A-Za-z0-9+/=]{24})" />`)
+
 func TestServesIndexForUIRoutesWithCSP(t *testing.T) {
 	h := web.Handler(web.Options{
 		ConnectSrc: []string{"https://s3.example.com"},
 		FS: fstest.MapFS{
-			"index.html":               {Data: []byte("<!doctype html><div id=root></div>")},
+			"index.html":               {Data: []byte("<!doctype html><html><head><title>Hangar</title></head><div id=root></div>")},
 			"assets/index-AbCdEf12.js": {Data: []byte("console.log(1)")},
 			"assets/hangar.svg":        {Data: []byte("<svg/>")},
 		},
 	})
+	seen := map[string]bool{}
 	for _, p := range []string{"/", "/arsenal", "/ns/name/tree/main/a/b", "/datasets/ns/d/viewer/default/train"} {
 		rec := serve(h, http.MethodGet, p)
 		require.Equal(t, 200, rec.Code, p)
-		require.Contains(t, rec.Body.String(), "id=root")
+		body := rec.Body.String()
+		require.Contains(t, body, "id=root")
+		m := nonceMeta.FindStringSubmatch(body)
+		require.NotNil(t, m, "the page carries the style nonce: %s", body)
+		require.True(t, strings.HasPrefix(body, `<!doctype html><html><head><meta name="csp-nonce"`))
+		nonce := m[1]
+		require.False(t, seen[nonce], "every response gets a new nonce")
+		seen[nonce] = true
 		csp := rec.Header().Get("Content-Security-Policy")
-		require.Contains(t, csp, "script-src 'self'")
+		require.Contains(t, csp, "script-src 'self';")
+		require.Contains(t, csp, "style-src 'self' 'nonce-"+nonce+"';")
 		require.NotContains(t, csp, "unsafe-inline")
+		require.NotContains(t, csp, "unsafe-eval")
 		require.Contains(t, csp, "connect-src 'self' https://s3.example.com")
+		require.Contains(t, csp, "frame-ancestors 'none'")
 		require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
+		require.Equal(t, "DENY", rec.Header().Get("X-Frame-Options"))
 	}
 	rec := serve(h, http.MethodGet, "/assets/index-AbCdEf12.js")
 	require.Equal(t, 200, rec.Code)
 	require.Contains(t, rec.Header().Get("Cache-Control"), "immutable")
+	require.Empty(t, rec.Header().Get("Content-Security-Policy"))
 	rec = serve(h, http.MethodGet, "/assets/hangar.svg")
 	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
 	rec = serve(h, http.MethodGet, "/assets/../index.html")
@@ -52,6 +68,18 @@ func TestServesIndexForUIRoutesWithCSP(t *testing.T) {
 	require.Equal(t, 200, rec.Code)
 	require.Empty(t, rec.Body.String())
 	require.Equal(t, 405, serve(h, http.MethodPost, "/arsenal").Code)
+}
+
+func TestNonceWithoutHead(t *testing.T) {
+	h := web.Handler(web.Options{FS: fstest.MapFS{"index.html": {Data: []byte("<div id=root></div>")}}})
+	rec := serve(h, http.MethodGet, "/")
+	require.Regexp(t, `^<meta name="csp-nonce" content="[^"]+" /><div id=root></div>$`, rec.Body.String())
+}
+
+func TestCSPWithoutNonce(t *testing.T) {
+	csp := web.CSP(nil, "")
+	require.Contains(t, csp, "style-src 'self';")
+	require.Contains(t, csp, "connect-src 'self';")
 }
 
 func TestMissingBuild(t *testing.T) {

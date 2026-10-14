@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { TokensPage } from "@/features/settings/TokensPage";
 
 export const Route = createFileRoute("/settings/tokens")({
-  component: () => <PageShell title="Tokens" />,
+  component: () => <TokensPage />,
 });

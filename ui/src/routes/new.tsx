@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { NewRepoPage } from "@/features/repos/NewRepoPage";
 
 export const Route = createFileRoute("/new")({
-  component: () => <PageShell title="New model" />,
+  component: () => <NewRepoPage kind="model" />,
 });

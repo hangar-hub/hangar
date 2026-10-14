@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RepoPageShell } from "@/pages/repo";
+import { CardPage } from "@/features/repos/CardPage";
 
 export const Route = createFileRoute("/$ns/$name/")({
   component: Page,
@@ -7,5 +7,5 @@ export const Route = createFileRoute("/$ns/$name/")({
 
 function Page() {
   const { ns, name } = Route.useParams();
-  return <RepoPageShell kind="model" ns={ns} name={name} page="Model card" />;
+  return <CardPage kind="model" ns={ns} name={name} />;
 }

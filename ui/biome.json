@@ -25,7 +25,13 @@
     "rules": {
       "preset": "recommended",
       "a11y": {
-        "preset": "recommended"
+        "preset": "recommended",
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": ["Input", "Select", "Textarea"]
+          }
+        }
       }
     }
   },
@@ -39,5 +45,18 @@
     "parser": {
       "tailwindDirectives": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/components/VirtualTable.tsx", "src/features/datasets/ViewerPage.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useFocusableInteractive": "off"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RepoPageShell } from "@/pages/repo";
+import { BlobPage } from "@/features/files/BlobPage";
 
 export const Route = createFileRoute("/datasets/$ns/$name/blob/$rev/$")({
   component: Page,
@@ -7,13 +7,5 @@ export const Route = createFileRoute("/datasets/$ns/$name/blob/$rev/$")({
 
 function Page() {
   const { ns, name, rev, _splat } = Route.useParams();
-  return (
-    <RepoPageShell
-      kind="dataset"
-      ns={ns}
-      name={name}
-      page="File"
-      detail={`${rev}${_splat ? `/${_splat}` : ""}`}
-    />
-  );
+  return <BlobPage kind="dataset" ns={ns} name={name} rev={rev} path={_splat ?? ""} />;
 }

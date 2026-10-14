@@ -11,13 +11,26 @@ export function setCsrfToken(token: string | undefined): void {
   csrfToken = token;
 }
 
+/**
+ * The CSRF token to send: the one from GET /me, or the readable
+ * `hangar_csrf` cookie the server sets with the session (05-auth.md).
+ */
+export function currentCsrfToken(
+  cookie: string = globalThis.document?.cookie ?? "",
+): string | undefined {
+  if (csrfToken) return csrfToken;
+  const match = cookie.split(/;\s*/).find((c) => c.startsWith("hangar_csrf="));
+  return match ? decodeURIComponent(match.slice("hangar_csrf=".length)) : undefined;
+}
+
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Adds the X-CSRF-Token header to state-changing requests (05-auth.md "Sessions"). */
 export const csrfMiddleware: Middleware = {
   onRequest({ request }) {
-    if (csrfToken && !safeMethods.has(request.method.toUpperCase())) {
-      request.headers.set("X-CSRF-Token", csrfToken);
+    const token = currentCsrfToken();
+    if (token && !safeMethods.has(request.method.toUpperCase())) {
+      request.headers.set("X-CSRF-Token", token);
     }
     return request;
   },
@@ -27,12 +40,49 @@ export const csrfMiddleware: Middleware = {
 export function createApiClient(options: { baseUrl?: string; fetch?: typeof fetch } = {}) {
   const client = createClient<paths>({
     baseUrl: options.baseUrl ?? apiBase,
-    fetch: options.fetch,
+    // Resolve fetch on each call rather than once, so tests can replace it.
+    fetch: options.fetch ?? ((input: Request, init?: RequestInit) => globalThis.fetch(input, init)),
     credentials: "same-origin",
   });
   client.use(csrfMiddleware);
   return client;
 }
 
-/** The shared client the UI uses. */
-export const api = createApiClient();
+/**
+ * The shared client the UI uses, with an absolute base URL so requests are
+ * built the same way in the browser and in tests.
+ */
+export const api = createApiClient({
+  baseUrl: typeof window === "undefined" ? apiBase : new URL(apiBase, window.location.origin).href,
+});
+
+/**
+ * Whether a URL points at this Instance: a path, or an absolute URL on the
+ * page's origin (Hangar builds part URLs from `server.public_url`).
+ */
+export function isSameOrigin(
+  input: string,
+  origin: string | undefined = globalThis.location?.origin,
+): boolean {
+  if (input.startsWith("/") && !input.startsWith("//")) return true;
+  if (!origin) return false;
+  try {
+    return new URL(input).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sends a same-origin request outside the generated client (the `/auth/`
+ * handler, the Dataset Viewer API and upload parts), with the CSRF header
+ * on state-changing calls.
+ */
+export function rawFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const method = (init.method ?? "GET").toUpperCase();
+  const token = currentCsrfToken();
+  const sameOrigin = isSameOrigin(input);
+  if (token && sameOrigin && !safeMethods.has(method)) headers.set("X-CSRF-Token", token);
+  return fetch(input, { ...init, headers, credentials: sameOrigin ? "same-origin" : "omit" });
+}

@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { CollectionPage } from "@/features/collections/CollectionPage";
 
 export const Route = createFileRoute("/collections/$ns/$slug")({
-  component: CollectionPage,
+  component: Page,
 });
 
-function CollectionPage() {
+function Page() {
   const { ns, slug } = Route.useParams();
-  return <PageShell title="Collection" subtitle={`${ns}/${slug}`} />;
+  return <CollectionPage ns={ns} slug={slug} />;
 }

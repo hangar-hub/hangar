@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { NewRepoPage } from "@/features/repos/NewRepoPage";
 
 export const Route = createFileRoute("/new-dataset")({
-  component: () => <PageShell title="New dataset" />,
+  component: () => <NewRepoPage kind="dataset" />,
 });

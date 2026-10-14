@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { NamespacePage } from "@/features/NamespacePage";
 
 export const Route = createFileRoute("/$ns/")({
-  component: NamespacePage,
+  component: Page,
 });
 
-function NamespacePage() {
+function Page() {
   const { ns } = Route.useParams();
-  return <PageShell title={ns} />;
+  return <NamespacePage ns={ns} />;
 }

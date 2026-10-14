@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { HomePage } from "@/features/HomePage";
 
 export const Route = createFileRoute("/")({
-  component: () => (
-    <PageShell title="Hangar" subtitle="A self-hosted home for your arsenal of models." />
-  ),
+  component: HomePage,
 });

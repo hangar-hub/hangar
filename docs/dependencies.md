@@ -38,13 +38,12 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/pierrec/lz4/v4` | v4.1.21 | Decodes the LZ4 frames in Xet xorb chunks (UP-7) and checks LZ4_RAW Parquet pages before parquet-go reads them (BSD-3-Clause). Already required by parquet-go. |
 | `github.com/andybalholm/brotli` | v1.1.1 | Brotli for checking Brotli Parquet pages before parquet-go reads them (MIT). Already required by parquet-go. |
 | `github.com/zeebo/blake3` | v0.2.4 | Keyed BLAKE3 for Xet chunk, xorb, file and verification hashes (UP-7); CC0-1.0. |
-| `go.yaml.in/yaml/v3` | v3.0.5 | Ordered YAML nodes for dataset card metadata, so `configs` and features keep their order (Apache-2.0, MIT). Already required by koanf. |
 | `github.com/oapi-codegen/runtime` | v1.7.0 | Runtime helpers for the generated native API code. |
 | `github.com/oapi-codegen/oapi-codegen/v2` (tool) | v2.8.0 | Generates `internal/api/gen` from `api/openapi.yaml`. |
 | `github.com/getkin/kin-openapi` | v0.142.0 | OpenAPI document model used by the generated embedded spec. |
 | `github.com/stretchr/testify` | v1.12.1 | Test assertions. |
 | `github.com/zalando/go-keyring` | v0.2.8 | Keeps the CLI's Token in the OS keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux) for `hangar login` (08-local-tools.md). |
-| `go.yaml.in/yaml/v3` | v3.0.5 | Model card front matter in the Hub API's validate-yaml (W4); the CLI's `~/.config/hangar/config.yaml` and `secrets.yaml` in `hangar admin rotate-key` (W9). |
+| `go.yaml.in/yaml/v3` | v3.0.5 | Model card front matter in the Hub API's validate-yaml (W4), Upstream card metadata for Dependencies (W6), ordered dataset card metadata so `configs` and features keep their order (W10), and the CLI's `~/.config/hangar/config.yaml` and `secrets.yaml` in `hangar admin rotate-key` (W9) (Apache-2.0, MIT). |
 | `github.com/yannh/kubeconform` (run with `go run`, not in `go.mod`) | v0.7.0 | Validates the rendered Helm chart in `make lint-deploy`. |
 | `github.com/testcontainers/testcontainers-go` (and `modules/postgres`, `modules/minio`) | v0.44.0 | Postgres and MinIO containers for conformance and integration tests. |
 
@@ -62,6 +61,18 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `@biomejs/biome` | Lint and format. |
 | `vitest`, `jsdom`, `@testing-library/*` | Unit tests. |
 | `@playwright/test`, `@axe-core/playwright` | End-to-end and accessibility tests. |
+| `radix-ui` | Accessible primitives (dialog, menu, tabs, switch, tooltip) under the shadcn/ui-style components. |
+| `class-variance-authority` | Component variants for the shadcn/ui-style buttons and badges. |
+| `lucide-react` | Icons. |
+| `cmdk` | The command palette behind global search (BROWSE-6). |
+| `react-markdown`, `remark-gfm`, `rehype-raw`, `rehype-sanitize` | Model cards and discussions, with raw HTML sanitised to the Hub's allowed subset. |
+| `shiki` | Syntax highlighting, loaded lazily, with its JavaScript regex engine so the Content Security Policy needs no WebAssembly. |
+| `@tanstack/react-virtual` | Virtualised lists and the Dataset Viewer table. |
+| `@noble/hashes` | Streaming SHA-256 in a Web Worker for browser uploads; pure JavaScript, so no WebAssembly. |
+| `yaml` | Reading and writing card metadata, and the mock server's copy of `api/openapi.yaml`. |
+| `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` | Drag and keyboard reordering of Collection items. |
+| `get-nonce` | Hands the per-response style nonce to the dialog libraries, which add a style element to lock page scrolling. |
+| `ajv`, `ajv-formats` | The development mock server validates every request and response against `api/openapi.yaml`. |
 
 ## Build, release and documentation tools
 

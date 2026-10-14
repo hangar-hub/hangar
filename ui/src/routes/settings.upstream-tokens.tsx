@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { UpstreamTokensPage } from "@/features/settings/UpstreamTokensPage";
 
 export const Route = createFileRoute("/settings/upstream-tokens")({
-  component: () => <PageShell title="Upstream tokens" />,
+  component: () => <UpstreamTokensPage />,
 });

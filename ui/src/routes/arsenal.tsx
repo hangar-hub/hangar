@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { ArsenalPage } from "@/features/arsenal/ArsenalPage";
 
 export const Route = createFileRoute("/arsenal")({
-  component: () => <PageShell title="Arsenal" />,
+  component: () => <ArsenalPage />,
 });

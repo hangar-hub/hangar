@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PageShell } from "@/components/PageShell";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/")({
-  component: () => <PageShell title="Administration" />,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/system" });
+  },
 });
