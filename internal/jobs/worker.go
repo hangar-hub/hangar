@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
@@ -504,18 +505,46 @@ func (w *Worker) run(ctx context.Context, job *Job, reg Registration, traceCtx m
 	if cause := context.Cause(jobCtx); err != nil && (errors.Is(cause, ErrCancelled) || errors.Is(cause, ErrLeaseLost)) {
 		err = cause
 	}
+	var pe *panicError
+	if errors.As(err, &pe) {
+		// The stack stays in the server log; the Job's error column, which
+		// users read through GET /jobs/{id}, gets panicError's fixed text.
+		w.log.ErrorContext(ctx, "job handler panicked", "job_id", job.ID, "kind", job.Kind,
+			"panic", RedactURLs(fmt.Sprint(pe.value)), "stack", string(pe.stack))
+	}
 	outcome := w.finish(ctx, job, job.ID, job.Kind, err, p, started)
 	if outcome == "failed" || outcome == "retry" {
-		span.RecordError(err)
+		recordJobError(span, err)
 		span.SetStatus(codes.Error, "job failed")
 	}
 	span.SetAttributes(attribute.String("hangar.job.outcome", outcome))
 }
 
+// recordJobError adds an exception event to span like span.RecordError,
+// with the error's text passed through RedactError, so a presigned URL or
+// a URL password in a handler error never reaches a trace.
+func recordJobError(span trace.Span, err error) {
+	span.AddEvent(semconv.ExceptionEventName, trace.WithAttributes(
+		semconv.ExceptionType(fmt.Sprintf("%T", err)),
+		semconv.ExceptionMessage(RedactError(err)),
+	))
+}
+
+// panicError is a recovered handler panic. Its text is a fixed message for
+// users; the worker logs the value and stack.
+type panicError struct {
+	value any
+	stack []byte
+}
+
+func (e *panicError) Error() string {
+	return "The Job stopped because of an internal error in Hangar. The server log has the details."
+}
+
 func safeRun(ctx context.Context, h Handler, j *Job, p Progress) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("handler panicked: %v\n%s", r, debug.Stack())
+			err = &panicError{value: r, stack: debug.Stack()}
 		}
 	}()
 	return h(ctx, j, p)
@@ -560,6 +589,7 @@ func (w *Worker) finish(ctx context.Context, job *Job, id JobID, kind Kind, runE
 	}
 	var snooze *snoozeError
 	outcome := ""
+	errText := RedactError(runErr)
 	switch {
 	case runErr == nil:
 		outcome = "succeeded"
@@ -585,7 +615,7 @@ func (w *Worker) finish(ctx context.Context, job *Job, id JobID, kind Kind, runE
 		upd.Set("status = ?", string(StatusPending)).Set("run_after = ?", now).Set("attempts = attempts - 1")
 	case IsPermanent(runErr) || job == nil || job.Attempts >= job.MaxAttempts:
 		outcome = "failed"
-		upd.Set("status = ?", string(StatusFailed)).Set("finished_at = ?", now).Set("error = ?", truncateError(runErr.Error()))
+		upd.Set("status = ?", string(StatusFailed)).Set("finished_at = ?", now).Set("error = ?", truncateError(errText))
 	default:
 		outcome = "retry"
 		reg, _ := w.reg.Lookup(kind)
@@ -594,7 +624,7 @@ func (w *Worker) finish(ctx context.Context, job *Job, id JobID, kind Kind, runE
 			backoff = reg.Options.Backoff
 		}
 		upd.Set("status = ?", string(StatusPending)).Set("run_after = ?", now.Add(backoff(job.Attempts))).
-			Set("error = ?", truncateError(runErr.Error()))
+			Set("error = ?", truncateError(errText))
 	}
 	if outcome != "cancelled" && outcome != "lost" {
 		res, err := upd.Exec(bg)
@@ -610,7 +640,7 @@ func (w *Worker) finish(ctx context.Context, job *Job, id JobID, kind Kind, runE
 	}
 	attrs := []any{"job_id", id, "kind", kind, "outcome", outcome, "duration_ms", time.Since(started).Milliseconds()}
 	if runErr != nil && outcome != "succeeded" {
-		attrs = append(attrs, "error", runErr.Error())
+		attrs = append(attrs, "error", errText)
 	}
 	w.log.Log(bg, level, "job finished", attrs...)
 	if w.inst != nil {

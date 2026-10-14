@@ -1,9 +1,14 @@
 package jobs_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -109,7 +114,7 @@ func TestWorkerRetriesWithBackoffAndFails(t *testing.T) {
 		require.Equal(t, jobs.StatusFailed, mustGet(t, q, gc).Status, "permanent errors are not retried")
 		require.Equal(t, "bad payload", mustGet(t, q, gc).Error)
 		require.Equal(t, jobs.StatusFailed, mustGet(t, q, verify).Status)
-		require.Contains(t, mustGet(t, q, verify).Error, "handler panicked: boom")
+		require.Equal(t, "The Job stopped because of an internal error in Hangar. The server log has the details.", mustGet(t, q, verify).Error)
 
 		// Not due yet: nothing runs.
 		w.Tick(ctx)
@@ -626,4 +631,111 @@ func TestJobSpanLinksToEnqueuer(t *testing.T) {
 	}
 	require.Equal(t, id.String(), attrs["hangar.job.id"])
 	require.Equal(t, "succeeded", attrs["hangar.job.outcome"])
+}
+
+// presignedURL is a URL whose query is a credential, as a presigned S3 GET
+// is, with a password in its user information as well.
+const presignedURL = "https://hangar:hunter2-secret@bucket.s3.example.com/lfs/sha256/ab/cd?X-Amz-Credential=AKIAEXAMPLE&X-Amz-Signature=deadbeefsignature"
+
+// leaksSecret reports which secret part of presignedURL s contains.
+func leaksSecret(s string) string {
+	for _, secret := range []string{"hunter2-secret", "AKIAEXAMPLE", "deadbeefsignature", "X-Amz-"} {
+		if strings.Contains(s, secret) {
+			return secret
+		}
+	}
+	return ""
+}
+
+func TestWorkerRedactsURLsInErrors(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		rec := tracetest.NewSpanRecorder()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))
+		var logs bytes.Buffer
+		reg := jobs.NewRegistry()
+		// A handler that fails fetching a presigned URL returns a wrapped
+		// *url.Error, whose text holds the whole URL.
+		fail := func(context.Context, *jobs.Job, jobs.Progress) error {
+			return fmt.Errorf("fetch object: %w", &url.Error{Op: "Get", URL: presignedURL, Err: errors.New("connection refused")})
+		}
+		require.NoError(t, reg.Register(jobs.KindIndex, fail, jobs.HandlerOptions{MaxAttempts: 3}))
+		require.NoError(t, reg.Register(jobs.KindScan, func(ctx context.Context, j *jobs.Job, p jobs.Progress) error {
+			return jobs.Permanent(fail(ctx, j, p))
+		}, jobs.HandlerOptions{}))
+		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Tracer: tp.Tracer("test"), Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
+		retried, err := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex})
+		require.NoError(t, err)
+		failed, err := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan})
+		require.NoError(t, err)
+		w.Tick(ctx)
+		w.Wait()
+
+		want := `fetch object: Get "https://bucket.s3.example.com/lfs/sha256/ab/cd?redacted": connection refused`
+		for _, id := range []uuid.UUID{retried, failed} {
+			j := mustGet(t, w.Queue(), id)
+			require.Equal(t, want, j.Error, "the stored error keeps the host and path only")
+		}
+		require.Equal(t, jobs.StatusPending, mustGet(t, w.Queue(), retried).Status)
+		require.Equal(t, jobs.StatusFailed, mustGet(t, w.Queue(), failed).Status)
+
+		require.Contains(t, logs.String(), "job finished")
+		require.Contains(t, logs.String(), "bucket.s3.example.com/lfs/sha256/ab/cd?redacted")
+		require.Empty(t, leaksSecret(logs.String()), "the log holds a secret")
+
+		events := 0
+		for _, sp := range rec.Ended() {
+			for _, ev := range sp.Events() {
+				for _, a := range ev.Attributes {
+					require.Empty(t, leaksSecret(a.Value.String()), "span %s event %s attribute %s", sp.Name(), ev.Name, a.Key)
+					if a.Key == "exception.message" {
+						events++
+						require.Equal(t, want, a.Value.AsString())
+					}
+				}
+			}
+			for _, a := range sp.Attributes() {
+				require.Empty(t, leaksSecret(a.Value.String()), "span %s attribute %s", sp.Name(), a.Key)
+			}
+			require.Empty(t, leaksSecret(sp.Status().Description))
+		}
+		require.Equal(t, 2, events, "both failures record an exception event")
+	})
+}
+
+func TestWorkerKeepsPanicStacksOutOfJobs(t *testing.T) {
+	ctx := context.Background()
+	d := dbtest.SQLite(t)
+	var logs bytes.Buffer
+	reg := jobs.NewRegistry()
+	require.NoError(t, reg.Register(jobs.KindIndex, func(context.Context, *jobs.Job, jobs.Progress) error {
+		panic("cannot read " + presignedURL)
+	}, jobs.HandlerOptions{MaxAttempts: 1}))
+	w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
+	id, err := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex})
+	require.NoError(t, err)
+	w.Tick(ctx)
+	w.Wait()
+
+	j := mustGet(t, w.Queue(), id)
+	require.Equal(t, jobs.StatusFailed, j.Status)
+	require.Equal(t, "The Job stopped because of an internal error in Hangar. The server log has the details.", j.Error)
+	require.NotContains(t, j.Error, "goroutine")
+	require.NotContains(t, j.Error, ".go:")
+
+	var panicked map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &rec))
+		if rec["msg"] == "job handler panicked" {
+			panicked = rec
+		}
+	}
+	require.NotNil(t, panicked, "the panic is logged server-side")
+	require.Equal(t, "ERROR", panicked["level"])
+	require.Equal(t, id.String(), panicked["job_id"])
+	require.Contains(t, panicked["stack"], "goroutine", "the log has the stack")
+	require.Contains(t, panicked["stack"], "runtime/debug.Stack")
+	require.Equal(t, "cannot read https://bucket.s3.example.com/lfs/sha256/ab/cd?redacted", panicked["panic"])
+	require.Empty(t, leaksSecret(logs.String()), "the log holds a secret")
 }
