@@ -375,3 +375,65 @@ func copyParquet(ctx context.Context, res *ConfigResult, splits []splitFiles) (*
 
 // DownloadChecksumKey is the download_checksums key `datasets` uses for a file.
 func DownloadChecksumKey(repoURL, p string) string { return repoURL + "/" + path.Clean(p) }
+
+// HeadBuilders are the formats Head reads.
+var HeadBuilders = map[string]bool{"parquet": true, "csv": true, "json": true, "text": true}
+
+// Head reads the first n rows of a Split without converting it, for the
+// formats whose files can be read from the start (HeadBuilders). The
+// Viewer shows these as first rows while a conversion runs.
+func Head(ctx context.Context, cfg datasets.Config, split string, files map[string]File, n int) (features.Features, [][]any, error) {
+	if !HeadBuilders[cfg.Builder] {
+		return nil, nil, fmt.Errorf("%w: first rows of %s datasets need the Parquet export", ErrUnsupported, cfg.Builder)
+	}
+	b, err := builderFor(cfg.Builder)
+	if err != nil {
+		return nil, nil, err
+	}
+	var splits []splitFiles
+	var target *splitFiles
+	for _, s := range cfg.Splits() {
+		sf := splitFiles{name: s}
+		for _, p := range cfg.Files[s] {
+			f, ok := files[p]
+			if !ok {
+				return nil, nil, fmt.Errorf("data file %s is missing", p)
+			}
+			sf.files = append(sf.files, f)
+		}
+		splits = append(splits, sf)
+	}
+	for i := range splits {
+		if splits[i].name == split {
+			target = &splits[i]
+		}
+	}
+	if target == nil {
+		return nil, nil, fmt.Errorf("no split %q", split)
+	}
+	e := &env{ctx: ctx, opts: cfg.BuilderOptions, splits: splits}
+	if e.opts == nil {
+		e.opts = map[string]any{}
+	}
+	fs := cfg.Features
+	if fs == nil {
+		if fs, err = b.infer(e, splits); err != nil {
+			return nil, nil, err
+		}
+	}
+	var rows [][]any
+	err = b.read(e, *target, fs, func(batch [][]any) error {
+		rows = append(rows, batch...)
+		if len(rows) >= n {
+			return errLimit
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errLimit) {
+		return nil, nil, err
+	}
+	if len(rows) > n {
+		rows = rows[:n]
+	}
+	return fs, rows, nil
+}

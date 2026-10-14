@@ -113,6 +113,12 @@ func EnqueueConvert(ctx context.Context, q jobs.Queue, repoID uuid.UUID, commit 
 		Payload: Payload{Repo: repoID, Commit: commit}, Priority: jobs.PriorityLow})
 }
 
+// StatsJob returns the dataset.stats Job of a Commit.
+func StatsJob(repoID uuid.UUID, commit model.CommitSHA) jobs.NewJob {
+	return jobs.NewJob{Kind: jobs.KindDatasetStats, DedupeKey: dedupeKey(repoID, commit),
+		Payload: Payload{Repo: repoID, Commit: commit}, Priority: jobs.PriorityLow}
+}
+
 // HandleConvert is the dataset.convert Job handler.
 func (p *Pipeline) HandleConvert(ctx context.Context, j *jobs.Job, progress jobs.Progress) error {
 	var pl Payload
@@ -136,8 +142,7 @@ func (p *Pipeline) HandleConvert(ctx context.Context, j *jobs.Job, progress jobs
 	if err := p.convert(ctx, r, pl.Commit, progress); err != nil {
 		return err
 	}
-	_, err = p.d.Jobs.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindDatasetStats, DedupeKey: dedupeKey(r.UUID, pl.Commit),
-		Payload: pl, Priority: jobs.PriorityLow})
+	_, err = p.d.Jobs.Enqueue(ctx, StatsJob(r.UUID, pl.Commit))
 	return err
 }
 

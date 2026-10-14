@@ -6,6 +6,7 @@
 package datasets
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -124,20 +125,74 @@ type Feature struct {
 	Type       json.RawMessage `json:"type"`
 }
 
-// Row is one row in a Viewer response.
-type Row struct {
-	RowIdx         int64          `json:"row_idx"`
-	Row            map[string]any `json:"row"`
-	TruncatedCells []string       `json:"truncated_cells"`
+// Cell is one column of a row in a Viewer response.
+type Cell struct {
+	Name  string
+	Value any
 }
 
-// RowsResponse is the Hub's shape for /first-rows, /rows, /search and /filter.
+// Cells are a row's columns, in feature order. They marshal to a JSON
+// object that keeps that order, as the Hub's responses do.
+type Cells []Cell
+
+// Get returns a column's value.
+func (c Cells) Get(name string) (any, bool) {
+	for _, x := range c {
+		if x.Name == name {
+			return x.Value, true
+		}
+	}
+	return nil, false
+}
+
+// MarshalJSON writes the cells as an ordered JSON object.
+func (c Cells) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, x := range c {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		k, err := json.Marshal(x.Name)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(k)
+		b.WriteByte(':')
+		v, err := json.Marshal(x.Value)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(v)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
+}
+
+// Row is one row in a Viewer response.
+type Row struct {
+	RowIdx         int64    `json:"row_idx"`
+	Row            Cells    `json:"row"`
+	TruncatedCells []string `json:"truncated_cells"`
+}
+
+// RowsResponse is the Hub's shape for /rows, /search and /filter.
 type RowsResponse struct {
 	Features       []Feature `json:"features"`
 	Rows           []Row     `json:"rows"`
 	NumRowsTotal   int64     `json:"num_rows_total"`
 	NumRowsPerPage int       `json:"num_rows_per_page"`
 	Partial        bool      `json:"partial"`
+}
+
+// FirstRowsResponse is the Hub's shape for /first-rows.
+type FirstRowsResponse struct {
+	Dataset   string    `json:"dataset"`
+	Config    string    `json:"config"`
+	Split     string    `json:"split"`
+	Features  []Feature `json:"features"`
+	Rows      []Row     `json:"rows"`
+	Truncated bool      `json:"truncated"`
 }
 
 // SplitRef names a Split.
@@ -147,11 +202,25 @@ type SplitRef struct {
 	Split   string `json:"split"`
 }
 
-// SplitsResponse is /splits.
+// ConfigRef names a Config.
+type ConfigRef struct {
+	Dataset string `json:"dataset"`
+	Config  string `json:"config"`
+}
+
+// FailedConfig is a Config that could not be processed, with the error.
+type FailedConfig struct {
+	Dataset string         `json:"dataset"`
+	Config  string         `json:"config"`
+	Error   map[string]any `json:"error"`
+}
+
+// SplitsResponse is /splits: the Splits of every Config whose Splits are
+// known, the Configs still being processed and the Configs that failed.
 type SplitsResponse struct {
-	Splits  []SplitRef `json:"splits"`
-	Pending []SplitRef `json:"pending"`
-	Failed  []SplitRef `json:"failed"`
+	Splits  []SplitRef     `json:"splits"`
+	Pending []ConfigRef    `json:"pending"`
+	Failed  []FailedConfig `json:"failed"`
 }
 
 // IsValidResponse is /is-valid.
@@ -173,12 +242,14 @@ type ParquetFile struct {
 	Size     int64  `json:"size"`
 }
 
-// ParquetResponse is /parquet.
+// ParquetResponse is /parquet. For one Config, Features holds the
+// Config's Features JSON and Pending and Failed are not sent.
 type ParquetResponse struct {
-	ParquetFiles []ParquetFile `json:"parquet_files"`
-	Pending      []SplitRef    `json:"pending"`
-	Failed       []SplitRef    `json:"failed"`
-	Partial      bool          `json:"partial"`
+	ParquetFiles []ParquetFile   `json:"parquet_files"`
+	Pending      []ConfigRef     `json:"pending,omitempty"`
+	Failed       []FailedConfig  `json:"failed,omitempty"`
+	Features     json.RawMessage `json:"features,omitempty"`
+	Partial      bool            `json:"partial"`
 }
 
 // RowsRequest is a /rows request; Length is at most MaxRowsPerPage.
@@ -209,7 +280,7 @@ type FilterRequest struct {
 type Viewer interface {
 	IsValid(ctx context.Context, p model.Principal, id model.RepoID) (*IsValidResponse, error)
 	Splits(ctx context.Context, p model.Principal, id model.RepoID) (*SplitsResponse, error)
-	FirstRows(ctx context.Context, p model.Principal, id model.RepoID, config, split string) (*RowsResponse, error)
+	FirstRows(ctx context.Context, p model.Principal, id model.RepoID, config, split string) (*FirstRowsResponse, error)
 	Rows(ctx context.Context, p model.Principal, req RowsRequest) (*RowsResponse, error)
 	Search(ctx context.Context, p model.Principal, req SearchRequest) (*RowsResponse, error)
 	Filter(ctx context.Context, p model.Principal, req FilterRequest) (*RowsResponse, error)
