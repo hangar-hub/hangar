@@ -40,5 +40,8 @@ func init() {
 		}
 	}
 	register("real-sqlite", real(func(t testing.TB) *db.DB { return dbtest.SQLite(t) }))
-	register("real-postgres", real(func(t testing.TB) *db.DB { return dbtest.Postgres(t) }))
+	// Postgres needs HANGAR_TEST_POSTGRES=1 (make sets it) or HANGAR_TEST_POSTGRES_DSN.
+	if dbtest.PostgresEnabled() {
+		register("real-postgres", real(func(t testing.TB) *db.DB { return dbtest.Postgres(t) }))
+	}
 }
