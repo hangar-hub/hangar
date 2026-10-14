@@ -94,7 +94,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	// schema is current, which web and worker processes wait for while
 	// hangar admin migrate runs.
 	var current atomic.Pointer[http.Handler]
-	starting := http.Handler(httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL)))
+	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
 	current.Store(&starting)
 	srv := &http.Server{
 		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { (*current.Load()).ServeHTTP(w, r) }),

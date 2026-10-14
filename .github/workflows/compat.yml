@@ -104,6 +104,40 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           go test -count=1 -tags compat ./compat/git/
 
+  # Xet uploads (UP-7): the oldest hf_xet huggingface_hub 2.2.0 accepts and
+  # the latest 1.x, each on the fakes and on the real Repo service, plus the
+  # 14 MiB reference xorb (15-build-plan.md, W11).
+  xet:
+    name: Xet uploads (hf_xet ${{ matrix.hf_xet }}, ${{ matrix.backend }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        hf_xet: ["1.6.0", "1.7.0"]
+        backend: [fakes, real]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/cache@v6
+        with:
+          path: compat/.fixtures
+          key: compat-fixtures-xet-${{ hashFiles('compat/fixtures.json') }}
+      - name: Reference xorb
+        if: matrix.backend == 'fakes' && matrix.hf_xet == '1.7.0'
+        run: go test -count=1 -tags xetref -run TestReferenceXorb ./internal/xet
+      - name: compat/xet
+        working-directory: compat
+        env:
+          HF_XET_VERSION: ${{ matrix.hf_xet }}
+          BACKEND: ${{ matrix.backend }}
+        run: |
+          if [ "$BACKEND" = real ]; then export HANGAR_XET_GO_TAGS=xetreal; fi
+          uv run --no-project --python 3.11 --with pytest==9.1.1 --with requests==2.34.2 \
+            --with huggingface_hub==2.2.0 --with "hf-xet==$HF_XET_VERSION" pytest xet -p no:cacheprovider
+
   compose:
     name: Compose example (${{ matrix.example }})
     runs-on: ubuntu-24.04
