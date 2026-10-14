@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("---\nlicense: mit\ntags: [a]\n---\n# x")

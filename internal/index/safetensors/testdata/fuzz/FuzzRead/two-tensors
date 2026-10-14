@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\x88\x00\x00\x00\x00\x00\x00\x00{\"__metadata__\":{\"k\":\"v\"},\"a\":{\"data_offsets\":[0,8],\"dtype\":\"F32\",\"shape\":[2]},\"b\":{\"data_offsets\":[8,11],\"dtype\":\"U8\",\"shape\":[3]}}    \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
