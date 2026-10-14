@@ -252,6 +252,29 @@ type ParquetResponse struct {
 	Partial      bool            `json:"partial"`
 }
 
+// MarshalJSON writes the Hub's two shapes: for a dataset, Pending and
+// Failed are always present, as empty lists when there are none; for one
+// Config (Features set), they are left out.
+func (r ParquetResponse) MarshalJSON() ([]byte, error) {
+	type plain ParquetResponse
+	if len(r.Features) > 0 {
+		return json.Marshal(plain(r))
+	}
+	pending, failed := r.Pending, r.Failed
+	if pending == nil {
+		pending = []ConfigRef{}
+	}
+	if failed == nil {
+		failed = []FailedConfig{}
+	}
+	return json.Marshal(struct {
+		ParquetFiles []ParquetFile  `json:"parquet_files"`
+		Pending      []ConfigRef    `json:"pending"`
+		Failed       []FailedConfig `json:"failed"`
+		Partial      bool           `json:"partial"`
+	}{r.ParquetFiles, pending, failed, r.Partial})
+}
+
 // RowsRequest is a /rows request; Length is at most MaxRowsPerPage.
 type RowsRequest struct {
 	Repo   model.RepoID

@@ -146,6 +146,9 @@ func (s *Service) FirstRowsFor(ctx context.Context, p model.Principal, id model.
 	}
 	var fs features.Features
 	var rows [][]any
+	// more is the Hub's "not all_fetched": the Split has more rows than
+	// the response can hold.
+	more := false
 	_, info, err := s.readySplit(ctx, st, config, split)
 	switch {
 	case err == nil:
@@ -158,10 +161,18 @@ func (s *Service) FirstRowsFor(ctx context.Context, p model.Principal, id model.
 			return nil, st, err
 		}
 		fs = info.Features
+		for _, sp := range info.Splits {
+			if sp.Name == split {
+				more = sp.NumExamples > datasets.MaxRowsPerPage
+			}
+		}
 	case errors.Is(err, datasets.ErrNotReady):
 		fs, rows, err = s.headRows(ctx, st, config, split)
 		if err != nil {
 			return nil, st, err
+		}
+		if len(rows) > datasets.MaxRowsPerPage {
+			rows, more = rows[:datasets.MaxRowsPerPage], true
 		}
 	default:
 		return nil, st, err
@@ -187,10 +198,11 @@ func (s *Service) FirstRowsFor(ctx context.Context, p model.Principal, id model.
 	}
 	items, truncated := truncateRows(items, keep)
 	return &datasets.FirstRowsResponse{Dataset: st.dataset(), Config: config, Split: split, Features: feats, Rows: items,
-		Truncated: truncated}, st, nil
+		Truncated: more || truncated}, st, nil
 }
 
-// headRows reads first rows from source files while a Split converts.
+// headRows reads up to one more than the first page of rows from source
+// files while a Split converts, so the caller knows whether there are more.
 func (s *Service) headRows(ctx context.Context, st *state, config, split string) (features.Features, [][]any, error) {
 	lay, err := s.resolveLayout(ctx, st.repo, st.commit)
 	if err != nil {
@@ -204,7 +216,7 @@ func (s *Service) headRows(ctx context.Context, st *state, config, split string)
 	if err != nil {
 		return nil, nil, err
 	}
-	fs, rows, err := convert.Head(ctx, c, split, files, datasets.MaxRowsPerPage)
+	fs, rows, err := convert.Head(ctx, c, split, files, datasets.MaxRowsPerPage+1)
 	if err != nil {
 		s.d.Log.DebugContext(ctx, "first rows from source files failed", "error", err.Error())
 		return nil, nil, datasets.ErrNotReady
