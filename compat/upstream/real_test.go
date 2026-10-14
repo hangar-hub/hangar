@@ -813,6 +813,14 @@ func TestRealPullRespectsNamespaceQuota(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		up := newSecondInstance(t)
 		l := newLocal(t, d, up.URL, localOptions{partSize: 1 << 20})
+		// Upstream Repos in their own Namespaces, so each local Mirror
+		// Namespace has its own quota.
+		upstreamRepo := func(id model.RepoID) {
+			t.Helper()
+			owner := up.Real.AddUser(t, id.Namespace)
+			_, err := up.Real.Create(l.ctx, repo.CreateParams{ID: id, Actor: owner, Visibility: model.VisibilityPublic})
+			require.NoError(t, err)
+		}
 		requireRefused := func(jid jobs.JobID) {
 			t.Helper()
 			j := l.wait(jid, time.Minute)
@@ -826,6 +834,7 @@ func TestRealPullRespectsNamespaceQuota(t *testing.T) {
 
 		// The history does not fit.
 		hist := model.RepoID{Type: model.RepoTypeModel, Namespace: "tight", Name: "history"}
+		upstreamRepo(hist)
 		up.seed(t, hist, map[string][]byte{"config.json": []byte(`{"model_type":"bert"}`), "model.safetensors": []byte("weights")})
 		tight, err := l.orgs.EnsureMirrorNamespace(l.ctx, "tight")
 		require.NoError(t, err)
@@ -839,6 +848,7 @@ func TestRealPullRespectsNamespaceQuota(t *testing.T) {
 		// The history fits; the weights do not.
 		big := bytes.Repeat([]byte("over quota "), 20_000) // 220 KB
 		sel := model.RepoID{Type: model.RepoTypeModel, Namespace: "roomy", Name: "weights"}
+		upstreamRepo(sel)
 		up.seed(t, sel, map[string][]byte{"config.json": []byte(`{}`), "model.safetensors": big})
 		roomy, err := l.orgs.EnsureMirrorNamespace(l.ctx, "roomy")
 		require.NoError(t, err)
