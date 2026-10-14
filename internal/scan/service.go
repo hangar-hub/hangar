@@ -346,3 +346,50 @@ func (s *Service) HandleJob(ctx context.Context, j *jobs.Job, _ jobs.Progress) e
 	}
 	return nil
 }
+
+// RescanStale enqueues low-priority scan Jobs for branch heads whose
+// results come from an older scanner version, and returns how many it
+// queued. Run it when a worker starts after Version changes.
+func (s *Service) RescanStale(ctx context.Context, q jobs.Queue) (int, error) {
+	var rows []struct {
+		RepoID uuid.UUID `bun:"repo_id"`
+		Commit string    `bun:"commit_sha"`
+	}
+	err := s.o.DB.NewSelect().TableExpr("scan_results").ColumnExpr("repo_id, commit_sha").Where("path = ?", commitRow).
+		GroupExpr("repo_id, commit_sha").Having("MAX(scanner_version) < ?", Version).Scan(ctx, &rows)
+	if err != nil {
+		return 0, err
+	}
+	heads := map[uuid.UUID]map[model.CommitSHA]bool{}
+	repos := map[uuid.UUID]*repo.Repo{}
+	queued := 0
+	for _, row := range rows {
+		r, seen := repos[row.RepoID]
+		if !seen {
+			got, err := s.o.Repos.GetByUUID(ctx, row.RepoID)
+			if err != nil && !errors.Is(err, repo.ErrNotFound) {
+				return queued, err
+			}
+			r, repos[row.RepoID] = got, got
+			if got != nil && got.DeletedAt == nil {
+				refs, err := s.o.Repos.Refs(ctx, got.ID)
+				if err != nil {
+					return queued, err
+				}
+				heads[row.RepoID] = map[model.CommitSHA]bool{}
+				for _, b := range refs.Branches {
+					heads[row.RepoID][b.Target] = true
+				}
+			}
+		}
+		if r == nil || r.DeletedAt != nil || !heads[row.RepoID][model.CommitSHA(row.Commit)] {
+			continue
+		}
+		job := index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: model.CommitSHA(row.Commit)}
+		if _, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: job.DedupeKey(), Payload: job, Priority: jobs.PriorityLow}); err != nil {
+			return queued, err
+		}
+		queued++
+	}
+	return queued, nil
+}

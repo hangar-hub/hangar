@@ -275,3 +275,33 @@ func FuzzScanFile(f *testing.F) {
 		}
 	})
 }
+
+func TestRescanStaleQueuesBranchHeadsOnly(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := t.Context()
+		fake := repotest.NewFake(t)
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "stale"}
+		r := indextest.CreateRepo(t, fake, id, model.VisibilityPublic)
+		indextest.InsertRepoRow(t, d, r)
+		old := indextest.Commit(t, fake, id, map[string][]byte{"a.txt": []byte("a")})
+		head := indextest.Commit(t, fake, id, map[string][]byte{"b.txt": []byte("b")})
+		for _, sha := range []model.CommitSHA{old, head} {
+			_, err := d.NewInsert().Model(&db.ScanResult{RepoID: r.UUID, Commit: string(sha), Path: "", ScannerVersion: scan.Version - 1,
+				Status: "safe", Findings: db.JSON("[]")}).Exec(ctx)
+			require.NoError(t, err)
+		}
+		s := scan.New(scan.Options{DB: d, Repos: fake})
+		got, err := s.Results(ctx, r.UUID, head)
+		require.NoError(t, err, "stale results stay readable")
+		require.Equal(t, scan.StatusSafe, got.Status)
+		q := jobstest.NewFake(jobs.NewRegistry())
+		n, err := s.RescanStale(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+		list, _, err := q.List(ctx, jobs.Filter{})
+		require.NoError(t, err)
+		var p index.CommitJob
+		require.NoError(t, list[0].DecodePayload(&p))
+		require.Equal(t, head, p.Commit)
+	})
+}
