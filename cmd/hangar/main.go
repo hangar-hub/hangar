@@ -3,13 +3,17 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/jamesagarside/hangar/internal/blob/backends"
 	"github.com/jamesagarside/hangar/internal/cli"
+	"github.com/jamesagarside/hangar/internal/config"
 )
 
 // Set at build time with -ldflags "-X main.version=... -X main.commit=... -X main.date=...".
@@ -63,10 +67,13 @@ func newRootCommand() *cobra.Command {
 		newAdminCommand(),
 		newVersionCommand(),
 	)
-	// Client commands, the admin commands that need no server wiring, and
-	// the hidden reference generators (internal/cli, W9). Phase 2 passes
-	// the Blob store opener in cli.Options.Admin.
-	cli.Register(root, cli.Options{Version: version})
+	// Client commands, the backup, restore, doctor and rotate-key admin
+	// commands, and the hidden reference generators (internal/cli, W9).
+	cli.Register(root, cli.Options{Version: version, Admin: cli.AdminDeps{
+		OpenBlobStore: func(ctx context.Context, cfg *config.Config) (blob.Store, error) {
+			return backends.Open(ctx, cfg.Storage)
+		},
+	}})
 	return root
 }
 

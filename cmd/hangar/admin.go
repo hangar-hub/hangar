@@ -43,7 +43,7 @@ func newAdminCommand() *cobra.Command {
 	}
 	flags.register(migrate)
 	addJSONFlag(migrate, &asJSON)
-	cmd.AddCommand(migrate)
+	cmd.AddCommand(migrate, newCreateUserCommand(), newResetPasswordCommand(), newGCCommand(), newReindexCommand())
 	return cmd
 }
 
