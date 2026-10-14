@@ -174,7 +174,7 @@ function AddItem({ c, onAdded }: { c: Collection; onAdded: (c: Collection) => vo
   );
 }
 
-/** A Collection, with an editor for its owners: details, items, notes and drag to reorder (BROWSE-5). */
+/** A Collection, with an editor for members of its Namespace: details, items, notes and drag to reorder (BROWSE-5). */
 export function CollectionPage({ ns, slug }: { ns: string; slug: string }) {
   const me = useMe();
   const qc = useQueryClient();
@@ -345,7 +345,7 @@ export function CollectionPage({ ns, slug }: { ns: string; slug: string }) {
       ) : null}
       {items.length === 0 ? (
         <EmptyState title="This Collection is empty">
-          {canEdit ? "Choose Edit to add Repos." : "Its owner has not added anything yet."}
+          {canEdit ? "Choose Edit to add Repos." : "Nothing has been added to it yet."}
         </EmptyState>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

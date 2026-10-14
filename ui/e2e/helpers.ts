@@ -46,6 +46,15 @@ export async function expectAccessible(page: Page): Promise<void> {
   expect(summary).toEqual([]);
 }
 
+/**
+ * Fails when the page's text says "Owner", which CONTEXT.md says to avoid:
+ * the UI calls the owner part of a Repo ID a Namespace.
+ */
+export async function expectGlossaryTerms(page: Page): Promise<void> {
+  const text = await page.locator("body").innerText();
+  expect(text.match(/\bowners?\b/gi) ?? []).toEqual([]);
+}
+
 /** Waits until no loading placeholder is on the page. */
 export async function settled(page: Page): Promise<void> {
   await expect(page.locator('[role="status"][aria-label^="Loading"]')).toHaveCount(0, {

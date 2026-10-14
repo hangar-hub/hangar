@@ -20,13 +20,13 @@ export function validRepoName(name: string): boolean {
   );
 }
 
-/** `/new` and `/new-dataset`: owner, name, visibility, licence and an optional first upload. */
+/** `/new` and `/new-dataset`: Namespace, name, visibility, licence and an optional first upload. */
 export function NewRepoPage({ kind }: { kind: RepoKind }) {
   const me = useMe();
   const go = useGo();
   const qc = useQueryClient();
   const toast = useToast();
-  const owners = writableNamespaces(me.data);
+  const namespaces = writableNamespaces(me.data);
   const [form, setForm] = useState({
     namespace: "",
     name: "",
@@ -36,7 +36,7 @@ export function NewRepoPage({ kind }: { kind: RepoKind }) {
     readme: true,
     upload: false,
   });
-  const ns = form.namespace || owners[0] || "";
+  const ns = form.namespace || namespaces[0] || "";
   const create = useMutation({
     mutationFn: async () =>
       unwrap(
@@ -83,14 +83,14 @@ export function NewRepoPage({ kind }: { kind: RepoKind }) {
         }}
       >
         <div className="flex flex-wrap items-start gap-2">
-          <Field label="Owner" error={errs.namespace} className="w-48">
+          <Field label="Namespace" error={errs.namespace} className="w-48">
             {(p) => (
               <Select
                 {...p}
                 value={ns}
                 onChange={(e) => setForm({ ...form, namespace: e.target.value })}
               >
-                {owners.map((o) => (
+                {namespaces.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
@@ -134,7 +134,7 @@ export function NewRepoPage({ kind }: { kind: RepoKind }) {
             [
               ["public", "Public", "Anyone who can reach this Instance can see and download it."],
               ["internal", "Internal", "Anyone signed in to this Instance."],
-              ["private", "Private", "Only members of the owner Namespace and collaborators."],
+              ["private", "Private", "Only members of the Namespace and collaborators."],
             ] as const
           ).map(([v, label, hint]) => (
             <label key={v} className="flex items-start gap-2 text-sm">

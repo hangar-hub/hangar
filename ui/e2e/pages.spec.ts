@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { expectAccessible, settled, signIn, watchConsole } from "./helpers";
+import { expectAccessible, expectGlossaryTerms, settled, signIn, watchConsole } from "./helpers";
 
-// Every page in 09-web-ui.md renders, has one h1, and passes every axe rule
-// at phone, tablet and desktop widths.
+// Every page in 09-web-ui.md renders, has one h1, passes every axe rule and
+// avoids the glossary's "Avoid" terms at phone, tablet and desktop widths.
 
 /** A Commit SHA in the mock's fixture data (ui/mock/data.ts makeCommits). */
 const commitSha = (repo: string, title: string) =>
@@ -84,6 +84,7 @@ for (const path of signedIn) {
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
     await expectAccessible(page);
+    await expectGlossaryTerms(page);
     expect(problems).toEqual([]);
   });
 }
@@ -95,6 +96,7 @@ for (const path of signedOut) {
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
     await expectAccessible(page);
+    await expectGlossaryTerms(page);
     expect(problems).toEqual([]);
   });
 }

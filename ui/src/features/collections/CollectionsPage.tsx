@@ -19,7 +19,7 @@ function CreateCollection() {
   const me = useMe();
   const go = useGo();
   const qc = useQueryClient();
-  const owners = writableNamespaces(me.data);
+  const namespaces = writableNamespaces(me.data);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     namespace: "",
@@ -31,7 +31,7 @@ function CreateCollection() {
     mutationFn: async () =>
       unwrap(
         await api.POST("/collections", {
-          body: { ...form, namespace: form.namespace || owners[0] || "" },
+          body: { ...form, namespace: form.namespace || namespaces[0] || "" },
         }),
       ),
     onSuccess: (c) => {
@@ -75,14 +75,14 @@ function CreateCollection() {
           create.mutate();
         }}
       >
-        <Field label="Owner">
+        <Field label="Namespace">
           {(p) => (
             <Select
               {...p}
-              value={form.namespace || owners[0]}
+              value={form.namespace || namespaces[0]}
               onChange={(e) => setForm({ ...form, namespace: e.target.value })}
             >
-              {owners.map((o) => (
+              {namespaces.map((o) => (
                 <option key={o} value={o}>
                   {o}
                 </option>

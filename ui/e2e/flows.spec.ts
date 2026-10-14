@@ -487,6 +487,31 @@ test("reorders a Collection with the keyboard", async ({ page }) => {
   ).toContainText("ada/bert-tiny-finetune");
 });
 
+test("creates a Repo and a Collection in an Organisation's Namespace", async ({ page }) => {
+  const problems = watchConsole(page);
+  await signIn(page);
+  await page.goto("/new");
+  await expect(page.getByLabel("Owner")).toHaveCount(0);
+  await page.getByLabel("Namespace", { exact: true }).selectOption("ml-team");
+  await page.getByLabel("Model name").fill("laptop-classifier");
+  await page.getByRole("radio", { name: /^Private/ }).check();
+  await expect(page.getByText("Only members of the Namespace and collaborators.")).toBeVisible();
+  await page.getByRole("button", { name: "Create model" }).click();
+  await expect(page).toHaveURL(/\/ml-team\/laptop-classifier$/);
+
+  await page.goto("/collections");
+  await page.getByRole("button", { name: "New Collection" }).click();
+  const dialog = page.getByRole("dialog", { name: "New Collection" });
+  await expect(dialog.getByLabel("Owner")).toHaveCount(0);
+  await dialog.getByLabel("Namespace", { exact: true }).selectOption("ml-team");
+  await dialog.getByLabel("Title").fill("Runs on a laptop");
+  await dialog.getByRole("button", { name: "Create Collection" }).click();
+  await expect(page).toHaveURL(/\/collections\/ml-team\/runs-on-a-laptop-[0-9a-f]{6}$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Runs on a laptop" })).toBeVisible();
+  await expect(page.getByText("Choose Edit to add Repos.")).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
 test("shows the empty arsenal and virtualises long lists", async ({ page, baseURL }) => {
   await useScenario(page, "empty", baseURL ?? "");
   await signIn(page);
