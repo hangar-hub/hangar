@@ -21,6 +21,12 @@ var (
 	// ErrNotPullRequest means the action only applies to pull requests.
 	ErrNotPullRequest = errors.New("discussion is not a pull request")
 	ErrInvalid        = errors.New("invalid request")
+	// ErrConflict means a pull request cannot be merged because its base
+	// changed the same files.
+	ErrConflict = errors.New("pull request conflicts with its base branch")
+	// ErrNotDiscardable means the pull request has commits or comments, so
+	// it can only be closed.
+	ErrNotDiscardable = errors.New("pull request has activity and cannot be discarded")
 )
 
 // Discussion kinds and statuses, as the Hub names them.
@@ -44,12 +50,14 @@ const (
 
 // Event is one entry in a thread.
 type Event struct {
-	ID        uuid.UUID
-	Type      string
-	Author    string
-	Body      string
-	Data      map[string]any
-	Hidden    bool
+	ID     uuid.UUID
+	Type   string
+	Author string
+	Body   string
+	Data   map[string]any
+	Hidden bool
+	// Edited is true once a comment has been edited.
+	Edited    bool
 	CreatedAt time.Time
 }
 
@@ -107,10 +115,24 @@ type Service interface {
 	// Merge merges a pull request into its base through repo.Service and
 	// marks it merged.
 	Merge(ctx context.Context, repoUUID uuid.UUID, num int, comment string, actor model.Principal) (*Event, error)
+	// EditComment replaces a comment's text. Handlers check that the actor
+	// wrote it or administers the Repo.
+	EditComment(ctx context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, body string, actor model.Principal) (*Event, error)
+	// HideComment hides a comment's text.
+	HideComment(ctx context.Context, repoUUID uuid.UUID, num int, eventID uuid.UUID, actor model.Principal) (*Event, error)
+	// Discard removes a pull request that has no ref and no events but its
+	// description, for a create_pr Commit that failed after opening it.
+	Discard(ctx context.Context, repoUUID uuid.UUID, num int) error
 
 	Like(ctx context.Context, userID, repoUUID uuid.UUID) error
 	Unlike(ctx context.Context, userID, repoUUID uuid.UUID) error
 	Likes(ctx context.Context, repoUUID uuid.UUID) (int64, error)
+	// Liked reports whether a user likes a Repo.
+	Liked(ctx context.Context, userID, repoUUID uuid.UUID) (bool, error)
+	// Likers returns the usernames of the users who like a Repo, in name order.
+	Likers(ctx context.Context, repoUUID uuid.UUID) ([]string, error)
+	// LikedBy returns the Repos a user likes, newest like first.
+	LikedBy(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	// RecordDownload counts one download on a day (UTC).
 	RecordDownload(ctx context.Context, repoUUID uuid.UUID, at time.Time) error
 	// Downloads returns daily counts from since (inclusive), oldest first.

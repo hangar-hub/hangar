@@ -1,0 +1,3 @@
+go test fuzz v1
+string("x.npy")
+[]byte("\x93NUMPY\x01\x00v\x00{'descr': '|O', 'fortran_order': False, 'shape': (1,), }                                                             \ncos\nsystem\n(S'echo pwned'\ntR.")

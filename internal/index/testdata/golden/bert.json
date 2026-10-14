@@ -1,0 +1,60 @@
+{
+  "formats": [
+    "safetensors"
+  ],
+  "architecture": "BertModel",
+  "model_type": "bert",
+  "parameters": {
+    "total": 36480,
+    "by_dtype": {
+      "F32": 35968,
+      "I64": 512
+    }
+  },
+  "context_length": 512,
+  "card_data": {
+    "license": "apache-2.0",
+    "tags": [
+      "test"
+    ]
+  },
+  "licence": {
+    "id": "apache-2.0"
+  },
+  "pipeline_tag": "feature-extraction",
+  "library_name": "transformers",
+  "tags": [
+    "test",
+    "transformers",
+    "safetensors",
+    "bert",
+    "feature-extraction",
+    "license:apache-2.0"
+  ],
+  "size": {
+    "total": 149974,
+    "present": 149974
+  },
+  "files": [
+    {
+      "path": "model.safetensors",
+      "format": "safetensors",
+      "dtype": "F32",
+      "tensor_count": 2,
+      "parameters": 36480
+    }
+  ],
+  "config": {
+    "architectures": [
+      "BertModel"
+    ],
+    "model_type": "bert",
+    "tokenizer_config": {
+      "cls_token": "[CLS]",
+      "mask_token": "[MASK]",
+      "pad_token": "[PAD]",
+      "sep_token": "[SEP]",
+      "unk_token": "[UNK]"
+    }
+  }
+}

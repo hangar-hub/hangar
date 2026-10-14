@@ -1,0 +1,114 @@
+{
+  "formats": [
+    "gguf"
+  ],
+  "architecture": "llama",
+  "model_type": "llama",
+  "parameters": {
+    "total": 512
+  },
+  "quantisations": [
+    {
+      "name": "F16",
+      "file_type": 1,
+      "files": [
+        "tiny-F16-00001-of-00002.gguf",
+        "tiny-F16-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "name": "Q4_K_M",
+      "file_type": 15,
+      "files": [
+        "tiny-Q4_K_M.gguf"
+      ]
+    },
+    {
+      "name": "Q8_0",
+      "file_type": 7,
+      "files": [
+        "tiny-Q8_0.gguf"
+      ]
+    }
+  ],
+  "context_length": 2048,
+  "chat_template": "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '\u003c|start_header_id|\u003e' + message['role'] + '\u003c|end_header_id|\u003e\n\n'+ message['content'] | trim + '\u003c|eot_id|\u003e' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{% if add_generation_prompt %}{{ '\u003c|start_header_id|\u003eassistant\u003c|end_header_id|\u003e\n\n' }}{% endif %}",
+  "tokens": {
+    "bos": "\u003cs\u003e",
+    "eos": "\u003c/s\u003e"
+  },
+  "card_data": {
+    "base_model": "example/Tiny-Llama",
+    "license": "llama3.1",
+    "pipeline_tag": "text-generation"
+  },
+  "licence": {
+    "id": "llama3.1"
+  },
+  "pipeline_tag": "text-generation",
+  "library_name": "gguf",
+  "tags": [
+    "gguf",
+    "llama",
+    "text-generation",
+    "base_model:example/Tiny-Llama",
+    "license:llama3.1"
+  ],
+  "size": {
+    "total": 8934,
+    "present": 8934
+  },
+  "files": [
+    {
+      "path": "mmproj-tiny-f16.gguf",
+      "format": "gguf",
+      "dtype": "F16",
+      "quant": "F16",
+      "tensor_count": 1,
+      "parameters": 64
+    },
+    {
+      "path": "tiny-F16-00001-of-00002.gguf",
+      "format": "gguf",
+      "dtype": "F16",
+      "quant": "F16",
+      "tensor_count": 1,
+      "parameters": 512
+    },
+    {
+      "path": "tiny-F16-00002-of-00002.gguf",
+      "format": "gguf",
+      "dtype": "F16",
+      "quant": "F16",
+      "tensor_count": 1,
+      "parameters": 512
+    },
+    {
+      "path": "tiny-Q4_K_M.gguf",
+      "format": "gguf",
+      "dtype": "Q4_K",
+      "quant": "Q4_K_M",
+      "tensor_count": 1,
+      "parameters": 512
+    },
+    {
+      "path": "tiny-Q8_0.gguf",
+      "format": "gguf",
+      "dtype": "Q8_0",
+      "quant": "Q8_0",
+      "tensor_count": 1,
+      "parameters": 512
+    }
+  ],
+  "gguf": {
+    "total": 512,
+    "architecture": "llama",
+    "context_length": 2048,
+    "chat_template": "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '\u003c|start_header_id|\u003e' + message['role'] + '\u003c|end_header_id|\u003e\n\n'+ message['content'] | trim + '\u003c|eot_id|\u003e' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{% if add_generation_prompt %}{{ '\u003c|start_header_id|\u003eassistant\u003c|end_header_id|\u003e\n\n' }}{% endif %}",
+    "bos_token": "\u003cs\u003e",
+    "eos_token": "\u003c/s\u003e"
+  },
+  "config": {
+    "model_type": "llama"
+  }
+}

@@ -34,8 +34,9 @@ type Parameters struct {
 
 // Quantisation describes one GGUF file or group, or an MLX quantisation.
 type Quantisation struct {
-	Name     string   `json:"name"`
-	FileType int      `json:"file_type,omitempty"`
+	Name string `json:"name"`
+	// FileType is GGUF general.file_type, when known.
+	FileType *int     `json:"file_type,omitempty"`
 	Bits     int      `json:"bits,omitempty"`
 	Group    int      `json:"group_size,omitempty"`
 	Files    []string `json:"files,omitempty"`

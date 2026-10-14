@@ -1,0 +1,42 @@
+{
+  "formats": [
+    "safetensors"
+  ],
+  "architecture": "BertModel",
+  "model_type": "bert",
+  "parameters": {
+    "total": 64,
+    "by_dtype": {
+      "F32": 64
+    }
+  },
+  "context_length": 512,
+  "licence": {},
+  "pipeline_tag": "sentence-similarity",
+  "library_name": "sentence-transformers",
+  "tags": [
+    "sentence-transformers",
+    "safetensors",
+    "bert",
+    "sentence-similarity"
+  ],
+  "size": {
+    "total": 2075,
+    "present": 2075
+  },
+  "files": [
+    {
+      "path": "model.safetensors",
+      "format": "safetensors",
+      "dtype": "F32",
+      "tensor_count": 1,
+      "parameters": 64
+    }
+  ],
+  "config": {
+    "architectures": [
+      "BertModel"
+    ],
+    "model_type": "bert"
+  }
+}
