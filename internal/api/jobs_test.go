@@ -30,7 +30,7 @@ func (m jobRepos) GetByUUID(_ context.Context, id uuid.UUID) (*repo.Repo, error)
 	return nil, fmt.Errorf("%w: %s", repo.ErrNotFound, id)
 }
 
-func (e *env) addRepo(ns model.Principal, nsName, name string, vis model.Visibility) *repo.Repo {
+func (e *platformEnv) addRepo(ns model.Principal, nsName, name string, vis model.Visibility) *repo.Repo {
 	r := &repo.Repo{
 		UUID: uuid.New(), ID: model.RepoID{Type: model.RepoTypeModel, Namespace: nsName, Name: name},
 		NamespaceID: ns.NamespaceID, Visibility: vis,
@@ -51,7 +51,7 @@ func withToken(p model.Principal, scope model.Scope, r model.TokenRestrictions) 
 // Namespace, a deleted Repo and a purged one, with a Job of alice's on each,
 // an Instance-wide Job of alice's and a system Job.
 type jobAuthzFixture struct {
-	e                                                *env
+	e                                                *platformEnv
 	secret, public                                   *repo.Repo
 	acme                                             model.Principal
 	zipSecret, pullPublic, deleted, purged, instance uuid.UUID
@@ -59,7 +59,7 @@ type jobAuthzFixture struct {
 }
 
 func newJobAuthzFixture(t *testing.T) *jobAuthzFixture {
-	e := newEnv(t, nil)
+	e := newPlatformEnv(t, nil)
 	f := &jobAuthzFixture{e: e}
 	// acme stands in for an Organisation; alice is a write Member.
 	f.acme = e.newUser("acme", false)

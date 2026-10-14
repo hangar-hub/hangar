@@ -43,7 +43,7 @@ type platformServer struct {
 	*api.AdminSystem
 }
 
-type env struct {
+type platformEnv struct {
 	t       *testing.T
 	db      *db.DB
 	queue   *jobs.DBQueue
@@ -55,12 +55,12 @@ type env struct {
 	repos   jobRepos
 }
 
-func newEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck) *env {
+func newPlatformEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck) *platformEnv {
 	t.Helper()
 	d := dbtest.SQLite(t)
 	store, err := blobfs.New(filepath.Join(t.TempDir(), "blobs"))
 	require.NoError(t, err)
-	e := &env{
+	e := &platformEnv{
 		t: t, db: d, queue: jobs.NewQueue(d, nil, jobs.QueueOptions{}), audit: audittest.NewFake(), store: store,
 		users: map[string]model.Principal{}, authz: authtest.NewAuthz(), repos: jobRepos{},
 	}
@@ -99,7 +99,7 @@ func newEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck)
 	return e
 }
 
-func (e *env) newUser(name string, admin bool) model.Principal {
+func (e *platformEnv) newUser(name string, admin bool) model.Principal {
 	ctx := context.Background()
 	ns := &db.Namespace{ID: db.NewID(), Name: name, Kind: "user"}
 	_, err := e.db.NewInsert().Model(ns).Exec(ctx)
@@ -110,7 +110,7 @@ func (e *env) newUser(name string, admin bool) model.Principal {
 	return model.Principal{Kind: model.PrincipalUser, UserID: u.ID, NamespaceID: ns.ID, Username: name, IsAdmin: admin, Method: model.AuthSession}
 }
 
-func (e *env) do(user, method, path string, body any) (int, []byte) {
+func (e *platformEnv) do(user, method, path string, body any) (int, []byte) {
 	e.t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -139,7 +139,7 @@ func decode[T any](t *testing.T, b []byte) T {
 	return v
 }
 
-func (e *env) enqueue(user string, nj jobs.NewJob) uuid.UUID {
+func (e *platformEnv) enqueue(user string, nj jobs.NewJob) uuid.UUID {
 	if user != "" {
 		nj.CreatedBy = e.users[user].UserID
 	}
@@ -149,7 +149,7 @@ func (e *env) enqueue(user string, nj jobs.NewJob) uuid.UUID {
 }
 
 func TestJobsEndpoints(t *testing.T) {
-	e := newEnv(t, nil)
+	e := newPlatformEnv(t, nil)
 	ctx := context.Background()
 	alicePull := e.enqueue("alice", jobs.NewJob{Kind: jobs.KindPull, Payload: map[string]string{"repo": "a/b"}})
 	aliceFile := e.enqueue("alice", jobs.NewJob{Kind: jobs.KindPullFile, ParentID: alicePull})
@@ -232,7 +232,7 @@ func TestJobsEndpoints(t *testing.T) {
 }
 
 func TestAdminStorageEndpoints(t *testing.T) {
-	e := newEnv(t, nil)
+	e := newPlatformEnv(t, nil)
 	ctx := context.Background()
 	// A Repo with one LFS object, as the repo package would record it.
 	nsID := e.users["alice"].NamespaceID
@@ -311,7 +311,7 @@ func TestAdminStorageEndpoints(t *testing.T) {
 }
 
 func TestAdminSystem(t *testing.T) {
-	e := newEnv(t, nil)
+	e := newPlatformEnv(t, nil)
 	code, _ := e.do("alice", http.MethodGet, "/admin/system", nil)
 	require.Equal(t, http.StatusForbidden, code)
 	code, body := e.do("root", http.MethodGet, "/admin/system", nil)
