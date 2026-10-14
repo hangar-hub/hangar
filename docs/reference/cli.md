@@ -23,8 +23,12 @@ Administer an Instance directly through its database and Blob store.
 Subcommands:
 
 - [`hangar admin backup`](#hangar-admin-backup): Back up the database and the Blob store to a folder
+- [`hangar admin create-user`](#hangar-admin-create-user): Create a local user
 - [`hangar admin doctor`](#hangar-admin-doctor): Check the configuration, database, Blob store, presigned URLs, clock and git
+- [`hangar admin gc`](#hangar-admin-gc): Collect garbage: unreferenced LFS objects and unused git data
 - [`hangar admin migrate`](#hangar-admin-migrate): Apply database migrations
+- [`hangar admin reindex`](#hangar-admin-reindex): Index and scan Repos again
+- [`hangar admin reset-password`](#hangar-admin-reset-password): Set a local user's password
 - [`hangar admin restore`](#hangar-admin-restore): Restore a backup made by hangar admin backup
 - [`hangar admin rotate-key`](#hangar-admin-rotate-key): Replace the Instance key and re-encrypt every stored secret
 
@@ -71,6 +75,36 @@ Flags:
 | `--set` | set a configuration key, such as --set database.dsn=... (repeatable) |  |
 | `--skip-blobs` | back up the database only |  |
 
+## hangar admin create-user
+
+Create a local user.
+
+```text
+Creates a local user with a personal Namespace. The password is read from
+standard input with --password-stdin, or generated and printed once.
+```
+
+Usage:
+
+```sh
+hangar admin create-user <username> [flags]
+```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `--admin` | make the user an Instance admin |  |
+| `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--display-name` | the user's display name |  |
+| `--email` | the user's email address |  |
+| `--json` | print JSON instead of text |  |
+| `--listen` | shortcut for --set server.listen=... |  |
+| `--password-stdin` | read the password from standard input instead of generating one |  |
+| `--public-url` | shortcut for --set server.public_url=... |  |
+| `--role` | shortcut for --set server.role=... |  |
+| `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
+
 ## hangar admin doctor
 
 Check the configuration, database, Blob store, presigned URLs, clock and git.
@@ -96,6 +130,38 @@ Flags:
 | `--json` | print JSON instead of text |  |
 | `--set` | set a configuration key, such as --set database.dsn=... (repeatable) |  |
 
+## hangar admin gc
+
+Collect garbage: unreferenced LFS objects and unused git data.
+
+```text
+Deletes LFS objects no Repo has referenced for gc.grace_period, orphaned
+blobs, retired and orphaned packs, git data of purged Repos, stale
+temporary files and abandoned uploads, then reports what it freed. It runs
+in this process; with --queue it queues a gc Job for the Instance's workers
+instead, which needs a running Instance on Postgres.
+```
+
+Usage:
+
+```sh
+hangar admin gc [flags]
+```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--git` | collect git data only |  |
+| `--json` | print JSON instead of text |  |
+| `--lfs` | collect LFS objects only |  |
+| `--listen` | shortcut for --set server.listen=... |  |
+| `--public-url` | shortcut for --set server.public_url=... |  |
+| `--queue` | queue a gc Job for the Instance's workers instead of running it here |  |
+| `--role` | shortcut for --set server.role=... |  |
+| `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
+
 ## hangar admin migrate
 
 Apply database migrations.
@@ -117,6 +183,69 @@ Flags:
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
 | `--json` | print JSON instead of text |  |
 | `--listen` | shortcut for --set server.listen=... |  |
+| `--public-url` | shortcut for --set server.public_url=... |  |
+| `--role` | shortcut for --set server.role=... |  |
+| `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
+
+## hangar admin reindex
+
+Index and scan Repos again.
+
+```text
+Queues index and scan Jobs for the head of every branch of the named Repos,
+or of every Repo when none is named. With --stale it queues them only for
+results from an older indexer or scanner version, as workers do when they
+start. The Instance's workers run the Jobs; on SQLite they run when Hangar
+starts again.
+
+Name a Repo as namespace/name, or datasets/namespace/name for a dataset.
+```
+
+Usage:
+
+```sh
+hangar admin reindex [repo...] [flags]
+```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | print JSON instead of text |  |
+| `--listen` | shortcut for --set server.listen=... |  |
+| `--public-url` | shortcut for --set server.public_url=... |  |
+| `--role` | shortcut for --set server.role=... |  |
+| `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
+| `--stale` | only results from an older indexer or scanner version |  |
+| `--type` | the type of Repo IDs without a prefix: model (the default) or dataset |  |
+
+## hangar admin reset-password
+
+Set a local user's password.
+
+```text
+Sets a new password for a user, signs them out everywhere and clears
+sign-in throttling, for example when the only admin is locked out. The
+password is read from standard input with --password-stdin, or generated
+and printed once. To let a user choose their own, create a reset link in
+the admin UI instead.
+```
+
+Usage:
+
+```sh
+hangar admin reset-password <username> [flags]
+```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | print JSON instead of text |  |
+| `--listen` | shortcut for --set server.listen=... |  |
+| `--password-stdin` | read the password from standard input instead of generating one |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
 | `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
