@@ -91,7 +91,7 @@ func TestSummarise(t *testing.T) {
 
 func TestPlainText(t *testing.T) {
 	md := "# Title\n\nSome **bold** and _it_ text with a [link](https://x) and ![img](a.png).\n\n\n\n" +
-		"```python\ncode()\n```\n<div align=\"center\">html</div>\n  ## Sub\n`inline`\n"
+		"```python\ncode()\n```\n<div class=\"note\">html</div>\n  ## Sub\n`inline`\n"
 	require.Equal(t, "Title\n\nSome bold and it text with a link and img.\n\nhtml\nSub\ninline", meta.PlainText(md))
 	require.Empty(t, meta.PlainText("  \n"))
 }

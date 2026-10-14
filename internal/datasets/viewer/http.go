@@ -215,19 +215,25 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, st, out)
 }
 
+// paramError is a parameter error with the Hub's message, which starts
+// with a capital letter.
+type paramError string
+
+func (e paramError) Error() string { return string(e) }
+
 func pageParams(p params) (int64, int, error) {
 	offset, length := int64(0), datasets.MaxRowsPerPage
 	if v := p.get("offset"); v != "" {
 		o, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return 0, 0, errors.New("Parameter 'offset' must be integer")
+			return 0, 0, paramError("Parameter 'offset' must be integer")
 		}
 		offset = o
 	}
 	if v := p.get("length"); v != "" {
 		l, err := strconv.Atoi(v)
 		if err != nil {
-			return 0, 0, errors.New("Parameter 'length' must be integer")
+			return 0, 0, paramError("Parameter 'length' must be integer")
 		}
 		length = l
 	}

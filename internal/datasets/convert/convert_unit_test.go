@@ -171,7 +171,7 @@ func TestCast(t *testing.T) {
 		{2.5, "float64", 2.5}, {int64(2), "float32", 2.0}, {uint64(2), "float64", 2.0}, {false, "float64", 0.0}, {"1_000.5", "float64", 1000.5},
 		{0.1, "float32", float64(float32(0.1))}, {"inf", "float64", math.Inf(1)},
 		{"s", "string", "s"}, {int64(-4), "string", "-4"}, {uint64(4), "large_string", "4"}, {1e20, "string", "1e+20"}, {123456789.0, "string", "123456789"},
-		{1.5e-7, "string", "1.5e-7"}, {1e-6, "string", "0.000001"}, {math.NaN(), "string", "nan"}, {math.Inf(-1), "string", "-inf"}, {-0.0, "string", "0"},
+		{1.5e-7, "string", "1.5e-7"}, {1e-6, "string", "0.000001"}, {math.NaN(), "string", "nan"}, {math.Inf(-1), "string", "-inf"}, {math.Copysign(0, -1), "string", "-0"},
 		{true, "string", "true"}, {[]byte("b"), "string", "b"}, {when, "string", "2020-01-02 03:04:05"},
 		{[]byte{0}, "binary", []byte{0}}, {"x", "large_binary", []byte("x")},
 		{"2020-01-02T03:04:05", "timestamp[s]", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},

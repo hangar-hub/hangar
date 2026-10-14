@@ -197,9 +197,10 @@ func (s *Service) head(ctx context.Context, p model.Principal, id model.RepoID, 
 		if _, err := pipeline.EnqueueConvert(ctx, s.d.Jobs, r.UUID, commit); err != nil {
 			s.d.Log.WarnContext(ctx, "could not queue the dataset conversion", "repo", r.ID.Path(), "error", err.Error())
 		}
-		lay, err := s.resolveLayout(ctx, r, commit)
-		if err != nil {
-			st.failed = err.Error()
+		lay, failure := s.layoutOrFailure(ctx, r, commit)
+		if failure != "" {
+			// The dataset has no Configs; the state reports why.
+			st.failed = failure
 			return st, nil
 		}
 		st.layout = lay
@@ -259,10 +260,10 @@ func (s *Service) readySplit(ctx context.Context, st *state, config, split strin
 	if !ok {
 		return row, nil, fmt.Errorf("%w: %s/%s", datasets.ErrNotFound, config, split)
 	}
-	switch {
-	case row.Status == pipeline.StatusPending:
+	switch row.Status {
+	case pipeline.StatusPending:
 		return row, nil, datasets.ErrNotReady
-	case row.Status == pipeline.StatusFailed:
+	case pipeline.StatusFailed:
 		return row, nil, fmt.Errorf("%w: %s", ErrFailed, row.Error)
 	}
 	info, err := s.info(ctx, st, config)
@@ -270,6 +271,15 @@ func (s *Service) readySplit(ctx context.Context, st *state, config, split strin
 		return row, nil, datasets.ErrNotReady
 	}
 	return row, info, err
+}
+
+// layoutOrFailure resolves a Commit's Configs, or says why it has none.
+func (s *Service) layoutOrFailure(ctx context.Context, r *repo.Repo, commit model.CommitSHA) (*datasets.Resolved, string) {
+	lay, err := s.resolveLayout(ctx, r, commit)
+	if err != nil {
+		return nil, err.Error()
+	}
+	return lay, ""
 }
 
 // splitInfo returns a Split's entry in a Config's info document.
