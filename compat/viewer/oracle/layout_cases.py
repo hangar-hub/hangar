@@ -2,10 +2,12 @@
 
 Usage: python compat/viewer/oracle/layout_cases.py CASES_JSON WORK_DIR
 
-CASES_JSON is a list of {"name": ..., "files": {path: text or null}}. For
-each case the script writes the files under WORK_DIR/<name> (a null
-content becomes a few bytes of the right format; resolution only looks at
-names and the card), resolves Configs and Splits as
+CASES_JSON is a list of {"name": ..., "files": {path: text or null},
+"archives": {path: [entry names]}}. For each case the script writes the
+files under WORK_DIR/<name> (a null content becomes a few bytes of the
+right format; resolution only looks at names and the card) and each zip
+archive with its entries in order (a name ending in "/" is a folder
+entry), resolves Configs and Splits as
 LocalDatasetModuleFactory does, and prints one JSON object mapping each
 case to {"configs": [{"name", "default", "builder", "splits", "files"}]}
 or {"error": <exception class name>}. Run it with datasets 5.1.0, the
@@ -19,6 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
+import zipfile
 from pathlib import Path
 
 from datasets import DownloadConfig
@@ -33,13 +36,20 @@ TINY = {
 }
 
 
-def write(root: Path, files: dict[str, str | None]) -> None:
+def write(root: Path, files: dict[str, str | None], archives: dict[str, list[str]]) -> None:
     for rel, text in files.items():
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         if text is None:
             text = TINY.get(p.suffix, "x")
         p.write_text(text, encoding="utf-8")
+    for rel, names in archives.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(p, "w") as z:
+            for name in names or []:
+                info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                z.writestr(info, "" if name.endswith("/") else TINY.get(Path(name).suffix, "x"))
 
 
 def resolve(root: Path) -> dict:
@@ -73,7 +83,7 @@ def main() -> int:
     out = {}
     for case in cases:
         root = work / case["name"]
-        write(root, case["files"])
+        write(root, case["files"], case.get("archives") or {})
         try:
             out[case["name"]] = resolve(root)
         except Exception as e:  # noqa: BLE001 - the class is the oracle's answer

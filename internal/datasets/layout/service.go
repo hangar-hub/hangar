@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/card"
@@ -36,7 +37,11 @@ func ReadCard(ctx context.Context, repos repo.Service, id model.RepoID, commit m
 	if err != nil {
 		return nil, err
 	}
-	return card.Parse(readme, standalone)
+	c, err := card.Parse(readme, standalone)
+	if err != nil && !errors.Is(err, card.ErrInvalid) {
+		err = fmt.Errorf("%w: %w", card.ErrInvalid, err)
+	}
+	return c, err
 }
 
 func readSmall(ctx context.Context, repos repo.Service, id model.RepoID, commit model.CommitSHA, p string) ([]byte, error) {
@@ -53,12 +58,14 @@ func readSmall(ctx context.Context, repos repo.Service, id model.RepoID, commit 
 		return nil, err
 	}
 	if len(b) > MaxCardBytes {
-		return nil, fmt.Errorf("%s is larger than %d bytes", p, MaxCardBytes)
+		return nil, fmt.Errorf("%w: %s is larger than %d bytes", ErrCardTooLarge, p, MaxCardBytes)
 	}
 	return b, nil
 }
 
-// ListFiles returns every file of a Commit.
+// ListFiles returns every file of a Commit. Zip archives list their
+// entries by reading their central directory from the Repo when Resolve
+// needs them.
 func ListFiles(ctx context.Context, repos repo.Service, id model.RepoID, commit model.CommitSHA) ([]File, error) {
 	entries, err := repos.Tree(ctx, id, commit, "", repo.TreeOpts{Recursive: true})
 	if err != nil {
@@ -66,9 +73,17 @@ func ListFiles(ctx context.Context, repos repo.Service, id model.RepoID, commit 
 	}
 	out := make([]File, 0, len(entries))
 	for _, e := range entries {
-		if e.Type == model.EntryFile {
-			out = append(out, File{Path: e.Path, Size: e.Size})
+		if e.Type != model.EntryFile {
+			continue
 		}
+		f := File{Path: e.Path, Size: e.Size}
+		if strings.HasSuffix(e.Path, ".zip") {
+			p, size := e.Path, e.Size
+			f.Entries = func(fn func(name string) error) error {
+				return ZipEntries(OpenRepoFile(ctx, repos, id, commit, p, size), size, fn)
+			}
+		}
+		out = append(out, f)
 	}
 	return out, nil
 }

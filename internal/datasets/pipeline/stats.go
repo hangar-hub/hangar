@@ -49,7 +49,8 @@ func (p *Pipeline) HandleStats(ctx context.Context, j *jobs.Job, progress jobs.P
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			doc = &StatsDoc{Error: err.Error(), Statistics: []json.RawMessage{}}
+			p.d.Log.WarnContext(ctx, "dataset statistics failed", "repo", r.ID.Path(), "config", row.Config, "split", row.Split, "error", err.Error())
+			doc = &StatsDoc{Error: FailureStatistics, Statistics: []json.RawMessage{}}
 		}
 		if err := p.store.SaveStats(ctx, r.UUID, pl.Commit, row.Config, row.Split, doc); err != nil {
 			return err

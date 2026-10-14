@@ -30,6 +30,16 @@ For a dataset the caller cannot read, the Hub answers 401 or 404 with `ExternalU
 
 The Hub ranks matches with DuckDB full-text search (BM25 over stemmed words). Hangar matches rows where every term of the query appears, case-insensitively, in some string column, and returns them in dataset order. Hangar can return rows the Hub's stemming misses and the other way round, and the order differs. `/filter` evaluates the same `where` and `orderby` grammar as the Hub, so its results match.
 
+### Error responses
+
+When a dataset, Config or Split fails, Hangar answers with the Hub's status and error code (`EmptyDatasetError`, `FileFormatMismatchBetweenSplitsError`, `ConfigNamesError`, `DatasetGenerationError`) and the Hub's fixed message, for example `{"error": "The dataset generation failed"}`. The Hub adds `cause_exception`, `cause_message` and `cause_traceback`, the text of the error behind the failure. Hangar never sends that text, in the responses or in the `failed` lists of `/splits`, `/info`, `/parquet` and `/size`, because it can name internal paths and services; the server log has it. A failed Partial mirror Split, whose Parquet export is not in the arsenal, answers with Hangar's own code, `ParquetNotPulledError`.
+
+As on the Hub, `/splits` still lists the Splits of a Config whose conversion failed, with nothing in `failed`: the Hub's `config-split-names` step falls back to the data files when `config-info` failed. `/info`, `/parquet` and `/size` list the Config in `failed`.
+
+### Rows too big to read
+
+The Hub refuses to read more than 300 MB of Parquet data at once for a `/rows` or `/first-rows` request and answers `TooBigContentError` (500 for `/rows`, 501 for `/first-rows`). Hangar applies the same limit to the decoded data a request holds, which it works out from the page headers before decoding: pages, the values built from them and about eight bytes a value for levels. The Hub counts the bytes it reads from the files, before decompression, so for compressed data Hangar reaches the limit sooner. Hangar also applies the limit to `/search` and `/filter`, one row group at a time, where the Hub queries a DuckDB index instead. The message starts `Scan size limit exceeded: attempted to read N bytes, limit is 300000000 bytes`, followed by the Hub's advice to write smaller row groups.
+
 ### Scanning endpoints
 
 `/opt-in-out-urls` and `/presidio-entities` return the Hub's empty result: Hangar does not scan for opted-out image URLs or personal data.

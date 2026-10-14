@@ -175,12 +175,28 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 	if cerr == nil {
 		list := make([]layout.File, 0, len(files))
 		for _, f := range files {
-			list = append(list, layout.File{Path: f.Path, Size: f.Size})
+			lf := layout.File{Path: f.Path, Size: f.Size}
+			if strings.HasSuffix(f.Path, ".zip") {
+				lf.Entries = func(fn func(name string) error) error {
+					ra, err := f.OpenAt(ctx)
+					if err != nil {
+						return err
+					}
+					return layout.ZipEntries(ra, f.Size, fn)
+				}
+			}
+			list = append(list, lf)
 		}
 		res, cerr = layout.Resolve(list, card)
 	}
 	if cerr != nil {
-		return p.store.ReplaceSplits(ctx, r.UUID, commit, []SplitRow{{Config: DatasetLevel, Split: DatasetLevel, Status: StatusFailed, Error: cerr.Error()}})
+		code, ok := LayoutFailure(cerr)
+		if !ok {
+			// Reading the files or the card failed; the Job retries.
+			return cerr
+		}
+		p.d.Log.WarnContext(ctx, "the dataset has no Configs", "repo", r.ID.Path(), "error", cerr.Error())
+		return p.store.ReplaceSplits(ctx, r.UUID, commit, []SplitRow{{Config: DatasetLevel, Split: DatasetLevel, Status: StatusFailed, Error: code}})
 	}
 	// Show every Split as pending while the conversion runs.
 	var pending []SplitRow
@@ -223,7 +239,7 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 			}
 			p.d.Log.WarnContext(ctx, "dataset conversion failed", "repo", r.ID.Path(), "config", c.Name, "error", err.Error())
 			for _, s := range c.Splits() {
-				rows = append(rows, SplitRow{Config: c.Name, Split: s, Status: StatusFailed, Error: err.Error()})
+				rows = append(rows, SplitRow{Config: c.Name, Split: s, Status: StatusFailed, Error: FailureGeneration})
 			}
 			continue
 		}
@@ -416,7 +432,8 @@ func (p *Pipeline) adoptExport(ctx context.Context, r *repo.Repo, commit model.C
 			sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 			row := SplitRow{Config: c.Name, Split: s, ConvertedCommit: tip}
 			if len(files) == 0 {
-				row.Status, row.Error = StatusFailed, "the Upstream's Parquet export has no files for this split"
+				p.d.Log.WarnContext(ctx, "the Upstream's Parquet export has no files for a split", "repo", r.ID.Path(), "config", c.Name, "split", s)
+				row.Status, row.Error = StatusFailed, FailureGeneration
 				rows = append(rows, row)
 				continue
 			}
@@ -424,7 +441,7 @@ func (p *Pipeline) adoptExport(ctx context.Context, r *repo.Repo, commit model.C
 			var ferr error
 			for _, f := range files {
 				if !f.Present {
-					ferr = fmt.Errorf("%s is not in the arsenal: pull the Parquet export to preview this split", f.Path)
+					ferr = errNotPulled
 					break
 				}
 				pf, err := pq.Open(OpenRepoFile(ctx, p.d.Repos, r.ID, tip, f.Path, f.Size), f.Size)
@@ -445,7 +462,12 @@ func (p *Pipeline) adoptExport(ctx context.Context, r *repo.Repo, commit model.C
 				row.NumBytesParquet += f.Size
 			}
 			if ferr != nil {
-				row.Status, row.Error = StatusFailed, ferr.Error()
+				row.Status, row.Error = StatusFailed, FailureNotPulled
+				if !errors.Is(ferr, errNotPulled) {
+					p.d.Log.WarnContext(ctx, "could not read the Upstream's Parquet export", "repo", r.ID.Path(), "config", c.Name, "split", s,
+						"error", ferr.Error())
+					row.Error = FailureGeneration
+				}
 				rows = append(rows, row)
 				continue
 			}

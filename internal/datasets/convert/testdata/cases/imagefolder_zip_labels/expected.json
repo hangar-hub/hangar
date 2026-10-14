@@ -1,0 +1,11 @@
+{
+ "builder": "imagefolder",
+ "options": {},
+ "data_files": {
+  "train": [
+   "data/train.zip"
+  ]
+ },
+ "splits": {},
+ "error": "Invalid string class label data"
+}

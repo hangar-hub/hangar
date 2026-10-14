@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets/convert"
 	"github.com/jamesagarside/hangar/internal/datasets/features"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
+	"github.com/jamesagarside/hangar/internal/datasets/pq"
 	"github.com/jamesagarside/hangar/internal/model"
 )
 
@@ -115,7 +117,7 @@ func (s *Service) SplitsFor(ctx context.Context, p model.Principal, id model.Rep
 		return nil, nil, err
 	}
 	if st.failed != "" {
-		return nil, st, fmt.Errorf("%w: %s", ErrFailed, st.failed)
+		return nil, st, failure(st.failed)
 	}
 	if config != "" && !st.hasConfig(config) {
 		return nil, st, fmt.Errorf("%w: config %s", datasets.ErrNotFound, config)
@@ -158,7 +160,7 @@ func (s *Service) FirstRowsFor(ctx context.Context, p model.Principal, id model.
 		}
 		rows, err = t.read(ctx, nil, 0, datasets.MaxRowsPerPage)
 		if err != nil {
-			return nil, st, err
+			return nil, st, tooBig(err, http.StatusNotImplemented)
 		}
 		fs = info.Features
 		for _, sp := range info.Splits {
@@ -216,7 +218,10 @@ func (s *Service) headRows(ctx context.Context, st *state, config, split string)
 	if err != nil {
 		return nil, nil, err
 	}
-	fs, rows, err := convert.Head(ctx, c, split, files, datasets.MaxRowsPerPage+1)
+	fs, rows, err := convert.HeadWithin(ctx, pq.NewBudget(s.o.MaxRequestBytes), c, split, files, datasets.MaxRowsPerPage+1)
+	if errors.Is(err, pq.ErrTooBig) {
+		return nil, nil, tooBig(err, http.StatusNotImplemented)
+	}
 	if err != nil {
 		s.d.Log.DebugContext(ctx, "first rows from source files failed", "error", err.Error())
 		return nil, nil, datasets.ErrNotReady
@@ -358,7 +363,8 @@ func pendingFailed(st *state, only string) ([]datasets.ConfigRef, []datasets.Fai
 		case isPending:
 			pending = append(pending, datasets.ConfigRef{Dataset: st.dataset(), Config: c})
 		case errMsg != "":
-			failed = append(failed, datasets.FailedConfig{Dataset: st.dataset(), Config: c, Error: map[string]any{"error": errMsg}})
+			failed = append(failed, datasets.FailedConfig{Dataset: st.dataset(), Config: c,
+				Error: map[string]any{"error": pipeline.FailureOf(errMsg).Message}})
 		}
 	}
 	return pending, failed
@@ -371,7 +377,7 @@ func (s *Service) ParquetFor(ctx context.Context, p model.Principal, id model.Re
 		return nil, nil, err
 	}
 	if st.failed != "" {
-		return nil, st, fmt.Errorf("%w: %s", ErrFailed, st.failed)
+		return nil, st, failure(st.failed)
 	}
 	if config != "" && !st.hasConfig(config) {
 		return nil, st, fmt.Errorf("%w: config %s", datasets.ErrNotFound, config)
@@ -507,7 +513,7 @@ func (s *Service) InfoFor(ctx context.Context, p model.Principal, id model.RepoI
 		return nil, nil, err
 	}
 	if st.failed != "" {
-		return nil, st, fmt.Errorf("%w: %s", ErrFailed, st.failed)
+		return nil, st, failure(st.failed)
 	}
 	if config != "" {
 		if !st.hasConfig(config) {
@@ -554,7 +560,7 @@ func (s *Service) InfoFor(ctx context.Context, p model.Principal, id model.RepoI
 func (s *Service) configNotReady(st *state, config string) error {
 	for _, r := range st.rows {
 		if r.Config == config && r.Status == pipeline.StatusFailed {
-			return fmt.Errorf("%w: %s", ErrFailed, r.Error)
+			return failure(r.Error)
 		}
 	}
 	return datasets.ErrNotReady
@@ -602,7 +608,7 @@ func (s *Service) SizeFor(ctx context.Context, p model.Principal, id model.RepoI
 		return nil, nil, err
 	}
 	if st.failed != "" {
-		return nil, st, fmt.Errorf("%w: %s", ErrFailed, st.failed)
+		return nil, st, failure(st.failed)
 	}
 	if config != "" {
 		if !st.hasConfig(config) {
@@ -682,7 +688,7 @@ func (s *Service) StatisticsFor(ctx context.Context, p model.Principal, id model
 		return nil, st, err
 	}
 	if doc.Error != "" {
-		return nil, st, fmt.Errorf("%w: %s", ErrFailed, doc.Error)
+		return nil, st, failure(doc.Error)
 	}
 	b, err := json.Marshal(object{{Name: "num_examples", Value: doc.NumExamples}, {Name: "statistics", Value: doc.Statistics},
 		{Name: "partial", Value: doc.Partial}})

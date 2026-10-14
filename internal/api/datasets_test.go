@@ -88,10 +88,20 @@ func TestListDatasetConfigs(t *testing.T) {
 		empty, emptySHA := s.Dataset(t, "empty", map[string][]byte{"README.md": []byte("# nothing\n")})
 		rec, _ = configsRequest(t, a, "ns", "empty", nil, anon)
 		require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
-		require.Contains(t, rec.Body.String(), "no data files")
+		require.Contains(t, rec.Body.String(), "Hangar cannot read this dataset's Configs and Splits: The dataset is empty.")
 		s.Convert(t, empty, emptySHA)
 		rec, _ = configsRequest(t, a, "ns", "empty", nil, anon)
 		require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		require.Contains(t, rec.Body.String(), "Hangar cannot read this dataset's Configs and Splits: The dataset is empty.")
+
+		// A failed Split gives the Hub's message, not the conversion error.
+		xml, xmlSHA := s.Dataset(t, "xml", map[string][]byte{"train.xml": []byte("<rows/>\n")})
+		s.Convert(t, xml, xmlSHA)
+		rec, out = configsRequest(t, a, "ns", "xml", nil, anon)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		split = out.Configs[0].Splits[0]
+		require.Equal(t, gen.DatasetSplitStatusFailed, split.Status)
+		require.Equal(t, "The dataset generation failed", *split.Error)
 
 		// Private datasets are hidden.
 		id := model.RepoID{Type: model.RepoTypeDataset, Namespace: "other", Name: "secret"}

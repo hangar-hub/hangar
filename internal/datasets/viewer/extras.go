@@ -51,11 +51,14 @@ func (s *Service) Croissant(ctx context.Context, p model.Principal, id model.Rep
 		return nil, err
 	}
 	if st.failed != "" {
-		return nil, fmt.Errorf("%w: %s", ErrFailed, st.failed)
+		return nil, failure(st.failed)
 	}
 	c, err := layout.ReadCard(ctx, s.d.Repos, st.repo.ID, st.commit)
 	if err != nil {
-		return nil, fmt.Errorf("%w: the dataset card is not valid: %w", ErrFailed, err)
+		if code, ok := pipeline.LayoutFailure(err); ok {
+			return nil, failure(code)
+		}
+		return nil, err
 	}
 	base := s.o.PublicURL
 	in := croissant.Input{Dataset: st.dataset(), URL: base + "/" + st.repo.ID.Path(),

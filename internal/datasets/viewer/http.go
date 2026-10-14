@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jamesagarside/hangar/internal/datasets"
+	"github.com/jamesagarside/hangar/internal/datasets/pq"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 )
@@ -257,7 +258,14 @@ func (s *Service) writeErr(w http.ResponseWriter, r *http.Request, st *state, er
 		w.Header().Set("X-Revision", st.Revision())
 	}
 	msg := err.Error()
+	var he *hubError
+	var tb *pq.TooBigError
 	switch {
+	case errors.As(err, &he):
+		writeError(w, r, he.status, he.code, he.message)
+	case errors.As(err, &tb):
+		he = tooBigError(tb, http.StatusInternalServerError)
+		writeError(w, r, he.status, he.code, he.message)
 	case errors.Is(err, datasets.ErrNotFound) && st == nil:
 		s.notFound(w, r)
 	case errors.Is(err, datasets.ErrNotFound):
@@ -265,8 +273,6 @@ func (s *Service) writeErr(w http.ResponseWriter, r *http.Request, st *state, er
 	case errors.Is(err, datasets.ErrNotReady):
 		w.Header().Set("Retry-After", "30")
 		writeError(w, r, http.StatusInternalServerError, "ResponseNotReady", msgNotReady)
-	case errors.Is(err, ErrFailed):
-		writeError(w, r, http.StatusInternalServerError, "DatasetGenerationError", strings.TrimPrefix(msg, ErrFailed.Error()+": "))
 	case errors.Is(err, ErrInvalidParameter):
 		writeError(w, r, http.StatusUnprocessableEntity, "InvalidParameter", strings.TrimPrefix(msg, ErrInvalidParameter.Error()+": "))
 	case errors.Is(err, datasets.ErrInvalidQuery):

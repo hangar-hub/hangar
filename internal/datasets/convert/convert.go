@@ -387,6 +387,12 @@ var HeadBuilders = map[string]bool{"parquet": true, "csv": true, "json": true, "
 // formats whose files can be read from the start (HeadBuilders). The
 // Viewer shows these as first rows while a conversion runs.
 func Head(ctx context.Context, cfg datasets.Config, split string, files map[string]File, n int) (features.Features, [][]any, error) {
+	return HeadWithin(ctx, nil, cfg, split, files, n)
+}
+
+// HeadWithin is Head with the decoded data of Parquet sources charged to
+// budget, which may be nil; it fails with pq.ErrTooBig rather than go over.
+func HeadWithin(ctx context.Context, budget *pq.Budget, cfg datasets.Config, split string, files map[string]File, n int) (features.Features, [][]any, error) {
 	if !HeadBuilders[cfg.Builder] {
 		return nil, nil, fmt.Errorf("%w: first rows of %s datasets need the Parquet export", ErrUnsupported, cfg.Builder)
 	}
@@ -415,7 +421,7 @@ func Head(ctx context.Context, cfg datasets.Config, split string, files map[stri
 	if target == nil {
 		return nil, nil, fmt.Errorf("no split %q", split)
 	}
-	e := &env{ctx: ctx, opts: cfg.BuilderOptions, splits: splits}
+	e := &env{ctx: ctx, opts: cfg.BuilderOptions, splits: splits, budget: budget}
 	if e.opts == nil {
 		e.opts = map[string]any{}
 	}

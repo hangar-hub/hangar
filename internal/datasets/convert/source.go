@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/jamesagarside/hangar/internal/datasets/layout"
 )
 
 // ErrUnsupported means a source format or option Hangar cannot convert.
@@ -37,6 +39,70 @@ type File struct {
 	OpenAt func(ctx context.Context) (io.ReaderAt, error)
 	// OID is the file's LFS object ID, or "" for files stored in git.
 	OID string
+	// archive is the Repo path of the zip archive that holds this file,
+	// for the entries folder builders read from archives; Path is then
+	// archive + "/" + entry.
+	archive, entry string
+}
+
+// maxArchiveEntryInMemory caps an archive entry read into memory for
+// random access (a Parquet metadata file inside an archive).
+const maxArchiveEntryInMemory = 256 << 20
+
+// openZip opens a zip archive in the Repo, refusing archives with more
+// entries than layout.MaxArchiveEntries before archive/zip reads them all.
+func openZip(ctx context.Context, f File) (*zip.Reader, error) {
+	if f.OpenAt == nil {
+		return nil, fmt.Errorf("%w: zip archive without random access", ErrUnsupported)
+	}
+	ra, err := f.OpenAt(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := layout.ZipEntries(ra, f.Size, func(string) error { return nil }); err != nil {
+		return nil, fmt.Errorf("%s: %w", f.Path, err)
+	}
+	zr, err := zip.NewReader(ra, f.Size)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w: %w", f.Path, layout.ErrInvalidArchive, err)
+	}
+	return zr, nil
+}
+
+// archiveFiles lists the files of a zip archive as FilesIterable walks the
+// extracted archive: hidden files and folders skipped, a folder's files
+// before its subfolders. Each opens the entry as it is stored, without
+// decompressing a .gz or other compressed entry.
+func archiveFiles(ctx context.Context, f File) ([]File, error) {
+	zr, err := openZip(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	var out []File
+	for _, zf := range zr.File {
+		name := zf.Name
+		if zf.FileInfo().IsDir() || hiddenMember(name) {
+			continue
+		}
+		size := int64(zf.UncompressedSize64) //nolint:gosec // only a size hint for in-memory reads
+		open := func(context.Context) (io.ReadCloser, error) { return zf.Open() }
+		out = append(out, File{Path: f.Path + "/" + strings.Trim(name, "/"), Size: size, archive: f.Path, entry: strings.Trim(name, "/"),
+			Open: open,
+			OpenAt: func(ctx context.Context) (io.ReaderAt, error) {
+				rc, err := open(ctx)
+				if err != nil {
+					return nil, err
+				}
+				defer rc.Close()
+				b, err := readAllLimit(rc, maxArchiveEntryInMemory)
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", name, err)
+				}
+				return bytes.NewReader(b), nil
+			}})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return walkLess(out[i].entry, out[j].entry) })
+	return out, nil
 }
 
 // member is one readable stream inside a source file: the file itself,
@@ -96,17 +162,10 @@ func (f closerFunc) Close() error { return f() }
 
 // members lists the readable streams of a file.
 func members(ctx context.Context, f File) ([]member, error) {
-	if strings.EqualFold(path.Ext(f.Path), ".zip") {
-		if f.OpenAt == nil {
-			return nil, fmt.Errorf("%w: zip archive without random access", ErrUnsupported)
-		}
-		ra, err := f.OpenAt(ctx)
+	if f.archive == "" && strings.EqualFold(path.Ext(f.Path), ".zip") {
+		zr, err := openZip(ctx, f)
 		if err != nil {
 			return nil, err
-		}
-		zr, err := zip.NewReader(ra, f.Size)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", f.Path, err)
 		}
 		var out []member
 		for _, zf := range zr.File {

@@ -4,15 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
+	"github.com/jamesagarside/hangar/internal/datasets/card"
 	"github.com/jamesagarside/hangar/internal/datasets/datasetstest"
 	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/jamesagarside/hangar/internal/datasets/layout"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
 	"github.com/jamesagarside/hangar/internal/datasets/pq"
 	"github.com/jamesagarside/hangar/internal/db"
@@ -30,17 +37,46 @@ type env struct {
 	db    *db.DB
 	q     *jobstest.Fake
 	p     *pipeline.Pipeline
+	log   *syncBuffer
+}
+
+// syncBuffer is the pipeline's log output.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
 
 func newEnv(t *testing.T, d *db.DB, maxBytes int64) *env {
+	return newEnvWith(t, d, maxBytes, nil)
+}
+
+// newEnvWith is newEnv with the pipeline's Repo service wrapped by wrap.
+func newEnvWith(t *testing.T, d *db.DB, maxBytes int64, wrap func(*repotest.Fake) repo.Service) *env {
 	reg := jobs.NewRegistry()
 	q := jobstest.NewFake(reg)
 	repos := repotest.NewFake(t)
-	p, err := pipeline.New(pipeline.Deps{DB: d, Blobs: blobtest.NewFake(), Repos: repos, LFS: repos.LFS, Jobs: q,
-		MaxConvertBytes: maxBytes, TempDir: t.TempDir()})
+	var svc repo.Service = repos
+	if wrap != nil {
+		svc = wrap(repos)
+	}
+	log := &syncBuffer{}
+	p, err := pipeline.New(pipeline.Deps{DB: d, Blobs: blobtest.NewFake(), Repos: svc, LFS: repos.LFS, Jobs: q,
+		MaxConvertBytes: maxBytes, TempDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(log, nil))})
 	require.NoError(t, err)
 	require.NoError(t, p.Register(reg))
-	return &env{ctx: context.Background(), repos: repos, db: d, q: q, p: p}
+	return &env{ctx: context.Background(), repos: repos, db: d, q: q, p: p, log: log}
 }
 
 func (e *env) dataset(t *testing.T, name string, files map[string][]byte) (*repo.Repo, model.CommitSHA) {
@@ -175,17 +211,93 @@ func TestFailures(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, pipeline.StatusFailed, rows[0].Status)
 	require.Equal(t, pipeline.DatasetLevel, rows[0].Config)
-	require.Contains(t, rows[0].Error, "no data files")
+	require.Equal(t, pipeline.FailureEmpty, rows[0].Error)
+	require.Contains(t, e.log.String(), "no data files")
 
+	// The error behind a failure is logged; only its code is stored, so
+	// no error text reaches the Viewer or the API.
 	r2, sha2 := e.dataset(t, "badcsv", map[string][]byte{"train.csv": []byte("a,b\n1,2,3\n")})
 	e.run(t, r2, sha2)
 	rows, err = e.p.Store().Splits(e.ctx, r2.UUID, sha2)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, pipeline.StatusFailed, rows[0].Status)
-	require.Contains(t, rows[0].Error, "expected 2 fields")
+	require.Equal(t, pipeline.FailureGeneration, rows[0].Error)
+	require.Contains(t, e.log.String(), "expected 2 fields")
 	_, err = e.repos.Resolve(e.ctx, r2.ID, pipeline.ExportRef)
 	require.ErrorIs(t, err, repo.ErrRevisionNotFound)
+}
+
+// failingCard fails to read README.md, as a Blob store outage would.
+type failingCard struct {
+	repo.Service
+	fail bool
+}
+
+func (f *failingCard) OpenFile(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, rng *blob.Range) (io.ReadCloser, model.Entry, error) {
+	if f.fail && p == "README.md" {
+		return nil, model.Entry{}, errors.New("blob: connection refused to 10.0.0.7:9000")
+	}
+	return f.Service.OpenFile(ctx, id, commit, p, rng)
+}
+
+// TestReadFailureIsNotAFailedDataset checks that an error reading a
+// dataset's files fails the Job, which retries it, rather than marking the
+// dataset as failed for good with the error's text.
+func TestReadFailureIsNotAFailedDataset(t *testing.T) {
+	wrapper := &failingCard{fail: true}
+	e := newEnvWith(t, dbtest.SQLite(t), 0, func(f *repotest.Fake) repo.Service {
+		wrapper.Service = f
+		return wrapper
+	})
+	r, sha := e.dataset(t, "flaky", map[string][]byte{"README.md": []byte("# Flaky\n"), "train.csv": []byte(demoCSV)})
+	payload, err := json.Marshal(pipeline.Payload{Repo: r.UUID, Commit: sha})
+	require.NoError(t, err)
+	job := &jobs.Job{Kind: jobs.KindDatasetConvert, Payload: payload}
+	err = e.p.HandleConvert(e.ctx, job, nil)
+	require.ErrorContains(t, err, "connection refused")
+	require.False(t, jobs.IsPermanent(err))
+	rows, err := e.p.Store().Splits(e.ctx, r.UUID, sha)
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.NotEqual(t, pipeline.StatusFailed, row.Status, "%+v", row)
+	}
+	wrapper.fail = false
+	require.NoError(t, e.p.HandleConvert(e.ctx, job, nil))
+	rows, err = e.p.Store().Splits(e.ctx, r.UUID, sha)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, pipeline.StatusReady, rows[0].Status)
+}
+
+func TestFailureCodes(t *testing.T) {
+	for code, msg := range map[string]string{
+		pipeline.FailureGeneration:     "The dataset generation failed",
+		pipeline.FailureEmpty:          "The dataset is empty.",
+		pipeline.FailureFormatMismatch: "Couldn't infer the same data file format for all splits.",
+		pipeline.FailureConfigNames:    "Cannot get the config names for the dataset.",
+		pipeline.FailureStatistics:     "Unexpected error.",
+	} {
+		require.Equal(t, pipeline.Failure{Code: code, Message: msg}, pipeline.FailureOf(code))
+	}
+	// Rows from before codes were stored hold error text, which is never
+	// shown.
+	legacy := pipeline.FailureOf("split train: open /var/lib/hangar/tmp/x.parquet: no space left on device")
+	require.Equal(t, pipeline.Failure{Code: pipeline.FailureGeneration, Message: "The dataset generation failed"}, legacy)
+
+	for err, want := range map[error]string{
+		fmt.Errorf("x: %w", layout.ErrEmptyDataset):   pipeline.FailureEmpty,
+		fmt.Errorf("x: %w", layout.ErrMixedFormats):   pipeline.FailureFormatMismatch,
+		fmt.Errorf("x: %w", layout.ErrMissingFile):    pipeline.FailureConfigNames,
+		fmt.Errorf("x: %w", card.ErrInvalid):          pipeline.FailureConfigNames,
+		fmt.Errorf("x: %w", layout.ErrInvalidArchive): pipeline.FailureConfigNames,
+	} {
+		got, ok := pipeline.LayoutFailure(err)
+		require.True(t, ok, err)
+		require.Equal(t, want, got, err)
+	}
+	_, ok := pipeline.LayoutFailure(errors.New("database is locked"))
+	require.False(t, ok)
 }
 
 func TestPartialExport(t *testing.T) {

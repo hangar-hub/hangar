@@ -1,17 +1,22 @@
 package viewertest_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/parquet-go/parquet-go"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/datasets/viewer"
 	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
@@ -91,4 +96,68 @@ func TestCorruptParquetUpload(t *testing.T) {
 	}
 	runtime.ReadMemStats(&after)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<20))
+}
+
+// prefixBombParquet writes a valid Parquet file of one string column "s"
+// in one DELTA_BYTE_ARRAY page: n values that each repeat the 64 KiB value
+// before them as a prefix, so about 100 KB of page builds n*64 KiB of
+// values when read.
+func prefixBombParquet(t *testing.T, n int) []byte {
+	base := strings.Repeat("z", 64<<10)
+	rows := make([]parquet.Row, n)
+	for i := range rows {
+		rows[i] = parquet.Row{parquet.ByteArrayValue([]byte(base+fmt.Sprintf("%05d", i))).Level(0, 0, 0)}
+	}
+	var buf bytes.Buffer
+	schema := parquet.NewSchema("r", parquet.Group{"s": parquet.Encoded(parquet.String(), &parquet.DeltaByteArray)})
+	w := parquet.NewWriter(&buf, schema, parquet.PageBufferSize(256<<20), parquet.DataPageStatistics(false), parquet.SkipPageBounds("s"))
+	_, err := w.WriteRows(rows)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
+// TestRowsTooBigForTheBudget uploads a valid Parquet file whose page of
+// about 100 KB builds 32 MiB of values, and serves it with a budget of
+// 8 MiB per request. Without a budget each read decoded the whole page;
+// with it /first-rows (from the source while the conversion is pending, then
+// from the export), /rows and /search answer with the Hub's
+// TooBigContentError before parquet-go decodes the page.
+func TestRowsTooBigForTheBudget(t *testing.T) {
+	const budget = 8 << 20
+	b := prefixBombParquet(t, 512)
+	require.Less(t, len(b), 1<<20)
+	s := viewertest.New(t, viewertest.Options{Viewer: viewer.Options{MaxRequestBytes: budget}})
+	r, sha := s.Dataset(t, "bomb", map[string][]byte{"train.parquet": b})
+
+	// While the conversion is pending, first rows come from the source.
+	res, err := http.Get(s.URL + "/first-rows?dataset=ns/bomb&config=default&split=train")
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusNotImplemented, res.StatusCode)
+	require.Equal(t, "TooBigContentError", res.Header.Get("X-Error-Code"))
+	s.Convert(t, r, sha)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for _, c := range []struct {
+		path   string
+		status int
+	}{
+		{"/first-rows?dataset=ns/bomb&config=default&split=train", http.StatusNotImplemented},
+		{"/rows?dataset=ns/bomb&config=default&split=train&offset=10&length=5", http.StatusInternalServerError},
+		{"/search?dataset=ns/bomb&config=default&split=train&query=zz", http.StatusInternalServerError},
+	} {
+		res, err := http.Get(s.URL + c.path)
+		require.NoError(t, err)
+		var body map[string]string
+		require.NoError(t, json.NewDecoder(res.Body).Decode(&body))
+		require.NoError(t, res.Body.Close())
+		require.Equal(t, c.status, res.StatusCode, c.path)
+		require.Equal(t, "TooBigContentError", res.Header.Get("X-Error-Code"), c.path)
+		require.Regexp(t, `^Scan size limit exceeded: attempted to read \d+ bytes, limit is 8388608 bytes\n\nMake sure that\n\n`, body["error"], c.path)
+	}
+	runtime.ReadMemStats(&after)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(3*budget), "the three requests allocated %d bytes", after.TotalAlloc-before.TotalAlloc)
 }

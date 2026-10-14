@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +35,10 @@ type expected struct {
 	// CardFeatures are the Features passed to `datasets`, as a card's
 	// `features` declare them.
 	CardFeatures json.RawMessage `json:"card_features"`
-	Splits       map[string]struct {
+	// Error is why `datasets` failed to generate the dataset, for cases
+	// where it does.
+	Error  string `json:"error"`
+	Splits map[string]struct {
 		NumExamples    int64 `json:"num_examples"`
 		NumBytes       int64 `json:"num_bytes"`
 		EmbeddedNBytes int64 `json:"embedded_nbytes"`
@@ -171,6 +175,11 @@ func TestConvertMatchesDatasets(t *testing.T) {
 					}
 					return f, nil
 				}})
+			if want.Error != "" {
+				require.Error(t, err)
+				require.Contains(t, strings.ToLower(err.Error()), strings.ToLower(want.Error))
+				return
+			}
 			require.NoError(t, err)
 			defer res.Cleanup()
 			gotFeatures, err := json.Marshal(res.Features)

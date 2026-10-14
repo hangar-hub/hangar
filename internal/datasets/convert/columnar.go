@@ -83,7 +83,7 @@ func (parquetBuilder) read(e *env, split splitFiles, fs features.Features, emit 
 		var start int64
 		for g := range pf.NumRowGroups() {
 			n := pf.RowGroupRows(g)
-			rows, err := pf.ReadRows(cols, start, n)
+			rows, err := pf.ReadRowsWithin(e.budget, cols, start, n)
 			if err != nil {
 				return fmt.Errorf("%s: %w", f.Path, err)
 			}

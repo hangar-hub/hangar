@@ -211,7 +211,7 @@ func (sc *scanner) each(ctx context.Context, fn func(rowIdx int64, vals []any) e
 					continue
 				}
 			}
-			it, err := f.Scan(cols, start, n)
+			it, err := f.ScanWithin(sc.t.budget, cols, start, n)
 			if err != nil {
 				return err
 			}

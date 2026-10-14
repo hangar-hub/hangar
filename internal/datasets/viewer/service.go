@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/layout"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
+	"github.com/jamesagarside/hangar/internal/datasets/pq"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -32,6 +34,47 @@ var (
 	ErrInvalidParameter = errors.New("invalid parameter")
 )
 
+// hubError is an error the Viewer answers with the Hub's HTTP status,
+// error code and message, and nothing else: no internal error text.
+type hubError struct {
+	status  int
+	code    string
+	message string
+	// failed is set for a conversion or statistics failure (ErrFailed).
+	failed bool
+}
+
+func (e *hubError) Error() string { return e.code + ": " + e.message }
+
+// Is makes errors.Is(err, ErrFailed) true for failures.
+func (e *hubError) Is(target error) bool { return e.failed && target == ErrFailed }
+
+// failure is the error for a stored failure code.
+func failure(stored string) error {
+	f := pipeline.FailureOf(stored)
+	return &hubError{status: http.StatusInternalServerError, code: f.Code, message: f.Message, failed: true}
+}
+
+// tooBigAdvice ends the Hub's TooBigRows message (libcommon parquet_utils).
+const tooBigAdvice = "\n\nMake sure that\n\n" +
+	"1. the Parquet files contain a page index to enable random access without loading entire row groups" +
+	"2. otherwise use smaller row-group sizes when serializing the Parquet files\n" //nolint:misspell // the Hub's message, word for word
+
+// tooBig is the Hub's TooBigContentError for rows that decode to more
+// than a request's budget. /first-rows answers it with 501, as the Hub's
+// worker caches it; the other endpoints with 500.
+func tooBig(err error, status int) error {
+	var tb *pq.TooBigError
+	if !errors.As(err, &tb) {
+		return err
+	}
+	return tooBigError(tb, status)
+}
+
+func tooBigError(tb *pq.TooBigError, status int) *hubError {
+	return &hubError{status: status, code: "TooBigContentError", message: tb.Error() + tooBigAdvice}
+}
+
 // Options configure the Viewer; they mirror the viewer.* configuration.
 type Options struct {
 	// PublicURL is server.public_url.
@@ -43,6 +86,9 @@ type Options struct {
 	MaxCellBytes int
 	// AssetTTL is the lifetime of signed media URLs. Zero means one hour.
 	AssetTTL time.Duration
+	// MaxRequestBytes is the decoded Parquet data one request may hold.
+	// Zero means pq.DefaultBudgetBytes, the Hub's 300 MB.
+	MaxRequestBytes int64
 }
 
 // Deps are the services the Viewer uses.
@@ -91,6 +137,9 @@ func New(d Deps, o Options) (*Service, error) {
 	if o.AssetTTL <= 0 {
 		o.AssetTTL = time.Hour
 	}
+	if o.MaxRequestBytes <= 0 {
+		o.MaxRequestBytes = pq.DefaultBudgetBytes
+	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
@@ -134,7 +183,7 @@ type state struct {
 	repo   *repo.Repo
 	commit model.CommitSHA
 	rows   []pipeline.SplitRow
-	// failed is set when the whole dataset failed to convert.
+	// failed holds the failure code when the dataset has no Configs.
 	failed string
 	// pending is true while the conversion has not stored its results.
 	pending bool
@@ -197,10 +246,13 @@ func (s *Service) head(ctx context.Context, p model.Principal, id model.RepoID, 
 		if _, err := pipeline.EnqueueConvert(ctx, s.d.Jobs, r.UUID, commit); err != nil {
 			s.d.Log.WarnContext(ctx, "could not queue the dataset conversion", "repo", r.ID.Path(), "error", err.Error())
 		}
-		lay, failure := s.layoutOrFailure(ctx, r, commit)
-		if failure != "" {
+		lay, code, err := s.layoutOrFailure(ctx, r, commit)
+		if err != nil {
+			return nil, err
+		}
+		if code != "" {
 			// The dataset has no Configs; the state reports why.
-			st.failed = failure
+			st.failed = code
 			return st, nil
 		}
 		st.layout = lay
@@ -254,7 +306,7 @@ func (s *Service) info(ctx context.Context, st *state, config string) (*pipeline
 // error the Hub gives for a Split that is missing, pending or failed.
 func (s *Service) readySplit(ctx context.Context, st *state, config, split string) (pipeline.SplitRow, *pipeline.ConfigInfo, error) {
 	if st.failed != "" {
-		return pipeline.SplitRow{}, nil, fmt.Errorf("%w: %s", ErrFailed, st.failed)
+		return pipeline.SplitRow{}, nil, failure(st.failed)
 	}
 	row, ok := st.split(config, split)
 	if !ok {
@@ -264,7 +316,7 @@ func (s *Service) readySplit(ctx context.Context, st *state, config, split strin
 	case pipeline.StatusPending:
 		return row, nil, datasets.ErrNotReady
 	case pipeline.StatusFailed:
-		return row, nil, fmt.Errorf("%w: %s", ErrFailed, row.Error)
+		return row, nil, failure(row.Error)
 	}
 	info, err := s.info(ctx, st, config)
 	if errors.Is(err, pipeline.ErrNoInfo) {
@@ -273,13 +325,20 @@ func (s *Service) readySplit(ctx context.Context, st *state, config, split strin
 	return row, info, err
 }
 
-// layoutOrFailure resolves a Commit's Configs, or says why it has none.
-func (s *Service) layoutOrFailure(ctx context.Context, r *repo.Repo, commit model.CommitSHA) (*datasets.Resolved, string) {
+// layoutOrFailure resolves a Commit's Configs, or gives the failure code
+// that says why it has none. An error reading the files is returned as it
+// is, because the dataset has not failed.
+func (s *Service) layoutOrFailure(ctx context.Context, r *repo.Repo, commit model.CommitSHA) (*datasets.Resolved, string, error) {
 	lay, err := s.resolveLayout(ctx, r, commit)
 	if err != nil {
-		return nil, err.Error()
+		code, ok := pipeline.LayoutFailure(err)
+		if !ok {
+			return nil, "", err
+		}
+		s.d.Log.DebugContext(ctx, "the dataset has no Configs", "repo", r.ID.Path(), "error", err.Error())
+		return nil, code, nil
 	}
-	return lay, ""
+	return lay, "", nil
 }
 
 // splitInfo returns a Split's entry in a Config's info document.

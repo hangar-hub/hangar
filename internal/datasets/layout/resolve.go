@@ -29,6 +29,10 @@ type module struct {
 type File struct {
 	Path string
 	Size int64
+	// Entries calls fn with the name of each entry of a zip archive, as
+	// ZipEntries does. Resolve lists archives to find their builder, as
+	// `datasets` does; it is nil for files that are not zip archives.
+	Entries func(fn func(name string) error) error
 }
 
 // Errors.
@@ -39,7 +43,29 @@ var (
 	ErrMixedFormats = errors.New("couldn't infer the same data file format for all splits")
 	// ErrMissingFile means a data_files entry names a file that does not exist.
 	ErrMissingFile = errors.New("a data file listed in the card does not exist")
+	// ErrInvalidSplitName means a sharded file name gives a Split name
+	// `datasets` refuses.
+	ErrInvalidSplitName = errors.New("invalid split name")
+	// ErrCardTooLarge means README.md or .huggingface.yaml is larger than
+	// MaxCardBytes.
+	ErrCardTooLarge = errors.New("the dataset card is too large")
+	// ErrInvalidArchive means a zip archive among the data files cannot be
+	// read.
+	ErrInvalidArchive = errors.New("invalid zip archive")
 )
+
+// IsLayoutError reports whether err, from Resolve or ReadCard, is about
+// the dataset's files or card, which only a new Commit changes, rather
+// than a failure to read them.
+func IsLayoutError(err error) bool {
+	for _, e := range []error{ErrEmptyDataset, ErrMixedFormats, ErrMissingFile, ErrInvalidSplitName, ErrCardTooLarge,
+		ErrInvalidArchive, ErrInvalidPattern, card.ErrInvalid} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
 
 // Split pattern constants from datasets/data_files.py.
 const (
@@ -88,6 +114,18 @@ var allDefaultPatterns = []patternSet{
 // resolver matches patterns against a Repo's files.
 type resolver struct {
 	files []File
+	// members lists the entries of the zip archives by path.
+	members map[string]func(fn func(name string) error) error
+}
+
+func newResolver(files []File) *resolver {
+	r := &resolver{files: files, members: map[string]func(fn func(name string) error) error{}}
+	for _, f := range files {
+		if f.Entries != nil {
+			r.members[f.Path] = f.Entries
+		}
+	}
+	return r
 }
 
 // resolve is datasets.data_files.resolve_pattern for files in a Repo.
@@ -222,7 +260,7 @@ func (r *resolver) dataPatterns(base string) (patternSet, error) {
 		for s := range seen {
 			if !slices.Contains(defaultSplits, s) {
 				if !card.ValidSplitName(s) {
-					return nil, fmt.Errorf("split name should match %q but got %q", `^\w+(\.\w+)*$`, s)
+					return nil, fmt.Errorf("%w: split name should match %q but got %q", ErrInvalidSplitName, `^\w+(\.\w+)*$`, s)
 				}
 				others = append(others, s)
 			}
@@ -289,7 +327,7 @@ func isMetadataFile(p string) bool {
 }
 
 // inferModule is infer_module_for_data_files_list for one Split.
-func inferModule(files []string) (module, error) {
+func (r *resolver) inferModule(files []string) (module, error) {
 	type key struct {
 		ext      string
 		metadata bool
@@ -328,7 +366,7 @@ func inferModule(files []string) (module, error) {
 			return m, nil
 		}
 		if k.ext == ".zip" {
-			return module{name: "zip"}, nil
+			return r.inferArchives(files)
 		}
 	}
 	return module{}, ErrEmptyDataset
@@ -398,7 +436,7 @@ func Resolve(files []File, c *card.Card) (*datasets.Resolved, error) {
 	if c == nil {
 		c = &card.Card{}
 	}
-	r := &resolver{files: files}
+	r := newResolver(files)
 	allowed := allAllowedExtensions()
 
 	// Find the builder from the first config's data_files, or from the
@@ -416,9 +454,12 @@ func Resolve(files []File, c *card.Card) (*datasets.Resolved, error) {
 	}
 	var mod module
 	for i, sf := range splitFiles {
-		m, err := inferModule(sf.Patterns)
-		if err != nil {
+		m, err := r.inferModule(sf.Patterns)
+		if errors.Is(err, ErrEmptyDataset) {
 			return nil, fmt.Errorf("%w: no supported data files in split %q", ErrEmptyDataset, sf.Split)
+		}
+		if err != nil {
+			return nil, err
 		}
 		if i == 0 {
 			mod = m

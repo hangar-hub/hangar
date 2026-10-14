@@ -52,7 +52,7 @@ func (c *fileCache) get(repos repo.Service, repoUUID uuid.UUID, id model.RepoID,
 	return f, nil
 }
 
-// table gives row access to a converted Split.
+// table gives row access to a converted Split for one request.
 type table struct {
 	s        *Service
 	st       *state
@@ -60,6 +60,9 @@ type table struct {
 	split    *pipeline.SplitInfo
 	features features.Features
 	storage  *features.Arrow
+	// budget limits the decoded Parquet data the request holds; reads
+	// that would go over fail with pq.ErrTooBig.
+	budget *pq.Budget
 }
 
 func (s *Service) table(st *state, info *pipeline.ConfigInfo, split string) (*table, error) {
@@ -71,7 +74,8 @@ func (s *Service) table(st *state, info *pipeline.ConfigInfo, split string) (*ta
 	if err != nil {
 		return nil, err
 	}
-	return &table{s: s, st: st, info: info, split: si, features: info.Features, storage: storage}, nil
+	return &table{s: s, st: st, info: info, split: si, features: info.Features, storage: storage,
+		budget: pq.NewBudget(s.o.MaxRequestBytes)}, nil
 }
 
 func (t *table) numRows() int64 { return t.split.NumExamples }
@@ -103,7 +107,7 @@ func (t *table) read(ctx context.Context, names []string, offset, n int64) ([][]
 			}
 			local := offset - start
 			k := min(n, sh.NumRows-local)
-			rows, err := f.ReadRows(cols, local, k)
+			rows, err := f.ReadRowsWithin(t.budget, cols, local, k)
 			if err != nil {
 				return nil, err
 			}

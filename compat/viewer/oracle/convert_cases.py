@@ -101,7 +101,7 @@ def enc(v):
     return v
 
 
-def run(name: str, builder: str, files: dict[str, bytes], data_files: dict[str, list[str]], **kwargs):
+def run(name: str, builder: str, files: dict[str, bytes], data_files: dict[str, list[str]], expect_error: bool = False, **kwargs):
     root = OUT / name
     if root.exists():
         shutil.rmtree(root)
@@ -109,14 +109,25 @@ def run(name: str, builder: str, files: dict[str, bytes], data_files: dict[str, 
     for p, b in files.items():
         (fdir / p).parent.mkdir(parents=True, exist_ok=True)
         (fdir / p).write_bytes(b)
-    dd = datasets.load_dataset(
-        builder,
-        data_files={s: [str(fdir / p) for p in ps] for s, ps in data_files.items()},
-        cache_dir=str(root / ".cache"),
-        **kwargs,
-    )
     options = {k: v for k, v in kwargs.items() if k != "features"}
     out = {"builder": builder, "options": options, "data_files": data_files, "splits": {}}
+    try:
+        dd = datasets.load_dataset(
+            builder,
+            data_files={s: [str(fdir / p) for p in ps] for s, ps in data_files.items()},
+            cache_dir=str(root / ".cache"),
+            **kwargs,
+        )
+    except datasets.exceptions.DatasetGenerationError as e:
+        if not expect_error:
+            raise
+        # The case records why `datasets` fails, which Hangar must match.
+        shutil.rmtree(root / ".cache")
+        out["error"] = str(e.__cause__)
+        (root / "expected.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+        print("wrote", name, "(an error)")
+        return
+    assert not expect_error, name
     if "features" in kwargs:
         out["card_features"] = kwargs["features"].to_dict()
     for split, ds in dd.items():
@@ -262,3 +273,30 @@ structs = [{"s": {"k": 1, "t": "a"}}, {"s": None}]
 run("jsonl_null_struct", "json", {"a.jsonl": ("\n".join(json.dumps(x) for x in structs) + "\n").encode()}, {"train": ["a.jsonl"]})
 run("json_array_null_struct", "json", {"a.json": json.dumps(structs).encode()}, {"train": ["a.json"]})
 run("json_field_null_struct", "json", {"a.json": json.dumps({"rows": structs}).encode()}, {"train": ["a.json"]}, field="rows")
+
+
+def zipped(members: dict[str, bytes]) -> bytes:
+    """A zip archive with fixed timestamps, so the fixture is reproducible."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in members.items():
+            z.writestr(zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0)), data)
+    return buf.getvalue()
+
+
+# ImageFolder and AudioFolder read zip archives: images and a metadata file
+# inside, images alone, and class folders, where `datasets` labels each
+# image with the archive's folder and fails.
+run("imagefolder_zip_metadata", "imagefolder",
+    {"data/train.zip": zipped({"0.png": png(2, 3, 5), "sub/1.png": png(6, 2, 6), "__MACOSX/._0.png": b"x", ".hidden.png": png(1, 1, 1),
+                               "metadata.csv": b"file_name,caption\n0.png,first\nsub/1.png,second\n"})},
+    {"train": ["data/train.zip"]})
+run("imagefolder_zip_images", "imagefolder", {"data/train.zip": zipped({"b.png": png(2, 2, 7), "a.png": png(3, 1, 8), "c/d.png": png(1, 1, 9),
+                                                                    "e.PNG": png(1, 2, 3), "f.png.gz": gzip.compress(png(1, 1, 4), mtime=0)})},
+    {"train": ["data/train.zip"]})
+run("imagefolder_zip_labels", "imagefolder", {"data/train.zip": zipped({"cat/a.png": png(2, 2, 1), "dog/b.png": png(3, 1, 2)})},
+    {"train": ["data/train.zip"]}, expect_error=True)
+run("audiofolder_zip_jsonl", "audiofolder",
+    {"data/train.zip": zipped({"a.wav": wav(800), "b.wav": wav(1600),
+                               "metadata.jsonl": (json.dumps({"file_name": "a.wav", "speaker": "x"}) + "\n" + json.dumps({"file_name": "b.wav", "speaker": "y"}) + "\n").encode()})},
+    {"train": ["data/train.zip"]})

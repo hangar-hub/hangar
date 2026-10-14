@@ -1,0 +1,41 @@
+{
+ "builder": "imagefolder",
+ "options": {},
+ "data_files": {
+  "train": [
+   "data/train.zip"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 472,
+   "embedded_nbytes": 242,
+   "rows": [
+    {
+     "image": {
+      "media": "train.zip",
+      "size": 86
+     },
+     "caption": "first"
+    },
+    {
+     "image": {
+      "media": "train.zip",
+      "size": 103
+     },
+     "caption": "second"
+    }
+   ]
+  }
+ },
+ "features": {
+  "image": {
+   "_type": "Image"
+  },
+  "caption": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

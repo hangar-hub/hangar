@@ -1,0 +1,41 @@
+{
+ "builder": "audiofolder",
+ "options": {},
+ "data_files": {
+  "train": [
+   "data/train.zip"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 453,
+   "embedded_nbytes": 2532,
+   "rows": [
+    {
+     "audio": {
+      "media": "train.zip",
+      "size": 844
+     },
+     "speaker": "x"
+    },
+    {
+     "audio": {
+      "media": "train.zip",
+      "size": 1644
+     },
+     "speaker": "y"
+    }
+   ]
+  }
+ },
+ "features": {
+  "audio": {
+   "_type": "Audio"
+  },
+  "speaker": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

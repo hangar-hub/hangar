@@ -32,11 +32,51 @@ type folderBuilder struct {
 func (b folderBuilder) name() string { return b.module }
 
 // isData reports whether a file is an image or audio file, also inside a
-// compressed file such as x.wav.gz.
-func (b folderBuilder) isData(p string) bool {
+// compressed file such as x.wav.gz. Inside a zip archive the builder takes
+// only the lower-case extensions it lists, and no compressed files.
+func (b folderBuilder) isData(f File) bool {
+	if f.archive != "" {
+		ext := path.Ext(f.entry)
+		return ext == strings.ToLower(ext) && layout.ModuleForExtension(ext) == b.module
+	}
+	p := f.Path
 	ext := strings.ToLower(path.Ext(p))
 	second := strings.ToLower(path.Ext(strings.TrimSuffix(p, path.Ext(p))))
 	return layout.ModuleForExtension(ext) == b.module || (second != "" && layout.ModuleForExtension(second) == b.module)
+}
+
+// label is the folder name FolderBasedBuilder takes as a file's class
+// label when it analyses the files. `datasets` names a file in an archive
+// zip://{entry}::{archive}, so the label is the entry's folder, and empty
+// at the top of the archive.
+func label(f File) string {
+	if f.archive != "" {
+		if !strings.Contains(f.entry, "/") {
+			return ""
+		}
+		return path.Base(path.Dir(f.entry))
+	}
+	return path.Base(path.Dir(f.Path))
+}
+
+// depth is count_path_segments: the slashes in the name `datasets` gives
+// a file, counted from the Repo root, which adds the same number to every
+// file. For a file in an archive that name is zip://{entry}::{archive}.
+func depth(f File) int {
+	if f.archive != "" {
+		return 2 + strings.Count(f.entry, "/") + strings.Count(f.archive, "/")
+	}
+	return strings.Count(f.Path, "/")
+}
+
+// mediaName is the file name the builder stores with an image or audio
+// value: for a file in an archive, the base name of zip://{entry}::{archive}
+// is the archive's.
+func mediaName(f File) string {
+	if f.archive != "" {
+		return path.Base(f.archive)
+	}
+	return path.Base(innerName(f.Path))
 }
 
 // folderPlan is FolderBasedBuilder's analysis of every Split.
@@ -45,24 +85,60 @@ type folderPlan struct {
 	addLabels bool
 	labels    []string
 	metaExt   string
+	// files are each Split's files with every zip archive replaced by the
+	// files in it: the Split's own files first, then each archive's, in
+	// the order the builder reads them.
+	files map[string][]File
+	// entries are the files in each archive by path, for metadata files
+	// in an archive, whose file names resolve inside it.
+	entries map[string]map[string]File
 }
 
-func (b folderBuilder) plan(splits []splitFiles) (*folderPlan, error) {
-	p := &folderPlan{metadata: map[string][]File{}}
+// expand lists a Split's files as the builder reads them: images, audio
+// and metadata files first, in order, then the files of each zip archive.
+func (p *folderPlan) expand(e *env, files []File) ([]File, error) {
+	var out, archives []File
+	for _, f := range files {
+		if strings.EqualFold(path.Ext(f.Path), ".zip") {
+			archives = append(archives, f)
+			continue
+		}
+		out = append(out, f)
+	}
+	for _, a := range archives {
+		in, err := archiveFiles(e.ctx, a)
+		if err != nil {
+			return nil, err
+		}
+		byPath := map[string]File{}
+		for _, f := range in {
+			byPath[f.Path] = f
+		}
+		p.entries[a.Path] = byPath
+		out = append(out, in...)
+	}
+	return out, nil
+}
+
+func (b folderBuilder) plan(e *env, splits []splitFiles) (*folderPlan, error) {
+	p := &folderPlan{metadata: map[string][]File{}, files: map[string][]File{}, entries: map[string]map[string]File{}}
 	labels := map[string]bool{}
 	depths := map[int]bool{}
 	exts := map[string]bool{}
 	for _, s := range splits {
-		for _, f := range s.files {
+		files, err := p.expand(e, s.files)
+		if err != nil {
+			return nil, err
+		}
+		p.files[s.name] = files
+		for _, f := range files {
 			switch {
-			case b.isData(f.Path):
-				labels[path.Base(path.Dir(f.Path))] = true
-				depths[strings.Count(f.Path, "/")] = true
+			case b.isData(f):
+				labels[label(f)] = true
+				depths[depth(f)] = true
 			case slices.Contains(metadataNames, path.Base(f.Path)):
 				p.metadata[s.name] = append(p.metadata[s.name], f)
 				exts[path.Ext(f.Path)] = true
-			case strings.EqualFold(path.Ext(f.Path), ".zip"):
-				return nil, fmt.Errorf("%w: zip archives in %s datasets", ErrUnsupported, b.module)
 			}
 		}
 	}
@@ -262,7 +338,7 @@ func (b folderBuilder) metadataFeatures(fs features.Features) (features.Features
 }
 
 func (b folderBuilder) infer(e *env, splits []splitFiles) (features.Features, error) {
-	p, err := b.plan(splits)
+	p, err := b.plan(e, splits)
 	if err != nil {
 		return nil, err
 	}
@@ -312,25 +388,46 @@ func resolveFileName(metaPath, name string) (string, error) {
 	return path.Join(dir, rel), nil
 }
 
-func (b folderBuilder) readFile(e *env, p string) ([]any, error) {
-	f, err := e.open(e.ctx, p)
-	if err != nil {
-		return nil, err
+// readFile reads the file a metadata file names: a file of the Repo, or,
+// for a metadata file in a zip archive, a file of the same archive.
+func (b folderBuilder) readFile(e *env, plan *folderPlan, meta File, p string) ([]any, error) {
+	var f File
+	if meta.archive != "" {
+		var ok bool
+		if f, ok = plan.entries[meta.archive][p]; !ok {
+			return nil, fmt.Errorf("%s is not in %s", strings.TrimPrefix(p, meta.archive+"/"), meta.archive)
+		}
+	} else {
+		var err error
+		if f, err = e.open(e.ctx, p); err != nil {
+			return nil, err
+		}
 	}
+	return b.readData(e, f)
+}
+
+// readData reads an image or audio file as the builder stores it: its
+// bytes and its file name.
+func (b folderBuilder) readData(e *env, f File) ([]any, error) {
+	p := f.Path
 	rc, err := f.Open(e.ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer rc.Close()
-	r, _, err := decompress(p, rc)
-	if err != nil {
-		return nil, err
+	var r io.Reader = rc
+	if f.archive == "" {
+		dr, _, err := decompress(p, rc)
+		if err != nil {
+			return nil, err
+		}
+		r = dr
 	}
 	raw, err := readAllLimit(r, maxMediaFile)
 	if err != nil {
 		return nil, err
 	}
-	return []any{raw, path.Base(innerName(p))}, nil
+	return []any{raw, mediaName(f)}, nil
 }
 
 func (b folderBuilder) read(e *env, split splitFiles, fs features.Features, emit emitFunc) error {
@@ -338,7 +435,7 @@ func (b folderBuilder) read(e *env, split splitFiles, fs features.Features, emit
 	if len(all) == 0 {
 		all = []splitFiles{split}
 	}
-	p, err := b.plan(all)
+	p, err := b.plan(e, all)
 	if err != nil {
 		return err
 	}
@@ -375,7 +472,7 @@ func (b folderBuilder) read(e *env, split splitFiles, fs features.Features, emit
 								if err != nil {
 									return err
 								}
-								if v, err = b.readFile(e, rp); err != nil {
+								if v, err = b.readFile(e, p, mf, rp); err != nil {
 									return fmt.Errorf("%s: %w", rp, err)
 								}
 							}
@@ -396,7 +493,7 @@ func (b folderBuilder) read(e *env, split splitFiles, fs features.Features, emit
 									if err != nil {
 										return err
 									}
-									if list[k], err = b.readFile(e, rp); err != nil {
+									if list[k], err = b.readFile(e, p, mf, rp); err != nil {
 										return fmt.Errorf("%s: %w", rp, err)
 									}
 								}
@@ -427,18 +524,30 @@ func (b folderBuilder) read(e *env, split splitFiles, fs features.Features, emit
 		}
 	} else {
 		labelIdx := fs.Index("label")
-		for _, f := range split.files {
-			if !b.isData(f.Path) {
+		for _, f := range p.files[split.name] {
+			// The builder reads every file of an archive as data, whatever
+			// its extension; only the Split's own files are filtered.
+			if f.archive == "" && !b.isData(f) {
 				continue
 			}
-			v, err := b.readFile(e, f.Path)
+			v, err := b.readData(e, f)
 			if err != nil {
 				return fmt.Errorf("%s: %w", f.Path, err)
 			}
 			row := make([]any, len(fs))
 			row[fs.Index(b.column)] = v
 			if labelIdx >= 0 && p.addLabels {
-				row[labelIdx] = int64(slices.Index(p.labels, path.Base(path.Dir(f.Path))))
+				// The builder labels a file of an archive with the archive's
+				// folder, which is not one of the labels it found inside.
+				name := label(f)
+				if f.archive != "" {
+					name = path.Base(path.Dir(f.archive))
+				}
+				i := slices.Index(p.labels, name)
+				if i < 0 {
+					return fmt.Errorf("invalid string class label %s", name)
+				}
+				row[labelIdx] = int64(i)
 			}
 			if err := add(row); err != nil {
 				return err

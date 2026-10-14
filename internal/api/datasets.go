@@ -101,7 +101,7 @@ func (a *DatasetsAPI) ListDatasetConfigs(w http.ResponseWriter, r *http.Request,
 	var datasetErr string
 	for _, row := range rows {
 		if row.Config == pipeline.DatasetLevel {
-			datasetErr = row.Error
+			datasetErr = pipeline.FailureOf(row.Error).Message
 			continue
 		}
 		byKey[key{row.Config, row.Split}] = row
@@ -115,7 +115,12 @@ func (a *DatasetsAPI) ListDatasetConfigs(w http.ResponseWriter, r *http.Request,
 				a.problem(w, r, repo.ErrNotFound)
 				return
 			}
-			detail = lerr.Error()
+			code, ok := pipeline.LayoutFailure(lerr)
+			if !ok {
+				a.problem(w, r, lerr)
+				return
+			}
+			detail = pipeline.FailureOf(code).Message
 		}
 		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusUnprocessableEntity, Title: "The dataset has no Configs",
 			Detail: "Hangar cannot read this dataset's Configs and Splits: " + detail})
@@ -135,7 +140,7 @@ func (a *DatasetsAPI) ListDatasetConfigs(w http.ResponseWriter, r *http.Request,
 					gs.NumRows, gs.NumBytesSource, gs.NumBytesParquet = &nr, &ns, &np
 				}
 				if row.Error != "" {
-					e := row.Error
+					e := pipeline.FailureOf(row.Error).Message
 					gs.Error = &e
 				}
 			}

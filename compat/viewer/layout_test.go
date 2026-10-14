@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,8 @@ import (
 type layoutCase struct {
 	Name  string             `json:"name"`
 	Files map[string]*string `json:"files"`
+	// Archives are zip archives and the names of their entries, in order.
+	Archives map[string][]string `json:"archives,omitempty"`
 }
 
 func readme(yaml string) *string {
@@ -44,6 +47,21 @@ func layoutCases() []layoutCase {
 		c.Files["README.md"] = readme(yaml)
 		return c
 	}
+	// withZip adds a zip archive with entries to a case. `datasets` looks
+	// inside archives to choose the builder
+	// (infer_module_for_data_files_list_in_archives).
+	withZip := func(c layoutCase, archive string, entries ...string) layoutCase {
+		if c.Archives == nil {
+			c.Archives = map[string][]string{}
+		}
+		c.Archives[archive] = entries
+		return c
+	}
+	eleven := names("zip_eleven_archives")
+	for i := range 10 {
+		eleven = withZip(eleven, fmt.Sprintf("data/a%02d.zip", i), "notes.txt")
+	}
+	eleven = withZip(eleven, "data/a10.zip", "1.csv", "2.csv", "3.csv", "4.csv", "5.csv", "6.csv", "7.csv", "8.csv", "9.csv", "10.csv", "11.csv")
 	return []layoutCase{
 		names("flat_splits", "train.csv", "valid.csv", "test.csv"),
 		names("data_dir_splits", "data/train.txt", "data/valid.txt", "data/test.txt"),
@@ -102,6 +120,24 @@ func layoutCases() []layoutCase {
 			"license: mit\npretty_name: Something\n"),
 		withCard(names("card_dataset_info_only", "train.csv", "test.csv"),
 			"dataset_info:\n  features:\n  - name: a\n    dtype: int64\n  splits:\n  - name: train\n    num_examples: 1\n"),
+		withZip(names("zip_csv"), "data/train.zip", "a.csv"),
+		withZip(names("zip_images_metadata"), "train.zip", "0.jpg", "1.jpg", "metadata.csv"),
+		withZip(names("zip_tie_metadata_first"), "train.zip", "metadata.csv", "z.jpg"),
+		withZip(names("zip_tie_image_first"), "train.zip", "a.jpg", "metadata.csv"),
+		withZip(names("zip_dotted_folders"), "train.zip", "x.v1/a.csv", "y.v1/b.jsonl", "c.jsonl"),
+		withZip(names("zip_hidden_entries"), "train.zip", "a.csv", "__MACOSX/._a.csv", "__MACOSX/._b.jsonl", "__MACOSX/._c.jsonl", ".hidden.jsonl", "b.jsonl"),
+		withZip(names("zip_readme_inside"), "train.zip", "README.md", "a.csv"),
+		withZip(names("zip_upper_case"), "train.zip", "A.JPG", "B.JPG"),
+		withZip(names("zip_folder_entries"), "train.zip", "d/", "d/a.csv"),
+		withZip(names("zip_compressed_inside"), "train.zip", "a.csv.gz"),
+		withZip(names("zip_empty"), "train.zip"),
+		withZip(names("zip_unknown_extension"), "train.zip", "a.xyz", "b.xyz"),
+		withZip(withZip(names("zip_splits"), "data/train.zip", "a.csv"), "data/test.zip", "b.csv"),
+		withZip(withZip(names("zip_mixed_formats"), "train.zip", "a.csv"), "test.zip", "b.jsonl"),
+		withZip(names("zip_beside_csv", "data/train.csv"), "data/train.zip", "a.jsonl", "b.jsonl"),
+		withZip(names("zip_beside_two_csv", "data/train_1.csv", "data/train_2.csv"), "data/train.zip", "a.jsonl"),
+		withZip(names("zip_audio_metadata", "data/train/notes.txt"), "data/train/clips.zip", "a.wav", "b.wav", "metadata.jsonl"),
+		eleven,
 	}
 }
 
@@ -153,6 +189,16 @@ func hangarResolve(c layoutCase) (resolution, error) {
 			readmeText = []byte(*c.Files[p])
 		}
 		files = append(files, layout.File{Path: p, Size: 1})
+	}
+	for p, entries := range c.Archives {
+		files = append(files, layout.File{Path: p, Size: 1, Entries: func(fn func(string) error) error {
+			for _, e := range entries {
+				if err := fn(e); err != nil {
+					return err
+				}
+			}
+			return nil
+		}})
 	}
 	slices.SortFunc(files, func(a, b layout.File) int { return strings.Compare(a.Path, b.Path) })
 	var cd *card.Card

@@ -1,6 +1,7 @@
 package convert_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/convert"
 	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/jamesagarside/hangar/internal/datasets/layout"
 )
 
 func memFile(p string, b []byte) convert.File {
@@ -269,3 +271,59 @@ func TestCastFeature(t *testing.T) {
 }
 
 func readFile(p string) ([]byte, error) { return os.ReadFile(p) }
+
+func zipOf(t *testing.T, files map[string][]byte) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for name, b := range files {
+		f, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write(b)
+		require.NoError(t, err)
+	}
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
+// TestFolderArchiveFileNames checks where metadata file names resolve: a
+// metadata file in an archive names files of the same archive and nothing
+// outside it, and a metadata file in the Repo does not reach into an
+// archive, as `datasets` joins the names to the metadata file's folder.
+func TestFolderArchiveFileNames(t *testing.T) {
+	png := mustRead(t, "../media/testdata/i.png")
+	ctx := context.Background()
+	convertFiles := func(files map[string]convert.File, data ...string) error {
+		cfg := datasets.Config{Name: "default", Builder: "imagefolder", Files: map[string][]string{"train": data}, SplitOrder: []string{"train"}}
+		res, err := convert.Convert(ctx, cfg, files, convert.Options{TempDir: t.TempDir(), Open: func(_ context.Context, p string) (convert.File, error) {
+			f, ok := files[p]
+			if !ok {
+				return convert.File{}, fmt.Errorf("no file %s", p)
+			}
+			return f, nil
+		}})
+		if res != nil {
+			res.Cleanup()
+		}
+		return err
+	}
+
+	inside := zipOf(t, map[string][]byte{"a.png": png, "metadata.csv": []byte("file_name\na.png\n")})
+	require.NoError(t, convertFiles(map[string]convert.File{"d/t.zip": memFile("d/t.zip", inside)}, "d/t.zip"))
+
+	missing := zipOf(t, map[string][]byte{"a.png": png, "metadata.csv": []byte("file_name\nb.png\n")})
+	err := convertFiles(map[string]convert.File{"d/t.zip": memFile("d/t.zip", missing)}, "d/t.zip")
+	require.ErrorContains(t, err, "b.png is not in d/t.zip")
+
+	escape := zipOf(t, map[string][]byte{"a.png": png, "metadata.csv": []byte("file_name\n../x.png\n")})
+	err = convertFiles(map[string]convert.File{"d/t.zip": memFile("d/t.zip", escape), "x.png": memFile("x.png", png)}, "d/t.zip")
+	require.ErrorContains(t, err, "must not leave the folder of the metadata file")
+
+	// A Repo metadata file naming a file inside an archive finds nothing.
+	err = convertFiles(map[string]convert.File{"d/t.zip": memFile("d/t.zip", zipOf(t, map[string][]byte{"a.png": png})),
+		"d/metadata.csv": memFile("d/metadata.csv", []byte("file_name\nt.zip/a.png\n"))}, "d/metadata.csv", "d/t.zip")
+	require.ErrorContains(t, err, "no file d/t.zip/a.png")
+
+	// A corrupt archive is invalid.
+	err = convertFiles(map[string]convert.File{"d/t.zip": memFile("d/t.zip", []byte("PK\x05\x06 not really"))}, "d/t.zip")
+	require.ErrorIs(t, err, layout.ErrInvalidArchive)
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/jamesagarside/hangar/internal/datasets/pq"
 )
 
 // emitFunc receives a batch of rows, one storage value per feature. A
@@ -31,6 +32,8 @@ type env struct {
 	// splits are every Split of the config, which folder builders analyse
 	// together.
 	splits []splitFiles
+	// budget limits the decoded Parquet data a read holds, or nil.
+	budget *pq.Budget
 	// nullStructChildren is set by a builder while it emits rows that
 	// `datasets` reads with pyarrow's JSON reader, where the children of
 	// a null struct are null, which changes num_bytes.

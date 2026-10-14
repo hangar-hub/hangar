@@ -1,9 +1,11 @@
 package viewer_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -12,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,6 +24,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/repo/repotest"
 )
 
 type resp struct {
@@ -223,14 +227,100 @@ func TestErrors(t *testing.T) {
 	_ = post.Body.Close()
 	require.Equal(t, http.StatusMethodNotAllowed, post.StatusCode)
 
-	// A failed dataset answers with the conversion error.
+	// A dataset without data files answers with the Hub's error.
 	bad, badSHA := s.Dataset(t, "bad", map[string][]byte{"README.md": []byte("# no data\n")})
 	s.Convert(t, bad, badSHA)
 	res = get(t, s, "/splits", q("dataset", bad.ID.String()), "")
 	require.Equal(t, http.StatusInternalServerError, res.status)
-	require.Equal(t, "DatasetGenerationError", res.header.Get("X-Error-Code"))
+	require.Equal(t, "EmptyDatasetError", res.header.Get("X-Error-Code"))
+	require.Equal(t, map[string]any{"error": "The dataset is empty."}, res.body)
 	res = get(t, s, "/is-valid", q("dataset", bad.ID.String()), "")
 	require.Equal(t, false, res.body["preview"])
+}
+
+// TestFailedConversion converts a dataset whose only Config cannot be
+// converted, and checks every endpoint answers as the Hub does: /splits
+// still lists the Split, with nothing failed, because the Hub's
+// config-split-names step falls back to the data files when config-info
+// failed; /info, /parquet and /size list the Config as failed; and the
+// Split's endpoints answer with the Hub's DatasetGenerationError. None of
+// them shows the conversion error's text, which can hold internal detail.
+func TestFailedConversion(t *testing.T) {
+	s := viewertest.New(t, viewertest.Options{})
+	r, sha := s.Dataset(t, "xmlish", map[string][]byte{"train.xml": []byte("<rows><row a='1'/></rows>\n")})
+	s.Convert(t, r, sha)
+	ds := r.ID.String()
+	generation := map[string]any{"error": "The dataset generation failed"}
+
+	res := get(t, s, "/splits", q("dataset", ds), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	require.Equal(t, []any{map[string]any{"dataset": ds, "config": "default", "split": "train"}}, res.body["splits"])
+	require.Equal(t, []any{}, res.body["failed"])
+	require.Equal(t, []any{}, res.body["pending"])
+	res = get(t, s, "/splits", q("dataset", ds, "config", "default"), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+
+	failed := []any{map[string]any{"dataset": ds, "config": "default", "error": generation}}
+	for _, path := range []string{"/info", "/parquet", "/size"} {
+		res = get(t, s, path, q("dataset", ds), "")
+		require.Equal(t, http.StatusOK, res.status, "%s: %s", path, res.raw)
+		require.Equal(t, failed, res.body["failed"], path)
+	}
+	for _, c := range []struct {
+		path string
+		q    url.Values
+	}{
+		{"/first-rows", q("dataset", ds, "config", "default", "split", "train")},
+		{"/rows", q("dataset", ds, "config", "default", "split", "train")},
+		{"/search", q("dataset", ds, "config", "default", "split", "train", "query", "a")},
+		{"/filter", q("dataset", ds, "config", "default", "split", "train", "where", `"a" = 1`)},
+		{"/statistics", q("dataset", ds, "config", "default", "split", "train")},
+		{"/info", q("dataset", ds, "config", "default")},
+		{"/size", q("dataset", ds, "config", "default")},
+	} {
+		res = get(t, s, c.path, c.q, "")
+		require.Equal(t, http.StatusInternalServerError, res.status, "%s: %s", c.path, res.raw)
+		require.Equal(t, "DatasetGenerationError", res.header.Get("X-Error-Code"), c.path)
+		require.Equal(t, generation, res.body, c.path)
+	}
+	res = get(t, s, "/is-valid", q("dataset", ds), "")
+	require.Equal(t, map[string]any{"preview": false, "viewer": false, "search": false, "filter": false, "statistics": false}, res.body)
+}
+
+// TestReadErrorsAreNotFailures makes the Viewer's Repo service fail while
+// it resolves a dataset's layout: the request fails with the Hub's
+// UnexpectedApiError and no detail, and the dataset is not reported as
+// failed once the Repo service recovers.
+func TestReadErrorsAreNotFailures(t *testing.T) {
+	broken := &flakyRepos{}
+	s := viewertest.New(t, viewertest.Options{ViewerRepos: func(f *repotest.Fake) repo.Service {
+		broken.Service = f
+		return broken
+	}})
+	r, _ := s.Dataset(t, "flaky", map[string][]byte{"train.csv": []byte(reviewsCSV)})
+	broken.fail.Store(true)
+	res := get(t, s, "/splits", q("dataset", r.ID.String()), "")
+	require.Equal(t, http.StatusInternalServerError, res.status)
+	require.Equal(t, "UnexpectedApiError", res.header.Get("X-Error-Code"))
+	require.Equal(t, map[string]any{"error": "Unexpected error."}, res.body)
+	require.NotContains(t, string(res.raw), "10.0.0.7")
+	broken.fail.Store(false)
+	res = get(t, s, "/splits", q("dataset", r.ID.String()), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	require.Len(t, res.body["splits"], 1)
+}
+
+// flakyRepos fails to list files while fail is set.
+type flakyRepos struct {
+	repo.Service
+	fail atomic.Bool
+}
+
+func (f *flakyRepos) Tree(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, opts repo.TreeOpts) ([]model.Entry, error) {
+	if f.fail.Load() {
+		return nil, errors.New("gitstore: read 10.0.0.7: connection reset by peer")
+	}
+	return f.Service.Tree(ctx, id, commit, p, opts)
 }
 
 func TestPrivateDatasetsAreHidden(t *testing.T) {
@@ -317,4 +407,52 @@ func TestLongCellsAreTruncated(t *testing.T) {
 	row := res.body["rows"].([]any)[0].(map[string]any)
 	require.Equal(t, []any{"t"}, row["truncated_cells"])
 	require.LessOrEqual(t, len(row["row"].(map[string]any)["t"].(string)), 50)
+}
+
+func zipBytes(t *testing.T, files map[string][]byte, order ...string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for _, name := range order {
+		f, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write(files[name])
+		require.NoError(t, err)
+	}
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
+// TestZipArchives converts datasets of zip archives end to end: a CSV
+// file in data/train.zip is a csv Config, and images with a metadata.csv
+// at the top of train.zip are an imagefolder Config, as `datasets` reads
+// them. Hangar used to call both a "zip" format and convert neither.
+func TestZipArchives(t *testing.T) {
+	s := viewertest.New(t, viewertest.Options{})
+	csvZip := zipBytes(t, map[string][]byte{"a.csv": []byte(reviewsCSV)}, "a.csv")
+	r, sha := s.Dataset(t, "zipped-csv", map[string][]byte{"data/train.zip": csvZip})
+	res := get(t, s, "/first-rows", q("dataset", r.ID.String(), "config", "default", "split", "train"), "")
+	require.Equal(t, http.StatusOK, res.status, "first rows from the archive while the conversion is pending: %s", res.raw)
+	require.Len(t, res.body["rows"], 4)
+	s.Convert(t, r, sha)
+	res = get(t, s, "/info", q("dataset", r.ID.String(), "config", "default"), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	require.Equal(t, "csv", res.body["dataset_info"].(map[string]any)["builder_name"])
+	res = get(t, s, "/rows", q("dataset", r.ID.String(), "config", "default", "split", "train"), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	require.EqualValues(t, 4, res.body["num_rows_total"])
+
+	img := pngBytes(t, 4, 2)
+	files := map[string][]byte{"a.png": img, "sub/b.png": pngBytes(t, 1, 1), "metadata.csv": []byte("file_name,caption\na.png,first\nsub/b.png,second\n")}
+	r, sha = s.Dataset(t, "zipped-images", map[string][]byte{"train.zip": zipBytes(t, files, "metadata.csv", "a.png", "sub/b.png")})
+	s.Convert(t, r, sha)
+	res = get(t, s, "/info", q("dataset", r.ID.String(), "config", "default"), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	require.Equal(t, "imagefolder", res.body["dataset_info"].(map[string]any)["builder_name"])
+	res = get(t, s, "/first-rows", q("dataset", r.ID.String(), "config", "default", "split", "train"), "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	rows := res.body["rows"].([]any)
+	require.Len(t, rows, 2)
+	first := rows[0].(map[string]any)["row"].(map[string]any)
+	require.Equal(t, "first", first["caption"])
+	require.EqualValues(t, 4, first["image"].(map[string]any)["width"])
 }
