@@ -114,9 +114,9 @@ func (s *DB) List(ctx context.Context, repoUUID uuid.UUID, o ListOptions) ([]Dis
 	}
 	switch o.Status {
 	case StatusOpen:
-		q = q.Where("discussion.status IN (?)", bun.In([]string{StatusOpen, StatusDraft}))
+		q = q.Where("discussion.status IN (?)", bun.List([]string{StatusOpen, StatusDraft}))
 	case StatusClosed:
-		q = q.Where("discussion.status IN (?)", bun.In([]string{StatusClosed, StatusMerged}))
+		q = q.Where("discussion.status IN (?)", bun.List([]string{StatusClosed, StatusMerged}))
 	}
 	if o.Author != "" {
 		q = q.Where("lower(an.name) = lower(?)", o.Author)
@@ -487,8 +487,7 @@ func (s *DB) Unlike(ctx context.Context, userID, repoUUID uuid.UUID) error {
 
 // Likes implements Service.
 func (s *DB) Likes(ctx context.Context, repoUUID uuid.UUID) (int64, error) {
-	n, err := s.o.DB.NewSelect().Model((*db.Like)(nil)).Where("repo_id = ?", repoUUID).Count(ctx)
-	return int64(n), err
+	return s.o.DB.NewSelect().Model((*db.Like)(nil)).Where("repo_id = ?", repoUUID).Count(ctx)
 }
 
 // Liked implements Service.

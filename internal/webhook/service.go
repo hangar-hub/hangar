@@ -269,10 +269,10 @@ func (s *Service) List(ctx context.Context, o ListOptions) ([]Webhook, error) {
 	var rows []db.Webhook
 	q := s.o.DB.NewSelect().Model(&rows).WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
 		if len(o.NamespaceIDs) > 0 {
-			q = q.WhereOr("scope_namespace_id IN (?)", bun.In(o.NamespaceIDs))
+			q = q.WhereOr("scope_namespace_id IN (?)", bun.List(o.NamespaceIDs))
 		}
 		if len(o.RepoUUIDs) > 0 {
-			q = q.WhereOr("scope_repo_id IN (?)", bun.In(o.RepoUUIDs))
+			q = q.WhereOr("scope_repo_id IN (?)", bun.List(o.RepoUUIDs))
 		}
 		return q
 	}).Order("created_at ASC", "id ASC")
@@ -524,10 +524,9 @@ func (s *Service) record(ctx context.Context, d *db.WebhookDelivery, status int,
 	}
 	outcome := "success"
 	var retryAt time.Time
-	switch {
-	case sendErr == nil:
+	if sendErr == nil {
 		d.DeliveredAt, d.NextAttemptAt, d.Error = &now, nil, ""
-	default:
+	} else {
 		d.Error = sendErr.Error()
 		var nr errNoRetry
 		if errors.As(sendErr, &nr) || d.Attempt > len(RetrySchedule) {

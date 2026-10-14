@@ -93,7 +93,7 @@ type rawTensor struct {
 func Read(r io.ReaderAt, size int64) (*Header, error) {
 	var lenBuf [8]byte
 	if _, err := r.ReadAt(lenBuf[:], 0); err != nil {
-		return nil, fmt.Errorf("%w: cannot read the header length: %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: cannot read the header length: %w", ErrInvalid, err)
 	}
 	n := binary.LittleEndian.Uint64(lenBuf[:])
 	if n == 0 || n > MaxHeaderSize {
@@ -104,7 +104,7 @@ func Read(r io.ReaderAt, size int64) (*Header, error) {
 	}
 	raw := make([]byte, n)
 	if _, err := r.ReadAt(raw, 8); err != nil {
-		return nil, fmt.Errorf("%w: cannot read the %d-byte header: %v", ErrInvalid, n, err)
+		return nil, fmt.Errorf("%w: cannot read the %d-byte header: %w", ErrInvalid, n, err)
 	}
 	return Parse(raw)
 }
@@ -116,7 +116,7 @@ func Parse(raw []byte) (*Header, error) {
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, fmt.Errorf("%w: the header is not valid JSON: %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: the header is not valid JSON: %w", ErrInvalid, err)
 	}
 	h := &Header{HeaderSize: int64(len(raw)), Raw: json.RawMessage(raw)}
 	for name, v := range fields {
@@ -130,7 +130,7 @@ func Parse(raw []byte) (*Header, error) {
 		}
 		var rt rawTensor
 		if err := json.Unmarshal(v, &rt); err != nil {
-			return nil, fmt.Errorf("%w: tensor %q: %v", ErrInvalid, name, err)
+			return nil, fmt.Errorf("%w: tensor %q: %w", ErrInvalid, name, err)
 		}
 		if rt.DType == "" || rt.DataOffsets[0] == nil || rt.DataOffsets[1] == nil || rt.Shape == nil {
 			return nil, fmt.Errorf("%w: tensor %q needs dtype, shape and data_offsets", ErrInvalid, name)

@@ -54,6 +54,8 @@ type Result struct {
 	Imports []Import
 	// Pickles is how many pickles the stream held back to back.
 	Pickles int
+
+	firstErr error
 }
 
 // Worst returns the worst classification among the imports, or Safe.
@@ -520,6 +522,28 @@ func (m *machine) run() error {
 	}
 }
 
+// next parses one more pickle into res and reports whether another may
+// follow. When the first pickle fails, res.firstErr holds the error; a
+// later failure means the data after the pickles is not a pickle, where an
+// unpickler stops too.
+func (m *machine) next(res *Result) bool {
+	runErr := m.run()
+	res.Imports = append(res.Imports, m.imports...)
+	m.imports = nil
+	if runErr != nil {
+		if res.Pickles == 0 {
+			res.firstErr = runErr
+		}
+		return false
+	}
+	res.Pickles++
+	head, _ := m.r.Peek(2)
+	if len(head) < 2 {
+		return false
+	}
+	return res.Pickles < legacyPickles || (head[0] == '\x80' && head[1] <= 5)
+}
+
 // unquote strips the quotes of a protocol 0 STRING argument.
 func unquote(s string) string {
 	if len(s) >= 2 && (s[0] == '\'' || s[0] == '"') && s[len(s)-1] == s[0] {
@@ -545,24 +569,10 @@ const legacyPickles = 5
 func Scan(r io.Reader) (Result, error) {
 	m := &machine{r: bufio.NewReaderSize(r, 64<<10)}
 	var res Result
-	for {
-		err := m.run()
-		res.Imports = append(res.Imports, m.imports...)
-		m.imports = nil
-		if err != nil {
-			if res.Pickles == 0 {
-				return finish(res), err
-			}
-			break
-		}
-		res.Pickles++
-		next, err := m.r.Peek(2)
-		if err != nil {
-			break
-		}
-		if res.Pickles >= legacyPickles && (next[0] != '\x80' || next[1] > 5) {
-			break
-		}
+	for m.next(&res) {
+	}
+	if res.Pickles == 0 {
+		return finish(res), res.firstErr
 	}
 	return finish(res), nil
 }

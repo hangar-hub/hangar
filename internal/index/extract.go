@@ -176,12 +176,11 @@ func (x *extractor) readCard(s *Summary) error {
 		x.info("README.md", "markdown").Error = err.Error()
 		return nil
 	}
-	data, err := card.FromReadme(b)
-	if err != nil {
+	if data, err := card.FromReadme(b); err == nil {
+		s.CardData = data
+	} else {
 		x.info("README.md", "markdown").Error = err.Error()
-		return nil
 	}
-	s.CardData = data
 	return nil
 }
 

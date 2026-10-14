@@ -211,13 +211,13 @@ func (s *Service) FileHeader(ctx context.Context, id model.RepoID, commit model.
 	if ext == ".safetensors" {
 		h, err := safetensors.Read(ra, e.Size)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrNoHeader, err)
+			return nil, fmt.Errorf("%w: %w", ErrNoHeader, err)
 		}
 		return h.Raw, nil
 	}
 	f, err := gguf.Read(ra, e.Size)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNoHeader, err)
+		return nil, fmt.Errorf("%w: %w", ErrNoHeader, err)
 	}
 	view := HeaderView{Version: f.Version, TensorCount: f.TensorCount, Alignment: f.Alignment, DataOffset: f.DataOffset, Metadata: f.Metadata}
 	for _, t := range f.Tensors {

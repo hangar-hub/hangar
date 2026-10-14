@@ -343,17 +343,17 @@ func (r *reader) scalar(t uint32) (any, error) {
 		return r.u8()
 	case TypeInt8:
 		v, err := r.u8()
-		return int8(v), err
+		return int8(v), err //nolint:gosec // GGUF stores signed integers in two's complement.
 	case TypeUint16:
 		return r.u16()
 	case TypeInt16:
 		v, err := r.u16()
-		return int16(v), err
+		return int16(v), err //nolint:gosec // GGUF stores signed integers in two's complement.
 	case TypeUint32:
 		return r.u32()
 	case TypeInt32:
 		v, err := r.u32()
-		return int32(v), err
+		return int32(v), err //nolint:gosec // GGUF stores signed integers in two's complement.
 	case TypeFloat32:
 		v, err := r.u32()
 		return math.Float32frombits(v), err
@@ -366,7 +366,7 @@ func (r *reader) scalar(t uint32) (any, error) {
 		return r.u64()
 	case TypeInt64:
 		v, err := r.u64()
-		return int64(v), err
+		return int64(v), err //nolint:gosec // GGUF stores signed integers in two's complement.
 	case TypeFloat64:
 		v, err := r.u64()
 		return math.Float64frombits(v), err
@@ -400,10 +400,10 @@ func (r *reader) value(t uint32, key string, f *File) (Value, error) {
 	if minSize == 0 {
 		return Value{}, fmt.Errorf("%w: unknown array type %d (key %q)", ErrInvalid, at, key)
 	}
-	if n > uint64(r.remaining()/minSize) {
+	if r.remaining() < 0 || n > uint64(r.remaining()/minSize) { //nolint:gosec // remaining is checked to be non-negative.
 		return Value{}, fmt.Errorf("%w: array %q of %d items does not fit in the file", ErrInvalid, key, n)
 	}
-	v := Value{Type: TypeArray, ArrayType: int(at), Len: int64(n)}
+	v := Value{Type: TypeArray, ArrayType: int(at), Len: int64(n)} //nolint:gosec // n fits in the file, so in an int64.
 	keepTokens := key == "tokenizer.ggml.tokens" && at == TypeString && n <= maxKeptTokens
 	if keepTokens {
 		f.Tokens = make([]string, 0, n)
@@ -417,7 +417,7 @@ func (r *reader) value(t uint32, key string, f *File) (Value, error) {
 			}
 			v.Items = append(v.Items, s)
 		}
-		r.c.Skip(int64(n-keep) * minSize)
+		r.c.Skip(int64(n-keep) * minSize) //nolint:gosec // n fits in the file, so in an int64.
 		if r.c.Pos > r.end {
 			return Value{}, fmt.Errorf("%w: array %q runs past the end of the file", ErrInvalid, key)
 		}
@@ -473,7 +473,7 @@ func Read(r io.ReaderAt, size int64) (*File, error) {
 		return nil, err
 	}
 	// Each key-value pair and tensor info takes at least 12 bytes.
-	if tensors > uint64(size/12) || kvs > uint64(size/12) {
+	if size < 0 || tensors > uint64(size/12) || kvs > uint64(size/12) { //nolint:gosec // size is checked to be non-negative.
 		return nil, fmt.Errorf("%w: %d tensors and %d metadata keys do not fit in %d bytes", ErrInvalid, tensors, kvs, size)
 	}
 	f.TensorCount = tensors
@@ -529,11 +529,11 @@ func Read(r io.ReaderAt, size int64) (*File, error) {
 		}
 		f.Tensors = append(f.Tensors, t)
 	}
-	pos := uint64(rd.c.Pos)
+	pos := uint64(rd.c.Pos) //nolint:gosec // the position only grows from 4.
 	if rem := pos % f.Alignment; rem != 0 {
 		pos += f.Alignment - rem
 	}
-	f.DataOffset = int64(pos)
+	f.DataOffset = int64(pos) //nolint:gosec // the header was read from the file, so pos is near its size.
 	return f, nil
 }
 
@@ -543,7 +543,7 @@ func (f *File) Validate(fileSize int64) error {
 	if f.DataOffset > fileSize {
 		return fmt.Errorf("%w: the header runs past the end of the file", ErrInvalid)
 	}
-	data := uint64(fileSize - f.DataOffset)
+	data := uint64(fileSize - f.DataOffset) //nolint:gosec // checked above to be non-negative.
 	for _, t := range f.Tensors {
 		n, ok := t.Bytes()
 		if !ok {

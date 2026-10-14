@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path"
 	"regexp"
 	"sort"
@@ -195,6 +196,10 @@ func scanZipStream(fr *FileResult, r *bufio.Reader) {
 		if csize == 0xffffffff {
 			csize = zip64Size(nameExtra[nameLen:])
 		}
+		if csize > math.MaxInt64 {
+			fail(fr, fmt.Errorf("%s: the member size is not valid", name))
+			return
+		}
 		descriptor := flags&0x8 != 0 && csize == 0
 		if descriptor && method != zip.Deflate {
 			fail(fr, fmt.Errorf("%s: stored members with data descriptors cannot be scanned as a stream", name))
@@ -202,9 +207,9 @@ func scanZipStream(fr *FileResult, r *bufio.Reader) {
 		}
 		// A deflated member ends where its compressed stream ends, so it
 		// can be read without knowing its size.
-		var body io.Reader = io.LimitReader(r, int64(csize))
-		if descriptor {
-			body = r
+		body := io.Reader(r)
+		if !descriptor {
+			body = io.LimitReader(r, int64(csize)) //nolint:gosec // checked against MaxInt64 above.
 		}
 		var member io.Reader
 		switch method {

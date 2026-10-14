@@ -451,7 +451,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 	})
 	header, err := gguf.Read(ra, modelEntry.Size)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %s: %v", errBadModel, modelEntry.Path, err)
+		return nil, nil, fmt.Errorf("%w: %s: %w", errBadModel, modelEntry.Path, err)
 	}
 	layers := []Layer{modelLayer}
 	if len(g.Projectors) > 0 {

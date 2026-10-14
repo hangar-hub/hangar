@@ -53,7 +53,7 @@ func hookRepo(s string) (model.RepoID, error) {
 func (a *WebhooksAPI) manageNamespace(ctx context.Context, p model.Principal, ns *org.Namespace) error {
 	err := a.d.Authz.Can(ctx, p, auth.ActionManageNamespace, auth.Target{Namespace: &auth.NamespaceTarget{ID: ns.ID, Name: ns.Name, Kind: ns.Kind}})
 	if err != nil {
-		return fmt.Errorf("%w: %v", auth.ErrForbidden, err)
+		return fmt.Errorf("%w: %w", auth.ErrForbidden, err)
 	}
 	return nil
 }

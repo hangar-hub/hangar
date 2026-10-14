@@ -173,7 +173,7 @@ func (s *DB) items(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID][]db.Col
 		return out, nil
 	}
 	var rows []db.CollectionItem
-	if err := s.o.DB.NewSelect().Model(&rows).Where("collection_id IN (?)", bun.In(ids)).Order("collection_id", "position ASC", "id ASC").Scan(ctx); err != nil {
+	if err := s.o.DB.NewSelect().Model(&rows).Where("collection_id IN (?)", bun.List(ids)).Order("collection_id", "position ASC", "id ASC").Scan(ctx); err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
@@ -201,8 +201,11 @@ func (s *DB) List(ctx context.Context, viewer model.Principal, o ListOptions) ([
 	q := s.o.DB.NewSelect().Model(&rows).Order("updated_at DESC", "id DESC")
 	if o.Owner != "" {
 		ns, err := s.o.Orgs.Get(ctx, o.Owner)
-		if err != nil {
+		if errors.Is(err, org.ErrNotFound) {
 			return []Collection{}, nil
+		}
+		if err != nil {
+			return nil, err
 		}
 		q = q.Where("namespace_id = ?", ns.ID)
 	}
@@ -275,7 +278,7 @@ func (s *DB) load(ctx context.Context, c *viewerCache, row *db.Collection) (*Col
 func (s *DB) canWrite(ctx context.Context, actor model.Principal, ns *org.Namespace) error {
 	err := s.o.Authz.Can(ctx, actor, auth.ActionWrite, auth.Target{Namespace: &auth.NamespaceTarget{ID: ns.ID, Name: ns.Name, Kind: ns.Kind}})
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrForbidden, err)
+		return fmt.Errorf("%w: %w", ErrForbidden, err)
 	}
 	return nil
 }
@@ -409,7 +412,7 @@ func (s *DB) checkItem(ctx context.Context, actor model.Principal, p ItemParams)
 		}
 		id, err := model.ParseRepoID(t, p.ItemID)
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrInvalid, err)
+			return "", fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 		r, err := s.o.Repos.Get(ctx, id)
 		if err != nil || r.DeletedAt != nil ||

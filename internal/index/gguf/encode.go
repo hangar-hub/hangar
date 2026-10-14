@@ -70,6 +70,9 @@ func Encode(kvs []KV, tensors []EncodeTensor) ([]byte, error) {
 			w(uint32(TypeUint32))
 			w(v)
 		case int:
+			if v < 0 || v > math.MaxUint32 {
+				return nil, fmt.Errorf("gguf encode: %q does not fit in a uint32", kv.Key)
+			}
 			w(uint32(TypeUint32))
 			w(uint32(v))
 		case uint64:
@@ -121,7 +124,7 @@ func Encode(kvs []KV, tensors []EncodeTensor) ([]byte, error) {
 			return nil, fmt.Errorf("gguf encode: unknown tensor type %q", t.Type)
 		}
 		str(t.Name)
-		w(uint32(len(t.Dims)))
+		w(uint32(len(t.Dims))) //nolint:gosec // a tensor has a handful of dimensions.
 		for _, d := range t.Dims {
 			w(d)
 		}
@@ -136,7 +139,7 @@ func Encode(kvs []KV, tensors []EncodeTensor) ([]byte, error) {
 			offset += align - rem
 		}
 	}
-	for uint64(b.Len())%align != 0 {
+	for uint64(b.Len())%align != 0 { //nolint:gosec // a length is never negative.
 		b.WriteByte(0)
 	}
 	b.Write(make([]byte, offset))

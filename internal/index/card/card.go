@@ -59,7 +59,7 @@ func Parse(front []byte) (map[string]any, error) {
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(front, &doc); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if doc.Kind == 0 || len(doc.Content) == 0 {
 		return map[string]any{}, nil
@@ -139,27 +139,26 @@ func scalar(n *yaml.Node) (any, error) {
 	case "!!null":
 		return nil, nil
 	case "!!bool":
-		b, err := strconv.ParseBool(n.Value)
-		if err != nil {
-			var v bool
-			if err := n.Decode(&v); err != nil {
-				return n.Value, nil
-			}
+		if b, err := strconv.ParseBool(n.Value); err == nil {
+			return b, nil
+		}
+		var v bool
+		if n.Decode(&v) == nil {
 			return v, nil
 		}
-		return b, nil
+		return n.Value, nil
 	case "!!int":
 		var v int64
-		if err := n.Decode(&v); err != nil {
-			return n.Value, nil
+		if n.Decode(&v) == nil {
+			return v, nil
 		}
-		return v, nil
+		return n.Value, nil
 	case "!!float":
 		var v float64
-		if err := n.Decode(&v); err != nil || math.IsInf(v, 0) || math.IsNaN(v) {
-			return n.Value, nil
+		if n.Decode(&v) == nil && !math.IsInf(v, 0) && !math.IsNaN(v) {
+			return v, nil
 		}
-		return v, nil
+		return n.Value, nil
 	case "!!str", "!!binary", "!!timestamp":
 		return n.Value, nil
 	}
