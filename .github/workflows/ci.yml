@@ -177,6 +177,8 @@ jobs:
           docker logs hangar 2>&1 | grep -q "Admin password"
       - name: The image reads /etc/hangar/hangar.yaml
         run: ./scripts/image-config-check.sh hangar:ci
+      - name: The Docker backup recipe works
+        run: ./scripts/image-backup-check.sh hangar:ci
 
   docs:
     name: Documentation builds with no broken links

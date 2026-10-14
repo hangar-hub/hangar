@@ -44,19 +44,22 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 # zones and git (the server runs git upload-pack), and nothing else, so no
 # shell or package manager. /etc/hangar/hangar.yaml sets no keys, so the
 # image reads it without changing a default; mount your own file over it.
+# /backups belongs to UID 65532, so a new named volume mounted there is
+# writable by hangar admin backup (docs/operate/backup.md).
 FROM cgr.dev/chainguard/wolfi-base:latest AS rootfs
 RUN apk add --no-cache --initdb --root /rootfs \
       --keys-dir /etc/apk/keys --repositories-file /etc/apk/repositories \
       wolfi-baselayout ca-certificates-bundle tzdata git \
  && rm -rf /rootfs/var/cache/apk /rootfs/lib/apk /rootfs/etc/apk \
- && mkdir -p /rootfs/var/lib/hangar /rootfs/var/cache/hangar /rootfs/etc/hangar /rootfs/tmp \
+ && mkdir -p /rootfs/var/lib/hangar /rootfs/var/cache/hangar /rootfs/etc/hangar /rootfs/backups /rootfs/tmp \
  && printf '%s\n' \
       '# Hangar configuration. This file sets nothing, so every key has its default.' \
       '# Mount your own file here, or set HANGAR_* environment variables, which' \
       '# override it. Every key: https://jamesagarside.github.io/hangar/reference/configuration/' \
       > /rootfs/etc/hangar/hangar.yaml \
  && chmod 0644 /rootfs/etc/hangar/hangar.yaml \
- && chown -R 65532:65532 /rootfs/var/lib/hangar /rootfs/var/cache/hangar \
+ && chown -R 65532:65532 /rootfs/var/lib/hangar /rootfs/var/cache/hangar /rootfs/backups \
+ && chmod 0700 /rootfs/backups \
  && chmod 1777 /rootfs/tmp
 
 # 4. The image.
