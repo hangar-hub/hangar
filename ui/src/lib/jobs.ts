@@ -21,6 +21,7 @@ const kindLabels: Record<string, string> = {
   "zip.export": "Zip download",
   "repo.purge": "Purge deleted Repo",
   "upload.expire": "Expire uploads",
+  "auth.cleanup": "Sign-in clean-up",
 };
 
 /** A readable name for a Job kind. */

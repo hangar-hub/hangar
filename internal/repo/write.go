@@ -174,11 +174,11 @@ func (s *Store) afterRefMove(ctx context.Context, row *repoRow, updates []gitsto
 		}
 		payload := CommitJob{RepoUUID: row.ID, Repo: r.ID.String(), Type: r.ID.Type, Commit: u.New}
 		key := row.ID.String() + ":" + string(u.New)
-		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: key, Payload: payload})
-		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: key, Payload: payload})
+		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: key, Payload: payload, Repo: row.ID})
+		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: key, Payload: payload, Repo: row.ID})
 	}
 	if n, err := s.db.NewSelect().Model((*db.Pack)(nil)).Where("repo_id = ?", row.ID).Where("state = ?", gitstore.PackLive).Count(ctx); err == nil && n > int64(s.opts.CompactThreshold) {
-		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindGitCompact, DedupeKey: row.ID.String(), Payload: RepoJob{RepoUUID: row.ID}, Priority: jobs.PriorityLow})
+		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindGitCompact, DedupeKey: row.ID.String(), Payload: RepoJob{RepoUUID: row.ID}, Priority: jobs.PriorityLow, Repo: row.ID})
 	}
 	s.emit(ctx, webhook.RepoUpdated, actor, r, map[string]any{"refs": changed})
 }

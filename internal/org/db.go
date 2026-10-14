@@ -665,6 +665,30 @@ func (o *DBService) SyncOIDCMemberships(ctx context.Context, userID uuid.UUID, p
 	return nil
 }
 
+// SearchNamespaces returns up to limit Namespaces whose name or display
+// name contains query, ignoring case, in name order. The system user's
+// Namespace is never returned. It serves the Namespace part of /search.
+func (o *DBService) SearchNamespaces(ctx context.Context, query string, limit int) ([]Namespace, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	pattern := "%" + likeEscaper.Replace(strings.ToLower(query)) + "%"
+	var rows []nsRow
+	err := o.db.NewRaw(nsSelect+`WHERE (lower(n.name) LIKE ? ESCAPE '\' OR lower(n.display_name) LIKE ? ESCAPE '\')
+	AND (u.id IS NULL OR u.is_system = ?) ORDER BY lower(n.name) LIMIT ?`, pattern, pattern, false, limit).Scan(ctx, &rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Namespace, 0, len(rows))
+	for i := range rows {
+		out = append(out, *rows[i].toNamespace())
+	}
+	return out, nil
+}
+
+// likeEscaper escapes the LIKE wildcards and the escape character itself.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 // MemberCount returns the number of Members of an Organisation.
 func (o *DBService) MemberCount(ctx context.Context, namespaceID uuid.UUID) (int64, error) {
 	return o.db.NewSelect().Model((*db.Membership)(nil)).Where("org_namespace_id = ?", namespaceID).Count(ctx)

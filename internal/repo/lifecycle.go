@@ -217,7 +217,7 @@ func (s *Store) Delete(ctx context.Context, id model.RepoID, actor model.Princip
 	r := toRepo(row)
 	r.DeletedAt = &now
 	s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindRepoPurge, DedupeKey: purgeDedupe(row.ID, now), Payload: PurgeJob{RepoUUID: row.ID, DeletedAt: now},
-		RunAfter: now.Add(s.opts.RestoreWindow), Priority: jobs.PriorityLow})
+		RunAfter: now.Add(s.opts.RestoreWindow), Priority: jobs.PriorityLow, Repo: row.ID})
 	s.record(ctx, audit.RepoDeleted, actor, r, nil)
 	s.emit(ctx, webhook.RepoDeleted, actor, r, nil)
 	return nil

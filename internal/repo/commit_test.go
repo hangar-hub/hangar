@@ -256,8 +256,13 @@ func TestCommitReadsAndCaches(t *testing.T) {
 		var kinds []jobs.Kind
 		js, _, err := e.jobs.List(e.ctx, jobs.Filter{})
 		require.NoError(t, err)
+		created, err := e.svc.Get(e.ctx, id)
+		require.NoError(t, err)
 		for _, j := range js {
 			kinds = append(kinds, j.Kind)
+			if j.Kind == jobs.KindIndex || j.Kind == jobs.KindScan {
+				require.Equal(t, created.UUID, j.Repo, "index and scan Jobs are scoped to their Repo")
+			}
 		}
 		require.Contains(t, kinds, jobs.KindIndex)
 		require.Contains(t, kinds, jobs.KindScan)

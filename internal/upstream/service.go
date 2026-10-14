@@ -325,9 +325,22 @@ func (s *Service) StartPull(ctx context.Context, req PullRequest) (jobs.JobID, m
 	return id, local, err
 }
 
+// enqueuePull queues a pull Job. When the local Repo exists already (a
+// Pull into a Mirror, a sync, Pull-through of more files), the Job is
+// scoped to it, so the native API checks access to that Repo; a Pull that
+// creates its Mirror stays visible to the user who started it.
 func (s *Service) enqueuePull(ctx context.Context, p pullPayload, parent uuid.UUID, priority int) (jobs.JobID, error) {
-	return s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPull, DedupeKey: p.dedupeKey(), Payload: p, Priority: priority,
-		CreatedBy: p.RequestedBy, ParentID: parent})
+	nj := jobs.NewJob{Kind: jobs.KindPull, DedupeKey: p.dedupeKey(), Payload: p, Priority: priority, CreatedBy: p.RequestedBy, ParentID: parent}
+	if id, err := p.localID(); err == nil {
+		r, err := s.opts.Repos.Get(ctx, id)
+		switch {
+		case err == nil:
+			nj.Repo = r.UUID
+		case !errors.Is(err, repo.ErrNotFound):
+			return uuid.Nil, err
+		}
+	}
+	return s.opts.Queue.Enqueue(ctx, nj)
 }
 
 // repoTarget describes a Repo for auth.Authz.

@@ -20,8 +20,10 @@ import (
 
 // ZipJob is the payload of a zip.export Job (DOWN-5).
 type ZipJob struct {
-	RepoUUID uuid.UUID       `json:"repo_uuid"`
-	Commit   model.CommitSHA `json:"commit"`
+	RepoUUID uuid.UUID `json:"repo_uuid"`
+	// Repo is the Repo ID, for Job listings.
+	Repo   string          `json:"repo,omitempty"`
+	Commit model.CommitSHA `json:"commit"`
 	// Path limits the zip to one folder; "" is the whole Revision.
 	Path string `json:"path,omitempty"`
 }
@@ -61,10 +63,14 @@ type JobOptions struct {
 	// PackGracePeriod is git.pack_grace_period, for the pack sweep after
 	// compaction. Zero means one hour.
 	PackGracePeriod time.Duration
+	// UploadsExpiredElsewhere leaves upload.expire out, for processes where
+	// internal/gc registers it (gc.Register, with its own schedule). A
+	// Registry takes each kind once.
+	UploadsExpiredElsewhere bool
 }
 
 // RegisterJobs registers the handlers for zip.export, repo.purge,
-// git.compact and upload.expire.
+// git.compact and, unless o.UploadsExpiredElsewhere is set, upload.expire.
 func (s *Store) RegisterJobs(reg *jobs.Registry, lfs *LFS, o JobOptions) error {
 	if o.Blobs == nil {
 		return errors.New("repo: JobOptions.Blobs is required")
@@ -88,10 +94,12 @@ func (s *Store) RegisterJobs(reg *jobs.Registry, lfs *LFS, o JobOptions) error {
 			_, err := s.git.Sweep(ctx, o.PackGracePeriod)
 			return err
 		}, Options: jobs.HandlerOptions{MaxAttempts: 3, Concurrency: 1}},
-		{Kind: jobs.KindUploadExpire, Handler: func(ctx context.Context, _ *jobs.Job, _ jobs.Progress) error {
+	}
+	if !o.UploadsExpiredElsewhere {
+		regs = append(regs, jobs.Registration{Kind: jobs.KindUploadExpire, Handler: func(ctx context.Context, _ *jobs.Job, _ jobs.Progress) error {
 			_, err := lfs.ExpireUploads(ctx)
 			return err
-		}},
+		}})
 	}
 	for _, r := range regs {
 		if err := reg.Register(r.Kind, r.Handler, r.Options); err != nil {

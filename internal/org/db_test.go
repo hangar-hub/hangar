@@ -254,3 +254,35 @@ func TestSyncOIDCMemberships(t *testing.T) {
 			"a mapping to a user Namespace fails")
 	})
 }
+
+func TestSearchNamespaces(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		_, o, _, u := setup(t, d)
+		_, err := o.CreateOrg(ctx, "ML-Team", "Machine learning", u["alice"])
+		require.NoError(t, err)
+		_, err = o.CreateOrg(ctx, "under_score", "", u["alice"])
+		require.NoError(t, err)
+
+		names := func(q string, limit int) []string {
+			t.Helper()
+			nss, err := o.SearchNamespaces(ctx, q, limit)
+			require.NoError(t, err)
+			out := []string{}
+			for _, ns := range nss {
+				out = append(out, ns.Name)
+			}
+			return out
+		}
+		require.Equal(t, []string{"ML-Team"}, names("ml-", 10), "names match without case")
+		require.Equal(t, []string{"ML-Team"}, names("LEARNING", 10), "display names match too")
+		require.Equal(t, []string{"alice", "bob", "carol"}, names("", 10)[:3], "name order")
+		require.Len(t, names("", 2), 2, "the limit applies")
+		require.Equal(t, []string{"under_score"}, names("_", 10), "LIKE wildcards are literal")
+		require.Empty(t, names("%", 10))
+		ns, err := o.SearchNamespaces(ctx, "carol", 10)
+		require.NoError(t, err)
+		require.Len(t, ns, 1)
+		require.Equal(t, u["carol"].UserID, ns[0].UserID)
+	})
+}

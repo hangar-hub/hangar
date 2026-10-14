@@ -847,9 +847,9 @@ func (a *ReposAPI) StartZipExport(w http.ResponseWriter, r *http.Request, pType 
 		return
 	}
 	p := httpx.Principal(r.Context())
-	id, err := a.d.Jobs.Enqueue(r.Context(), jobs.NewJob{Kind: jobs.KindZipExport, CreatedBy: p.UserID,
+	id, err := a.d.Jobs.Enqueue(r.Context(), jobs.NewJob{Kind: jobs.KindZipExport, CreatedBy: p.UserID, Repo: rp.UUID,
 		DedupeKey: rp.UUID.String() + ":" + string(sha) + ":" + e.Path + ":" + p.UserID.String(),
-		Payload:   repo.ZipJob{RepoUUID: rp.UUID, Commit: sha, Path: e.Path}})
+		Payload:   repo.ZipJob{RepoUUID: rp.UUID, Repo: rp.ID.String(), Commit: sha, Path: e.Path}})
 	if err != nil {
 		a.d.problem(w, r, err)
 		return

@@ -291,7 +291,7 @@ func (s *Service) plan(ctx context.Context, j *jobs.Job, prog jobs.Progress, p *
 // commit, or joins the Job already transferring the object (Pulls of the
 // same object share one Job by OID).
 func (s *Service) queueTransfer(ctx context.Context, parent jobs.JobID, p *pullPayload, up *Upstream, upID model.RepoID, r *repo.Repo, commit model.CommitSHA, f *fileState) error {
-	id, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: f.OID, ParentID: parent, CreatedBy: p.RequestedBy,
+	id, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: f.OID, ParentID: parent, CreatedBy: p.RequestedBy, Repo: r.UUID,
 		Payload: filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: upID.String(), Type: r.ID.Type, Repo: r.ID.String(),
 			RepoUUID: r.UUID, Commit: commit, Path: f.Path, OID: f.OID, Size: f.Size, RequestedBy: p.RequestedBy, Now: p.Now}})
 	if err != nil {
@@ -814,7 +814,7 @@ func (s *Service) finish(ctx context.Context, j *jobs.Job, prog jobs.Progress, p
 	payload := commitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: st.SourceCommit}
 	key := r.UUID.String() + ":" + string(st.SourceCommit)
 	for _, k := range []jobs.Kind{jobs.KindIndex, jobs.KindScan} {
-		if _, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: k, DedupeKey: key, Payload: payload}); err != nil {
+		if _, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: k, DedupeKey: key, Payload: payload, Repo: r.UUID}); err != nil {
 			return err
 		}
 	}

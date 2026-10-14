@@ -39,13 +39,16 @@ const (
 	KindZipExport      Kind = "zip.export"
 	KindRepoPurge      Kind = "repo.purge"
 	KindUploadExpire   Kind = "upload.expire"
+	// KindAuthCleanup removes expired sessions, device codes, OIDC states,
+	// Ollama nonces and sign-in throttle counters (internal/auth).
+	KindAuthCleanup Kind = "auth.cleanup"
 )
 
 // AllKinds lists every Job kind.
 func AllKinds() []Kind {
 	return []Kind{KindPull, KindPullFile, KindMirrorSync, KindIndex, KindScan, KindGC, KindGitCompact,
 		KindLFSVerify, KindDatasetConvert, KindDatasetStats, KindXetGC, KindWebhookDeliver, KindZipExport,
-		KindRepoPurge, KindUploadExpire}
+		KindRepoPurge, KindUploadExpire, KindAuthCleanup}
 }
 
 // Status is a Job's state.

@@ -181,7 +181,7 @@ func (pt *PullThrough) stream(ctx context.Context, r *repo.Repo, m *Mirror, up *
 	}
 	fp := filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: m.UpstreamRepo.String(), Type: r.ID.Type, Repo: r.ID.String(),
 		RepoUUID: r.UUID, Commit: commit, Path: path, OID: oid, Size: size, RequestedBy: user, Now: true}
-	jobID, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: oid, Payload: fp, Priority: jobs.PriorityHigh,
+	jobID, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: oid, Payload: fp, Priority: jobs.PriorityHigh, Repo: r.UUID,
 		RunAfter: s.opts.Now().Add(time.Minute), CreatedBy: user})
 	if err != nil {
 		return nil, err

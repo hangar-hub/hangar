@@ -17,6 +17,8 @@ import (
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/jamesagarside/hangar/internal/jobs/jobstest"
 	"github.com/jamesagarside/hangar/internal/model"
 )
 
@@ -201,5 +203,34 @@ func TestCleanup(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, auth.CleanupResult{Sessions: 1, DeviceCodes: 1, LoginAttempts: 2}, res)
 		require.Equal(t, time.Hour, auth.CleanupInterval())
+	})
+}
+
+func TestCleanupJob(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		u := mustUser(t, s, "alice", false)
+		_, _, err := s.Sessions.Create(ctx, u.ID, "", "")
+		require.NoError(t, err)
+		clock.Advance(s.Config().Security.SessionTTL + time.Hour)
+
+		reg := jobs.NewRegistry()
+		require.NoError(t, s.RegisterJobs(reg))
+		require.Error(t, s.RegisterJobs(reg), "registered once")
+		q := jobstest.NewFake(reg)
+		sched := auth.CleanupSchedule()
+		require.Equal(t, jobs.KindAuthCleanup, sched.Kind)
+		require.True(t, sched.Enabled)
+		id, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindAuthCleanup})
+		require.NoError(t, err)
+		require.Equal(t, 1, q.RunPending(ctx))
+		j, err := q.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusSucceeded, j.Status)
+		var res auth.CleanupResult
+		require.NoError(t, json.Unmarshal(j.Result, &res))
+		require.Equal(t, int64(1), res.Sessions)
 	})
 }

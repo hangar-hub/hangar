@@ -386,7 +386,7 @@ func (s *Service) RescanStale(ctx context.Context, q jobs.Queue) (int, error) {
 			continue
 		}
 		job := index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: model.CommitSHA(row.Commit)}
-		if _, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: job.DedupeKey(), Payload: job, Priority: jobs.PriorityLow}); err != nil {
+		if _, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: job.DedupeKey(), Payload: job, Priority: jobs.PriorityLow, Repo: r.UUID}); err != nil {
 			return queued, err
 		}
 		queued++

@@ -110,12 +110,12 @@ func (p *Pipeline) EnqueueConvert(ctx context.Context, repoID uuid.UUID, commit 
 // EnqueueConvert queues a dataset.convert Job on a queue.
 func EnqueueConvert(ctx context.Context, q jobs.Queue, repoID uuid.UUID, commit model.CommitSHA) (jobs.JobID, error) {
 	return q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindDatasetConvert, DedupeKey: dedupeKey(repoID, commit),
-		Payload: Payload{Repo: repoID, Commit: commit}, Priority: jobs.PriorityLow})
+		Payload: Payload{Repo: repoID, Commit: commit}, Priority: jobs.PriorityLow, Repo: repoID})
 }
 
 // StatsJob returns the dataset.stats Job of a Commit.
 func StatsJob(repoID uuid.UUID, commit model.CommitSHA) jobs.NewJob {
-	return jobs.NewJob{Kind: jobs.KindDatasetStats, DedupeKey: dedupeKey(repoID, commit),
+	return jobs.NewJob{Kind: jobs.KindDatasetStats, DedupeKey: dedupeKey(repoID, commit), Repo: repoID,
 		Payload: Payload{Repo: repoID, Commit: commit}, Priority: jobs.PriorityLow}
 }
 

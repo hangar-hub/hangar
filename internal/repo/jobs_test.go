@@ -151,3 +151,15 @@ func TestUploadExpireJobAndSchedules(t *testing.T) {
 		require.ErrorIs(t, e.lfs.AbortUpload(e.ctx, u.ID), repo.ErrNotFound)
 	})
 }
+
+func TestUploadExpireCanBeLeftToGC(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		reg := jobs.NewRegistry()
+		require.NoError(t, e.svc.RegisterJobs(reg, e.lfs, repo.JobOptions{Blobs: e.blobs, UploadsExpiredElsewhere: true}))
+		require.NoError(t, reg.Register(jobs.KindUploadExpire, func(context.Context, *jobs.Job, jobs.Progress) error { return nil }, jobs.HandlerOptions{}),
+			"upload.expire is free for internal/gc")
+		for _, k := range []jobs.Kind{jobs.KindZipExport, jobs.KindRepoPurge, jobs.KindGitCompact} {
+			require.Error(t, reg.Register(k, func(context.Context, *jobs.Job, jobs.Progress) error { return nil }, jobs.HandlerOptions{}), k)
+		}
+	})
+}

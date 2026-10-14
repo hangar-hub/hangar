@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/jamesagarside/hangar/internal/jobs"
 )
 
 // CleanupResult counts the rows Cleanup removed.
@@ -47,3 +48,23 @@ const cleanupInterval = time.Hour
 
 // CleanupInterval returns how often Cleanup should run.
 func CleanupInterval() time.Duration { return cleanupInterval }
+
+// CleanupScheduleKey names the auth.cleanup schedule.
+const CleanupScheduleKey = "auth"
+
+// RegisterJobs registers the auth.cleanup handler, which runs Cleanup and
+// stores the counts as the Job's result.
+func (s *Service) RegisterJobs(reg *jobs.Registry) error {
+	return reg.Register(jobs.KindAuthCleanup, func(ctx context.Context, _ *jobs.Job, p jobs.Progress) error {
+		res, err := s.Cleanup(ctx)
+		if err != nil {
+			return err
+		}
+		return p.SetResult(ctx, res)
+	}, jobs.HandlerOptions{MaxAttempts: 3, Concurrency: 1, Timeout: 10 * time.Minute})
+}
+
+// CleanupSchedule is the hourly auth.cleanup schedule.
+func CleanupSchedule() jobs.Schedule {
+	return jobs.Schedule{Kind: jobs.KindAuthCleanup, Key: CleanupScheduleKey, Cron: "41 * * * *", Enabled: true}
+}

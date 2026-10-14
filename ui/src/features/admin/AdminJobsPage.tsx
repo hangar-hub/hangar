@@ -30,6 +30,7 @@ const kinds = [
   "zip.export",
   "repo.purge",
   "upload.expire",
+  "auth.cleanup",
 ];
 const statuses: JobStatus[] = ["pending", "running", "succeeded", "failed", "cancelled"];
 

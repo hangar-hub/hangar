@@ -29,7 +29,7 @@ func TestRegistry(t *testing.T) {
 }
 
 func TestKindsAndStatus(t *testing.T) {
-	require.Len(t, jobs.AllKinds(), 15)
+	require.Len(t, jobs.AllKinds(), 16)
 	require.True(t, jobs.StatusPending.Active())
 	require.True(t, jobs.StatusRunning.Active())
 	require.False(t, jobs.StatusFailed.Active())
