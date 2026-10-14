@@ -1,0 +1,22 @@
+Hangar is starting at {{ .Values.publicURL }}.
+
+{{- if include "hangar.generate" . }}
+
+The first admin is hangar-admin. Read the generated password with:
+
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "hangar.fullname" . }}-generated \
+    -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d; echo
+
+The Instance key is in the same Secret. Back it up: without it, stored
+upstream tokens and webhook secrets cannot be decrypted.
+{{- end }}
+
+{{- if not (or .Values.ingress.enabled .Values.httpRoute.enabled) }}
+
+To reach it from this machine:
+
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "hangar.fullname" . }} 8080:{{ .Values.service.port }}
+{{- end }}
+
+Point Hugging Face tools at it with: export HF_ENDPOINT={{ .Values.publicURL }}
+Documentation: https://jamesagarside.github.io/hangar/

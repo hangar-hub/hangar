@@ -1,0 +1,181 @@
+# Default values for the Hangar chart. The defaults run one Pod in role
+# `all` with SQLite and the filesystem Blob store on a PersistentVolumeClaim.
+# To scale out, turn persistence off, point `config` at Postgres and an S3
+# bucket, and raise web.replicas and worker.replicas (see docs: Operate,
+# Scaling).
+
+image:
+  repository: ghcr.io/jamesagarside/hangar
+  # Defaults to the chart's appVersion.
+  tag: ""
+  # Set to pin the image by digest, such as sha256:...
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# The URL clients use to reach Hangar (server.public_url). Required.
+publicURL: ""
+
+# Hangar configuration, rendered into a ConfigMap as hangar.yaml. Any key in
+# the configuration reference can go here, such as:
+#   database: {driver: postgres}
+#   storage: {backend: s3, s3: {endpoint: s3.eu-west-2.amazonaws.com, region: eu-west-2, bucket: hangar}}
+# server.public_url and server.role are set by the chart.
+config: {}
+
+# Secret environment variables, rendered into a Secret, such as
+#   HANGAR_DATABASE_DSN: postgres://hangar:...@postgres:5432/hangar
+#   HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ...
+# Use existingSecret instead to keep secrets out of Helm values.
+secrets: {}
+# Name of an existing Secret with HANGAR_* variables, used instead of `secrets`.
+existingSecret: ""
+# Generate HANGAR_SECURITY_INSTANCE_KEY and the bootstrap admin password
+# when neither `secrets` nor existingSecret sets them. They are kept across
+# upgrades. Read the password with:
+#   kubectl get secret <release>-hangar-generated -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d
+generateSecrets: true
+
+# SQLite and filesystem mode. With persistence on, the chart runs one Pod in
+# role `all`, so web.replicas must be 1 and worker.replicas 0.
+persistence:
+  enabled: true
+  size: 50Gi
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  existingClaim: ""
+  annotations: {}
+
+web:
+  replicas: 1
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # For example, spread web Pods across zones:
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: ScheduleAnyway
+  topologySpreadConstraints: []
+
+worker:
+  replicas: 0
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# The pre-install and pre-upgrade Job that runs `hangar admin migrate` when
+# persistence is off. With persistence on, the `all` Pod migrates at start.
+migrations:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: hangar.example.com
+  tls: []
+  #  - secretName: hangar-tls
+  #    hosts: [hangar.example.com]
+  # Also route datasets-server.<host> to Hangar, which serves the Dataset
+  # Viewer API there for the `datasets` library.
+  datasetsServerHost: false
+
+# Gateway API HTTPRoute, as an alternative to the Ingress.
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  #  - name: public-gateway
+  #    namespace: gateway-system
+  hostnames: [hangar.example.com]
+  datasetsServerHost: false
+
+serviceAccount:
+  create: true
+  name: ""
+  # For example, eks.amazonaws.com/role-arn for IRSA, or
+  # iam.gke.io/gcp-service-account for Workload Identity.
+  annotations: {}
+  automountServiceAccountToken: false
+
+# Prometheus metrics on a separate port (telemetry.metrics: prometheus).
+metrics:
+  enabled: false
+  port: 9464
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+networkPolicy:
+  enabled: false
+  # Peers allowed to reach the HTTP port; empty allows every source.
+  ingressFrom: []
+  # Egress is open by default, because Hangar talks to Upstreams, the
+  # database, the Blob store, OIDC providers and webhook targets.
+  egress: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# Size of the emptyDir volumes for /tmp and the git pack cache.
+tmpSizeLimit: 2Gi
+cacheSizeLimit: 10Gi
+
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []

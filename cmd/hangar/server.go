@@ -22,12 +22,13 @@ import (
 
 func newServerCommand(use, short, forceRole string) *cobra.Command {
 	var flags configFlags
+	var jsonLogs bool
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := flags.load(forceRole)
+			cfg, err := flags.loadServer(forceRole, jsonLogs)
 			if err != nil {
 				return err
 			}
@@ -37,6 +38,7 @@ func newServerCommand(use, short, forceRole string) *cobra.Command {
 		},
 	}
 	flags.register(cmd)
+	cmd.Flags().BoolVar(&jsonLogs, "json", false, "write logs as JSON, the default (shortcut for --set telemetry.log_format=json)")
 	return cmd
 }
 

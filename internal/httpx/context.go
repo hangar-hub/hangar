@@ -8,6 +8,8 @@ import (
 	"context"
 	"sync"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
@@ -99,8 +101,13 @@ func SetRoute(ctx context.Context, route string) {
 	}
 }
 
-// SetProtocol records the protocol.
+// SetProtocol records the protocol. It also adds hangar.protocol to the
+// HTTP server metrics otelhttp records for the request, so dashboards can
+// show traffic by protocol (11-observability.md "Dashboards").
 func SetProtocol(ctx context.Context, p telemetry.Protocol) {
+	if l, ok := otelhttp.LabelerFromContext(ctx); ok {
+		l.Add(telemetry.AttrProtocol.String(string(p)))
+	}
 	if i := infoFrom(ctx); i != nil {
 		i.mu.Lock()
 		i.protocol = p

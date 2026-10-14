@@ -1,0 +1,20 @@
+# Keep the build context small and free of local state.
+.git
+**/node_modules
+ui/test-results
+ui/playwright-report
+ui/blob-report
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+bin
+hangar
+hangar.exe
+tmp
+coverage*
+compat/.venv
+compat/.fixtures
+**/__pycache__
+docs
+site
+deploy
+loadtest

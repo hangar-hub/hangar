@@ -1,0 +1,150 @@
+site_name: Hangar
+site_description: A self-hosted home for your arsenal of models. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.
+site_url: https://jamesagarside.github.io/hangar/
+repo_url: https://github.com/jamesagarside/hangar
+repo_name: jamesagarside/hangar
+edit_uri: edit/main/docs/
+copyright: Hangar is source-available under the Elastic License 2.0.
+
+# The spec, research notes and build notes live in docs/ for the build, not
+# for the site.
+exclude_docs: |
+  spec/
+  research/
+  build/
+  dependencies.md
+  requirements.txt
+  hooks.py
+
+hooks:
+  - docs/hooks.py
+
+theme:
+  name: material
+  language: en
+  logo: assets/icon.svg
+  favicon: assets/icon.svg
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: amber
+      toggle: {icon: material/weather-night, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: amber
+      toggle: {icon: material/weather-sunny, name: Switch to light mode}
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: info
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Get started:
+      - get-started/index.md
+      - Docker: get-started/docker.md
+      - Docker Compose: get-started/compose.md
+      - Helm: get-started/helm.md
+      - Binary: get-started/binary.md
+      - First sign-in: get-started/first-login.md
+      - Pull your first model: get-started/first-pull.md
+      - Point HF_ENDPOINT at Hangar: get-started/hf-endpoint.md
+  - Concepts:
+      - concepts/index.md
+      - Repos and Revisions: concepts/repos.md
+      - Mirrors and Upstreams: concepts/mirrors.md
+      - Pulls and Dependencies: concepts/pulls.md
+      - Jobs: concepts/jobs.md
+      - Permissions: concepts/permissions.md
+  - Guides:
+      - guides/index.md
+      - Python libraries: guides/python.md
+      - The hf CLI: guides/hf-cli.md
+      - Uploading: guides/uploading.md
+      - Datasets: guides/datasets.md
+      - git and git-lfs: guides/git.md
+      - Ollama: guides/ollama.md
+      - LM Studio: guides/lm-studio.md
+      - vLLM: guides/vllm.md
+      - The hangar CLI: guides/hangar-cli.md
+      - Importing an existing cache: guides/import.md
+      - Pull windows and bandwidth: guides/pull-windows.md
+      - Air-gapped Instances: guides/air-gapped.md
+      - Gated models: guides/gated.md
+      - Collections: guides/collections.md
+      - Webhooks: guides/webhooks.md
+  - Operate:
+      - operate/index.md
+      - Configuration: reference/configuration.md
+      - Storage backends: operate/storage.md
+      - Databases: operate/databases.md
+      - Scaling: operate/scaling.md
+      - OIDC:
+          - operate/oidc/index.md
+          - Keycloak: operate/oidc/keycloak.md
+          - Authentik: operate/oidc/authentik.md
+          - Microsoft Entra ID: operate/oidc/entra-id.md
+          - Google: operate/oidc/google.md
+          - Okta: operate/oidc/okta.md
+          - GitLab: operate/oidc/gitlab.md
+          - UniFi Identity: operate/oidc/unifi.md
+      - TLS and reverse proxies: operate/proxies.md
+      - Observability: operate/observability.md
+      - Backup and restore: operate/backup.md
+      - Upgrades: operate/upgrades.md
+      - Security hardening: operate/security.md
+      - Troubleshooting: operate/troubleshooting.md
+  - Reference:
+      - reference/index.md
+      - Hub API compatibility: reference/hub-api-compatibility.md
+      - Native API: reference/native-api.md
+      - CLI: reference/cli.md
+      - Configuration: reference/configuration.md
+      - Webhook events: reference/webhooks.md
+      - Metrics: reference/metrics.md
+  - Project:
+      - Architecture: project/architecture.md
+      - Contributing: project/contributing.md
+      - Security policy: project/security.md
+      - Changelog: project/changelog.md
+      - Licence: project/licence.md

@@ -1,0 +1,21 @@
+# OpenTelemetry Collector for the scale example: receives OTLP from Hangar
+# and prints it. Replace the debug exporter with your backend's exporter
+# (Elastic, Grafana, or any OTLP endpoint) to keep the data.
+receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: 0.0.0.0:4317}
+      http: {endpoint: 0.0.0.0:4318}
+
+processors:
+  batch: {}
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch], exporters: [debug]}
+    metrics: {receivers: [otlp], processors: [batch], exporters: [debug]}
+    logs: {receivers: [otlp], processors: [batch], exporters: [debug]}

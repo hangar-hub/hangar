@@ -1,0 +1,45 @@
+# Keeps dependencies current (docs/spec/12-packaging-and-release.md).
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      opentelemetry:
+        patterns: ["go.opentelemetry.io/*"]
+      go-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message: {prefix: deps}
+  - package-ecosystem: npm
+    directory: /ui
+    schedule: {interval: weekly}
+    groups:
+      ui-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message: {prefix: deps}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message: {prefix: deps}
+  - package-ecosystem: docker
+    directory: /
+    schedule: {interval: weekly}
+    commit-message: {prefix: deps}
+  - package-ecosystem: docker-compose
+    directory: /deploy/compose
+    schedule: {interval: weekly}
+    commit-message: {prefix: deps}
+  - package-ecosystem: uv
+    directory: /compat
+    schedule: {interval: weekly}
+    groups:
+      compat:
+        patterns: ["*"]
+    commit-message: {prefix: deps}
+  - package-ecosystem: pip
+    directory: /docs
+    schedule: {interval: monthly}
+    commit-message: {prefix: deps}

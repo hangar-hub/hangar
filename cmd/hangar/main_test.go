@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/config"
@@ -189,4 +191,121 @@ func TestReadyzReportsSchemaAndBlobStore(t *testing.T) {
 	b, err := json.Marshal(failed)
 	require.NoError(t, err)
 	require.NotContains(t, string(b), cfg.Database.DSN, "failures do not reveal the DSN")
+}
+
+// TestEveryCommandTakesJSON walks the whole binary's command tree, the
+// server and admin commands here as well as the client commands from
+// internal/cli, because 08-local-tools.md puts --json on every command.
+func TestEveryCommandTakesJSON(t *testing.T) {
+	var checked int
+	var missing []string
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		for _, sub := range c.Commands() {
+			if sub.Hidden || sub.Name() == "help" || sub.Name() == "completion" {
+				continue
+			}
+			if sub.Runnable() {
+				checked++
+				if sub.Flag("json") == nil {
+					missing = append(missing, sub.CommandPath())
+				}
+			}
+			walk(sub)
+		}
+	}
+	walk(newRootCommand())
+	require.Empty(t, missing, "commands without --json")
+	require.Greater(t, checked, 25)
+}
+
+func TestCommandsJSON(t *testing.T) {
+	out, code := execute(t, "version", "--json")
+	require.Equal(t, 0, code, out)
+	var v versionInfo
+	require.NoError(t, json.Unmarshal([]byte(out), &v))
+	require.Equal(t, versionInfo{Version: "dev", Commit: "none", Date: "unknown"}, v)
+
+	out, code = execute(t, "config", "reference", "--json")
+	require.Equal(t, 0, code)
+	var fields []referenceField
+	require.NoError(t, json.Unmarshal([]byte(out), &fields))
+	byKey := map[string]referenceField{}
+	for _, f := range fields {
+		byKey[f.Key] = f
+	}
+	require.Equal(t, "HANGAR_SERVER_PUBLIC_URL", byKey["server.public_url"].Env)
+	require.Equal(t, "json", byKey["telemetry.log_format"].Default)
+	require.True(t, byKey["security.instance_key"].Secret)
+
+	dir := t.TempDir()
+	out, code = execute(t, "admin", "migrate", "--json", "--set", "database.dsn="+filepath.Join(dir, "x.db"))
+	require.Equal(t, 0, code, out)
+	var sv schemaVersion
+	require.NoError(t, json.Unmarshal([]byte(out), &sv))
+	require.Equal(t, sv.Expected, sv.Current)
+	require.Contains(t, sv.Current, "0001")
+	require.NotNil(t, sv.Pending)
+	require.Empty(t, sv.Pending)
+
+	// Validation problems go to stdout as JSON, and the exit code is 1.
+	out, code = execute(t, "config", "validate", "--json", "--set", "storage.backend=tape")
+	require.Equal(t, 1, code)
+	jsonPart := out[:strings.LastIndex(out, "}")+1]
+	var val validation
+	require.NoError(t, json.Unmarshal([]byte(jsonPart), &val), out)
+	require.False(t, val.Valid)
+	require.NotEmpty(t, val.Problems)
+	require.True(t, slices.ContainsFunc(val.Problems, func(p string) bool { return strings.Contains(p, "storage.backend") }))
+	out, code = execute(t, "config", "validate", "--json", "--public-url", "http://h", "--set", "security.instance_key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	require.Equal(t, 0, code, out)
+	require.JSONEq(t, `{"valid":true,"problems":[]}`, out)
+
+	out, code = execute(t, "healthcheck", "--json", "--listen", "127.0.0.1:1")
+	require.Equal(t, 1, code)
+	var r readiness
+	require.NoError(t, json.Unmarshal([]byte(out[:strings.LastIndex(out, "}")+1]), &r), out)
+	require.False(t, r.Ready)
+	require.Contains(t, r.Error, "not ready")
+	require.Equal(t, 1, run([]string{"healthcheck", "--json", "--listen", "127.0.0.1:1"}))
+	require.Equal(t, 0, run([]string{"version", "--json"}))
+}
+
+func TestHealthcheckJSONWhenReady(t *testing.T) {
+	cfg := testConfig(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, io.Discard, ready) }()
+	var addr string
+	select {
+	case addr = <-ready:
+	case err := <-done:
+		t.Fatalf("server exited: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("server did not start")
+	}
+	out, code := execute(t, "healthcheck", "--json", "--listen", addr)
+	require.Equal(t, 0, code, out)
+	require.JSONEq(t, `{"ready":true}`, out)
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
+func TestServerJSONSelectsJSONLogs(t *testing.T) {
+	var f configFlags
+	f.set = []string{"telemetry.log_format=text"}
+	cfg, err := f.loadServer("", false)
+	require.NoError(t, err)
+	require.Equal(t, "text", cfg.Telemetry.LogFormat)
+	cfg, err = f.loadServer("worker", true)
+	require.NoError(t, err)
+	require.Equal(t, "json", cfg.Telemetry.LogFormat, "--json overrides telemetry.log_format")
+	require.Equal(t, "worker", cfg.Server.Role)
 }

@@ -1,0 +1,946 @@
+{
+  "title": "Hangar",
+  "description": "Hangar: requests, transfers, Pulls, Jobs, storage and security, from the Elastic OpenTelemetry data streams.",
+  "panels": [
+    {
+      "type": "vis",
+      "id": "hangar-1",
+      "grid": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Requests by protocol",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "FROM logs-*.otel-* | WHERE service.name == \"hangar\" AND body.text == \"request\" AND protocol != \"health\" | STATS requests = COUNT(*) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), protocol"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "requests"
+              }
+            ],
+            "breakdown_by": {
+              "column": "protocol"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-2",
+      "grid": {
+        "x": 16,
+        "y": 0,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Request latency, 95th percentile",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "FROM logs-*.otel-* | WHERE service.name == \"hangar\" AND body.text == \"request\" AND protocol != \"health\" | STATS p95 = PERCENTILE(duration_ms, 95) / 1000 BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), protocol"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "p95"
+              }
+            ],
+            "breakdown_by": {
+              "column": "protocol"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-3",
+      "grid": {
+        "x": 32,
+        "y": 0,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Server errors (5xx) by protocol",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "FROM logs-*.otel-* | WHERE service.name == \"hangar\" AND body.text == \"request\" AND protocol != \"health\" AND status >= 500 | STATS errors = COUNT(*) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), protocol"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "errors"
+              }
+            ],
+            "breakdown_by": {
+              "column": "protocol"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-4",
+      "grid": {
+        "x": 0,
+        "y": 12,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Download throughput",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.download.bytes)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), protocol"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "protocol"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-5",
+      "grid": {
+        "x": 16,
+        "y": 12,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Upload throughput",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.upload.bytes)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), protocol"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "protocol"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-6",
+      "grid": {
+        "x": 32,
+        "y": 12,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Files downloaded",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.download.files)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), protocol"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "protocol"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-7",
+      "grid": {
+        "x": 0,
+        "y": 24,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Pull throughput by Upstream",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.pull.bytes)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), upstream"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "upstream"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-8",
+      "grid": {
+        "x": 16,
+        "y": 24,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Pulled files by outcome",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.pull.files)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), outcome"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "outcome"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-9",
+      "grid": {
+        "x": 32,
+        "y": 24,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Time waiting for the bandwidth limit",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.pull.rate_limited.duration)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), upstream"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "upstream"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-10",
+      "grid": {
+        "x": 0,
+        "y": 36,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Job queue by kind and status",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = MAX(LAST_OVER_TIME(hangar.jobs.queued)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), kind, status | EVAL series = CONCAT(kind, \" \", status)"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "series"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-11",
+      "grid": {
+        "x": 16,
+        "y": 36,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Failed Jobs by kind",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "FROM metrics-*.otel-* | WHERE service.name == \"hangar\" AND outcome != \"ok\" | STATS failed = COUNT(hangar.jobs.duration) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), kind"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "failed"
+              }
+            ],
+            "breakdown_by": {
+              "column": "kind"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-12",
+      "grid": {
+        "x": 32,
+        "y": 36,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Job duration, 95th percentile",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "FROM metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS p95 = PERCENTILE(hangar.jobs.duration, 95) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), kind"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "p95"
+              }
+            ],
+            "breakdown_by": {
+              "column": "kind"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-13",
+      "grid": {
+        "x": 0,
+        "y": 48,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Stored bytes by kind",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = MAX(LAST_OVER_TIME(hangar.storage.bytes)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), kind"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "kind"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-14",
+      "grid": {
+        "x": 16,
+        "y": 48,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Repos by type",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = MAX(LAST_OVER_TIME(hangar.repos)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), type"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "type"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-15",
+      "grid": {
+        "x": 32,
+        "y": 48,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Blob store latency, 95th percentile",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "FROM metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS p95 = PERCENTILE(hangar.blob.operation.duration, 95) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), operation"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "p95"
+              }
+            ],
+            "breakdown_by": {
+              "column": "operation"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-16",
+      "grid": {
+        "x": 0,
+        "y": 60,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Authentication failures by method",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" AND outcome != \"ok\" | STATS v = SUM(RATE(hangar.auth.attempts)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), method"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "method"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-17",
+      "grid": {
+        "x": 16,
+        "y": 60,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "git pushes by outcome",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.git.push)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), outcome"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "outcome"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "vis",
+      "id": "hangar-18",
+      "grid": {
+        "x": 32,
+        "y": 60,
+        "w": 16,
+        "h": 12
+      },
+      "config": {
+        "title": "Webhook deliveries by outcome",
+        "type": "xy",
+        "axis": {
+          "x": {
+            "title": {
+              "visible": false
+            },
+            "scale": "temporal",
+            "domain": {
+              "type": "fit",
+              "rounding": false
+            }
+          },
+          "y": {
+            "title": {
+              "visible": false
+            }
+          }
+        },
+        "layers": [
+          {
+            "type": "line",
+            "data_source": {
+              "type": "esql",
+              "query": "TS metrics-*.otel-* | WHERE service.name == \"hangar\" | STATS v = SUM(RATE(hangar.webhook.deliveries)) BY t = BUCKET(@timestamp, 75, ?_tstart, ?_tend), outcome"
+            },
+            "x": {
+              "column": "t",
+              "label": "@timestamp"
+            },
+            "y": [
+              {
+                "column": "v"
+              }
+            ],
+            "breakdown_by": {
+              "column": "outcome"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "time_range": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}

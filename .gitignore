@@ -1,5 +1,8 @@
 # Build output
 /bin/
+# go build ./cmd/hangar at the repository root
+/hangar
+/hangar.exe
 /dist/
 /coverage.out
 /coverage/
@@ -23,6 +26,9 @@ __pycache__/
 .pytest_cache/
 *.pyc
 
+# Secrets for the Compose examples (docs/get-started/compose.md)
+.env
+
 # Local data and fixtures cache
 /.cache/
 /compat/.fixtures/
@@ -33,3 +39,4 @@ __pycache__/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+/site/

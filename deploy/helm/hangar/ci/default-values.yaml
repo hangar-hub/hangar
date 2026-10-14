@@ -1,0 +1,4 @@
+# chart-testing: one Pod, SQLite and the filesystem Blob store.
+publicURL: http://hangar.example.test
+persistence:
+  size: 1Gi

@@ -1,0 +1,107 @@
+# Hangar in role all with Postgres and MinIO, the setup to grow from. The
+# MinIO bucket is created on start.
+#
+# The secrets have no defaults, so Compose stops if one is missing. Create
+# them once, in a .env file next to this file that every example here reads
+# (set -C refuses to overwrite one you already have):
+#
+#   (umask 077 && set -C && cat > .env) <<EOF
+#   HANGAR_INSTANCE_KEY=$(openssl rand -base64 32)
+#   HANGAR_ADMIN_PASSWORD=$(openssl rand -base64 18)
+#   POSTGRES_PASSWORD=$(openssl rand -hex 24)
+#   MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)
+#   KEYCLOAK_ADMIN_PASSWORD=$(openssl rand -hex 24)
+#   HANGAR_OIDC_CLIENT_SECRET=$(openssl rand -hex 24)
+#   EOF
+#
+#   docker compose -f postgres-minio.yaml up -d
+#
+# Then sign in as hangar-admin with HANGAR_ADMIN_PASSWORD from .env.
+#
+# Only Hangar is published on all interfaces. The MinIO console answers on
+# http://127.0.0.1:9001 on this machine only (user hangar, MINIO_ROOT_PASSWORD).
+name: hangar-postgres-minio
+
+x-minio-image: &minio-image pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hangar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env, for example with openssl rand -hex 24}
+      POSTGRES_DB: hangar
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "hangar", "-d", "hangar"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: *minio-image
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: hangar
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
+    ports:
+      # The MinIO console, on this machine only: MinIO's root user can read
+      # and change every Blob without going through Hangar.
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio-init:
+    image: *minio-image
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["sh", "-c"]
+    command:
+      - mc alias set local http://minio:9000 hangar "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing local/hangar
+    environment:
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
+
+  hangar:
+    image: ${HANGAR_IMAGE:-ghcr.io/jamesagarside/hangar:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+    ports:
+      - "${HANGAR_PORT:-8080}:8080"
+    environment:
+      HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:8080}
+      # Empty generates a password on first start and prints it once.
+      HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD: ${HANGAR_ADMIN_PASSWORD:-}
+      HANGAR_DATABASE_DRIVER: postgres
+      HANGAR_DATABASE_DSN: postgres://hangar:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env, for example with openssl rand -hex 24}@postgres:5432/hangar?sslmode=disable
+      HANGAR_STORAGE_BACKEND: s3
+      HANGAR_STORAGE_S3_ENDPOINT: http://minio:9000
+      HANGAR_STORAGE_S3_REGION: us-east-1
+      HANGAR_STORAGE_S3_BUCKET: hangar
+      HANGAR_STORAGE_S3_USE_PATH_STYLE: "true"
+      HANGAR_STORAGE_S3_ACCESS_KEY_ID: hangar
+      HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
+      # MinIO is not reachable from your browser at http://minio:9000, so
+      # downloads stream through Hangar instead of redirecting.
+      HANGAR_STORAGE_S3_DOWNLOAD_MODE: proxy
+    volumes:
+      # Only secrets.yaml (the generated Instance key and admin password).
+      - hangar-data:/var/lib/hangar
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/hangar:uid=65532,gid=65532
+
+volumes:
+  postgres-data:
+  minio-data:
+  hangar-data:

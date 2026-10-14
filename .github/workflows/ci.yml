@@ -98,7 +98,7 @@ jobs:
       - run: corepack enable
       - working-directory: ui
         run: pnpm install --frozen-lockfile
-      - name: OpenAPI and config reference drift
+      - name: Generated code, references and dashboards are current
         run: make check-generate PNPM=pnpm
 
   build:
@@ -127,3 +127,63 @@ jobs:
           for _ in $(seq 1 30); do ./bin/hangar healthcheck && break; sleep 1; done
           curl -fsS http://localhost:8080/healthz
           curl -fsS http://localhost:8080/ | grep -q 'id="root"'
+
+  deploy:
+    name: Helm chart, Compose, GoReleaser and scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.1.3
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          install-only: true
+          version: "~> v2"
+      - name: Lint and validate
+        run: make lint-deploy
+
+  image:
+    name: Container image (linux/amd64 and linux/arm64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build both platforms
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build for the runner and run the quickstart
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: hangar:ci
+          cache-from: type=gha
+      - name: Quickstart answers /readyz
+        run: |
+          docker run -d --name hangar -p 8080:8080 --read-only --tmpfs /tmp \
+            --tmpfs /var/cache/hangar:uid=65532,gid=65532 -v hangar:/var/lib/hangar \
+            -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 hangar:ci
+          ./scripts/smoke.sh --only health http://localhost:8080
+          docker logs hangar 2>&1 | grep -q "Admin password"
+      - name: The image reads /etc/hangar/hangar.yaml
+        run: ./scripts/image-config-check.sh hangar:ci
+      - name: The Docker backup recipe works
+        run: ./scripts/image-backup-check.sh hangar:ci
+
+  docs:
+    name: Documentation builds with no broken links
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - run: make docs

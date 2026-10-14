@@ -13,16 +13,19 @@ concurrency:
   group: compat-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: "24"
+
 jobs:
   compat:
-    name: Client suites
+    name: Client suites (Go and pytest)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       - uses: actions/cache@v6
         with:
           path: compat/.fixtures
@@ -31,8 +34,143 @@ jobs:
         run: make fixtures
       - name: Build hangar
         run: go build -o "$RUNNER_TEMP/hangar" ./cmd/hangar && echo "HANGAR_BINARY=$RUNNER_TEMP/hangar" >> "$GITHUB_ENV"
-      - name: Go and pytest suites
+      - name: Go and pytest suites, including git, LM Studio and the Hub clients
         run: make test-compat
+
+  # The Hub client matrix from compat/hf/README.md ("Client matrix"): the
+  # latest huggingface_hub and the oldest one the latest transformers
+  # supports, with and without hf_xet, on Python 3.10 and the latest Python.
+  hub-matrix:
+    name: Hub clients (${{ matrix.cell }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: [latest, latest-python, floor, without-xet, diffusers]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Choose the multipart test size
+        run: |
+          # 200 MB on pull requests; a 6 GiB file nightly (13-testing.md).
+          if [ "${{ github.event_name }}" = "schedule" ]; then size=6442450944; else size=200000000; fi
+          echo "HANGAR_HF_MULTIPART_FILE_SIZE=$size" >> "$GITHUB_ENV"
+      - name: Run the cell
+        env:
+          CELL: ${{ matrix.cell }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          case "$CELL" in
+            latest)
+              uv run --frozen --project compat python -m pytest compat/hf ;;
+            latest-python)
+              UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/venv-latest" \
+                uv run --frozen --project compat --python 3.14 python -m pytest compat/hf ;;
+            floor)
+              UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/venv-floor" \
+                uv run --frozen --project compat --python 3.10 --with huggingface_hub==1.31.0 python -m pytest compat/hf ;;
+            without-xet)
+              venv="$RUNNER_TEMP/venv-noxet"
+              uv venv --python 3.11 "$venv"
+              uv export --frozen --project compat --no-hashes --no-emit-project | grep -v '^hf-xet' > "$RUNNER_TEMP/reqs.txt"
+              VIRTUAL_ENV="$venv" uv pip install --no-deps -r "$RUNNER_TEMP/reqs.txt"
+              PATH="$venv/bin:$PATH" HANGAR_HF_WITHOUT_XET=1 "$venv/bin/python" -m pytest compat/hf ;;
+            diffusers)
+              if [ "$EVENT" != "schedule" ]; then echo "The diffusers cell runs nightly."; exit 0; fi
+              UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/venv-diffusers" \
+                uv run --frozen --project compat --with diffusers==0.41.0 --with huggingface_hub==1.33.0 python -m pytest compat/hf ;;
+          esac
+
+  # git 2.39 (Debian 12) as well as the latest git in the job above (13-testing.md).
+  git-239:
+    name: git 2.39 (Debian 12)
+    runs-on: ubuntu-24.04
+    container: debian:12
+    steps:
+      - name: Install git, git-lfs and build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git git-lfs ca-certificates curl tar gcc libc6-dev
+          git --version
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: compat/git
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          go test -count=1 -tags compat ./compat/git/
+
+  compose:
+    name: Compose example (${{ matrix.example }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [quickstart, postgres-minio, scale, oidc-keycloak]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: hangar:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start, smoke test and remove
+        env:
+          HANGAR_IMAGE: hangar:ci
+          HANGAR_PORT: "8080"
+        run: |
+          # Pulls from huggingface.co run nightly; pull requests stay offline.
+          if [ "${{ github.event_name }}" = "schedule" ]; then skip=(); else skip=(--skip pull); fi
+          ./scripts/compose-smoke.sh "${{ matrix.example }}" "${skip[@]}"
+
+  helm:
+    name: Helm chart on kind
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.1.3
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: helm/chart-testing-action@v2
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: hangar:ci
+          cache-from: type=gha
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: hangar
+      - name: Load the image
+        run: kind load docker-image hangar:ci --name hangar
+      - name: ct lint and ct install (runs helm test)
+        run: |
+          ct lint --charts deploy/helm/hangar --validate-maintainers=false --check-version-increment=false
+          ct install --charts deploy/helm/hangar \
+            --helm-extra-set-args "--set=image.repository=hangar --set=image.tag=ci --set=image.pullPolicy=Never"
+      - name: Smoke test through a port-forward
+        run: |
+          helm install smoke deploy/helm/hangar --namespace smoke --create-namespace \
+            -f deploy/helm/hangar/ci/default-values.yaml --set publicURL=http://localhost:18080 \
+            --set image.repository=hangar --set image.tag=ci --set image.pullPolicy=Never --wait --timeout 5m
+          kubectl --namespace smoke port-forward svc/smoke-hangar 18080:8080 &
+          password="$(kubectl --namespace smoke get secret smoke-hangar-generated \
+            -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d)"
+          if [ "${{ github.event_name }}" = "schedule" ]; then skip=(); else skip=(--skip pull); fi
+          HANGAR_SMOKE_PASSWORD="$password" ./scripts/smoke.sh "${skip[@]}" http://localhost:18080
 
   e2e:
     name: UI end to end
@@ -44,7 +182,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: ${{ env.NODE_VERSION }}
       - run: corepack enable
       - run: make build PNPM=pnpm
       - name: Start hangar

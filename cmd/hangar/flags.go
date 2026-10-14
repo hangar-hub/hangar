@@ -24,6 +24,17 @@ func (f *configFlags) register(cmd *cobra.Command) {
 	fl.StringVar(&f.publicURL, "public-url", "", "shortcut for --set server.public_url=...")
 }
 
+// loadServer is load for hangar server and worker, whose output is their
+// logs: --json selects JSON logs, overriding telemetry.log_format.
+func (f *configFlags) loadServer(forceRole string, jsonLogs bool) (*config.Config, error) {
+	cfg, err := f.load(forceRole)
+	if err != nil || !jsonLogs {
+		return cfg, err
+	}
+	cfg.Telemetry.LogFormat = "json"
+	return cfg, nil
+}
+
 // load reads the configuration with flag overrides applied last.
 func (f *configFlags) load(forceRole string) (*config.Config, error) {
 	set := append([]string{}, f.set...)

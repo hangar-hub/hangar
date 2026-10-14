@@ -1,0 +1,27 @@
+# One Hangar container with SQLite and the filesystem Blob store.
+#
+#   docker compose -f quickstart.yaml up -d
+#   docker compose -f quickstart.yaml logs hangar   # the generated admin password, shown once
+#
+# Then open http://localhost:8080 and sign in as hangar-admin.
+name: hangar-quickstart
+
+services:
+  hangar:
+    image: ${HANGAR_IMAGE:-ghcr.io/jamesagarside/hangar:latest}
+    restart: unless-stopped
+    ports:
+      - "${HANGAR_PORT:-8080}:8080"
+    environment:
+      HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:8080}
+      # Empty generates a password on first start and prints it once.
+      HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD: ${HANGAR_ADMIN_PASSWORD:-}
+    volumes:
+      - hangar-data:/var/lib/hangar
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/hangar:uid=65532,gid=65532
+
+volumes:
+  hangar-data:

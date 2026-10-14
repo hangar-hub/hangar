@@ -11,7 +11,8 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/uptrace/bun/extra/bunotel` | v1.3.0 | OpenTelemetry spans for database queries, without parameter values. |
 | `modernc.org/sqlite` | v1.60.1 | Pure Go SQLite, so builds need no cgo. |
 | `github.com/minio/minio-go/v7` | v7.4.1 | S3-compatible Blob store with presigning and multipart. Pinned in `internal/pins` until W1 imports it. |
-| `github.com/go-git/go-git/v6` | v6.0.0-beta.1 | git receive-pack, server-side Commits and Mirror fetches (04-git.md). A pinned pre-release, kept behind `internal/gitstore`. |
+| `github.com/go-git/go-git/v6` | v6.0.0-beta.1 | git receive-pack (W3) and Mirror fetches (W6) (04-git.md). Server-side Commits use the git binary instead (W2 request 1). A pinned pre-release. |
+| `github.com/go-git/go-billy/v6` | v6.0.0-beta.1 | The filesystem go-git's storer uses for the push quarantine; released with go-git. |
 | `github.com/coreos/go-oidc/v3` | v3.21.0 | OIDC discovery and ID token verification. |
 | `golang.org/x/oauth2` | v0.37.0 | OAuth 2.0 authorisation code flow with PKCE. |
 | `golang.org/x/crypto` | v0.58.0 | argon2id password hashing and HKDF key derivation. |
@@ -42,6 +43,9 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/oapi-codegen/oapi-codegen/v2` (tool) | v2.8.0 | Generates `internal/api/gen` from `api/openapi.yaml`. |
 | `github.com/getkin/kin-openapi` | v0.142.0 | OpenAPI document model used by the generated embedded spec. |
 | `github.com/stretchr/testify` | v1.12.1 | Test assertions. |
+| `github.com/zalando/go-keyring` | v0.2.8 | Keeps the CLI's Token in the OS keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux) for `hangar login` (08-local-tools.md). |
+| `go.yaml.in/yaml/v3` | v3.0.5 | Model card front matter in the Hub API's validate-yaml (W4); the CLI's `~/.config/hangar/config.yaml` and `secrets.yaml` in `hangar admin rotate-key` (W9). |
+| `github.com/yannh/kubeconform` (run with `go run`, not in `go.mod`) | v0.7.0 | Validates the rendered Helm chart in `make lint-deploy`. |
 | `github.com/testcontainers/testcontainers-go` (and `modules/postgres`, `modules/minio`) | v0.44.0 | Postgres and MinIO containers for conformance and integration tests. |
 
 ## UI
@@ -58,3 +62,14 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `@biomejs/biome` | Lint and format. |
 | `vitest`, `jsdom`, `@testing-library/*` | Unit tests. |
 | `@playwright/test`, `@axe-core/playwright` | End-to-end and accessibility tests. |
+
+## Build, release and documentation tools
+
+| Tool | Version | Why |
+|---|---|---|
+| `mkdocs`, `mkdocs-material`, `mike` (`docs/requirements.txt`) | 1.6.1, 9.7.7, 2.2.0 | The documentation site and its versions on GitHub Pages. |
+| GoReleaser | v2 | Release archives, checksums, SBOMs, signatures and the Homebrew cask (`.goreleaser.yaml`). |
+| cosign, syft | latest at release time | Keyless signing and SPDX SBOMs in `release.yml`. |
+| Helm, chart-testing, kind | Helm v4.1.3 | Chart lint and install tests in CI. |
+| k6 (`grafana/k6` image) | 1.4.2 | The load tests in `loadtest/`. |
+| Redoc (loaded from jsDelivr on the native API page) | 2.5.4 | Renders `api/openapi.yaml` in the documentation. |

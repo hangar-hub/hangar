@@ -102,7 +102,8 @@ oidc:
 		"HANGAR_UPSTREAMS_LOCAL_TOKEN=secret-token",
 		"HANGAR_JOBS_LEASE=90s",
 		"HANGAR_GIT_MAX_BLOB_SIZE=20MiB",
-		"HANGAR_TEST_POSTGRES=1", // ignored prefix
+		"HANGAR_TEST_POSTGRES=1",                // ignored prefix
+		"HANGAR_CLI_URL=https://hangar.example", // the client commands' variables
 	)
 	cfg, err := config.Load(config.LoadOptions{File: file, Env: env, Set: []string{"server.listen=:9200", "jobs.workers=8"}})
 	require.NoError(t, err)

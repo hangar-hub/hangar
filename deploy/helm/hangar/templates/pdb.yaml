@@ -1,0 +1,21 @@
+{{- if not .Values.persistence.enabled }}
+{{- range $component := list "web" "worker" }}
+{{- $v := index $.Values $component }}
+{{- if and $v.podDisruptionBudget.enabled (or (gt (int $v.replicas) 0) $v.autoscaling.enabled) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hangar.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "hangar.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  minAvailable: {{ $v.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "hangar.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $component }}
+{{- end }}
+{{- end }}
+{{- end }}

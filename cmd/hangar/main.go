@@ -8,6 +8,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/jamesagarside/hangar/internal/cli"
 )
 
 // Set at build time with -ldflags "-X main.version=... -X main.commit=... -X main.date=...".
@@ -21,7 +23,6 @@ var (
 // add 3 for not found and 4 for auth errors.
 const (
 	exitOK    = 0
-	exitError = 1
 	exitUsage = 2
 )
 
@@ -35,13 +36,12 @@ func run(args []string) int {
 	root := newRootCommand()
 	root.SetArgs(args)
 	if err := root.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		var ue usageError
 		if errors.As(err, &ue) {
-			fmt.Fprintln(os.Stderr, "Error:", err)
 			return exitUsage
 		}
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		return exitError
+		return cli.ExitCode(err)
 	}
 	return exitOK
 }
@@ -63,17 +63,34 @@ func newRootCommand() *cobra.Command {
 		newAdminCommand(),
 		newVersionCommand(),
 	)
+	// Client commands, the admin commands that need no server wiring, and
+	// the hidden reference generators (internal/cli, W9). Phase 2 passes
+	// the Blob store opener in cli.Options.Admin.
+	cli.Register(root, cli.Options{Version: version})
 	return root
 }
 
+// versionInfo is the --json output of hangar version.
+type versionInfo struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	Date    string `json:"date"`
+}
+
 func newVersionCommand() *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print the version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), versionInfo{Version: version, Commit: commit, Date: date})
+			}
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "hangar %s (commit %s, built %s)\n", version, commit, date)
 			return err
 		},
 	}
+	addJSONFlag(cmd, &asJSON)
+	return cmd
 }

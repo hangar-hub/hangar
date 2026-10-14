@@ -1,0 +1,18 @@
+apiVersion: v2
+name: hangar
+description: Hangar, a self-hosted home for your arsenal of models. A Hugging Face Hub-compatible model and dataset hub with git, Ollama and LM Studio support.
+type: application
+# The release workflow sets version and appVersion from the release tag.
+version: 0.0.0
+appVersion: "0.0.0"
+kubeVersion: ">=1.29.0-0"
+home: https://jamesagarside.github.io/hangar/
+sources:
+  - https://github.com/jamesagarside/hangar
+icon: https://jamesagarside.github.io/hangar/assets/icon.svg
+keywords: [huggingface, models, datasets, ml, ollama, git-lfs]
+maintainers:
+  - name: James Garside
+    url: https://github.com/jamesagarside
+annotations:
+  licenses: Elastic-2.0
