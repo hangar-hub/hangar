@@ -42,13 +42,20 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 # 3. A minimal Wolfi root filesystem: the base layout, CA certificates, time
 # zones and git (the server runs git upload-pack), and nothing else, so no
-# shell or package manager.
+# shell or package manager. /etc/hangar/hangar.yaml sets no keys, so the
+# image reads it without changing a default; mount your own file over it.
 FROM cgr.dev/chainguard/wolfi-base:latest AS rootfs
 RUN apk add --no-cache --initdb --root /rootfs \
       --keys-dir /etc/apk/keys --repositories-file /etc/apk/repositories \
       wolfi-baselayout ca-certificates-bundle tzdata git \
  && rm -rf /rootfs/var/cache/apk /rootfs/lib/apk /rootfs/etc/apk \
  && mkdir -p /rootfs/var/lib/hangar /rootfs/var/cache/hangar /rootfs/etc/hangar /rootfs/tmp \
+ && printf '%s\n' \
+      '# Hangar configuration. This file sets nothing, so every key has its default.' \
+      '# Mount your own file here, or set HANGAR_* environment variables, which' \
+      '# override it. Every key: https://jamesagarside.github.io/hangar/reference/configuration/' \
+      > /rootfs/etc/hangar/hangar.yaml \
+ && chmod 0644 /rootfs/etc/hangar/hangar.yaml \
  && chown -R 65532:65532 /rootfs/var/lib/hangar /rootfs/var/cache/hangar \
  && chmod 1777 /rootfs/tmp
 
@@ -66,10 +73,12 @@ LABEL org.opencontainers.image.title="Hangar" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"
 # The defaults keep data in /var/lib/hangar and the git pack cache in
-# /var/cache/hangar. Mount a configuration file at /etc/hangar/hangar.yaml
-# and set HANGAR_CONFIG to use one; environment variables are enough.
+# /var/cache/hangar. Hangar reads its configuration file from
+# /etc/hangar/hangar.yaml (optional: environment variables are enough), and
+# --config on a command line wins over HANGAR_CONFIG.
 ENV HOME=/var/lib/hangar \
-    TMPDIR=/tmp
+    TMPDIR=/tmp \
+    HANGAR_CONFIG=/etc/hangar/hangar.yaml
 USER 65532:65532
 WORKDIR /var/lib/hangar
 VOLUME ["/var/lib/hangar"]

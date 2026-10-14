@@ -175,6 +175,8 @@ jobs:
             -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 hangar:ci
           ./scripts/smoke.sh --only health http://localhost:8080
           docker logs hangar 2>&1 | grep -q "Admin password"
+      - name: The image reads /etc/hangar/hangar.yaml
+        run: ./scripts/image-config-check.sh hangar:ci
 
   docs:
     name: Documentation builds with no broken links

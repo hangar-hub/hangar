@@ -43,11 +43,11 @@ Keep the Instance key: it encrypts stored secrets such as upstream tokens and we
 
 ## Configuration
 
-Every configuration key is also an environment variable: `storage.s3.bucket` is `HANGAR_STORAGE_S3_BUCKET`. To use a file instead, mount it and set `HANGAR_CONFIG`:
+Every configuration key is also an environment variable: `storage.s3.bucket` is `HANGAR_STORAGE_S3_BUCKET`. To use a file instead, mount it at `/etc/hangar/hangar.yaml`, where the image reads it (the image sets `HANGAR_CONFIG` to that path). Environment variables override the file.
 
 ```sh
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
-  -v "$PWD/hangar.yaml:/etc/hangar/hangar.yaml:ro" -e HANGAR_CONFIG=/etc/hangar/hangar.yaml \
+  -v "$PWD/hangar.yaml:/etc/hangar/hangar.yaml:ro" \
   ghcr.io/jamesagarside/hangar:latest
 ```
 
