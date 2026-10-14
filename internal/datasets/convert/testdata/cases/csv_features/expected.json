@@ -1,0 +1,67 @@
+{
+ "builder": "csv",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 61,
+   "embedded_nbytes": 61,
+   "rows": [
+    {
+     "a": 1,
+     "b": 0,
+     "c": 10.0
+    },
+    {
+     "a": 2,
+     "b": 1,
+     "c": null
+    },
+    {
+     "a": 3,
+     "b": 0,
+     "c": 30.0
+    }
+   ]
+  }
+ },
+ "card_features": {
+  "a": {
+   "dtype": "int32",
+   "_type": "Value"
+  },
+  "b": {
+   "names": [
+    "x",
+    "y"
+   ],
+   "_type": "ClassLabel"
+  },
+  "c": {
+   "dtype": "float64",
+   "_type": "Value"
+  }
+ },
+ "features": {
+  "a": {
+   "dtype": "int32",
+   "_type": "Value"
+  },
+  "b": {
+   "names": [
+    "x",
+    "y"
+   ],
+   "_type": "ClassLabel"
+  },
+  "c": {
+   "dtype": "float64",
+   "_type": "Value"
+  }
+ }
+}

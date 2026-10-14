@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/adler32"
-	"math"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/jamesagarside/hangar/internal/datasets"
@@ -17,30 +17,11 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets/media"
 )
 
-// pyFloat is a float that marshals as orjson writes floats: integral
-// values keep ".0", and NaN and infinities are null.
+// pyFloat is a float that marshals as orjson writes floats
+// (datasets.FormatFloat).
 type pyFloat float64
 
-func (f pyFloat) MarshalJSON() ([]byte, error) {
-	x := float64(f)
-	if math.IsNaN(x) || math.IsInf(x, 0) {
-		return []byte("null"), nil
-	}
-	if x == math.Trunc(x) && math.Abs(x) < 1e16 {
-		return []byte(strconv.FormatFloat(x, 'f', 1, 64)), nil
-	}
-	s := strconv.FormatFloat(x, 'g', -1, 64)
-	if mant, exp, ok := strings.Cut(s, "e"); ok {
-		exp = strings.TrimPrefix(exp, "+")
-		neg := strings.HasPrefix(exp, "-")
-		exp = strings.TrimLeft(strings.TrimPrefix(exp, "-"), "0")
-		if neg {
-			exp = "-" + exp
-		}
-		s = mant + "e" + exp
-	}
-	return []byte(s), nil
-}
+func (f pyFloat) MarshalJSON() ([]byte, error) { return []byte(datasets.FormatFloat(float64(f))), nil }
 
 // rawJSON is a decoded Json feature cell, written back verbatim.
 type rawJSON []byte
@@ -75,10 +56,56 @@ func appendHashSuffix(name string, path []any) string {
 	if len(path) == 0 {
 		return name
 	}
-	b, _ := json.Marshal(path)
-	// Python's json.dumps puts a space after commas.
-	s := strings.ReplaceAll(string(b), ",", ", ")
-	return fmt.Sprintf("%s-%x", name, adler32.Checksum([]byte(s)))
+	return fmt.Sprintf("%s-%x", name, adler32.Checksum([]byte(pyJSONPath(path))))
+}
+
+// pyJSONPath is Python's json.dumps of a JSON path: ", " between items,
+// strings with ensure_ascii escapes, and integral numbers without a
+// fraction.
+func pyJSONPath(path []any) string {
+	var b strings.Builder
+	b.WriteByte('[')
+	for i, p := range path {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		switch x := p.(type) {
+		case string:
+			b.WriteByte('"')
+			for _, r := range x {
+				switch {
+				case r == '"':
+					b.WriteString(`\"`)
+				case r == '\\':
+					b.WriteString(`\\`)
+				case r == '\n':
+					b.WriteString(`\n`)
+				case r == '\r':
+					b.WriteString(`\r`)
+				case r == '\t':
+					b.WriteString(`\t`)
+				case r == '\b':
+					b.WriteString(`\b`)
+				case r == '\f':
+					b.WriteString(`\f`)
+				case r < 0x20 || (r >= 0x7f && r <= 0xffff):
+					fmt.Fprintf(&b, `\u%04x`, r)
+				case r > 0xffff:
+					r1, r2 := utf16.EncodeRune(r)
+					fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
+				default:
+					b.WriteRune(r)
+				}
+			}
+			b.WriteByte('"')
+		case float64:
+			b.WriteString(strconv.FormatInt(int64(x), 10))
+		default:
+			fmt.Fprint(&b, x)
+		}
+	}
+	b.WriteByte(']')
+	return b.String()
 }
 
 func (e *cellEncoder) encode(v any, f *features.Feature, a *features.Arrow, rowIdx int64, column string, path []any) any {

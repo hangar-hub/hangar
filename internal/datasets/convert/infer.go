@@ -492,6 +492,86 @@ func Cast(v any, a *features.Arrow) (any, error) {
 	return cast(v, a, 0)
 }
 
+// CastFeature is Cast with the Features that decide more than the
+// storage type: a ClassLabel takes its label names as strings and
+// converts them to ids (ClassLabel.cast_storage), and refuses ids outside
+// [-1, number of names).
+func CastFeature(v any, f *features.Feature, a *features.Arrow) (any, error) {
+	return castFeature(v, f, a, 0)
+}
+
+func castFeature(v any, f *features.Feature, a *features.Arrow, depth int) (any, error) {
+	if v == nil || f == nil {
+		return cast(v, a, depth)
+	}
+	if depth > 128 {
+		return nil, fmt.Errorf("%w: nested too deeply", ErrCast)
+	}
+	switch {
+	case f.Kind == features.KindClassLabel:
+		if s, ok := v.(string); ok {
+			for i, n := range f.Names {
+				if n == s {
+					return int64(i), nil
+				}
+			}
+			return nil, fmt.Errorf("%w: invalid string class label %s", ErrCast, s)
+		}
+		c, err := cast(v, a, depth)
+		if err != nil {
+			return nil, err
+		}
+		if id, ok := c.(int64); ok && len(f.Names) > 0 && (id < -1 || id >= int64(len(f.Names))) {
+			return nil, fmt.Errorf("%w: class label %d is outside the %d configured names", ErrCast, id, len(f.Names))
+		}
+		return c, nil
+	case f.IsListKind() && f.Elem != nil && a.Elem != nil:
+		l, ok := v.([]any)
+		if !ok {
+			break
+		}
+		if a.ID == features.FixedSizeList && len(l) != a.Size {
+			return nil, fmt.Errorf("%w: a list of %d values for %s", ErrCast, len(l), a)
+		}
+		out := make([]any, len(l))
+		for i, e := range l {
+			c, err := castFeature(e, f.Elem, a.Elem, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = c
+		}
+		return out, nil
+	case f.Kind == features.KindStruct && a.ID == features.Struct && len(f.Fields) == len(a.Fields):
+		out := make([]any, len(a.Fields))
+		switch x := v.(type) {
+		case *orderedObject:
+			for i, fl := range a.Fields {
+				fv, _ := x.get(fl.Name)
+				c, err := castFeature(fv, f.Fields[i].Feature, fl.Type, depth+1)
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", fl.Name, err)
+				}
+				out[i] = c
+			}
+			return out, nil
+		case []any:
+			if len(x) != len(a.Fields) {
+				break
+			}
+			for i, fl := range a.Fields {
+				c, err := castFeature(x[i], f.Fields[i].Feature, fl.Type, depth+1)
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", fl.Name, err)
+				}
+				out[i] = c
+			}
+			return out, nil
+		}
+	}
+	return cast(v, a, depth)
+}
+
 func cast(v any, a *features.Arrow, depth int) (any, error) {
 	if v == nil {
 		return nil, nil
@@ -756,8 +836,25 @@ func arrowFloatString(f float64) string {
 		return "inf"
 	case math.IsInf(f, -1):
 		return "-inf"
+	case f == 0:
+		if math.Signbit(f) {
+			return "-0"
+		}
+		return "0"
 	}
-	return strconv.FormatFloat(f, 'g', -1, 64)
+	// Arrow's shortest form: decimal notation for exponents from -6 to 9,
+	// otherwise 1.5e-7 or 1e+10.
+	sci := strconv.FormatFloat(f, 'e', -1, 64)
+	mant, expText, _ := strings.Cut(sci, "e")
+	exp, _ := strconv.Atoi(expText)
+	if exp < -6 || exp > 9 {
+		sign := "+"
+		if exp < 0 {
+			sign, exp = "-", -exp
+		}
+		return mant + "e" + sign + strconv.Itoa(exp)
+	}
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // parsePyFloat parses a float the way Python's float() does.

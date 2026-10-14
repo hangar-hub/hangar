@@ -409,7 +409,7 @@ func (b folderBuilder) read(e *env, split splitFiles, fs features.Features, emit
 								}
 							}
 						}
-						c, err := Cast(v, st.Fields[i].Type)
+						c, err := CastFeature(v, fl.Feature, st.Fields[i].Type)
 						if err != nil {
 							return fmt.Errorf("column %q: %w", fl.Name, err)
 						}

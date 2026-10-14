@@ -1,0 +1,39 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 27,
+   "embedded_nbytes": 27,
+   "rows": [
+    {
+     "s": {
+      "k": 1,
+      "t": "a"
+     }
+    },
+    {
+     "s": null
+    }
+   ]
+  }
+ },
+ "features": {
+  "s": {
+   "k": {
+    "dtype": "int64",
+    "_type": "Value"
+   },
+   "t": {
+    "dtype": "string",
+    "_type": "Value"
+   }
+  }
+ }
+}

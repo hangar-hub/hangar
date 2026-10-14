@@ -111,9 +111,7 @@ func members(ctx context.Context, f File) ([]member, error) {
 		var out []member
 		for _, zf := range zr.File {
 			name := zf.Name
-			base := path.Base(name)
-			if zf.FileInfo().IsDir() || strings.HasPrefix(base, ".") || strings.HasPrefix(base, "__") ||
-				strings.Contains(name, "__MACOSX/") || strings.Contains(name, "/.") {
+			if zf.FileInfo().IsDir() || hiddenMember(name) {
 				continue
 			}
 			out = append(out, member{name: name, open: func() (io.ReadCloser, error) {
@@ -125,7 +123,7 @@ func members(ctx context.Context, f File) ([]member, error) {
 				return r, err
 			}})
 		}
-		sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+		sort.Slice(out, func(i, j int) bool { return walkLess(out[i].name, out[j].name) })
 		return out, nil
 	}
 	return []member{{name: f.Path, open: func() (io.ReadCloser, error) {
@@ -194,4 +192,33 @@ func readAllLimit(r io.Reader, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("%w: a file larger than %d bytes", ErrUnsupported, limit)
 	}
 	return b.Bytes(), nil
+}
+
+// hiddenMember reports whether FilesIterable skips an archive member: any
+// part of its path starts with "." or "__".
+func hiddenMember(name string) bool {
+	for _, part := range strings.Split(strings.Trim(name, "/"), "/") {
+		if strings.HasPrefix(part, ".") || strings.HasPrefix(part, "__") {
+			return true
+		}
+	}
+	return false
+}
+
+// walkLess orders archive members as FilesIterable walks the extracted
+// archive: top down, a directory's files (sorted) before its
+// subdirectories (sorted).
+func walkLess(a, b string) bool {
+	pa, pb := strings.Split(a, "/"), strings.Split(b, "/")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		if pa[i] == pb[i] {
+			continue
+		}
+		aFile, bFile := i == len(pa)-1, i == len(pb)-1
+		if aFile != bFile {
+			return aFile
+		}
+		return pa[i] < pb[i]
+	}
+	return len(pa) < len(pb)
 }

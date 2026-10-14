@@ -16,7 +16,6 @@ import (
 	"github.com/parquet-go/parquet-go"
 
 	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/features"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
@@ -429,6 +428,3 @@ func (s *Service) FilterFor(ctx context.Context, p model.Principal, req datasets
 	resp, err := s.pageOf(ctx, st, info, req.Config, req.Split, t, r, req.Offset, req.Length)
 	return resp, st, err
 }
-
-// blobNotFound reports whether err means a missing cache entry.
-func blobNotFound(err error) bool { return errors.Is(err, blob.ErrNotFound) }

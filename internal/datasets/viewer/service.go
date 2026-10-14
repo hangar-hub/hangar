@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/datasets"
@@ -286,6 +284,3 @@ func splitInfo(info *pipeline.ConfigInfo, split string) (*pipeline.SplitInfo, bo
 
 // Revision returns the Commit the Viewer answers for, for X-Revision.
 func (st *state) Revision() string { return string(st.commit) }
-
-// RepoUUID returns the dataset's UUID.
-func (st *state) RepoUUID() uuid.UUID { return st.repo.UUID }

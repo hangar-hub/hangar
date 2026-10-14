@@ -1,10 +1,11 @@
 package stats_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"math"
 	"os"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,8 +63,13 @@ func storage(kind string, v any) any {
 		}
 		return out
 	case "float":
-		if v == "NaN" {
+		switch v {
+		case "NaN":
 			return math.NaN()
+		case "Infinity":
+			return math.Inf(1)
+		case "-Infinity":
+			return math.Inf(-1)
 		}
 	case "datetime":
 		t, err := time.Parse("2006-01-02T15:04:05", v.(string))
@@ -105,13 +111,14 @@ func equalJSON(t *testing.T, want, got any, path string) {
 func TestMatchesHubStatistics(t *testing.T) {
 	raw, err := os.ReadFile("testdata/cases.json")
 	require.NoError(t, err)
-	// Python writes NaN as a bare token.
-	raw = bytes.ReplaceAll(raw, []byte("NaN"), []byte(`"NaN"`))
+	// Python writes NaN and infinities as bare tokens.
+	raw = regexp.MustCompile(`-?Infinity|NaN`).ReplaceAll(raw, []byte(`"$0"`))
 	var cases []oracleCase
 	require.NoError(t, json.Unmarshal(raw, &cases))
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			var item *stats.Item
+			var colErr error
 			switch c.Kind {
 			case "image", "audio":
 				vals := make([]float64, len(c.Values))
@@ -131,12 +138,16 @@ func TestMatchesHubStatistics(t *testing.T) {
 				for i, v := range c.Values {
 					vals[i] = storage(c.Kind, v)
 				}
-				var err error
-				item, err = stats.Column(c.Name, feature(c.Kind, c.Names), vals)
-				require.NoError(t, err)
+				item, colErr = stats.Column(c.Name, feature(c.Kind, c.Names), vals)
 			}
 			got, err := json.Marshal(item)
 			require.NoError(t, err)
+			if c.Error != "" && strings.Contains(c.Error, "arange: cannot compute length") {
+				// Infinite ranges fail as they do on the Hub.
+				require.ErrorIs(t, colErr, stats.ErrComputation)
+				return
+			}
+			require.NoError(t, colErr)
 			if c.Error != "" {
 				// The Hub fails on two-value integer ranges; Hangar answers
 				// with a one-bin histogram (compat/viewer/DIFFERENCES.md).
@@ -146,8 +157,29 @@ func TestMatchesHubStatistics(t *testing.T) {
 			}
 			var w, g any
 			require.NoError(t, json.Unmarshal(c.Item, &w))
+			w = orjsonNumbers(w)
 			require.NoError(t, json.Unmarshal(got, &g))
 			equalJSON(t, w, g, c.Name)
 		})
 	}
+}
+
+// orjsonNumbers turns the NaN and infinities of an oracle item into null,
+// as orjson writes them in the Hub's responses.
+func orjsonNumbers(v any) any {
+	switch x := v.(type) {
+	case string:
+		if x == "NaN" || x == "Infinity" || x == "-Infinity" {
+			return nil
+		}
+	case map[string]any:
+		for k, e := range x {
+			x[k] = orjsonNumbers(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = orjsonNumbers(e)
+		}
+	}
+	return v
 }

@@ -1,6 +1,7 @@
 package viewer
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -30,16 +31,60 @@ func writeJSON(w http.ResponseWriter, r *http.Request, st *state, v any) {
 		w.Header().Set("X-Revision", st.Revision())
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	if raw, ok := v.(json.RawMessage); ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		if r.Method != http.MethodHead {
-			_, _ = w.Write(raw)
+	b, ok := v.(json.RawMessage)
+	if !ok {
+		var err error
+		if b, err = json.Marshal(v); err != nil {
+			httpx.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "Unexpected error."})
+			return
 		}
-		return
 	}
-	httpx.WriteJSON(w, r, http.StatusOK, v)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(unescapeHTML(b))
+	}
+}
+
+// unescapeHTML undoes encoding/json's escaping of <, >, & and the line
+// and paragraph separators inside strings, so responses match the Hub's
+// orjson output byte for byte. The response is JSON with nosniff, so the
+// characters are safe unescaped.
+func unescapeHTML(b []byte) []byte {
+	if !bytes.Contains(b, []byte(`\u00`)) && !bytes.Contains(b, []byte(`\u202`)) {
+		return b
+	}
+	out := make([]byte, 0, len(b))
+	for i := 0; i < len(b); i++ {
+		if b[i] != '\\' || i+1 >= len(b) {
+			out = append(out, b[i])
+			continue
+		}
+		if b[i+1] == 'u' && i+6 <= len(b) {
+			switch string(b[i+2 : i+6]) {
+			case "003c":
+				out, i = append(out, '<'), i+5
+				continue
+			case "003e":
+				out, i = append(out, '>'), i+5
+				continue
+			case "0026":
+				out, i = append(out, '&'), i+5
+				continue
+			case "2028":
+				out, i = append(out, "\u2028"...), i+5
+				continue
+			case "2029":
+				out, i = append(out, "\u2029"...), i+5
+				continue
+			}
+		}
+		// Any other escape, including an escaped backslash, is copied whole.
+		out = append(out, b[i], b[i+1])
+		i++
+	}
+	return out
 }
 
 // Handler returns the Dataset Viewer HTTP API. It expects paths relative

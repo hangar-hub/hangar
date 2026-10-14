@@ -309,7 +309,11 @@ func convertSplit(e *env, b builder, sf splitFiles, fs features.Features, st *fe
 			for r := range rows {
 				col[r] = rows[r][i]
 			}
-			n += features.NBytes(f.Type, col)
+			if e.nullStructChildren {
+				n += features.NBytesNullChildren(f.Type, col)
+			} else {
+				n += features.NBytes(f.Type, col)
+			}
 		}
 		sr.NumBytes += n
 		sr.NumRows += int64(len(rows))

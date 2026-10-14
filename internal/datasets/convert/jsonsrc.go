@@ -302,11 +302,15 @@ func jsonCast(v any, f *features.Feature) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Cast(v, st)
+	return CastFeature(v, f, st)
 }
 
 func (b jsonBuilder) read(e *env, split splitFiles, fs features.Features, emit emitFunc) error {
 	field, _ := optString(e.opts, "field")
+	// JSON Lines and JSON arrays go through pyarrow's JSON reader; a
+	// `field` is extracted in Python and loaded from objects.
+	e.nullStructChildren = field == ""
+	defer func() { e.nullStructChildren = false }()
 	names := map[string]bool{}
 	for _, f := range fs {
 		names[f.Name] = true

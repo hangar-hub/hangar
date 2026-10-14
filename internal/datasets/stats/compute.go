@@ -76,6 +76,11 @@ func Column(name string, f *features.Feature, values []any) (*Item, error) {
 			}
 			vals = append(vals, x)
 		}
+		if lo, hi, ok := infiniteRange(vals); ok {
+			// np.arange cannot split an infinite range into bins, so the
+			// Hub fails the Split's statistics.
+			return nil, fmt.Errorf("%w: arange: cannot compute length (min %v, max %v)", ErrComputation, lo, hi)
+		}
 		return &Item{name, kind(f), Numbers(vals, nulls, isInt)}, nil
 	case "string":
 		s := make([]*string, len(values))
@@ -161,4 +166,17 @@ func Column(name string, f *features.Feature, values []any) (*Item, error) {
 // Sort orders items by column name, as the Hub returns them.
 func Sort(items []Item) {
 	sort.Slice(items, func(i, j int) bool { return items[i].ColumnName < items[j].ColumnName })
+}
+
+// infiniteRange reports whether the values span a range with an infinite
+// end, which has no histogram bins.
+func infiniteRange(vals []float64) (lo, hi float64, ok bool) {
+	if len(vals) == 0 {
+		return 0, 0, false
+	}
+	lo, hi = vals[0], vals[0]
+	for _, v := range vals[1:] {
+		lo, hi = math.Min(lo, v), math.Max(hi, v)
+	}
+	return lo, hi, lo != hi && (math.IsInf(lo, 0) || math.IsInf(hi, 0))
 }

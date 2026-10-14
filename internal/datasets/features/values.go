@@ -43,7 +43,14 @@ type fill struct{}
 // plus the data buffers. pyarrow counts list and string offsets once per
 // value. `datasets` sums this over the tables it writes to get a Split's
 // `num_bytes`.
-func NBytes(a *Arrow, values []any) int64 {
+func NBytes(a *Arrow, values []any) int64 { return nbytes(a, values, false) }
+
+// NBytesNullChildren is NBytes for arrays where the children of a null
+// struct are null rather than filled, as pyarrow's JSON reader builds
+// them, so the children count their own validity bitmaps.
+func NBytesNullChildren(a *Arrow, values []any) int64 { return nbytes(a, values, true) }
+
+func nbytes(a *Arrow, values []any, nullChildren bool) int64 {
 	n := int64(len(values))
 	var total int64
 	hasNull := false
@@ -95,20 +102,20 @@ func NBytes(a *Arrow, values []any) int64 {
 				}
 			}
 		}
-		return total + NBytes(a.Elem, child)
+		return total + nbytes(a.Elem, child, nullChildren)
 	case Struct:
 		for i, f := range a.Fields {
 			col := make([]any, len(values))
 			for j, v := range values {
 				if s, ok := v.([]any); ok && i < len(s) {
 					col[j] = s[i]
-				} else if v == nil || v == (fill{}) {
-					// Arrow fills the children of a null struct with
-					// non-null empty values.
+				} else if (v == nil && !nullChildren) || v == (fill{}) {
+					// Arrow fills the children of a null struct built from
+					// Python objects with non-null empty values.
 					col[j] = fill{}
 				}
 			}
-			total += NBytes(f.Type, col)
+			total += nbytes(f.Type, col, nullChildren)
 		}
 		return total
 	}

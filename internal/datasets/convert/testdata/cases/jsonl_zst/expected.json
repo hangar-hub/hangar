@@ -1,0 +1,30 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.jsonl.zst"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 16,
+   "embedded_nbytes": 16,
+   "rows": [
+    {
+     "q": 1
+    },
+    {
+     "q": 2
+    }
+   ]
+  }
+ },
+ "features": {
+  "q": {
+   "dtype": "int64",
+   "_type": "Value"
+  }
+ }
+}

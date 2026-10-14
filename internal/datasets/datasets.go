@@ -10,8 +10,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/jamesagarside/hangar/internal/datasets/features"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -315,4 +318,31 @@ type Viewer interface {
 	Statistics(ctx context.Context, p model.Principal, id model.RepoID, config, split string) (json.RawMessage, error)
 	// Croissant returns MLCommons Croissant JSON-LD (DATA-10).
 	Croissant(ctx context.Context, p model.Principal, id model.RepoID) (json.RawMessage, error)
+}
+
+// FormatFloat writes a float as orjson, which serialises the Hub's viewer
+// responses, does: the shortest digits that round-trip, in decimal
+// notation for exponents from -5 to 15 (integral values keep ".0") and
+// otherwise as 1.5e-7 or 1e16; NaN and infinities are null.
+func FormatFloat(x float64) string {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		return "null"
+	}
+	if x == 0 {
+		if math.Signbit(x) {
+			return "-0.0"
+		}
+		return "0.0"
+	}
+	sci := strconv.FormatFloat(x, 'e', -1, 64)
+	mant, expText, _ := strings.Cut(sci, "e")
+	exp, _ := strconv.Atoi(expText)
+	if exp < -5 || exp > 15 {
+		return mant + "e" + strconv.Itoa(exp)
+	}
+	s := strconv.FormatFloat(x, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
+		s += ".0"
+	}
+	return s
 }

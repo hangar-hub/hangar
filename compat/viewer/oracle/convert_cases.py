@@ -9,8 +9,10 @@ Features `datasets` infers, and per Split the number of examples, the
 num_bytes it reports and every row. Media values are written as their file
 name and size, and rows come from the embedded table, as the Hub's Parquet
 export stores them. Run it with the library versions of the Hub's Dataset Viewer worker
-(datasets 5.1.0, pandas 2.3.3, pyarrow 24.0.0) plus Pillow; the Go tests
-read the output offline.
+(datasets 5.1.0, pandas 2.3.3, pyarrow 24.0.0) plus Pillow and
+zstandard; the Go tests read the output offline. A case run with
+`features=` records them as "card_features", the Features a card
+declares.
 """
 
 from __future__ import annotations
@@ -27,23 +29,30 @@ import shutil
 import struct
 import sys
 import tarfile
+import zipfile
 from pathlib import Path
+
+import pyarrow.parquet as pq
+import zstandard
 
 import datasets
 import pyarrow as pa
 from datasets.features import audio as _audio
 from datasets.table import embed_table_storage
 
-# Audio.encode_example imports torch even for file paths, which the
-# AudioFolder builder passes; encode paths without it.
+# Audio.encode_example imports torch even for file paths and bytes, which
+# the AudioFolder and WebDataset builders pass; encode those without it.
 _encode_audio = _audio.Audio.encode_example
 
 
 def _encode_audio_path(self, value):
+    # The branches of Audio.encode_example that need no decoding.
     if isinstance(value, str):
         return {"bytes": None, "path": value}
-    if isinstance(value, dict) and value.get("path") is not None and value.get("bytes") is None:
-        return {"bytes": None, "path": value["path"]}
+    if isinstance(value, (bytes, bytearray)):
+        return {"bytes": value, "path": None}
+    if isinstance(value, dict) and "array" not in value and (value.get("bytes") is not None or value.get("path") is not None):
+        return {"bytes": value.get("bytes"), "path": value.get("path")}
     return _encode_audio(self, value)
 
 
@@ -106,7 +115,10 @@ def run(name: str, builder: str, files: dict[str, bytes], data_files: dict[str, 
         cache_dir=str(root / ".cache"),
         **kwargs,
     )
-    out = {"builder": builder, "options": kwargs, "data_files": data_files, "splits": {}}
+    options = {k: v for k, v in kwargs.items() if k != "features"}
+    out = {"builder": builder, "options": options, "data_files": data_files, "splits": {}}
+    if "features" in kwargs:
+        out["card_features"] = kwargs["features"].to_dict()
     for split, ds in dd.items():
         out["features"] = ds.features.to_dict()
         table = embed_table_storage(ds.data.table)
@@ -126,6 +138,11 @@ def run(name: str, builder: str, files: dict[str, bytes], data_files: dict[str, 
             "embedded_nbytes": embedded,
             "rows": rows,
         }
+        if builder == "parquet":
+            # The Hub copies Parquet files and counts their row groups'
+            # total_byte_size (fill_builder_info) rather than num_bytes.
+            metas = [pq.ParquetFile(fdir / p).metadata for p in data_files[split]]
+            out["splits"][split]["hub_num_bytes"] = sum(m.row_group(i).total_byte_size for m in metas for i in range(m.num_row_groups))
     shutil.rmtree(root / ".cache")
     (root / "expected.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     print("wrote", name)
@@ -138,7 +155,7 @@ run("csv_ints_with_na", "csv", {"a.csv": b"a,b\n1,\n2,3\n,4\n"}, {"train": ["a.c
 run("tsv", "csv", {"a.tsv": "x\ty\n\"q\tq\",1\n\xc3\xa9,2\n".encode()}, {"train": ["a.tsv"]}, sep="\t")
 run("csv_semicolon_names", "csv", {"a.csv": b"1;2\n3;4\n"}, {"train": ["a.csv"]}, sep=";", names=["p", "q"])
 run("csv_quotes_dupes", "csv", {"a.csv": b'x,x,\n"a ""quoted"" value","multi\nline",9\n'}, {"train": ["a.csv"]})
-run("csv_gzip", "csv", {"a.csv.gz": gzip.compress(b"k,v\nalpha,1\nbeta,2\n")}, {"train": ["a.csv.gz"]})
+run("csv_gzip", "csv", {"a.csv.gz": gzip.compress(b"k,v\nalpha,1\nbeta,2\n", mtime=0)}, {"train": ["a.csv.gz"]})
 
 jl = "\n".join(json.dumps(x) for x in [
     {"a": 1, "b": "2020-01-01", "c": "2020-01-01 10:00:00", "d": [1, 2], "e": {"x": 1}, "f": 1, "g": None, "h": True, "i": [{"k": 1}], "u": "é/ü"},
@@ -188,3 +205,60 @@ shard = tar([("s/000.png", png(2, 2, 7)), ("s/000.json", b'{"label": 1, "tags": 
              ("s/001.png", png(3, 1, 8)), ("s/001.json", b'{"label": 0, "tags": []}'), ("s/001.txt", b"world"), ("s/001.cls", b"4"),
              ("s/002.png", png(1, 1, 9)), ("s/002.json", b'{"label": 2, "tags": ["b", "c"]}'), ("s/002.txt", b"!"), ("s/002.cls", b"5")])
 run("webdataset", "webdataset", {"shard-0000.tar": shard}, {"train": ["shard-0000.tar"]})
+
+
+# Parquet files are copied; the huggingface metadata gives the Features.
+def parquet(table: pa.Table, features: dict | None = None) -> bytes:
+    if features is not None:
+        table = table.replace_schema_metadata({"huggingface": json.dumps({"info": {"features": features}})})
+    buf = io.BytesIO()
+    pq.write_table(table, buf)
+    return buf.getvalue()
+
+
+pq_features = {"text": {"dtype": "string", "_type": "Value"}, "label": {"names": ["neg", "pos"], "_type": "ClassLabel"}}
+run("parquet_copy", "parquet",
+    {"data/train-0.parquet": parquet(pa.table({"text": ["a", "b"], "label": [0, 1]}), pq_features),
+     "data/train-1.parquet": parquet(pa.table({"text": ["c"], "label": [1]}), pq_features),
+     "data/test-0.parquet": parquet(pa.table({"text": [None], "label": [0]}), pq_features)},
+    {"train": ["data/train-0.parquet", "data/train-1.parquet"], "test": ["data/test-0.parquet"]})
+run("parquet_plain", "parquet",
+    {"a.parquet": parquet(pa.table({"x": pa.array([1.5, None], pa.float32()), "d": pa.array([datetime.date(2020, 1, 1), None], pa.date32()),
+                                    "m": pa.array([decimal.Decimal("1.25"), None], pa.decimal128(5, 2))}))},
+    {"train": ["a.parquet"]})
+
+fsink = io.BytesIO()
+with pa.ipc.new_file(fsink, tbl.schema) as w:
+    w.write_table(tbl)
+run("arrow_file", "arrow", {"data.arrow": fsink.getvalue()}, {"train": ["data.arrow"]})
+
+run("csv_latin1", "csv", {"a.csv": "name,city\nJos\xe9,M\xfcnchen\n".encode("latin-1")}, {"train": ["a.csv"]}, encoding="latin-1")
+run("csv_features", "csv", {"a.csv": b"a,b,c\n1,x,10\n2,y,\n3,x,30\n"}, {"train": ["a.csv"]},
+    features=datasets.Features({"a": datasets.Value("int32"), "b": datasets.ClassLabel(names=["x", "y"]), "c": datasets.Value("float64")}))
+run("json_features", "json",
+    {"a.jsonl": b'{"n": 1, "lab": "b", "l": [1, 2], "t": "2020-01-01 00:00:00", "s": {"k": 1}}\n{"n": 2.5, "lab": "a", "l": [], "t": null, "s": null}\n'},
+    {"train": ["a.jsonl"]},
+    features=datasets.Features({"n": datasets.Value("float32"), "lab": datasets.ClassLabel(names=["a", "b"]), "l": datasets.List(datasets.Value("int16")),
+                                "t": datasets.Value("timestamp[s]"), "s": {"k": datasets.Value("int64")}}))
+mixed = [{"m": 0.1}, {"m": "s \U0001F600"}, {"m": [1e20, 1.5e-7, 3.0, -0.0]}, {"m": {"deep": [1.25, None, True]}}, {"m": 123456789.125}]
+run("json_mixed_floats", "json", {"a.jsonl": ("\n".join(json.dumps(x) for x in mixed) + "\n").encode()}, {"train": ["a.jsonl"]})
+stamps = ["2020-01-01T10:00:00", "2020-01-01 10:00:00", "2020-01-01T10:00", "2020-01-01T10:00:00Z", "2020-01-01T10:00:00.123456",
+          "2020-01-01T10:00:00+02:00", "2020-01-01"]
+for i, st in enumerate(stamps):
+    run(f"json_timestamp_{i}", "json", {"a.jsonl": (json.dumps({"t": st}) + "\n" + json.dumps({"t": None}) + "\n").encode()}, {"train": ["a.jsonl"]})
+run("jsonl_zst", "json", {"a.jsonl.zst": zstandard.ZstdCompressor().compress(b'{"q": 1}\n{"q": 2}\n')}, {"train": ["a.jsonl.zst"]})
+zbuf = io.BytesIO()
+with zipfile.ZipFile(zbuf, "w") as z:
+    z.writestr("part1.csv", "k,v\na,1\n")
+    z.writestr("dir/part2.csv", "k,v\nb,2\n")
+run("csv_zip", "csv", {"a.zip": zbuf.getvalue()}, {"train": ["a.zip"]})
+jpg = (Path(__file__).resolve().parents[3] / "internal/datasets/media/testdata/i.jpg").read_bytes()
+media_shard = tar([("k/0.jpg", jpg), ("k/0.wav", wav(400)), ("k/0.json", b'{"a": 1}'),
+                   ("k/1.jpg", jpg), ("k/1.wav", wav(200)), ("k/1.json", b'{"a": 2}')])
+run("webdataset_media", "webdataset", {"shard-0000.tar": media_shard}, {"train": ["shard-0000.tar"]})
+# A null struct's children: null from pyarrow's JSON reader, filled from
+# Python objects; num_bytes tells them apart.
+structs = [{"s": {"k": 1, "t": "a"}}, {"s": None}]
+run("jsonl_null_struct", "json", {"a.jsonl": ("\n".join(json.dumps(x) for x in structs) + "\n").encode()}, {"train": ["a.jsonl"]})
+run("json_array_null_struct", "json", {"a.json": json.dumps(structs).encode()}, {"train": ["a.json"]})
+run("json_field_null_struct", "json", {"a.json": json.dumps({"rows": structs}).encode()}, {"train": ["a.json"]}, field="rows")

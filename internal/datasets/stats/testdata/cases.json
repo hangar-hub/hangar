@@ -2654,6 +2654,60 @@
   }
  },
  {
+  "name": "floats_inf",
+  "kind": "float",
+  "values": [
+   1.5,
+   NaN,
+   Infinity,
+   null
+  ],
+  "dtype": null,
+  "error": "(\"Error for FloatColumn=floats_inf: error=ValueError('arange: cannot compute length')\", ValueError('arange: cannot compute length'))"
+ },
+ {
+  "name": "floats_neg_inf",
+  "kind": "float",
+  "values": [
+   -Infinity,
+   1.0,
+   2.0
+  ],
+  "dtype": null,
+  "error": "(\"Error for FloatColumn=floats_neg_inf: error=ValueError('arange: cannot compute length')\", ValueError('arange: cannot compute length'))"
+ },
+ {
+  "name": "floats_only_inf",
+  "kind": "float",
+  "values": [
+   Infinity,
+   Infinity
+  ],
+  "dtype": null,
+  "item": {
+   "column_name": "floats_only_inf",
+   "column_type": "float",
+   "column_statistics": {
+    "nan_count": 0,
+    "nan_proportion": 0.0,
+    "min": Infinity,
+    "max": Infinity,
+    "mean": Infinity,
+    "median": Infinity,
+    "std": NaN,
+    "histogram": {
+     "hist": [
+      2
+     ],
+     "bin_edges": [
+      Infinity,
+      Infinity
+     ]
+    }
+   }
+  }
+ },
+ {
   "name": "floats_tiny",
   "kind": "float",
   "values": [
@@ -2951,8 +3005,8 @@
     "frequencies": {
      "a": 54,
      "b": 53,
-     "None": 49,
-     "c": 44
+     "c": 44,
+     "None": 49
     }
    }
   }
@@ -3532,15 +3586,15 @@
     "n_unique": 10,
     "frequencies": {
      "u4": 1,
-     "u0": 1,
-     "u9": 1,
-     "u7": 1,
      "u5": 1,
-     "u6": 1,
-     "u1": 1,
-     "u8": 1,
      "u3": 1,
-     "u2": 1
+     "u6": 1,
+     "u8": 1,
+     "u2": 1,
+     "u1": 1,
+     "u7": 1,
+     "u9": 1,
+     "u0": 1
     }
    }
   }
@@ -3601,11 +3655,11 @@
     "no_label_proportion": 0.0,
     "n_unique": 5,
     "frequencies": {
-     "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8,
+     "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8,
      "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8,
-     "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8,
      "h\u00e9llo w\u00f6rld ": 8,
-     "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8
+     "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8,
+     "h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld h\u00e9llo w\u00f6rld ": 8
     }
    }
   }

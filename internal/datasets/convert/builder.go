@@ -31,6 +31,10 @@ type env struct {
 	// splits are every Split of the config, which folder builders analyse
 	// together.
 	splits []splitFiles
+	// nullStructChildren is set by a builder while it emits rows that
+	// `datasets` reads with pyarrow's JSON reader, where the children of
+	// a null struct are null, which changes num_bytes.
+	nullStructChildren bool
 }
 
 // builder is a `datasets` packaged builder.

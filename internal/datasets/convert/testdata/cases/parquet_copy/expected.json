@@ -1,0 +1,60 @@
+{
+ "builder": "parquet",
+ "options": {},
+ "data_files": {
+  "train": [
+   "data/train-0.parquet",
+   "data/train-1.parquet"
+  ],
+  "test": [
+   "data/test-0.parquet"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 41,
+   "embedded_nbytes": 39,
+   "rows": [
+    {
+     "text": "a",
+     "label": 0
+    },
+    {
+     "text": "b",
+     "label": 1
+    },
+    {
+     "text": "c",
+     "label": 1
+    }
+   ],
+   "hub_num_bytes": 315
+  },
+  "test": {
+   "num_examples": 1,
+   "num_bytes": 14,
+   "embedded_nbytes": 13,
+   "rows": [
+    {
+     "text": null,
+     "label": 0
+    }
+   ],
+   "hub_num_bytes": 134
+  }
+ },
+ "features": {
+  "text": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "label": {
+   "names": [
+    "neg",
+    "pos"
+   ],
+   "_type": "ClassLabel"
+  }
+ }
+}

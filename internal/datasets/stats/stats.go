@@ -13,9 +13,10 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jamesagarside/hangar/internal/datasets"
 )
 
 // Constants from statistics_utils.py.
@@ -92,17 +93,8 @@ func marshalValue(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// pyFloat writes a float as Python's json module does: always with a
-// decimal point or exponent.
-func pyFloat(f float64) string {
-	if math.IsNaN(f) || math.IsInf(f, 0) {
-		return "null"
-	}
-	if f == math.Trunc(f) && math.Abs(f) < 1e16 {
-		return strconv.FormatFloat(f, 'f', 1, 64)
-	}
-	return strconv.FormatFloat(f, 'g', -1, 64)
-}
+// pyFloat writes a float as the Hub's responses do (datasets.FormatFloat).
+func pyFloat(f float64) string { return datasets.FormatFloat(f) }
 
 // Get returns a key's value.
 func (o Object) Get(key string) (any, bool) {

@@ -1,0 +1,30 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 35,
+   "embedded_nbytes": 35,
+   "rows": [
+    {
+     "t": "2020-01-01T10:00:00.123456"
+    },
+    {
+     "t": null
+    }
+   ]
+  }
+ },
+ "features": {
+  "t": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

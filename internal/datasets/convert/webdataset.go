@@ -265,7 +265,7 @@ func (webdatasetBuilder) read(e *env, split splitFiles, fs features.Features, em
 						v = []any{b, path.Base(x.key + "." + fl.Name)}
 					}
 				}
-				c, err := Cast(v, st.Fields[i].Type)
+				c, err := CastFeature(v, fl.Feature, st.Fields[i].Type)
 				if err != nil {
 					return fmt.Errorf("%s: column %q: %w", x.key, fl.Name, err)
 				}

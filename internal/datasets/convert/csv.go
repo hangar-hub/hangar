@@ -486,7 +486,7 @@ func (b csvBuilder) readMember(m member, o *csvOptions, fs features.Features, st
 				if err != nil {
 					return fmt.Errorf("column %q: %w", fs[i].Name, err)
 				}
-				v, err = Cast(v, st.Fields[i].Type)
+				v, err = CastFeature(v, fs[i].Feature, st.Fields[i].Type)
 				if err != nil {
 					return fmt.Errorf("column %q: %w", fs[i].Name, err)
 				}

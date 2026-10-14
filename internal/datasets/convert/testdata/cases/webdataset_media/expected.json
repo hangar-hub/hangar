@@ -1,0 +1,70 @@
+{
+ "builder": "webdataset",
+ "options": {},
+ "data_files": {
+  "train": [
+   "shard-0000.tar"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 2116,
+   "embedded_nbytes": 2108,
+   "rows": [
+    {
+     "jpg": {
+      "media": "0.jpg",
+      "size": 651
+     },
+     "wav": {
+      "media": "0.wav",
+      "size": 444
+     },
+     "json": {
+      "a": 1
+     },
+     "__key__": "k/0",
+     "__url__": "shard-0000.tar"
+    },
+    {
+     "jpg": {
+      "media": "1.jpg",
+      "size": 651
+     },
+     "wav": {
+      "media": "1.wav",
+      "size": 244
+     },
+     "json": {
+      "a": 2
+     },
+     "__key__": "k/1",
+     "__url__": "shard-0000.tar"
+    }
+   ]
+  }
+ },
+ "features": {
+  "jpg": {
+   "_type": "Image"
+  },
+  "wav": {
+   "_type": "Audio"
+  },
+  "json": {
+   "a": {
+    "dtype": "int64",
+    "_type": "Value"
+   }
+  },
+  "__key__": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "__url__": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

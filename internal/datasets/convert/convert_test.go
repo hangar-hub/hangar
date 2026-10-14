@@ -31,11 +31,16 @@ type expected struct {
 	Options   map[string]any      `json:"options"`
 	DataFiles map[string][]string `json:"data_files"`
 	Features  json.RawMessage     `json:"features"`
-	Splits    map[string]struct {
+	// CardFeatures are the Features passed to `datasets`, as a card's
+	// `features` declare them.
+	CardFeatures json.RawMessage `json:"card_features"`
+	Splits       map[string]struct {
 		NumExamples    int64 `json:"num_examples"`
 		NumBytes       int64 `json:"num_bytes"`
 		EmbeddedNBytes int64 `json:"embedded_nbytes"`
-		Rows           []any `json:"rows"`
+		// HubNumBytes is set for copied Parquet files.
+		HubNumBytes *int64 `json:"hub_num_bytes"`
+		Rows        []any  `json:"rows"`
 	} `json:"splits"`
 }
 
@@ -142,6 +147,10 @@ func TestConvertMatchesDatasets(t *testing.T) {
 				return nil
 			}))
 			cfg := datasets.Config{Name: "default", Builder: want.Builder, BuilderOptions: map[string]any{}, Files: want.DataFiles}
+			if want.CardFeatures != nil {
+				cfg.Features, err = features.ParseFeatures(want.CardFeatures)
+				require.NoError(t, err)
+			}
 			for k, v := range want.Options {
 				if f, ok := v.(float64); ok && f == math.Trunc(f) {
 					v = int64(f)
@@ -183,6 +192,9 @@ func TestConvertMatchesDatasets(t *testing.T) {
 				if ws.EmbeddedNBytes != ws.NumBytes && hasMedia(res.Features) {
 					// The Hub embeds media before it counts bytes.
 					wantBytes = ws.EmbeddedNBytes
+				}
+				if ws.HubNumBytes != nil {
+					wantBytes = *ws.HubNumBytes
 				}
 				var rows [][]any
 				for _, sh := range sr.Shards {
