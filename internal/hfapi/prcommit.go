@@ -148,12 +148,19 @@ func (h *Handler) verifyLFS(ctx context.Context, oid string, size int64) (repo.L
 	}
 }
 
-// closeFailedPR closes a pull request that create_pr=1 opened when the
-// Commit to its ref then failed, so the pull request does not stay open
-// with no ref. checkPRCommit makes this rare: it covers failures the base
-// tree cannot predict, such as a lost ref race or a storage error.
+// closeFailedPR removes a pull request that create_pr=1 opened when the
+// Commit to its ref then failed, as huggingface.co never shows such a pull
+// request. If it cannot be removed (someone commented on it meanwhile),
+// it is closed with a comment instead.
 func (h *Handler) closeFailedPR(ctx context.Context, rp *repo.Repo, d *community.Discussion, p model.Principal) {
 	ctx = context.WithoutCancel(ctx)
+	err := h.d.Community.Discard(ctx, rp.UUID, d.Num)
+	if err == nil {
+		return
+	}
+	if !errors.Is(err, community.ErrNotDiscardable) {
+		h.log.WarnContext(ctx, "discard pull request after failed commit", "error", err, "repo", rp.ID.String(), "num", d.Num)
+	}
 	if _, err := h.d.Community.SetStatus(ctx, rp.UUID, d.Num, community.StatusClosed,
 		"Closed automatically: the commit that opened this pull request failed, so it has no changes.", p); err != nil {
 		h.log.ErrorContext(ctx, "close pull request after failed commit", "error", err, "repo", rp.ID.String(), "num", d.Num)

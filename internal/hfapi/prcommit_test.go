@@ -175,7 +175,7 @@ func (f failingCommits) Commit(ctx context.Context, p repo.CommitParams) (*repo.
 	return f.Service.Commit(ctx, p)
 }
 
-func TestCreatePRClosesPullRequestWhenCommitFails(t *testing.T) {
+func TestCreatePRDiscardsPullRequestWhenCommitFails(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, func(o *hfapitest.Options) {
 		o.Deps = func(d *hfapi.Deps) { d.Repos = failingCommits{Service: d.Repos} }
@@ -184,11 +184,7 @@ func TestCreatePRClosesPullRequestWhenCommitFails(t *testing.T) {
 	r := e.Request(t, http.MethodPost, "/api/models/alice/fails/commit/main?create_pr=1", "bob",
 		ndjson(t, header("Fix", string(base)), fileLine("a.txt", "b")))
 	require.Equal(t, http.StatusInternalServerError, r.StatusCode)
-	d, err := e.Community.Get(context.Background(), rp.UUID, 1)
-	require.NoError(t, err)
-	require.Equal(t, community.StatusClosed, d.Status)
-	refs := decode[map[string]any](t, e.Request(t, http.MethodGet, "/api/models/alice/fails/refs?include_prs=1", "alice", ""))
-	require.Empty(t, refs["pullRequests"])
+	requireNoPullRequests(t, e, rp)
 }
 
 func TestCreatePROnMirror(t *testing.T) {
