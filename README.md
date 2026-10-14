@@ -2,6 +2,8 @@
 
 **A self-hosted home for your arsenal of models.**
 
+![The Arsenal page of Hangar's web UI, listing models and datasets with filters for format, task, quantisation and size](docs/assets/screenshots/arsenal-desktop.webp)
+
 Hangar keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:
 
 - **Hugging Face clients**: set `HF_ENDPOINT` and `huggingface_hub`, the `hf` CLI, `transformers`, `diffusers`, `sentence-transformers`, `datasets` and vLLM work unchanged.
@@ -15,6 +17,10 @@ Pull models and datasets from huggingface.co once, including just the quantisati
 Hangar runs as one container on a laptop or homelab, and scales out to stateless replicas over Postgres and S3-compatible storage. It exports traces, metrics and logs with OpenTelemetry, and supports local accounts and OIDC sign-in.
 
 > **Status:** in development. There is no release yet. The plan is in [`docs/spec/`](docs/spec/README.md).
+
+| Model card | GGUF viewer | Dataset Viewer |
+|---|---|---|
+| ![A model's page with its card, files, metadata and the Use this model button](docs/assets/screenshots/model-card-desktop.webp) | ![The GGUF viewer showing a file's metadata, chat template and tensors](docs/assets/screenshots/gguf-viewer-desktop.webp) | ![The Dataset Viewer showing rows of a dataset Split with column statistics](docs/assets/screenshots/dataset-viewer-desktop.webp) |
 
 ## Quickstart
 
