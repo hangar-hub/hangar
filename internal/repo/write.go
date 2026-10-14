@@ -517,6 +517,10 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 	if err != nil {
 		return nil, err
 	}
+	if strings.HasPrefix(ref, model.RefConvert) && p.Actor.Kind != model.PrincipalSystem {
+		// Only Hangar writes Parquet exports, as on the Hub.
+		return nil, &PolicyError{Ref: ref, Message: "refs/convert/* is written by Hangar's Parquet export and cannot be committed to"}
+	}
 	st, err := s.git.NewStaging(ctx, row.ID)
 	if err != nil {
 		return nil, err

@@ -414,3 +414,21 @@ func TestRefCASUnderConcurrency(t *testing.T) {
 		gitCmd(t, e.export(id), "fsck", "--strict", "--no-dangling")
 	})
 }
+
+func TestOnlyHangarCommitsToConvertRefs(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "data"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		head := e.commit(id, alice, add("train.csv", "a,b\n1,2\n"))
+		_, err := e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Revision: model.RefParquet, Summary: "spoof", Actor: alice, CreateFrom: head.SHA,
+			Operations: []repo.Operation{add("default/train/0000.parquet", "not parquet")}})
+		var pe *repo.PolicyError
+		require.ErrorAs(t, err, &pe, "users cannot write the Parquet export")
+		require.Contains(t, pe.Error(), "refs/convert/")
+		res, err := e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Revision: model.RefParquet, Summary: "Update Parquet export", Actor: model.System(),
+			CreateFrom: head.SHA, Operations: []repo.Operation{add("default/train/0000.parquet", "export")}})
+		require.NoError(t, err, "Hangar's own export commits")
+		require.False(t, res.NoOp)
+	})
+}
