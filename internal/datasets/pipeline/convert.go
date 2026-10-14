@@ -281,7 +281,9 @@ func orderRows(rows []SplitRow, res *datasets.Resolved) []SplitRow {
 			i++
 		}
 	}
-	sort.SliceStable(rows, func(a, b int) bool { return pos[rows[a].Config+"\x00"+rows[a].Split] < pos[rows[b].Config+"\x00"+rows[b].Split] })
+	sort.SliceStable(rows, func(a, b int) bool {
+		return pos[rows[a].Config+"\x00"+rows[a].Split] < pos[rows[b].Config+"\x00"+rows[b].Split]
+	})
 	return rows
 }
 
