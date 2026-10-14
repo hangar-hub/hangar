@@ -38,7 +38,7 @@ python -c "from transformers import AutoModel; AutoModel.from_pretrained('hf-int
 |---|---|
 | Container image | `ghcr.io/jamesagarside/hangar` for linux/amd64 and linux/arm64, signed with cosign |
 | Docker Compose | Examples for SQLite, Postgres and MinIO, a scaled-out setup and Keycloak in [`deploy/compose`](deploy/compose) |
-| Kubernetes | `helm install hangar oci://ghcr.io/jamesagarside/charts/hangar` ([`deploy/helm/hangar`](deploy/helm/hangar)) |
+| Kubernetes | `helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --set publicURL=https://hangar.example.com`, with `publicURL` set to the address clients use; see the [Helm guide](https://jamesagarside.github.io/hangar/get-started/helm/) and [`deploy/helm/hangar`](deploy/helm/hangar) |
 | Binary | [Release archives](https://github.com/jamesagarside/hangar/releases) for Linux, macOS and Windows, `brew install --cask jamesagarside/tap/hangar`, or `go install github.com/jamesagarside/hangar/cmd/hangar@latest` |
 
 ## Documentation
