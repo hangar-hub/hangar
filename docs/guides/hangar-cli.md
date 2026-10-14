@@ -60,4 +60,4 @@ hangar jobs cancel <job-id>
 
 ## Scripting
 
-Every command takes `--json` and prints JSON on standard output; progress goes to standard error. Exit codes: `0` success, `1` error, `2` usage error, `3` not found, `4` authentication error.
+Every command takes `--json` and prints JSON on standard output; progress goes to standard error. `hangar server` and `hangar worker` print only logs, so for them `--json` selects JSON logs, which is also the default. Exit codes: `0` success, `1` error, `2` usage error, `3` not found, `4` authentication error.

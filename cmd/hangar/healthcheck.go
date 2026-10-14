@@ -10,8 +10,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// readiness is the --json output of hangar healthcheck.
+type readiness struct {
+	Ready bool   `json:"ready"`
+	Error string `json:"error,omitempty"`
+}
+
 func newHealthcheckCommand() *cobra.Command {
 	var flags configFlags
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "healthcheck",
 		Short: "Call /readyz on this host and exit 0 when ready",
@@ -22,10 +29,21 @@ func newHealthcheckCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return checkReady(cmd.Context(), cfg.Server.Listen)
+			err = checkReady(cmd.Context(), cfg.Server.Listen)
+			if asJSON {
+				r := readiness{Ready: err == nil}
+				if err != nil {
+					r.Error = err.Error()
+				}
+				if jerr := writeJSON(cmd.OutOrStdout(), r); jerr != nil {
+					return jerr
+				}
+			}
+			return err
 		},
 	}
 	flags.register(cmd)
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 

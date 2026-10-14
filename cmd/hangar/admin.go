@@ -17,6 +17,7 @@ func newAdminCommand() *cobra.Command {
 		Short: "Administer an Instance directly through its database and Blob store",
 	}
 	var flags configFlags
+	var asJSON bool
 	migrate := &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply database migrations",
@@ -33,13 +34,24 @@ func newAdminCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), schemaVersion{Current: st.Current, Expected: st.Expected, Pending: append([]string{}, st.Pending...)})
+			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "The database schema is at version %s.\n", st.Current)
 			return err
 		},
 	}
 	flags.register(migrate)
+	addJSONFlag(migrate, &asJSON)
 	cmd.AddCommand(migrate)
 	return cmd
+}
+
+// schemaVersion is the --json output of hangar admin migrate.
+type schemaVersion struct {
+	Current  string   `json:"current"`
+	Expected string   `json:"expected"`
+	Pending  []string `json:"pending"`
 }
 
 func openDatabase(ctx context.Context, cfg *config.Config, tracing bool) (*db.DB, error) {

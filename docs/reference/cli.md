@@ -115,6 +115,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | print JSON instead of text |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
@@ -209,8 +210,14 @@ Print every configuration key with its type, default and description.
 Usage:
 
 ```sh
-hangar config reference
+hangar config reference [flags]
 ```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `--json` | print JSON instead of text |  |
 
 ## hangar config validate
 
@@ -227,6 +234,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | print JSON instead of text |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
@@ -287,6 +295,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | print JSON instead of text |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
@@ -894,6 +903,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | write logs as JSON, the default (shortcut for --set telemetry.log_format=json) |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
@@ -906,8 +916,14 @@ Print the version.
 Usage:
 
 ```sh
-hangar version
+hangar version [flags]
 ```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `--json` | print JSON instead of text |  |
 
 ## hangar whoami
 
@@ -942,6 +958,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--json` | write logs as JSON, the default (shortcut for --set telemetry.log_format=json) |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |

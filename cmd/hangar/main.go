@@ -70,14 +70,27 @@ func newRootCommand() *cobra.Command {
 	return root
 }
 
+// versionInfo is the --json output of hangar version.
+type versionInfo struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	Date    string `json:"date"`
+}
+
 func newVersionCommand() *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print the version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), versionInfo{Version: version, Commit: commit, Date: date})
+			}
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "hangar %s (commit %s, built %s)\n", version, commit, date)
 			return err
 		},
 	}
+	addJSONFlag(cmd, &asJSON)
+	return cmd
 }
