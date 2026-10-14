@@ -129,6 +129,10 @@ func (q *DBQueue) enqueue(ctx context.Context, idb bun.IDB, nj NewJob) (JobID, e
 		p := nj.ParentID
 		row.ParentID = &p
 	}
+	if nj.Repo != uuid.Nil {
+		r := nj.Repo
+		row.RepoID = &r
+	}
 	for range 5 {
 		res, err := idb.NewInsert().Model(row).
 			On("CONFLICT (kind, dedupe_key) WHERE status IN ('pending', 'running') AND dedupe_key IS NOT NULL DO NOTHING").
@@ -269,7 +273,7 @@ func (q *DBQueue) Retry(ctx context.Context, id JobID) (JobID, error) {
 	}
 	return q.Enqueue(ctx, NewJob{
 		Kind: old.Kind, DedupeKey: old.DedupeKey, Payload: old.Payload, Priority: old.Priority,
-		MaxAttempts: old.MaxAttempts, CreatedBy: old.CreatedBy, ParentID: old.ParentID,
+		MaxAttempts: old.MaxAttempts, CreatedBy: old.CreatedBy, ParentID: old.ParentID, Repo: old.Repo,
 	})
 }
 
@@ -358,6 +362,9 @@ func fromRow(r *db.Job) (*Job, error) {
 	}
 	if r.ParentID != nil {
 		j.ParentID = *r.ParentID
+	}
+	if r.RepoID != nil {
+		j.Repo = *r.RepoID
 	}
 	if len(r.Progress) > 0 && strings.TrimSpace(string(r.Progress)) != "{}" {
 		if err := json.Unmarshal(r.Progress, &j.Progress); err != nil {

@@ -260,3 +260,26 @@ func TestEnqueueTxRollsBack(t *testing.T) {
 }
 
 func noop(context.Context, *jobs.Job, jobs.Progress) error { return nil }
+
+func TestQueueKeepsTheJobsRepo(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		q := jobs.NewQueue(d, jobs.NewRegistry(), jobs.QueueOptions{})
+		repo := uuid.New() // No foreign key: a Job outlives a purged Repo.
+		id, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindZipExport, Repo: repo})
+		require.NoError(t, err)
+		instance, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindGC})
+		require.NoError(t, err)
+		require.Equal(t, repo, mustGet(t, q, id).Repo)
+		require.Equal(t, uuid.Nil, mustGet(t, q, instance).Repo)
+		list, _, err := q.List(ctx, jobs.Filter{})
+		require.NoError(t, err)
+		require.Len(t, list, 2)
+		require.Equal(t, repo, list[1].Repo)
+
+		require.NoError(t, q.Cancel(ctx, id))
+		retried, err := q.Retry(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, repo, mustGet(t, q, retried).Repo, "a retry stays scoped to the Repo")
+	})
+}

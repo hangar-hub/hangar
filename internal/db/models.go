@@ -477,6 +477,7 @@ type Job struct {
 	Error          string            `bun:"error,notnull"`
 	CreatedBy      *uuid.UUID        `bun:"created_by,type:uuid"`
 	ParentID       *uuid.UUID        `bun:"parent_id,type:uuid"`
+	RepoID         *uuid.UUID        `bun:"repo_id,type:uuid"`
 	TraceContext   map[string]string `bun:"trace_context,notnull"`
 	StartedAt      *time.Time        `bun:"started_at"`
 	FinishedAt     *time.Time        `bun:"finished_at"`

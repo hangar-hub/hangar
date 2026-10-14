@@ -4,23 +4,47 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	"github.com/jamesagarside/hangar/internal/api/gen"
+	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/repo"
 )
 
-// Jobs serves /jobs: listing, progress, cancel and retry. Users see the
-// Jobs they started; Instance admins see every Job.
+// JobRepos finds the Repo a Repo-scoped Job works on. repo.Service
+// implements it.
+type JobRepos interface {
+	GetByUUID(ctx context.Context, id uuid.UUID) (*repo.Repo, error)
+}
+
+// Jobs serves /jobs: listing, progress, cancel and retry.
+//
+// Users see the Jobs they started; Instance admins see every Job. A
+// Repo-scoped Job (jobs.Job.Repo set) is also checked against the caller's
+// current access to that Repo through Authz, including their Token's
+// restrictions: read_files to see it (its progress and result, such as a
+// zip download URL, reveal the Repo's files), write to cancel or retry it,
+// and admin while the Repo is deleted. So a Token restricted to one Repo
+// never sees another Repo's Jobs, and a user who lost access to a private
+// Repo no longer sees the Jobs they started on it. A credential with
+// Token restrictions sees no Instance-wide Jobs, as its restrictions name
+// only Repos and Namespaces.
 type Jobs struct {
 	Queue jobs.Queue
+	// Authz and Repos are required: without them any request that reaches
+	// a Repo-scoped Job fails with 500 rather than skip the check.
+	Authz auth.Authz
+	Repos JobRepos
 }
 
 // JobResource converts a Job to its native API form. The /pulls handlers
@@ -113,10 +137,82 @@ func jobsCaller(w http.ResponseWriter, r *http.Request) (model.Principal, bool) 
 	return p, true
 }
 
-// visible reports whether p may see the Job: its creator or an Instance admin.
-func jobVisible(p model.Principal, j *jobs.Job) bool {
-	return p.IsAdmin || (j.CreatedBy != uuid.Nil && j.CreatedBy == p.UserID)
+// Outcomes of a Job access check other than access.
+var (
+	// errJobHidden means the caller may not know the Job exists: 404.
+	errJobHidden = errors.New("job hidden")
+	// errJobReadOnly means the caller may see the Job but not change it: 403.
+	errJobReadOnly = errors.New("job read-only")
+)
+
+// jobAccess checks p's access to j: to see it, and with write to cancel or
+// retry it. It returns nil, errJobHidden, errJobReadOnly, or an error
+// reading the Repo or checking permissions. repos caches Repo lookups
+// across the Jobs of one request.
+func (h *Jobs) jobAccess(ctx context.Context, p model.Principal, j *jobs.Job, write bool, repos map[uuid.UUID]*repo.Repo) error {
+	started := j.CreatedBy != uuid.Nil && j.CreatedBy == p.UserID
+	if !started && !p.IsAdmin {
+		return errJobHidden
+	}
+	unrestricted := p.Token == nil || p.Token.Restrictions.IsZero()
+	if j.Repo == uuid.Nil {
+		if !unrestricted {
+			return errJobHidden
+		}
+		return nil
+	}
+	if h.Authz == nil || h.Repos == nil {
+		return errors.New("the Jobs API has no Authz or Repos, so it cannot check access to Repo-scoped Jobs")
+	}
+	r, ok := repos[j.Repo]
+	if !ok {
+		var err error
+		r, err = h.Repos.GetByUUID(ctx, j.Repo)
+		if err != nil && !errors.Is(err, repo.ErrNotFound) {
+			return fmt.Errorf("read the Repo of Job %s: %w", j.ID, err)
+		}
+		repos[j.Repo] = r
+	}
+	if r == nil {
+		// The Repo was purged. Nobody can be checked against it, so only
+		// Instance admins with an unrestricted credential see its Jobs.
+		if p.IsAdmin && unrestricted {
+			return nil
+		}
+		return errJobHidden
+	}
+	target := auth.Target{Repo: &auth.RepoTarget{
+		ID: r.ID, UUID: r.UUID, NamespaceID: r.NamespaceID, Visibility: r.Visibility, Gated: r.Gating.Enabled(), Mirror: r.Mirror,
+	}}
+	see, change := auth.ActionReadFiles, auth.ActionWrite
+	if r.DeletedAt != nil {
+		see, change = auth.ActionAdmin, auth.ActionAdmin
+	}
+	if err := h.Authz.Can(ctx, p, see, target); err != nil {
+		if jobAuthDenied(err) {
+			return errJobHidden
+		}
+		return fmt.Errorf("check access to the Repo of Job %s: %w", j.ID, err)
+	}
+	if write {
+		if err := h.Authz.Can(ctx, p, change, target); err != nil {
+			if jobAuthDenied(err) {
+				return errJobReadOnly
+			}
+			return fmt.Errorf("check access to the Repo of Job %s: %w", j.ID, err)
+		}
+	}
+	return nil
 }
+
+func jobAuthDenied(err error) bool {
+	return errors.Is(err, auth.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrGated)
+}
+
+// jobListMaxPages bounds how many queue pages one listing reads while
+// skipping Jobs the caller may not see. The response then carries the
+// cursor where it stopped.
+const jobListMaxPages = 10
 
 // ListJobs implements gen.ServerInterface.
 func (h *Jobs) ListJobs(w http.ResponseWriter, r *http.Request, params gen.ListJobsParams) {
@@ -160,19 +256,51 @@ func (h *Jobs) ListJobs(w http.ResponseWriter, r *http.Request, params gen.ListJ
 			return
 		}
 	}
-	list, next, err := h.Queue.List(r.Context(), f)
+	out, err := h.listVisible(r.Context(), p, f)
 	if err != nil {
 		platformFail(w, r, "Could not list Jobs.", err)
 		return
 	}
-	out := gen.JobList{Items: make([]gen.Job, 0, len(list))}
-	for _, j := range list {
-		out.Items = append(out.Items, JobResource(j))
-	}
-	if next != "" {
-		out.NextCursor = &next
-	}
 	httpx.WriteJSON(w, r, http.StatusOK, out)
+}
+
+// listVisible pages through the queue until it has f.Limit Jobs the caller
+// may see, the queue runs out, or it has read jobListMaxPages pages. The
+// cursor it returns is the last Job it examined, so the next page starts
+// after the Jobs it skipped.
+func (h *Jobs) listVisible(ctx context.Context, p model.Principal, f jobs.Filter) (gen.JobList, error) {
+	out := gen.JobList{Items: []gen.Job{}}
+	repos := map[uuid.UUID]*repo.Repo{}
+	for page := 1; ; page++ {
+		list, next, err := h.Queue.List(ctx, f)
+		if err != nil {
+			return out, err
+		}
+		for i, j := range list {
+			switch err := h.jobAccess(ctx, p, j, false, repos); {
+			case errors.Is(err, errJobHidden):
+				continue
+			case err != nil:
+				return out, err
+			}
+			out.Items = append(out.Items, JobResource(j))
+			if len(out.Items) == f.Limit {
+				if i < len(list)-1 || next != "" {
+					c := j.ID.String()
+					out.NextCursor = &c
+				}
+				return out, nil
+			}
+		}
+		if next == "" {
+			return out, nil
+		}
+		if page == jobListMaxPages {
+			out.NextCursor = &next
+			return out, nil
+		}
+		f.Cursor = next
+	}
 }
 
 func knownJobKind(k jobs.Kind) bool {
@@ -184,18 +312,33 @@ func knownJobKind(k jobs.Kind) bool {
 	return false
 }
 
-// lookup returns a Job the caller may see, or writes 401 or 404.
-func (h *Jobs) lookup(w http.ResponseWriter, r *http.Request, id gen.ID) (model.Principal, *jobs.Job, bool) {
+// lookup returns a Job the caller may see and, with write, change, or
+// writes 401, 403 or 404. A Job the caller may not see is 404 whatever
+// their Token's scope; one they may see but not change is 403.
+func (h *Jobs) lookup(w http.ResponseWriter, r *http.Request, id gen.ID, write bool) (model.Principal, *jobs.Job, bool) {
 	p, ok := jobsCaller(w, r)
 	if !ok {
 		return p, nil, false
 	}
+	repos := map[uuid.UUID]*repo.Repo{}
 	j, err := h.Queue.Get(r.Context(), id)
-	if errors.Is(err, jobs.ErrNotFound) || (err == nil && !jobVisible(p, j)) {
+	if err == nil {
+		err = h.jobAccess(r.Context(), p, j, false, repos)
+	}
+	if err == nil && write {
+		if !jobsCanWrite(w, r, p) {
+			return p, nil, false
+		}
+		err = h.jobAccess(r.Context(), p, j, true, repos)
+	}
+	switch {
+	case errors.Is(err, jobs.ErrNotFound) || errors.Is(err, errJobHidden):
 		platformProblem(w, r, http.StatusNotFound, "Job not found.")
 		return p, nil, false
-	}
-	if err != nil {
+	case errors.Is(err, errJobReadOnly):
+		platformProblem(w, r, http.StatusForbidden, "You need write access to this Job's Repo to cancel or retry the Job.")
+		return p, nil, false
+	case err != nil:
 		platformFail(w, r, "Could not read the Job.", err)
 		return p, nil, false
 	}
@@ -204,7 +347,7 @@ func (h *Jobs) lookup(w http.ResponseWriter, r *http.Request, id gen.ID) (model.
 
 // GetJob implements gen.ServerInterface.
 func (h *Jobs) GetJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
-	if _, j, ok := h.lookup(w, r, id); ok {
+	if _, j, ok := h.lookup(w, r, id, false); ok {
 		httpx.WriteJSON(w, r, http.StatusOK, JobResource(j))
 	}
 }
@@ -219,8 +362,7 @@ func jobsCanWrite(w http.ResponseWriter, r *http.Request, p model.Principal) boo
 
 // CancelJob implements gen.ServerInterface.
 func (h *Jobs) CancelJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
-	p, _, ok := h.lookup(w, r, id)
-	if !ok || !jobsCanWrite(w, r, p) {
+	if _, _, ok := h.lookup(w, r, id, true); !ok {
 		return
 	}
 	switch err := h.Queue.Cancel(r.Context(), id); {
@@ -244,8 +386,7 @@ func (h *Jobs) CancelJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
 
 // RetryJob implements gen.ServerInterface. It answers with the new Job.
 func (h *Jobs) RetryJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
-	p, _, ok := h.lookup(w, r, id)
-	if !ok || !jobsCanWrite(w, r, p) {
+	if _, _, ok := h.lookup(w, r, id, true); !ok {
 		return
 	}
 	newID, err := h.Queue.Retry(r.Context(), id)

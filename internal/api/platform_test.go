@@ -51,6 +51,8 @@ type env struct {
 	store   blob.Store
 	handler http.Handler
 	users   map[string]model.Principal
+	authz   *authtest.Authz
+	repos   jobRepos
 }
 
 func newEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck) *env {
@@ -58,7 +60,10 @@ func newEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck)
 	d := dbtest.SQLite(t)
 	store, err := blobfs.New(filepath.Join(t.TempDir(), "blobs"))
 	require.NoError(t, err)
-	e := &env{t: t, db: d, queue: jobs.NewQueue(d, nil, jobs.QueueOptions{}), audit: audittest.NewFake(), store: store, users: map[string]model.Principal{}}
+	e := &env{
+		t: t, db: d, queue: jobs.NewQueue(d, nil, jobs.QueueOptions{}), audit: audittest.NewFake(), store: store,
+		users: map[string]model.Principal{}, authz: authtest.NewAuthz(), repos: jobRepos{},
+	}
 	for _, name := range []string{"alice", "bob", "root"} {
 		e.users[name] = e.newUser(name, name == "root")
 	}
@@ -77,7 +82,7 @@ func newEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck)
 		}
 	}
 	srv := platformServer{
-		Jobs:         &api.Jobs{Queue: e.queue},
+		Jobs:         &api.Jobs{Queue: e.queue, Authz: e.authz, Repos: e.repos},
 		AdminStorage: &api.AdminStorage{Authz: authtest.NewAuthz(), Accounting: gc.NewAccounting(d), Queue: e.queue, Audit: e.audit},
 		AdminSystem: &api.AdminSystem{Authz: authtest.NewAuthz(), DB: d, Checks: checks(d, store), Info: api.SystemInfo{
 			Version: "1.2.3", Commit: "abc123", Role: "all", BlobBackend: "fs", Telemetry: map[string]string{"traces": "none"},

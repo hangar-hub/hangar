@@ -88,6 +88,16 @@ type NewJob struct {
 	CreatedBy uuid.UUID
 	// ParentID links child Jobs, such as pull.file Jobs of a pull.
 	ParentID uuid.UUID
+	// Repo is the UUID of the Repo a Repo-scoped Job works on: zip export,
+	// Pull and pull.file, mirror.sync, index, scan, git.compact,
+	// lfs.verify, dataset.convert and dataset.stats, and any other Job
+	// whose progress or result reveals the Repo's content. The native API
+	// shows such a Job only to callers who can still read that Repo, within
+	// their Token's restrictions, and lets only callers who can write to it
+	// cancel or retry it. uuid.Nil marks an Instance-wide Job (gc, xet.gc,
+	// upload.expire), which only Instance admins with an unrestricted
+	// credential see unless they started it.
+	Repo uuid.UUID
 }
 
 // FileProgress is per-file progress for Pulls.
@@ -129,6 +139,7 @@ type Job struct {
 	Error       string
 	CreatedBy   uuid.UUID
 	ParentID    uuid.UUID
+	Repo        uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	StartedAt   *time.Time

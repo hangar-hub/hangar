@@ -486,6 +486,7 @@ CREATE TABLE jobs (
     error text NOT NULL DEFAULT '',
     created_by uuid REFERENCES users (id) ON DELETE SET NULL,
     parent_id uuid REFERENCES jobs (id) ON DELETE CASCADE,
+    repo_id uuid,
     trace_context jsonb NOT NULL DEFAULT '{}',
     started_at timestamptz,
     finished_at timestamptz,
@@ -500,6 +501,8 @@ CREATE INDEX jobs_claim_idx ON jobs (status, priority DESC, run_after);
 CREATE INDEX jobs_parent_idx ON jobs (parent_id);
 --bun:split
 CREATE INDEX jobs_created_by_idx ON jobs (created_by, created_at);
+--bun:split
+CREATE INDEX jobs_repo_idx ON jobs (repo_id);
 --bun:split
 
 CREATE TABLE schedules (

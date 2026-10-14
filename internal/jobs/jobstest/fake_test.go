@@ -161,3 +161,25 @@ func TestFakeLimiter(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, l.WaitN(ctx, "pull", 1), context.Canceled)
 }
+
+func TestFakeKeepsRepoAndRedactsErrors(t *testing.T) {
+	ctx := context.Background()
+	reg := jobs.NewRegistry()
+	require.NoError(t, reg.Register(jobs.KindZipExport, func(context.Context, *jobs.Job, jobs.Progress) error {
+		return jobs.Permanent(errors.New(`Get "https://b.example/k?X-Amz-Signature=s3cr3t": EOF`))
+	}, jobs.HandlerOptions{}))
+	q := jobstest.NewFake(reg)
+	repo := uuid.New()
+	id, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindZipExport, Repo: repo})
+	require.NoError(t, err)
+	require.Equal(t, 1, q.RunPending(ctx))
+	j, err := q.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, repo, j.Repo)
+	require.Equal(t, `Get "https://b.example/k?redacted": EOF`, j.Error, "the fake stores errors as the worker does")
+	retried, err := q.Retry(ctx, id)
+	require.NoError(t, err)
+	j, err = q.Get(ctx, retried)
+	require.NoError(t, err)
+	require.Equal(t, repo, j.Repo)
+}
