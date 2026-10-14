@@ -31,7 +31,9 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/robfig/cron/v3` | v3.0.1 | Parsing the 5-field cron schedules in configuration and the `schedules` table. |
 | `github.com/google/uuid` | v1.6.0 | UUIDv7 row IDs. |
 | `github.com/gpustack/gguf-parser-go` | v0.26.4 | GGUF header parsing with ranged reads (MIT). Pinned until W7 imports it. |
-| `github.com/parquet-go/parquet-go` | v0.32.0 | Parquet reading and writing for datasets (Apache-2.0). Pinned until W10 imports it. |
+| `github.com/parquet-go/parquet-go` | v0.32.0 | Parquet reading and writing for datasets (Apache-2.0). |
+| `github.com/klauspost/compress` | v1.20.1 | zstd for zstd-compressed dataset files and Arrow IPC buffers (Apache-2.0, BSD-3-Clause). Already required by parquet-go. |
+| `go.yaml.in/yaml/v3` | v3.0.5 | Ordered YAML nodes for dataset card metadata, so `configs` and features keep their order (Apache-2.0, MIT). Already required by koanf. |
 | `github.com/oapi-codegen/runtime` | v1.7.0 | Runtime helpers for the generated native API code. |
 | `github.com/oapi-codegen/oapi-codegen/v2` (tool) | v2.8.0 | Generates `internal/api/gen` from `api/openapi.yaml`. |
 | `github.com/getkin/kin-openapi` | v0.142.0 | OpenAPI document model used by the generated embedded spec. |

@@ -15,6 +15,8 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/media"
 	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
+	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/model"
 )
 
@@ -189,4 +191,27 @@ func TestViewerInterface(t *testing.T) {
 	missing := model.RepoID{Type: model.RepoTypeDataset, Namespace: "ns", Name: "missing"}
 	_, err = v.IsValid(ctx, anon, missing)
 	require.True(t, errors.Is(err, datasets.ErrNotFound), err)
+}
+
+// TestViewerOnEachDriver runs the Viewer over SQLite and, with
+// HANGAR_TEST_POSTGRES=1, Postgres, whose jsonb would reorder keys if the
+// store kept documents as jsonb.
+func TestViewerOnEachDriver(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		s := viewertest.New(t, viewertest.Options{DB: d})
+		r, sha := s.Dataset(t, "drivers", map[string][]byte{"train.csv": []byte(reviewsCSV)})
+		s.Convert(t, r, sha)
+		ds := r.ID.String()
+		res := get(t, s, "/rows", q("dataset", ds, "config", "default", "split", "train"), "")
+		require.Equal(t, http.StatusOK, res.status, string(res.raw))
+		require.Contains(t, string(res.raw), `"row":{"id":1,"review":"Great app","stars":5,"ok":true}`)
+		res = get(t, s, "/info", q("dataset", ds), "")
+		require.Equal(t, http.StatusOK, res.status)
+		require.Contains(t, string(res.raw), `"features":{"id":{"dtype":"int64","_type":"Value"},"review":{"dtype":"string","_type":"Value"}`)
+		res = get(t, s, "/filter", q("dataset", ds, "config", "default", "split", "train", "where", `"stars" > 3`), "")
+		require.EqualValues(t, 2, res.body["num_rows_total"])
+		res = get(t, s, "/statistics", q("dataset", ds, "config", "default", "split", "train"), "")
+		require.Equal(t, http.StatusOK, res.status)
+		require.EqualValues(t, 4, res.body["num_examples"])
+	})
 }
