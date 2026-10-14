@@ -5,8 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -199,9 +202,73 @@ func runExtended(t *testing.T, caps Capabilities, newStore func(t *testing.T) bl
 		require.Nil(t, find())
 	})
 
+	t.Run("ServedDownloadsAreAttachments", func(t *testing.T) {
+		s := newStore(t)
+		key := "lfs/sha256/xss/page"
+		require.NoError(t, s.Put(ctx, key, bytes.NewReader(xssPage), int64(len(xssPage))))
+		d := blob.Downloads{Store: s, Mode: blob.DownloadProxy}
+		serve := func(t *testing.T, method, filename string, headers map[string]string) *httptest.ResponseRecorder {
+			t.Helper()
+			req := httptest.NewRequestWithContext(ctx, method, "/download", nil)
+			for k, v := range headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+			// A caller's Content-Type, such as one guessed from the file
+			// name, never survives.
+			rec.Header().Set("Content-Type", "text/html")
+			require.NoError(t, d.Serve(rec, req, key, filename))
+			return rec
+		}
+
+		for _, name := range []string{"page.html", "image.svg", ""} {
+			rec := serve(t, http.MethodGet, name, nil)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, xssPage, rec.Body.Bytes())
+			requireAttachment(t, rec.Header(), name)
+			require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+			require.Equal(t, strconv.Itoa(len(xssPage)), rec.Header().Get("Content-Length"))
+		}
+
+		rec := serve(t, http.MethodGet, "page.html", map[string]string{"Range": "bytes=6-13"})
+		require.Equal(t, http.StatusPartialContent, rec.Code)
+		require.Equal(t, string(xssPage[6:14]), rec.Body.String())
+		require.Equal(t, fmt.Sprintf("bytes 6-13/%d", len(xssPage)), rec.Header().Get("Content-Range"))
+		requireAttachment(t, rec.Header(), "page.html")
+
+		rec = serve(t, http.MethodHead, "page.html", nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Zero(t, rec.Body.Len())
+		require.Equal(t, strconv.Itoa(len(xssPage)), rec.Header().Get("Content-Length"))
+		requireAttachment(t, rec.Header(), "page.html")
+
+		rec = serve(t, http.MethodGet, "page.html", map[string]string{"Range": "bytes=999-"})
+		require.Equal(t, http.StatusRequestedRangeNotSatisfiable, rec.Code)
+		require.Equal(t, fmt.Sprintf("bytes */%d", len(xssPage)), rec.Header().Get("Content-Range"))
+
+		missing := httptest.NewRecorder()
+		err := d.Serve(missing, httptest.NewRequestWithContext(ctx, http.MethodGet, "/download", nil), "lfs/sha256/xss/missing", "x")
+		require.ErrorIs(t, err, blob.ErrNotFound)
+		require.False(t, missing.Flushed)
+		require.Empty(t, missing.Header(), "nothing is written for a missing object, so the caller answers in its own format")
+	})
+
 	if caps.PresignHTTP {
 		runPresignHTTP(t, caps, newStore)
 	}
+}
+
+// xssPage is an upload a browser would run as script if it were served
+// inline.
+var xssPage = []byte("<html><script>alert(document.domain)</script></html>")
+
+// requireAttachment checks the headers that stop a browser rendering a
+// download: application/octet-stream and an attachment disposition.
+func requireAttachment(t *testing.T, h http.Header, filename string) {
+	t.Helper()
+	require.Equal(t, blob.SafeContentType, h.Get("Content-Type"))
+	require.Equal(t, blob.ContentDisposition(filename), h.Get("Content-Disposition"))
+	require.True(t, strings.HasPrefix(h.Get("Content-Disposition"), "attachment"))
 }
 
 func runPresignHTTP(t *testing.T, caps Capabilities, newStore func(t *testing.T) blob.Store) {
@@ -264,6 +331,56 @@ func runPresignHTTP(t *testing.T, caps Capabilities, newStore func(t *testing.T)
 			require.GreaterOrEqual(t, resp.StatusCode, 400, "the store checks the signed SHA-256")
 			requireMissing(t, s, "lfs/sha256/pp/corrupt")
 		}
+	})
+
+	t.Run("PresignedDownloadsAreAttachments", func(t *testing.T) {
+		s := newStore(t)
+		// An uploader with a plain presigned PUT chooses the stored
+		// Content-Type; downloads must not serve it.
+		req, err := s.PresignPut(ctx, "lfs/sha256/xss/plain", int64(len(xssPage)), nil, 10*time.Minute)
+		require.NoError(t, err)
+		require.Equal(t, blob.SafeContentType, req.Headers["Content-Type"])
+		resp := do(t, http.MethodPut, req.URL, xssPage, map[string]string{"Content-Type": "text/html"})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		for _, name := range []string{"page.html", ""} {
+			u, err := s.PresignGet(ctx, "lfs/sha256/xss/plain", 10*time.Minute, name)
+			require.NoError(t, err)
+			resp = do(t, http.MethodGet, u, nil, nil)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, xssPage, resp.Body)
+			requireAttachment(t, resp.Header, name)
+		}
+
+		// A presigned PUT that carries a checksum signs its Content-Type:
+		// sending another one is refused and stores nothing.
+		sum := sha256.Sum256(xssPage)
+		req, err = s.PresignPut(ctx, "lfs/sha256/xss/signed", int64(len(xssPage)), sum[:], 10*time.Minute)
+		require.NoError(t, err)
+		headers := map[string]string{}
+		for k, v := range req.Headers {
+			headers[k] = v
+		}
+		headers["Content-Type"] = "image/svg+xml"
+		resp = do(t, http.MethodPut, req.URL, xssPage, headers)
+		require.GreaterOrEqual(t, resp.StatusCode, 400, "the Content-Type is signed")
+		requireMissing(t, s, "lfs/sha256/xss/signed")
+		resp = do(t, http.MethodPut, req.URL, xssPage, req.Headers)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Parts uploaded through presigned URLs cannot set the type either.
+		key := "lfs/sha256/xss/multipart"
+		id, err := s.CreateMultipart(ctx, key)
+		require.NoError(t, err)
+		u, err := s.PresignPart(ctx, key, id, 1, 10*time.Minute)
+		require.NoError(t, err)
+		resp = do(t, http.MethodPut, u, xssPage, map[string]string{"Content-Type": "text/html"})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.NoError(t, s.CompleteMultipart(ctx, key, id, []blob.Part{{Number: 1, ETag: resp.Header.Get("ETag")}}))
+		u, err = s.PresignGet(ctx, key, 10*time.Minute, "page.html")
+		require.NoError(t, err)
+		resp = do(t, http.MethodGet, u, nil, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		requireAttachment(t, resp.Header, "page.html")
 	})
 
 	t.Run("PresignPartHTTP", func(t *testing.T) {

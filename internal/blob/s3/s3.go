@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -306,7 +305,7 @@ func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64) er
 func (s *Store) putBytes(ctx context.Context, objectKey string, buf []byte) error {
 	sum := sha256.Sum256(buf)
 	_, err := s.core.PutObject(ctx, s.bucket, objectKey, bytes.NewReader(buf), int64(len(buf)), "", hex.EncodeToString(sum[:]),
-		minio.PutObjectOptions{DisableMultipart: true})
+		minio.PutObjectOptions{DisableMultipart: true, ContentType: blob.SafeContentType})
 	return mapErr(err, objectKey)
 }
 
@@ -428,7 +427,9 @@ func (s *Store) List(ctx context.Context, prefix string, fn func(blob.Info) erro
 }
 
 // Copy implements blob.Store. ComposeObject copies server-side, in parts
-// for objects over 5 GiB.
+// for objects over 5 GiB. The copy's Content-Type is replaced with
+// blob.SafeContentType rather than copied, so a source stored with another
+// type does not pass it on.
 func (s *Store) Copy(ctx context.Context, srcKey, dstKey string) error {
 	src, err := s.objectKey(srcKey)
 	if err != nil {
@@ -439,18 +440,23 @@ func (s *Store) Copy(ctx context.Context, srcKey, dstKey string) error {
 		return err
 	}
 	_, err = s.client.ComposeObject(ctx,
-		minio.CopyDestOptions{Bucket: s.bucket, Object: dst},
+		minio.CopyDestOptions{
+			Bucket: s.bucket, Object: dst, ContentType: blob.SafeContentType,
+			ReplaceMetadata: true, UserMetadata: map[string]string{"Content-Type": blob.SafeContentType},
+		},
 		minio.CopySrcOptions{Bucket: s.bucket, Object: src})
 	return mapErr(err, srcKey)
 }
 
-// CreateMultipart implements blob.Store.
+// CreateMultipart implements blob.Store. The upload's Content-Type is set
+// here, by Hangar, so clients uploading parts through presigned URLs cannot
+// choose it.
 func (s *Store) CreateMultipart(ctx context.Context, key string) (string, error) {
 	k, err := s.objectKey(key)
 	if err != nil {
 		return "", err
 	}
-	id, err := s.core.NewMultipartUpload(ctx, s.bucket, k, minio.PutObjectOptions{})
+	id, err := s.core.NewMultipartUpload(ctx, s.bucket, k, minio.PutObjectOptions{ContentType: blob.SafeContentType})
 	return id, mapErr(err, key)
 }
 
@@ -551,17 +557,19 @@ func (s *Store) AbortMultipart(ctx context.Context, key, uploadID string) error 
 	return mapErr(s.core.AbortMultipartUpload(ctx, s.bucket, k, uploadID), key)
 }
 
-// PresignGet implements blob.Store. The URL sets Content-Disposition so a
-// browser saves the file under filename.
+// PresignGet implements blob.Store. The URL overrides the response's
+// Content-Type with blob.SafeContentType and its Content-Disposition with an
+// attachment naming filename, whatever the object was stored with, so a
+// browser never renders an uploaded file (HTML, SVG) on the bucket's
+// origin.
 func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration, filename string) (string, error) {
 	k, err := s.objectKey(key)
 	if err != nil {
 		return "", err
 	}
 	q := url.Values{}
-	if filename != "" {
-		q.Set("response-content-disposition", ContentDisposition(filename))
-	}
+	q.Set("response-content-type", blob.SafeContentType)
+	q.Set("response-content-disposition", blob.ContentDisposition(filename))
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, k, ttl, q)
 	if err != nil {
 		return "", mapErr(err, key)
@@ -569,18 +577,16 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration, f
 	return u.String(), nil
 }
 
-// ContentDisposition returns an attachment Content-Disposition for
-// filename, with an RFC 6266 filename* for names that are not plain ASCII.
-func ContentDisposition(filename string) string {
-	if v := mime.FormatMediaType("attachment", map[string]string{"filename": filename}); v != "" {
-		return v
-	}
-	return `attachment; filename="download"`
-}
-
-// PresignPut implements blob.Store. With sum, the URL signs an
-// x-amz-checksum-sha256 header that the client must send, and the store
-// rejects a body with another SHA-256. Objects over 5 GiB need multipart.
+// PresignPut implements blob.Store. Headers always carries Content-Type
+// blob.SafeContentType. With sum, the URL signs that Content-Type and an
+// x-amz-checksum-sha256 header, the client must send both, and the store
+// rejects a body with another SHA-256 or a request with another
+// Content-Type. Without sum nothing is signed, because huggingface_hub
+// sends no headers on a basic upload (docs/research/s3-presigned-checksum.md)
+// and a signed header it leaves out fails the upload; the stored type is
+// then whatever the client sent, which is safe because every download
+// forces blob.SafeContentType (PresignGet, blob.Downloads.Serve). Objects
+// over 5 GiB need multipart.
 func (s *Store) PresignPut(ctx context.Context, key string, size int64, sum []byte, ttl time.Duration) (blob.PresignedRequest, error) {
 	k, err := s.objectKey(key)
 	if err != nil {
@@ -590,12 +596,13 @@ func (s *Store) PresignPut(ctx context.Context, key string, size int64, sum []by
 		return blob.PresignedRequest{}, blob.ErrNotSupported
 	}
 	headers := http.Header{}
-	out := map[string]string{}
+	out := map[string]string{"Content-Type": blob.SafeContentType}
 	if sum != nil {
 		if len(sum) != sha256.Size {
 			return blob.PresignedRequest{}, fmt.Errorf("presign put %s: want a %d-byte SHA-256", key, sha256.Size)
 		}
 		v := base64.StdEncoding.EncodeToString(sum)
+		headers.Set("Content-Type", blob.SafeContentType)
 		headers.Set("x-amz-checksum-sha256", v)
 		out["x-amz-checksum-sha256"] = v
 	}

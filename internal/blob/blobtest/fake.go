@@ -29,6 +29,10 @@ type object struct {
 	data    []byte
 	modTime time.Time
 	etag    string
+	// contentType is what the object was stored with. Hangar's own writes
+	// store blob.SafeContentType; a presigned PUT stores the request's
+	// Content-Type, as S3 does.
+	contentType string
 }
 
 type upload struct {
@@ -161,7 +165,7 @@ func (f *Fake) Put(ctx context.Context, key string, r io.Reader, size int64) err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.objects[key] = &object{data: data, modTime: f.now(), etag: etagOf(data)}
+	f.objects[key] = &object{data: data, modTime: f.now(), etag: etagOf(data), contentType: blob.SafeContentType}
 	return nil
 }
 
@@ -305,7 +309,7 @@ func (f *Fake) CompleteMultipart(_ context.Context, key, uploadID string, parts 
 		}
 		buf.Write(d)
 	}
-	f.objects[key] = &object{data: buf.Bytes(), modTime: f.now(), etag: etagOf(buf.Bytes())}
+	f.objects[key] = &object{data: buf.Bytes(), modTime: f.now(), etag: etagOf(buf.Bytes()), contentType: blob.SafeContentType}
 	delete(f.uploads, uploadID)
 	return nil
 }
@@ -332,9 +336,8 @@ func (f *Fake) PresignGet(ctx context.Context, key string, ttl time.Duration, fi
 		return "", err
 	}
 	q := url.Values{"X-Expires": {strconv.FormatInt(f.now().Add(ttl).Unix(), 10)}}
-	if filename != "" {
-		q.Set("response-content-disposition", `attachment; filename="`+filename+`"`)
-	}
+	q.Set("response-content-type", blob.SafeContentType)
+	q.Set("response-content-disposition", blob.ContentDisposition(filename))
 	return strings.TrimRight(f.PresignBaseURL, "/") + "/" + key + "?" + q.Encode(), nil
 }
 
@@ -348,7 +351,7 @@ func (f *Fake) PresignPut(_ context.Context, key string, size int64, sha256 []by
 		return blob.PresignedRequest{}, err
 	}
 	q := url.Values{"X-Expires": {strconv.FormatInt(f.now().Add(ttl).Unix(), 10)}}
-	headers := map[string]string{}
+	headers := map[string]string{"Content-Type": blob.SafeContentType}
 	if sha256 != nil {
 		if len(sha256) != sha256Size {
 			return blob.PresignedRequest{}, fmt.Errorf("presign put %s: want a %d-byte SHA-256", key, sha256Size)
@@ -358,6 +361,7 @@ func (f *Fake) PresignPut(_ context.Context, key string, size int64, sha256 []by
 		v := base64.StdEncoding.EncodeToString(sha256)
 		headers[checksumHeader] = v
 		q.Set(signedChecksumParam, v)
+		q.Set(signedContentTypeParam, blob.SafeContentType)
 	}
 	return blob.PresignedRequest{URL: strings.TrimRight(f.PresignBaseURL, "/") + "/" + key + "?" + q.Encode(), Headers: headers}, nil
 }
@@ -374,7 +378,7 @@ func (f *Fake) Copy(ctx context.Context, srcKey, dstKey string) error {
 	if !ok {
 		return fmt.Errorf("%w: %s", blob.ErrNotFound, srcKey)
 	}
-	f.objects[dstKey] = &object{data: bytes.Clone(o.data), modTime: f.now(), etag: o.etag}
+	f.objects[dstKey] = &object{data: bytes.Clone(o.data), modTime: f.now(), etag: o.etag, contentType: blob.SafeContentType}
 	return ctx.Err()
 }
 
@@ -384,14 +388,21 @@ const (
 	// signedChecksumParam carries the checksum a presigned PUT was signed
 	// with, as X-Amz-SignedHeaders does for S3.
 	signedChecksumParam = "X-Checksum-Sha256"
+	// signedContentTypeParam carries the Content-Type a presigned PUT was
+	// signed with.
+	signedContentTypeParam = "X-Content-Type"
+	// s3DefaultContentType is what S3 stores when a PUT has no Content-Type.
+	s3DefaultContentType = "binary/octet-stream"
 )
 
 var _ http.Handler = (*Fake)(nil)
 
 // ServeHTTP serves the Fake's presigned URLs the way S3 does: GET and HEAD
-// download an object (with Range and the signed Content-Disposition), PUT
-// uploads one (checking the signed SHA-256), and PUT with partNumber and
-// uploadId uploads a multipart part and returns its ETag. A URL whose
+// download an object (with Range, and the response-content-type and
+// response-content-disposition overrides, else the stored Content-Type),
+// PUT uploads one (storing the request's Content-Type and checking the
+// signed SHA-256 and Content-Type), and PUT with partNumber and uploadId
+// uploads a multipart part and returns its ETag. A URL whose
 // X-Expires has passed gets 403. Mount it at the path of PresignBaseURL.
 func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	base, err := url.Parse(f.PresignBaseURL)
@@ -424,6 +435,11 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if cd := q.Get("response-content-disposition"); cd != "" {
 			w.Header().Set("Content-Disposition", cd)
 		}
+		ct := q.Get("response-content-type")
+		if ct == "" {
+			ct = o.contentType
+		}
+		w.Header().Set("Content-Type", ct)
 		w.Header().Set("ETag", `"`+o.etag+`"`)
 		http.ServeContent(w, r, "", o.modTime, bytes.NewReader(o.data))
 	case r.Method == http.MethodPut && q.Has("uploadId"):
@@ -449,6 +465,10 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "the request does not match the signature", http.StatusForbidden)
 			return
 		}
+		if ct := q.Get(signedContentTypeParam); ct != "" && r.Header.Get("Content-Type") != ct {
+			http.Error(w, "the request does not match the signature", http.StatusForbidden)
+			return
+		}
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -465,7 +485,12 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		stored := r.Header.Get("Content-Type")
+		if stored == "" {
+			stored = s3DefaultContentType
+		}
 		f.mu.Lock()
+		f.objects[key].contentType = stored
 		etag := f.objects[key].etag
 		f.mu.Unlock()
 		w.Header().Set("ETag", `"`+etag+`"`)

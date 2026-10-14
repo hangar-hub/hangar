@@ -5,11 +5,15 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/blob"
@@ -125,9 +129,23 @@ func TestPresignPutLimit(t *testing.T) {
 	require.Contains(t, req.URL, "x-amz-checksum-sha256", "the checksum header is signed")
 	_, err = st.PresignPut(ctx, "lfs/x", 1, []byte{1}, time.Hour)
 	require.Error(t, err)
-	u, err := st.PresignGet(ctx, "lfs/x", time.Hour, "naïve model.gguf")
+	require.Equal(t, blob.SafeContentType, req.Headers["Content-Type"])
+	signed := signedHeaders(t, req.URL)
+	require.Contains(t, signed, "content-type", "with a checksum, the Content-Type is signed too")
+	require.Contains(t, signed, "x-amz-checksum-sha256")
+	plain, err := st.PresignPut(ctx, "lfs/x", 1, nil, time.Hour)
 	require.NoError(t, err)
-	require.Contains(t, u, "response-content-disposition=attachment")
+	require.Equal(t, blob.SafeContentType, plain.Headers["Content-Type"])
+	require.NotContains(t, signedHeaders(t, plain.URL), "content-type",
+		"without a checksum nothing is signed: huggingface_hub sends no headers on a basic upload")
+	for _, name := range []string{"naïve model.gguf", ""} {
+		u, err := st.PresignGet(ctx, "lfs/x", time.Hour, name)
+		require.NoError(t, err)
+		q := mustQuery(t, u)
+		require.Equal(t, blob.SafeContentType, q.Get("response-content-type"), "every presigned GET forces the type")
+		require.Equal(t, blob.ContentDisposition(name), q.Get("response-content-disposition"))
+		require.True(t, strings.HasPrefix(q.Get("response-content-disposition"), "attachment"))
+	}
 	_, err = st.PresignPart(ctx, "lfs/x", "id", 0, time.Hour)
 	require.Error(t, err)
 }
@@ -145,15 +163,72 @@ func TestNewValidatesOptions(t *testing.T) {
 	}
 }
 
-func TestContentDisposition(t *testing.T) {
-	require.Equal(t, "attachment; filename=model.gguf", s3.ContentDisposition("model.gguf"))
-	require.Contains(t, s3.ContentDisposition("naïve.gguf"), "filename*=utf-8''na%C3%AFve.gguf")
-}
-
 func TestStreamsLargeObjects(t *testing.T) {
 	if !s3Enabled(t) {
 		return
 	}
 	// 48 MiB is three 16 MiB parts, each streamed without a part buffer.
 	blobtest.RunStreaming(t, blobtest.S3(t), 48<<20, 16<<20)
+}
+
+func mustQuery(t *testing.T, raw string) url.Values {
+	t.Helper()
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	return u.Query()
+}
+
+func signedHeaders(t *testing.T, raw string) []string {
+	t.Helper()
+	return strings.Split(mustQuery(t, raw).Get("X-Amz-SignedHeaders"), ";")
+}
+
+// TestStoredContentTypeIsPinned checks that every write Hangar makes stores
+// application/octet-stream, including a server-side copy of an object an
+// uploader stored as text/html, so no stored object carries a type a
+// browser would render.
+func TestStoredContentTypeIsPinned(t *testing.T) {
+	if !s3Enabled(t) {
+		return
+	}
+	ctx := context.Background()
+	srv := blobtest.S3TestServer(t)
+	opts := srv.Options()
+	opts.Prefix = fmt.Sprintf("ctype-%d", time.Now().UnixNano())
+	st, err := s3.New(opts)
+	require.NoError(t, err)
+	require.NoError(t, st.EnsureBucket(ctx, srv.Region))
+	t.Cleanup(func() {
+		_ = st.List(context.Background(), "", func(i blob.Info) error { return st.Delete(context.Background(), i.Key) })
+	})
+	host, secure := strings.TrimPrefix(strings.TrimPrefix(srv.Endpoint, "http://"), "https://"), strings.HasPrefix(srv.Endpoint, "https://")
+	raw, err := minio.New(host, &minio.Options{Creds: credentials.NewStaticV4(srv.AccessKey, srv.SecretKey, ""), Secure: secure, Region: srv.Region, BucketLookup: minio.BucketLookupPath})
+	require.NoError(t, err)
+	stored := func(key string) string {
+		t.Helper()
+		oi, err := raw.StatObject(ctx, srv.Bucket, opts.Prefix+"/"+key, minio.StatObjectOptions{})
+		require.NoError(t, err, key)
+		return oi.ContentType
+	}
+
+	html := []byte("<html><script>alert(document.domain)</script></html>")
+	require.NoError(t, st.Put(ctx, "tmp/put", bytes.NewReader(html), int64(len(html))))
+	sum := sha256.Sum256(html)
+	require.NoError(t, st.PutVerified(ctx, "lfs/sha256/verified", bytes.NewReader(html), int64(len(html)), sum[:]))
+	id, err := st.CreateMultipart(ctx, "lfs/sha256/multipart")
+	require.NoError(t, err)
+	etag, err := st.PutPart(ctx, "lfs/sha256/multipart", id, 1, bytes.NewReader(html), int64(len(html)))
+	require.NoError(t, err)
+	require.NoError(t, st.CompleteMultipart(ctx, "lfs/sha256/multipart", id, []blob.Part{{Number: 1, ETag: etag}}))
+
+	// An uploader with a plain presigned PUT can choose the stored type;
+	// a copy of that object must not keep it.
+	_, err = raw.PutObject(ctx, srv.Bucket, opts.Prefix+"/uploads/evil", bytes.NewReader(html), int64(len(html)), minio.PutObjectOptions{ContentType: "text/html"})
+	require.NoError(t, err)
+	require.Equal(t, "text/html", stored("uploads/evil"))
+	require.NoError(t, st.Copy(ctx, "uploads/evil", "lfs/sha256/copied"))
+
+	for _, key := range []string{"tmp/put", "lfs/sha256/verified", "lfs/sha256/multipart", "lfs/sha256/copied"} {
+		require.Equal(t, blob.SafeContentType, stored(key), key)
+	}
 }
