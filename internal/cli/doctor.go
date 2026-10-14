@@ -186,9 +186,9 @@ func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error) []c
 			if err != nil {
 				return "", fmt.Errorf("the presigned URL is not valid")
 			}
-			resp, err := a.http.Do(req)
+			resp, err := redactingDoer{a.http}.Do(req)
 			if err != nil {
-				return "", fmt.Errorf("fetch a presigned URL from this host: %w", redactURLError(err))
+				return "", fmt.Errorf("fetch a presigned URL from this host: %w", err)
 			}
 			defer resp.Body.Close()
 			got, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
@@ -199,18 +199,6 @@ func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error) []c
 		})
 	}
 	return append(out, a.gitCheck())
-}
-
-// redactURLError drops the URL from an HTTP client error, so presigned
-// URLs never reach the output.
-func redactURLError(err error) error {
-	var ue interface{ Unwrap() error }
-	if errors.As(err, &ue) {
-		if inner := ue.Unwrap(); inner != nil {
-			return inner
-		}
-	}
-	return errors.New("request failed")
 }
 
 // skewMessage compares a remote time with the local one.

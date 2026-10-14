@@ -33,7 +33,31 @@ func newHTTPClient() *http.Client {
 	tr.DialContext = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	tr.TLSHandshakeTimeout = 30 * time.Second
 	tr.ResponseHeaderTimeout = 5 * time.Minute
-	return &http.Client{Transport: tr}
+	return &http.Client{Transport: tr, CheckRedirect: checkRedirect}
+}
+
+// maxRedirects is how many redirects one request may follow, as in
+// net/http.
+const maxRedirects = 10
+
+// checkRedirect drops the Token from a redirect to another origin. net/http
+// keeps the Authorization header on redirects to a subdomain, so without
+// this a download redirected to a presigned URL on, for example,
+// s3.hangar.example.com would send the Token to the storage endpoint, which
+// also refuses a request that is signed twice.
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
+	}
+	if !sameOrigin(req.URL, via[0].URL) {
+		req.Header.Del("Authorization")
+	}
+	return nil
+}
+
+// sameOrigin reports whether two URLs have the same scheme and host.
+func sameOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
 }
 
 // parseInstanceURL checks an Instance URL and strips any trailing slash.
@@ -50,7 +74,7 @@ func parseInstanceURL(raw string) (*url.URL, error) {
 func newClient(base *url.URL, token, version string, hc *http.Client) (*client, error) {
 	c := &client{base: base, token: token, ua: "hangar/" + version, http: hc}
 	api, err := gen.NewClientWithResponses(base.String()+nativePrefix,
-		gen.WithHTTPClient(hc),
+		gen.WithHTTPClient(redactingDoer{hc}),
 		gen.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
 			c.authorise(req)
 			return nil
@@ -64,7 +88,7 @@ func newClient(base *url.URL, token, version string, hc *http.Client) (*client, 
 
 // sameOrigin reports whether u is on the Instance, so it may carry the Token.
 func (c *client) sameOrigin(u *url.URL) bool {
-	return strings.EqualFold(u.Scheme, c.base.Scheme) && strings.EqualFold(u.Host, c.base.Host)
+	return sameOrigin(u, c.base)
 }
 
 // authorise adds the User-Agent, and the Token for requests to the Instance.
@@ -80,18 +104,24 @@ func (c *client) url(escapedPath string) string {
 	return c.base.String() + escapedPath
 }
 
+// send sends a request with the CLI's HTTP client, redacting the URLs in
+// its errors (see redactURLError).
+func (c *client) send(req *http.Request) (*http.Response, error) {
+	return redactingDoer{c.http}.Do(req)
+}
+
 // do sends a request to the Instance and returns the response if its status
 // is one of ok; otherwise it returns the mapped error.
 func (c *client) do(ctx context.Context, method, rawURL string, body io.Reader, header http.Header, ok ...int) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, body)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	for k, v := range header {
 		req.Header[k] = v
 	}
 	c.authorise(req)
-	resp, err := c.http.Do(req)
+	resp, err := c.send(req)
 	if err != nil {
 		return nil, fmt.Errorf("reach %s: %w", c.base.Host, err)
 	}

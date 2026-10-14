@@ -275,7 +275,7 @@ func (u *uploader) putPart(ctx context.Context, disk string, off, size int64, ra
 		req.Header.Set("Authorization", "Bearer "+u.c.token)
 		req.Header.Set("Content-Type", "application/octet-stream")
 	}
-	resp, err := u.c.http.Do(req)
+	resp, err := u.c.send(req)
 	if err != nil {
 		return "", fmt.Errorf("send the part: %w", err)
 	}

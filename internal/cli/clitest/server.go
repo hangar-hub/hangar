@@ -416,7 +416,7 @@ func (s *server) PlanUploads(w http.ResponseWriter, r *http.Request, t gen.RepoT
 			urls := make([]string, n)
 			for k := range urls {
 				if s.i.Presign {
-					urls[k] = fmt.Sprintf("%s/presigned/%s/%d?sig=fake", s.i.URL, up.id, k+1)
+					urls[k] = fmt.Sprintf("%s/presigned/%s/%d?sig=fake", s.i.PresignBase, up.id, k+1)
 				} else {
 					urls[k] = fmt.Sprintf("%s/api/hangar/v1/repos/%s/%s/%s/uploads/%s/parts/%d", s.i.URL, t, url.PathEscape(ns), url.PathEscape(name), up.id, k+1)
 				}
@@ -519,6 +519,24 @@ func (s *server) PutUploadPart(w http.ResponseWriter, r *http.Request, _ gen.Rep
 		return
 	}
 	s.i.storePart(w, id, n, body)
+}
+
+// presignedObject serves an LFS object at a presigned URL, with Range
+// support.
+func (i *Instance) presignedObject(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") != "" || r.URL.Query().Get("sig") != "fake" {
+		problem(w, http.StatusForbidden, "Presigned URLs take no Authorization header.")
+		return
+	}
+	sha := chi.URLParam(r, "sha")
+	i.mu.Lock()
+	obj, ok := i.objects[sha]
+	i.mu.Unlock()
+	if !ok {
+		problem(w, http.StatusNotFound, "No such object.")
+		return
+	}
+	http.ServeContent(w, r, sha, time.Time{}, bytes.NewReader(obj))
 }
 
 func (i *Instance) presignedPart(w http.ResponseWriter, r *http.Request) {
@@ -1012,6 +1030,8 @@ func (i *Instance) resolve(t model.RepoType) http.HandlerFunc {
 			f, ok = c.files[file]
 		}
 		present := ok && i.present(f)
+		redirect := i.RedirectDownloads
+		base := i.PresignBase
 		i.mu.Unlock()
 		if repo == nil || c == nil {
 			w.Header().Set("X-Error-Code", "RepoNotFound")
@@ -1032,6 +1052,11 @@ func (i *Instance) resolve(t model.RepoType) http.HandlerFunc {
 		}
 		w.Header().Set("ETag", `"`+etag+`"`)
 		w.Header().Set("X-Linked-Etag", `"`+etag+`"`)
+		if redirect && f.LFS {
+			w.Header().Set("X-Linked-Size", strconv.Itoa(len(f.Content)))
+			http.Redirect(w, r, base+"/presigned-objects/"+etag+"?sig=fake", http.StatusFound)
+			return
+		}
 		http.ServeContent(w, r, path.Base(file), time.Time{}, bytes.NewReader(f.Content))
 	}
 }

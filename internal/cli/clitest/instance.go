@@ -119,6 +119,15 @@ type Instance struct {
 	PartSize int64
 	// Presign makes part URLs presigned (no Authorization needed).
 	Presign bool
+	// RedirectDownloads makes Hub downloads of LFS files answer 302 with a
+	// presigned URL, as an Instance with storage.s3.download_mode redirect
+	// does.
+	RedirectDownloads bool
+	// PresignBase is the base URL of presigned URLs. New sets it to this
+	// server under another origin (localhost in place of 127.0.0.1), as a
+	// storage endpoint is; set it to point presigned URLs at another server,
+	// such as one that is down.
+	PresignBase string
 	// JobPolls is how many polls a Job takes to finish. Default 2.
 	JobPolls int
 	// FailPulls makes Pulls fail with this message.
@@ -170,11 +179,13 @@ func New(t testing.TB) *Instance {
 	r.Post("/oauth/device", i.oauthDevice)
 	r.Post("/oauth/token", i.oauthToken)
 	r.Put("/presigned/{id}/{n}", i.presignedPart)
+	r.Get("/presigned-objects/{sha}", i.presignedObject)
 	r.Get("/datasets/{ns}/{name}/resolve/{rev}/*", i.resolve(model.RepoTypeDataset))
 	r.Get("/{ns}/{name}/resolve/{rev}/*", i.resolve(model.RepoTypeModel))
 	gen.HandlerWithOptions(&server{i: i}, gen.ChiServerOptions{BaseURL: "/api/hangar/v1", BaseRouter: r})
 	i.srv = httptest.NewServer(r)
 	i.URL = i.srv.URL
+	i.PresignBase = strings.Replace(i.URL, "://127.0.0.1:", "://localhost:", 1)
 	t.Cleanup(i.srv.Close)
 	return i
 }

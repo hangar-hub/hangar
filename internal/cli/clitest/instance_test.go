@@ -318,3 +318,42 @@ func TestMeKeysAndDeviceLogin(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, r2.StatusCode)
 	i.Close()
 }
+
+func TestPresignedDownloadRedirects(t *testing.T) {
+	i := clitest.New(t)
+	i.RedirectDownloads = true
+	weights := bytes.Repeat([]byte("w"), 4<<10)
+	i.AddRepo(model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "m"},
+		clitest.File{Path: "w.safetensors", Content: weights}, clitest.File{Path: "README.md", Content: []byte("# M\n")})
+	require.NotEqual(t, i.URL, i.PresignBase, "presigned URLs are on another origin")
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	get := func(c *http.Client, u string, auth bool) *http.Response {
+		req, err := http.NewRequest(http.MethodGet, u, nil)
+		require.NoError(t, err)
+		if auth {
+			req.Header.Set("Authorization", "Bearer "+clitest.Token)
+		}
+		resp, err := c.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		return resp
+	}
+
+	// The LFS file redirects to a presigned URL; the small file does not.
+	resp := get(noFollow, i.URL+"/acme/m/resolve/main/w.safetensors", false)
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+	loc := resp.Header.Get("Location")
+	require.True(t, strings.HasPrefix(loc, i.PresignBase+"/presigned-objects/"), loc)
+	require.Equal(t, "4096", resp.Header.Get("X-Linked-Size"))
+	require.Equal(t, http.StatusOK, get(noFollow, i.URL+"/acme/m/resolve/main/README.md", false).StatusCode)
+
+	resp = get(http.DefaultClient, loc, false)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, weights, body)
+
+	require.Equal(t, http.StatusForbidden, get(http.DefaultClient, loc, true).StatusCode, "a presigned URL takes no Authorization header")
+	require.Equal(t, http.StatusForbidden, get(http.DefaultClient, strings.TrimSuffix(loc, "?sig=fake"), false).StatusCode)
+	require.Equal(t, http.StatusNotFound, get(http.DefaultClient, i.PresignBase+"/presigned-objects/missing?sig=fake", false).StatusCode)
+}

@@ -201,7 +201,7 @@ func pollDeviceToken(ctx context.Context, c *client, deviceCode string) (token s
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	c.authorise(req)
-	resp, err := c.http.Do(req)
+	resp, err := c.send(req)
 	if err != nil {
 		return "", false, false, fmt.Errorf("reach %s: %w", c.base.Host, err)
 	}
