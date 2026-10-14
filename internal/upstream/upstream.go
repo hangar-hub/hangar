@@ -51,6 +51,47 @@ type Upstream struct {
 	ViewerURL       string
 	Enabled         bool
 	NamespacePrefix string
+	// Source is "config" for Upstreams from the configuration file and
+	// "admin" for Upstreams added in the admin UI.
+	Source string
+	// HasInstanceToken is true when an Instance token is stored.
+	HasInstanceToken bool
+}
+
+// Upstream sources.
+const (
+	SourceConfig = "config"
+	SourceAdmin  = "admin"
+)
+
+// LocalID returns the ID a Mirror of the upstream Repo id has in the
+// Arsenal: the same ID, with the Upstream's Namespace prefix if it has one.
+func (u Upstream) LocalID(id model.RepoID) model.RepoID {
+	id.Namespace = u.NamespacePrefix + id.Namespace
+	return id
+}
+
+// UpstreamID returns the upstream ID of a local Repo ID, removing the
+// Namespace prefix. ok is false when the local ID does not carry the prefix.
+func (u Upstream) UpstreamID(local model.RepoID) (model.RepoID, bool) {
+	if u.NamespacePrefix == "" {
+		return local, true
+	}
+	if len(local.Namespace) <= len(u.NamespacePrefix) || !strings.EqualFold(local.Namespace[:len(u.NamespacePrefix)], u.NamespacePrefix) {
+		return model.RepoID{}, false
+	}
+	local.Namespace = local.Namespace[len(u.NamespacePrefix):]
+	return local, true
+}
+
+// Host returns the host of the base URL, such as huggingface.co, for
+// labels like "Mirrored from huggingface.co".
+func (u Upstream) Host() string {
+	p, err := url.Parse(u.BaseURL)
+	if err != nil {
+		return ""
+	}
+	return p.Host
 }
 
 // DatasetViewerURL returns the Upstream's Dataset Viewer base URL: ViewerURL,
@@ -84,9 +125,10 @@ type Sibling struct {
 
 // RepoInfo is upstream `model_info` or `dataset_info` for a Revision.
 type RepoInfo struct {
-	ID           model.RepoID
-	SHA          model.CommitSHA
-	Private      bool
+	ID      model.RepoID
+	SHA     model.CommitSHA
+	Private bool
+	// Gated is "", "auto" or "manual".
 	Gated        string
 	Siblings     []Sibling
 	CardData     map[string]any
@@ -150,8 +192,11 @@ type FetchResult struct {
 	// Pack is nil when there is nothing new.
 	Pack io.ReadCloser
 	// Refs maps every fetched ref (refs/heads/*, refs/tags/*, refs/pr/*,
-	// refs/convert/*) to its Commit.
+	// refs/convert/*) to the object it names: a Commit, or the tag object
+	// of an annotated tag.
 	Refs map[string]model.CommitSHA
+	// Peeled maps annotated tags to the Commits they point at.
+	Peeled map[string]model.CommitSHA
 }
 
 // Client talks to Upstreams. Requests send `User-Agent: hangar/<version>`,
