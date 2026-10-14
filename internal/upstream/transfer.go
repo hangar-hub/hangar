@@ -40,9 +40,12 @@ type filePayload struct {
 	Now          bool            `json:"now,omitempty"`
 }
 
-// fileResult is the pull.file Job's result: the multipart upload to resume.
+// fileResult is the pull.file Job's result: the multipart upload to
+// resume, and why the transfer failed when the Pull must know
+// (reasonQuotaExceeded).
 type fileResult struct {
 	UploadID uuid.UUID `json:"upload_id,omitempty"`
+	Reason   string    `json:"reason,omitempty"`
 }
 
 func upstreamAttrs(name, outcome string) metric.MeasurementOption {
@@ -69,11 +72,15 @@ func (s *Service) runFile(ctx context.Context, j *jobs.Job, prog jobs.Progress) 
 	if !model.IsSHA256(p.OID) || p.Size < 0 {
 		return jobs.Permanent(fmt.Errorf("invalid object %q", p.OID))
 	}
-	if done, err := s.markIfStored(ctx, id, p.OID, p.Size); err != nil || done {
+	ns, err := s.repoNamespace(ctx, p.RepoUUID)
+	if err != nil {
+		return err
+	}
+	if done, err := s.markIfStored(ctx, id, ns, p.OID, p.Size); err != nil || done {
 		if done {
 			s.countFile(ctx, p.Upstream, "deduplicated")
 		}
-		return err
+		return s.fileFailure(ctx, j, prog, p, err)
 	}
 	if !p.Now {
 		if err := s.waitForWindow(ctx, prog); err != nil {
@@ -84,8 +91,8 @@ func (s *Service) runFile(ctx context.Context, j *jobs.Job, prog jobs.Progress) 
 	if t := s.hub.lookup(p.OID); t != nil {
 		_ = prog.Report(ctx, jobs.ProgressUpdate{BytesTotal: p.Size, FilesTotal: 1, Message: "Waiting for a transfer of the same file"})
 		if err := t.wait(ctx); err == nil {
-			if done, err := s.markIfStored(ctx, id, p.OID, p.Size); err != nil || done {
-				return err
+			if done, err := s.markIfStored(ctx, id, ns, p.OID, p.Size); err != nil || done {
+				return s.fileFailure(ctx, j, prog, p, err)
 			}
 		}
 	}
@@ -103,6 +110,11 @@ func (s *Service) runFile(ctx context.Context, j *jobs.Job, prog jobs.Progress) 
 	upID, err := model.ParseRepoID(p.Type, p.UpstreamRepo)
 	if err != nil {
 		return jobs.Permanent(err)
+	}
+	// The object is not stored anywhere in the Instance, so all of it
+	// counts towards the Namespace's usage.
+	if err := s.checkQuota(ctx, ns, map[string]int64{p.OID: p.Size}, 0); err != nil {
+		return s.fileFailure(ctx, j, prog, p, err)
 	}
 	pr := newProgressReporter(prog, p.Path, p.Size, s.opts.Now)
 	src := fileSource{up: up, cred: cred, id: upID, commit: p.Commit, path: p.Path, oid: p.OID, size: p.Size}
@@ -132,6 +144,42 @@ func (s *Service) runFile(ctx context.Context, j *jobs.Job, prog jobs.Progress) 
 	return nil
 }
 
+// repoNamespace returns the Namespace of the Repo a transfer stores into,
+// for quota checks. It returns uuid.Nil when no QuotaChecker is set.
+func (s *Service) repoNamespace(ctx context.Context, repoUUID uuid.UUID) (uuid.UUID, error) {
+	if s.opts.Quota == nil {
+		return uuid.Nil, nil
+	}
+	r, err := s.opts.Repos.GetByUUID(ctx, repoUUID)
+	if errors.Is(err, repo.ErrNotFound) {
+		return uuid.Nil, jobs.Permanent(err)
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return r.NamespaceID, nil
+}
+
+// fileFailure ends a pull.file Job that the Namespace quota refused,
+// recording the reason for its Pull; other errors pass through.
+func (s *Service) fileFailure(ctx context.Context, j *jobs.Job, prog jobs.Progress, p filePayload, err error) error {
+	if !errors.Is(err, ErrQuotaExceeded) {
+		return err
+	}
+	var fr fileResult
+	if len(j.Result) > 0 {
+		_ = json.Unmarshal(j.Result, &fr)
+	}
+	fr.Reason = reasonQuotaExceeded
+	if serr := prog.SetResult(ctx, fr); serr != nil {
+		s.log.WarnContext(ctx, "record a refused transfer", "error", serr.Error())
+	}
+	_ = prog.Report(ctx, jobs.ProgressUpdate{BytesTotal: p.Size, FilesTotal: 1, Message: quotaMessage,
+		Files: []jobs.FileProgress{{Path: p.Path, BytesTotal: p.Size, Status: fileFailed, Error: err.Error()}}})
+	s.countFile(ctx, p.Upstream, "failed")
+	return jobs.Permanent(err)
+}
+
 // isSnooze reports whether err is the error SnoozeFunc returns.
 func (s *Service) isSnooze(err error) bool {
 	var marker *snoozeMarker
@@ -149,8 +197,9 @@ func (s *Service) snooze(until time.Time, reason string) error {
 }
 
 // markIfStored marks the object present in the Repo if the Instance
-// already holds it.
-func (s *Service) markIfStored(ctx context.Context, id model.RepoID, oid string, size int64) (bool, error) {
+// already holds it, once the Namespace ns has room for it: holding an
+// object another Namespace stored still counts towards ns's quota.
+func (s *Service) markIfStored(ctx context.Context, id model.RepoID, ns uuid.UUID, oid string, size int64) (bool, error) {
 	o, err := s.opts.LFS.Stat(ctx, oid)
 	if errors.Is(err, repo.ErrNotFound) {
 		return false, nil
@@ -160,6 +209,9 @@ func (s *Service) markIfStored(ctx context.Context, id model.RepoID, oid string,
 	}
 	if !o.Verified || o.Size != size {
 		return false, nil
+	}
+	if err := s.checkQuota(ctx, ns, map[string]int64{oid: size}, 0); err != nil {
+		return false, err
 	}
 	return true, s.opts.Repos.SetLFSPresence(ctx, id, []repo.LFSRef{{OID: oid, Size: size, Present: true}})
 }

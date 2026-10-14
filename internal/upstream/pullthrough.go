@@ -113,6 +113,12 @@ func (pt *PullThrough) waitPlanned(ctx context.Context, jobID jobs.JobID, local 
 			switch {
 			case st.Phase == phaseFailed && st.Reason == reasonUpstreamNotFound:
 				return nil, errPullThroughMiss
+			case st.Phase == phaseFailed && st.Reason == reasonQuotaExceeded:
+				// The Job's error, the message for users, is set once
+				// the handler returns.
+				if j.Status == jobs.StatusFailed {
+					return nil, QuotaExceeded(errors.New(j.Error))
+				}
 			case st.Phase == phaseFailed:
 				return nil, fmt.Errorf("%w: %s cannot be pulled through: %s", repo.ErrNotFound, local.Path(), j.Error)
 			case st.Phase != "" || j.Status == jobs.StatusSucceeded:
@@ -157,7 +163,7 @@ func (pt *PullThrough) File(ctx context.Context, p model.Principal, r *repo.Repo
 
 func (pt *PullThrough) stream(ctx context.Context, r *repo.Repo, m *Mirror, up *Upstream, commit model.CommitSHA, path, oid string, size int64, user uuid.UUID) (io.ReadCloser, error) {
 	s := pt.s
-	if done, err := s.markIfStored(ctx, r.ID, oid, size); err != nil {
+	if done, err := s.markIfStored(ctx, r.ID, r.NamespaceID, oid, size); err != nil {
 		return nil, err
 	} else if done {
 		rc, _, err := s.opts.LFS.Open(ctx, oid, nil)
@@ -168,6 +174,10 @@ func (pt *PullThrough) stream(ctx context.Context, r *repo.Repo, m *Mirror, up *
 			return t.reader(ctx)
 		}
 		return pt.afterTransfer(ctx, r, oid, size, t), nil
+	}
+	// A new transfer stores the object for the Mirror's Namespace.
+	if err := s.checkQuota(ctx, r.NamespaceID, map[string]int64{oid: size}, 0); err != nil {
+		return nil, err
 	}
 	fp := filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: m.UpstreamRepo.String(), Type: r.ID.Type, Repo: r.ID.String(),
 		RepoUUID: r.UUID, Commit: commit, Path: path, OID: oid, Size: size, RequestedBy: user, Now: true}
@@ -249,7 +259,7 @@ func (pt *PullThrough) afterTransfer(ctx context.Context, r *repo.Repo, oid stri
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
 		for {
-			done, err := pt.s.markIfStored(ctx, r.ID, oid, size)
+			done, err := pt.s.markIfStored(ctx, r.ID, r.NamespaceID, oid, size)
 			if err != nil {
 				return nil, err
 			}
@@ -372,6 +382,11 @@ func (pt *PullThrough) Handler() http.Handler {
 			return
 		}
 		rc, err := pt.stream(ctx, rp, m, up, commit, path, oid, size, uuid.Nil)
+		if errors.Is(err, ErrQuotaExceeded) {
+			w.Header().Del("Content-Length")
+			httpx.WriteError(w, r, http.StatusForbidden, reasonQuotaExceeded, err.Error())
+			return
+		}
 		if err != nil {
 			pt.s.log.WarnContext(ctx, "pull-through download", "repo", rp.ID.Path(), "error", err.Error())
 			w.Header().Del("Content-Length")

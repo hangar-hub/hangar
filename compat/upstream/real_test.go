@@ -47,6 +47,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/datasets/datasetstest"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
+	"github.com/jamesagarside/hangar/internal/gc"
 	"github.com/jamesagarside/hangar/internal/gitserver"
 	"github.com/jamesagarside/hangar/internal/hfapi"
 	"github.com/jamesagarside/hangar/internal/httpx"
@@ -206,6 +207,7 @@ type localInstance struct {
 	reg      *jobs.Registry
 	queue    *jobs.DBQueue
 	registry *upstream.Registry
+	quota    *gc.Accounting
 	svc      *upstream.Service
 	authz    *authtest.Authz
 	user     model.Principal
@@ -242,6 +244,7 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 	l.blobs = blobs
 	l.real = repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs, Tweak: func(ro *repo.Options) { ro.Jobs = l.queue }})
 	l.orgs = org.NewDB(d, audittest.NewFake())
+	l.quota = gc.NewAccounting(d)
 	sealer, err := secrets.New(instanceKey)
 	require.NoError(t, err)
 	l.registry = upstream.NewRegistry(d, sealer, nil)
@@ -271,7 +274,7 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 		Dependencies: config.DependencyConfig{AutoPullCode: true, MaxDepth: 5},
 		Settings:     func(context.Context) (upstream.Settings, error) { return *l.settings.Load(), nil },
 		ParseWindows: func(specs []string) (upstream.Windows, error) { return jobs.ParseWindows(specs, time.UTC) },
-		Snooze:       jobs.Snooze, PartSize: o.partSize, PollInterval: 200 * time.Millisecond})
+		Snooze:       jobs.Snooze, PartSize: o.partSize, PollInterval: 200 * time.Millisecond, Quota: pullQuota{l.quota}})
 	require.NoError(t, err)
 	require.NoError(t, l.svc.RegisterJobs(l.reg))
 	l.worker = jobs.NewWorker(d, l.reg, jobs.WorkerOptions{Owner: owner, Concurrency: 4, Lease: 3 * time.Second, PollInterval: 50 * time.Millisecond,
@@ -632,7 +635,9 @@ func newLocalHub(t *testing.T, l *localInstance, publicURL string, ln net.Listen
 
 type namespaceSearch struct{}
 
-func (namespaceSearch) SearchNamespaces(context.Context, string, int) ([]org.Namespace, error) { return nil, nil }
+func (namespaceSearch) SearchNamespaces(context.Context, string, int) ([]org.Namespace, error) {
+	return nil, nil
+}
 
 // newWithSigner rebuilds the Instance's Service with the public URL its
 // Pull-through links need.
@@ -787,9 +792,86 @@ func writeFile(t *testing.T, path string, b []byte) {
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 }
 
+// pullQuota is the adapter the integration lead wires between W1's
+// Namespace quotas and Pulls: W1's refusals become upstream.ErrQuotaExceeded
+// with W1's message kept.
+type pullQuota struct{ *gc.Accounting }
+
+func (q pullQuota) CheckQuota(ctx context.Context, ns uuid.UUID, adding int64) error {
+	err := q.Accounting.CheckQuota(ctx, ns, adding)
+	if errors.Is(err, gc.ErrQuotaExceeded) {
+		return upstream.QuotaExceeded(err)
+	}
+	return err
+}
+
+// TestRealPullRespectsNamespaceQuota checks Pulls against W1's quotas on
+// W2's Repo service: a pack that does not fit is not applied, a selection
+// that does not fit is not transferred, and both Pulls end with W1's
+// message and reason quota_exceeded until an admin raises the quota.
+func TestRealPullRespectsNamespaceQuota(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		up := newSecondInstance(t)
+		l := newLocal(t, d, up.URL, localOptions{partSize: 1 << 20})
+		requireRefused := func(jid jobs.JobID) {
+			t.Helper()
+			j := l.wait(jid, time.Minute)
+			require.Equal(t, jobs.StatusFailed, j.Status)
+			var st map[string]any
+			require.NoError(t, json.Unmarshal(j.Result, &st))
+			require.Equal(t, "quota_exceeded", st["reason"])
+			require.Contains(t, j.Error, "storage quota. Delete files or ask an admin to raise the quota.")
+			require.Equal(t, "Storage quota exceeded", j.Progress.Message)
+		}
+
+		// The history does not fit.
+		hist := model.RepoID{Type: model.RepoTypeModel, Namespace: "tight", Name: "history"}
+		up.seed(t, hist, map[string][]byte{"config.json": []byte(`{"model_type":"bert"}`), "model.safetensors": []byte("weights")})
+		tight, err := l.orgs.EnsureMirrorNamespace(l.ctx, "tight")
+		require.NoError(t, err)
+		require.NoError(t, l.quota.SetQuota(l.ctx, tight.ID, 1))
+		jid, _, err := l.svc.StartPull(l.ctx, upstream.PullRequest{Repo: hist, Actor: l.user})
+		require.NoError(t, err)
+		requireRefused(jid)
+		_, err = l.real.Resolve(l.ctx, hist, "main")
+		require.Error(t, err, "W2 stored no history")
+
+		// The history fits; the weights do not.
+		big := bytes.Repeat([]byte("over quota "), 20_000) // 220 KB
+		sel := model.RepoID{Type: model.RepoTypeModel, Namespace: "roomy", Name: "weights"}
+		up.seed(t, sel, map[string][]byte{"config.json": []byte(`{}`), "model.safetensors": big})
+		roomy, err := l.orgs.EnsureMirrorNamespace(l.ctx, "roomy")
+		require.NoError(t, err)
+		require.NoError(t, l.quota.SetQuota(l.ctx, roomy.ID, 64<<10))
+		jid, _, err = l.svc.StartPull(l.ctx, upstream.PullRequest{Repo: sel, Actor: l.user})
+		require.NoError(t, err)
+		requireRefused(jid)
+		_, err = l.real.Resolve(l.ctx, sel, "main")
+		require.NoError(t, err, "the history fitted")
+		files, _, err := l.queue.List(l.ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPullFile}})
+		require.NoError(t, err)
+		require.Empty(t, files, "nothing was transferred")
+		usage, err := l.quota.NamespaceUsage(l.ctx, roomy.ID)
+		require.NoError(t, err)
+		require.Zero(t, usage.LFSBytes)
+
+		// An admin raises the quota; retrying the Pull stores the weights.
+		require.NoError(t, l.quota.SetQuota(l.ctx, roomy.ID, 0))
+		retry, err := l.queue.Retry(l.ctx, jid)
+		require.NoError(t, err)
+		j := l.wait(retry, time.Minute)
+		require.Equal(t, jobs.StatusSucceeded, j.Status, j.Error)
+		require.Equal(t, big, l.read(sel, "model.safetensors"))
+		usage, err = l.quota.NamespaceUsage(l.ctx, roomy.ID)
+		require.NoError(t, err)
+		require.Equal(t, int64(len(big)), usage.LFSBytes)
+	})
+}
+
 // The interfaces the integration lead wires W6 through, checked against
 // the other workstreams' types.
 var (
+	_ upstream.QuotaChecker      = pullQuota{}
 	_ gitserver.PullThrough      = (*upstream.PullThrough)(nil)
 	_ hfapi.PullThrough          = pullThroughAdapter{}
 	_ auth.UpstreamLookup        = (*upstream.Registry)(nil)

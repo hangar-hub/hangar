@@ -71,8 +71,8 @@ type MirrorStateSetter interface {
 	SetMirrorState(ctx context.Context, id model.RepoID, mirror bool) error
 }
 
-// Options configure a Service. Every field except UserTokens, Audit,
-// Instruments, Log, Now and the tuning values is required.
+// Options configure a Service. Every field except UserTokens, Quota,
+// Audit, Instruments, Log, Now and the tuning values is required.
 type Options struct {
 	DB           *db.DB
 	Registry     *Registry
@@ -95,9 +95,13 @@ type Options struct {
 	// Dependencies are pull.dependencies.
 	Dependencies config.DependencyConfig
 	UserTokens   UserTokens
-	Audit        audit.Recorder
-	Instruments  *telemetry.Instruments
-	Log          *slog.Logger
+	// Quota, when set, enforces Namespace storage quotas on Pulls (OPS-4):
+	// a Pull that would take its Mirror's Namespace over the quota stores
+	// nothing more and fails with reason quota_exceeded.
+	Quota       QuotaChecker
+	Audit       audit.Recorder
+	Instruments *telemetry.Instruments
+	Log         *slog.Logger
 	// PartSize is the multipart part size for transfers. Zero means 64 MiB.
 	PartSize int64
 	// PollInterval is how often a Pull checks its file transfers. Zero

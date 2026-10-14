@@ -48,6 +48,8 @@ type fileState struct {
 	Status    string    `json:"status"`
 	BytesDone int64     `json:"bytes_done,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	// Reason is reasonQuotaExceeded when the Namespace quota refused the file.
+	Reason string `json:"reason,omitempty"`
 }
 
 // depState tracks a Dependency Pull started by a Pull.
@@ -120,6 +122,8 @@ func (s *Service) failPull(ctx context.Context, prog jobs.Progress, p *pullPaylo
 		st.Reason, permanent = reasonUpstreamNotFound, true
 	case errors.Is(err, ErrConflict), errors.Is(err, ErrInvalidSelection), errors.Is(err, ErrUpstreamDisabled), errors.Is(err, ErrUpstreamNotFound):
 		st.Reason, permanent = reasonConflict, true
+	case errors.Is(err, ErrQuotaExceeded):
+		st.Reason, permanent = reasonQuotaExceeded, true
 	}
 	if !permanent {
 		return err
@@ -127,6 +131,11 @@ func (s *Service) failPull(ctx context.Context, prog jobs.Progress, p *pullPaylo
 	st.Phase = phaseFailed
 	if serr := prog.SetResult(ctx, st); serr != nil {
 		s.log.WarnContext(ctx, "record pull failure", "error", serr.Error())
+	}
+	if st.Reason == reasonQuotaExceeded {
+		u := s.pullProgress(ctx, st)
+		u.Message = quotaMessage
+		_ = prog.Report(ctx, u)
 	}
 	var r *repo.Repo
 	if st.RepoUUID != uuid.Nil {
@@ -222,6 +231,15 @@ func (s *Service) plan(ctx context.Context, j *jobs.Job, prog jobs.Progress, p *
 			selected = append(selected, e)
 			oids = append(oids, e.LFS.OID)
 		}
+	}
+	// Everything selected that the Namespace does not hold yet must fit in
+	// its quota, whether it is transferred or already in the Instance.
+	objects := make(map[string]int64, len(selected))
+	for _, e := range selected {
+		objects[e.LFS.OID] = e.LFS.Size
+	}
+	if err := s.checkQuota(ctx, r.NamespaceID, objects, 0); err != nil {
+		return err
 	}
 	stored, err := s.opts.LFS.StatMany(ctx, oids)
 	if err != nil {
@@ -404,6 +422,19 @@ func (s *Service) fetchHistory(ctx context.Context, up *Upstream, cred Credentia
 	var pack io.Reader
 	if res.Pack != nil {
 		pack = res.Pack
+		if s.opts.Quota != nil {
+			// The pack's size is only known once it has arrived; it must
+			// fit in the Namespace's quota before anything is stored.
+			sp, err := s.spoolPack(res.Pack)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = sp.Close() }()
+			if err := s.checkQuota(ctx, r.NamespaceID, nil, sp.size); err != nil {
+				return err
+			}
+			pack = sp
+		}
 	}
 	actor := model.System()
 	if err := s.opts.Repos.ApplyPack(ctx, repo.ApplyPackParams{Repo: r.ID, Source: repo.SourceMirror, Actor: actor, Pack: pack, Updates: updates, AllowForce: true}); err != nil {
@@ -470,6 +501,9 @@ func (s *Service) advance(ctx context.Context, j *jobs.Job, prog jobs.Progress, 
 		if active > 0 {
 			return s.snooze(s.opts.Now().Add(s.opts.PollInterval), "Transferring files")
 		}
+		if err := quotaFailure(st); err != nil {
+			return s.failPull(ctx, prog, p, st, err)
+		}
 		if err := s.startDependencies(ctx, j, p, r, st); err != nil {
 			return err
 		}
@@ -527,10 +561,24 @@ func (s *Service) checkFiles(ctx context.Context, r *repo.Repo, st *pullState) (
 		}
 		switch fj.Status {
 		case jobs.StatusSucceeded:
+			joined, err := s.markJoinedTransfer(ctx, r, fj, f)
+			if errors.Is(err, ErrQuotaExceeded) {
+				f.Status, f.Error, f.Reason = fileFailed, err.Error(), reasonQuotaExceeded
+				continue
+			}
+			if err != nil {
+				return 0, err
+			}
 			f.Status, f.BytesDone = fileDone, f.Size
-			present = append(present, repo.LFSRef{OID: f.OID, Size: f.Size, Present: true})
+			if !joined {
+				present = append(present, repo.LFSRef{OID: f.OID, Size: f.Size, Present: true})
+			}
 		case jobs.StatusFailed:
 			f.Status, f.Error = fileFailed, fj.Error
+			var fr fileResult
+			if len(fj.Result) > 0 && json.Unmarshal(fj.Result, &fr) == nil && fr.Reason == reasonQuotaExceeded {
+				f.Reason = reasonQuotaExceeded
+			}
 		case jobs.StatusCancelled:
 			f.Status, f.Error = fileCancelled, "cancelled"
 		case jobs.StatusRunning:
@@ -547,6 +595,58 @@ func (s *Service) checkFiles(ctx context.Context, r *repo.Repo, st *pullState) (
 		}
 	}
 	return active, nil
+}
+
+// markJoinedTransfer handles a finished transfer that a pull.file Job for
+// another Repo ran (Pulls of the same object share one Job). Such an
+// object is new to this Repo's Namespace, so it is marked present only
+// once the quota allows it. joined is false for this Repo's own Jobs,
+// which checked the quota and marked the object themselves.
+func (s *Service) markJoinedTransfer(ctx context.Context, r *repo.Repo, fj *jobs.Job, f *fileState) (joined bool, err error) {
+	if s.opts.Quota == nil {
+		return false, nil
+	}
+	var fp filePayload
+	if err := fj.DecodePayload(&fp); err != nil {
+		return false, err
+	}
+	if fp.RepoUUID == r.UUID {
+		return false, nil
+	}
+	if err := s.checkQuota(ctx, r.NamespaceID, map[string]int64{f.OID: f.Size}, 0); err != nil {
+		return true, err
+	}
+	return true, s.opts.Repos.SetLFSPresence(ctx, r.ID, []repo.LFSRef{{OID: f.OID, Size: f.Size, Present: true}})
+}
+
+// quotaFailure returns the error that fails a Pull whose files the
+// Namespace quota refused, or nil when it refused none.
+func quotaFailure(st *pullState) error {
+	var (
+		paths []string
+		first string
+	)
+	for _, f := range st.Files {
+		if f.Reason != reasonQuotaExceeded {
+			continue
+		}
+		if first == "" {
+			first = f.Error
+		}
+		paths = append(paths, f.Path)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	list := strings.Join(paths[:min(len(paths), 5)], ", ")
+	if len(paths) > 5 {
+		list += fmt.Sprintf(" and %d more", len(paths)-5)
+	}
+	verb := "was"
+	if len(paths) > 1 {
+		verb = "were"
+	}
+	return QuotaExceeded(fmt.Errorf("%s %s not stored: %s", list, verb, first))
 }
 
 // pullProgress sums the files of a Pull for the UI.

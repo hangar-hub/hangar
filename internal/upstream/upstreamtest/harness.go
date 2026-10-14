@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -36,6 +37,37 @@ import (
 type DBRepos struct {
 	*repotest.Fake
 	DB *db.DB
+
+	mu     sync.Mutex
+	marked map[string][]string
+}
+
+// SetLFSPresence implements repo.Service and records the objects marked
+// present in each Repo, which the fake's Entry cannot tell apart from
+// objects stored for another Repo.
+func (r *DBRepos) SetLFSPresence(ctx context.Context, id model.RepoID, refs []repo.LFSRef) error {
+	if err := r.Fake.SetLFSPresence(ctx, id, refs); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.marked == nil {
+		r.marked = map[string][]string{}
+	}
+	key := strings.ToLower(string(id.Type) + ":" + id.String())
+	for _, ref := range refs {
+		if ref.Present {
+			r.marked[key] = append(r.marked[key], ref.OID)
+		}
+	}
+	return nil
+}
+
+// MarkedPresent returns the OIDs marked present in a Repo so far.
+func (r *DBRepos) MarkedPresent(id model.RepoID) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.marked[strings.ToLower(string(id.Type)+":"+id.String())]...)
 }
 
 // Create implements repo.Service.
@@ -181,6 +213,8 @@ type Harness struct {
 	Service   *upstream.Service
 	Signer    *httpx.Signer
 	Client    upstream.Client
+	// Quota enforces Namespace quotas; it has no limits until a test sets one.
+	Quota *Quota
 
 	mu       sync.Mutex
 	partSize int64
@@ -202,7 +236,7 @@ func NewHarness(t testing.TB, d *db.DB, o HarnessOptions) *Harness {
 	signer, err := httpx.NewSigner(key)
 	require.NoError(t, err)
 	h := &Harness{T: t, Ctx: ctx, DB: d, Remote: NewFake(t), Orgs: orgtest.NewFake(), Jobs: jobs.NewRegistry(), Limiter: &HookLimiter{},
-		Authz: authtest.NewAuthz(), Layout: datasetstest.NewLayout(), Hooks: &webhooktest.Fake{}, Audit: audittest.NewFake(),
+		Authz: authtest.NewAuthz(), Layout: datasetstest.NewLayout(), Hooks: &webhooktest.Fake{}, Audit: audittest.NewFake(), Quota: NewQuota(),
 		now: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC), tokens: map[uuid.UUID]string{}, Signer: signer, partSize: o.PartSize}
 	h.settings = upstream.Settings{AllowOverrideWindows: true, PullThroughAllow: []string{"*"}, PullThroughMinRole: "user"}
 	h.Server = NewServer(t, h.Remote)
@@ -240,7 +274,7 @@ func NewHarness(t testing.TB, d *db.DB, o HarnessOptions) *Harness {
 		},
 		ParseWindows: ParseHourWindows,
 		Snooze:       func(until time.Time, reason string) error { return &Snoozed{Until: until, Reason: reason} },
-		Signer:       signer, PublicURL: "http://hangar.test", Dependencies: dc, UserTokens: h, Audit: h.Audit,
+		Signer:       signer, PublicURL: "http://hangar.test", Dependencies: dc, UserTokens: h, Quota: h.Quota, Audit: h.Audit,
 		PartSize: o.PartSize, PullAttempts: 100, PollInterval: time.Second, PullThroughWait: 5 * time.Second, SpoolDir: t.TempDir(), Now: h.Now})
 	require.NoError(t, err)
 	require.NoError(t, h.Service.RegisterJobs(h.Jobs))
@@ -281,6 +315,15 @@ func (h *Harness) Advance(d time.Duration) {
 	h.mu.Lock()
 	h.now = h.now.Add(d)
 	h.mu.Unlock()
+}
+
+// MirrorNamespace returns the ID of the reserved Mirror Namespace name,
+// creating it as the first Pull into it would, so a test can set its quota
+// before pulling.
+func (h *Harness) MirrorNamespace(name string) uuid.UUID {
+	ns, err := h.Orgs.EnsureMirrorNamespace(h.Ctx, name)
+	require.NoError(h.T, err)
+	return ns.ID
 }
 
 // User adds a signed-in user with a personal Namespace.
@@ -341,7 +384,7 @@ func (h *Harness) NewService(limiter jobs.Limiter) *upstream.Service {
 		},
 		ParseWindows: ParseHourWindows,
 		Snooze:       func(until time.Time, reason string) error { return &Snoozed{Until: until, Reason: reason} },
-		Signer:       h.Signer, PublicURL: "http://hangar.test", UserTokens: h, Audit: h.Audit, PartSize: h.partSize,
+		Signer:       h.Signer, PublicURL: "http://hangar.test", UserTokens: h, Quota: h.Quota, Audit: h.Audit, PartSize: h.partSize,
 		PullAttempts: 100, PollInterval: time.Second, PullThroughWait: 30 * time.Second, SpoolDir: h.T.TempDir(), Now: h.Now})
 	require.NoError(h.T, err)
 	return svc
