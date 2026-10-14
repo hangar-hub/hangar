@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       - uses: actions/cache@v6
         with:
           path: compat/.fixtures
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       - name: Choose the multipart test size
         run: |
           # 200 MB on pull requests; a 6 GiB file nightly (13-testing.md).

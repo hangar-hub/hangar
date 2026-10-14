@@ -147,7 +147,7 @@ image-multiarch: ## Build the image for linux/amd64 and linux/arm64 (no push)
 	  --build-arg DATE=$(DATE) -t $(IMAGE) .
 
 .PHONY: lint-deploy
-lint-deploy: ## Lint the Helm chart, validate it with kubeconform and check the Compose files
+lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Compose files and the workflows' action refs
 	helm lint deploy/helm/hangar -f deploy/helm/hangar/ci/default-values.yaml
 	helm lint deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml
 	@for values in deploy/helm/hangar/ci/default-values.yaml deploy/helm/examples/scale-values.yaml; do \
@@ -158,6 +158,7 @@ lint-deploy: ## Lint the Helm chart, validate it with kubeconform and check the 
 	@for f in deploy/compose/*.yaml; do HANGAR_INSTANCE_KEY=x HANGAR_ADMIN_PASSWORD=x docker compose -f $$f config -q && echo "$$f ok"; done
 	goreleaser check
 	shellcheck scripts/*.sh loadtest/*.sh
+	./scripts/check-action-refs.sh
 
 .PHONY: docs
 docs: ## Build the documentation site into site/ (needs uv)
