@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 
 	"github.com/jamesagarside/hangar/internal/datasets/features"
 )
@@ -286,6 +287,7 @@ type Reader struct {
 	Schema *Schema
 	dicts  map[int64][]any
 	zstd   *zstd.Decoder
+	lz4    *lz4.Reader
 }
 
 // fileMagic starts and ends the Arrow file format.
@@ -523,22 +525,69 @@ func (b *batch) nextBuffer() ([]byte, error) {
 	if raw < 0 || raw > MaxMessageBytes {
 		return nil, fmt.Errorf("%w: uncompressed size", ErrInvalid)
 	}
+	src := bytes.NewReader(buf[8:])
+	var dec io.Reader
 	switch b.codec {
-	case 1:
+	case codecLZ4Frame:
+		if b.r.lz4 == nil {
+			b.r.lz4 = lz4.NewReader(nil)
+		}
+		b.r.lz4.Reset(src)
+		dec = b.r.lz4
+	case codecZstd:
 		if b.r.zstd == nil {
-			d, err := zstd.NewReader(nil, zstd.WithDecoderMaxMemory(MaxMessageBytes))
+			d, err := zstd.NewReader(nil, zstd.WithDecoderMaxMemory(MaxMessageBytes), zstd.WithDecoderConcurrency(1))
 			if err != nil {
 				return nil, err
 			}
 			b.r.zstd = d
 		}
-		out, err := b.r.zstd.DecodeAll(buf[8:], make([]byte, 0, raw))
-		if err != nil {
+		if err := b.r.zstd.Reset(src); err != nil {
 			return nil, fmt.Errorf("%w: zstd: %w", ErrInvalid, err)
 		}
-		return out, nil
+		dec = b.r.zstd
+	default:
+		return nil, fmt.Errorf("%w: compression codec %d", ErrInvalid, b.codec)
 	}
-	return nil, fmt.Errorf("%w: LZ4 compressed Arrow buffers", ErrUnsupported)
+	out, err := decodeExactly(dec, raw, n-8)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s buffer: %w", ErrInvalid, codecName(b.codec), err)
+	}
+	return out, nil
+}
+
+// Body compression codecs (Message.fbs CompressionType).
+const (
+	codecLZ4Frame = 0
+	codecZstd     = 1
+)
+
+func codecName(c int8) string {
+	if c == codecLZ4Frame {
+		return "LZ4"
+	}
+	return "zstd"
+}
+
+// decodeExactly reads the uncompressed buffer of size bytes from r, which
+// decodes compressed bytes of input. A buffer that decodes to more or less
+// than its header says is an error. The output grows with what r actually
+// decodes rather than with the size the header claims, so a corrupt size
+// costs no memory.
+func decodeExactly(r io.Reader, size, compressed int64) ([]byte, error) {
+	var out bytes.Buffer
+	out.Grow(int(min(size, 4*compressed+64<<10)))
+	n, err := io.Copy(&out, io.LimitReader(r, size+1))
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case n > size:
+		return nil, fmt.Errorf("decodes to more than %d bytes", size)
+	case n < size:
+		return nil, fmt.Errorf("decodes to %d bytes, not %d", n, size)
+	}
+	return out.Bytes(), nil
 }
 
 func (r *Reader) decodeBatch(h table, body []byte, fields []*node) ([][]any, int64, error) {

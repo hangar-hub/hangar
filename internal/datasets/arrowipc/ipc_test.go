@@ -3,11 +3,13 @@ package arrowipc_test
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -104,7 +106,9 @@ func TestReadFixtures(t *testing.T) {
 	require.NoError(t, err)
 	var want expected
 	require.NoError(t, json.Unmarshal(raw, &want))
-	for _, name := range []string{"types.arrow", "types_file.arrow", "zstd.arrow"} {
+	// lz4.arrow and lz4_file.arrow are compat/viewer/oracle/arrow_lz4.py's
+	// LZ4 frame copies of types.arrow.
+	for _, name := range []string{"types.arrow", "types_file.arrow", "zstd.arrow", "lz4.arrow", "lz4_file.arrow"} {
 		r, rows := readAll(t, name)
 		require.Len(t, rows, len(want.Rows), name)
 		require.Len(t, r.Schema.Type.Fields, len(want.Columns))
@@ -175,6 +179,47 @@ func TestCorruptInputs(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestLZ4BufferSizes changes the uncompressed length that precedes the
+// first LZ4 frame of lz4.arrow: a frame that decodes to more or fewer bytes
+// than its length is invalid, and a length of a gigabyte costs no more
+// memory than the frame decodes to.
+func TestLZ4BufferSizes(t *testing.T) {
+	good, err := os.ReadFile("testdata/lz4.arrow")
+	require.NoError(t, err)
+	at := bytes.Index(good, []byte{0x04, 0x22, 0x4d, 0x18})
+	require.Greater(t, at, 8)
+	size := int64(binary.LittleEndian.Uint64(good[at-8:]))
+	readErr := func(b []byte) error {
+		r, err := arrowipc.NewReader(bytes.NewReader(b))
+		require.NoError(t, err)
+		for {
+			if _, err := r.Next(); err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return err
+			}
+		}
+	}
+	for _, claim := range []int64{size - 1, size + 1, 1 << 30} {
+		b := bytes.Clone(good)
+		binary.LittleEndian.PutUint64(b[at-8:], uint64(claim))
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		err := readErr(b)
+		runtime.ReadMemStats(&after)
+		require.ErrorIs(t, err, arrowipc.ErrInvalid, "claimed %d bytes", claim)
+		require.Contains(t, err.Error(), "LZ4 buffer", "claimed %d bytes", claim)
+		require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(16<<20), "claimed %d bytes", claim)
+	}
+	// A corrupt frame is invalid too.
+	b := bytes.Clone(good)
+	for i := at + 7; i < at+40 && i < len(b); i++ {
+		b[i] ^= 0xff
+	}
+	require.ErrorIs(t, readErr(b), arrowipc.ErrInvalid)
+}
+
 func TestHelpers(t *testing.T) {
 	require.Equal(t, 1.0, arrowipc.HalfToFloat(0x3c00))
 	require.Equal(t, -2.0, arrowipc.HalfToFloat(0xc000))
@@ -192,7 +237,7 @@ func TestHelpers(t *testing.T) {
 
 // FuzzReader checks that no input makes the reader panic or loop.
 func FuzzReader(f *testing.F) {
-	for _, name := range []string{"types.arrow", "types_file.arrow", "zstd.arrow"} {
+	for _, name := range []string{"types.arrow", "types_file.arrow", "zstd.arrow", "lz4.arrow"} {
 		b, err := os.ReadFile("testdata/" + name)
 		if err != nil {
 			f.Fatal(err)
