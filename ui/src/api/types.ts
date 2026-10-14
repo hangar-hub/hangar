@@ -49,6 +49,7 @@ export type Role = Schemas["Role"];
 export type Scope = Schemas["Scope"];
 export type UploadPlanItem = Schemas["UploadPlanItem"];
 export type UploadedPart = Schemas["UploadedPart"];
+export type UploadStatus = Schemas["UploadStatus"];
 export type CommitOperation = Schemas["CommitOperation"];
 export type Member = Schemas["Member"];
 export type Session = Schemas["Session"];

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Route, test } from "@playwright/test";
 import { expectAccessible, settled, signIn, useScenario, watchConsole } from "./helpers";
 
 // The flows 15-build-plan.md asks W8 to cover: sign-in, Discover and Pull,
@@ -133,6 +133,64 @@ test.describe("upload", () => {
     await expect(page.getByRole("region", { name: "Code" })).toContainText(
       "hello from the browser",
     );
+    expect(problems).toEqual([]);
+  });
+
+  test("resumes an upload after a page reload, sending only the missing parts", async ({
+    page,
+  }) => {
+    const problems = watchConsole(page);
+    await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/tree/main");
+    const weights = {
+      name: "resume.safetensors",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.alloc(6 * 1024 * 1024, 9),
+    };
+    // Hold part 2 so the page is reloaded with part 1 stored and part 2 not.
+    let held: Route | undefined;
+    await page.route("**/uploads/*/parts/2", (route) => {
+      held = route;
+    });
+    const part1 = page.waitForResponse(
+      (r) => r.request().method() === "PUT" && /\/uploads\/[^/]+\/parts\/1$/.test(r.url()),
+    );
+    await page.getByRole("button", { name: "Upload files" }).click();
+    await page.getByLabel("Choose files").setInputFiles(weights);
+    await page.getByRole("button", { name: "Upload and commit" }).click();
+    const first = await part1;
+    expect(first.ok()).toBe(true);
+    const uploadId = first.url().split("/uploads/")[1]?.split("/")[0];
+    await expect.poll(() => held !== undefined).toBe(true);
+
+    // The page warns before leaving during an upload; leave anyway.
+    const dialogs: string[] = [];
+    page.on("dialog", (d) => {
+      dialogs.push(d.type());
+      void d.accept();
+    });
+    await page.reload();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    expect(dialogs).toEqual(["beforeunload"]);
+
+    // The plan starts a new upload, as W2's does; the browser resumes the first.
+    const puts: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "PUT") puts.push(new URL(r.url()).pathname);
+    });
+    await page.getByRole("button", { name: "Upload files" }).click();
+    await page.getByLabel("Choose files").setInputFiles(weights);
+    await page.getByRole("button", { name: "Upload and commit" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Files committed." })).toBeVisible({
+      timeout: 20_000,
+    });
+    expect(puts).toEqual([
+      `/api/hangar/v1/repos/models/ada/bert-tiny-finetune/uploads/${uploadId}/parts/2`,
+    ]);
+    const files = page.getByRole("table", { name: "Files in the Repo root" });
+    await expect(
+      files.getByRole("link", { name: "resume.safetensors", exact: true }),
+    ).toBeVisible();
     expect(problems).toEqual([]);
   });
 

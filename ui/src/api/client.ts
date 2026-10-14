@@ -57,6 +57,23 @@ export const api = createApiClient({
 });
 
 /**
+ * Whether a URL points at this Instance: a path, or an absolute URL on the
+ * page's origin (Hangar builds part URLs from `server.public_url`).
+ */
+export function isSameOrigin(
+  input: string,
+  origin: string | undefined = globalThis.location?.origin,
+): boolean {
+  if (input.startsWith("/") && !input.startsWith("//")) return true;
+  if (!origin) return false;
+  try {
+    return new URL(input).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Sends a same-origin request outside the generated client (the `/auth/`
  * handler, the Dataset Viewer API and upload parts), with the CSRF header
  * on state-changing calls.
@@ -65,7 +82,7 @@ export function rawFetch(input: string, init: RequestInit = {}): Promise<Respons
   const headers = new Headers(init.headers);
   const method = (init.method ?? "GET").toUpperCase();
   const token = currentCsrfToken();
-  const sameOrigin = input.startsWith("/");
+  const sameOrigin = isSameOrigin(input);
   if (token && sameOrigin && !safeMethods.has(method)) headers.set("X-CSRF-Token", token);
   return fetch(input, { ...init, headers, credentials: sameOrigin ? "same-origin" : "omit" });
 }

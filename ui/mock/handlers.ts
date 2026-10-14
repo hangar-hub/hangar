@@ -28,6 +28,8 @@ type Body = Record<string, unknown>;
 
 export type Ctx = {
   state: MockState;
+  /** The origin the request was sent to, standing in for server.public_url. */
+  origin: string;
   params: Record<string, string>;
   query: URLSearchParams;
   body: unknown;
@@ -759,22 +761,21 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       if (!lfsExt.test(f.path) && f.size <= 10 * 1024 * 1024)
         return { path: f.path, action: "inline" };
       if (ctx.state.lfsObjects.has(f.sha256)) return { path: f.path, action: "exists" };
-      const existing = Object.entries(ctx.state.uploads).find(
-        ([, u]) => u.sha256 === f.sha256 && u.state === "uploading",
-      );
-      const id = existing?.[0] ?? randomUUID();
+      // Like W2's PlanUploads, every plan starts a new upload, even when an
+      // upload of the same object is in progress, and part URLs are
+      // absolute (built from server.public_url).
+      const id = randomUUID();
       const partSize = 5 * 1024 * 1024;
       const count = Math.max(1, Math.ceil(f.size / partSize));
-      if (!existing)
-        ctx.state.uploads[id] = {
-          sha256: f.sha256,
-          size: f.size,
-          partSize,
-          parts: [],
-          state: "uploading",
-          repo: r.repo.id,
-        };
-      const base = `/api/hangar/v1/repos/${ctx.params.type}/${r.repo.namespace}/${r.repo.name}/uploads/${id}/parts`;
+      ctx.state.uploads[id] = {
+        sha256: f.sha256,
+        size: f.size,
+        partSize,
+        parts: [],
+        state: "uploading",
+        repo: r.repo.id,
+      };
+      const base = `${ctx.origin}/api/hangar/v1/repos/${ctx.params.type}/${r.repo.namespace}/${r.repo.name}/uploads/${id}/parts`;
       return {
         path: f.path,
         action: "upload",

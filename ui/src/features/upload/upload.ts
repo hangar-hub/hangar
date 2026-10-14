@@ -1,7 +1,8 @@
-import { api, rawFetch } from "@/api/client";
-import type { CommitOperation, UploadedPart, UploadPlanItem } from "@/api/types";
+import { api, apiBase, rawFetch } from "@/api/client";
+import type { CommitOperation, UploadedPart, UploadPlanItem, UploadStatus } from "@/api/types";
 import { ApiError, unwrap } from "@/lib/problem";
 import { joinPath } from "@/lib/repo";
+import { forgetUpload, type RepoKey, rememberedUpload, rememberUpload } from "./resume";
 
 /** A file staged for upload, with its path in the Repo. */
 export type StagedFile = { file: File; path: string };
@@ -143,7 +144,82 @@ async function putPart(
   );
 }
 
-type RepoPath = { type: "models" | "datasets"; ns: string; name: string };
+type RepoPath = RepoKey;
+
+/** Hangar's own part URLs for an upload, used to resume an earlier upload. */
+export function hangarPartUrls(repo: RepoPath, id: string, count: number): string[] {
+  const base = `${apiBase}/repos/${repo.type}/${encodeURIComponent(repo.ns)}/${encodeURIComponent(repo.name)}/uploads/${encodeURIComponent(id)}/parts/`;
+  return Array.from({ length: Math.max(1, count) }, (_, i) => `${base}${i + 1}`);
+}
+
+/** The parts an upload holds, or undefined when it is gone or cannot be read. */
+async function uploadStatus(repo: RepoPath, id: string): Promise<UploadStatus | undefined> {
+  try {
+    const res = await api.GET("/repos/{type}/{ns}/{name}/uploads/{id}", {
+      params: { path: { ...repo, id } },
+    });
+    return res.response.ok ? res.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type Target = {
+  id: string;
+  urls: string[];
+  partSize: number;
+  presigned: boolean;
+  done: Map<number, UploadedPart>;
+};
+
+const doneParts = (s: UploadStatus | undefined) =>
+  new Map((s?.parts ?? []).map((p): [number, UploadedPart] => [p.number, p]));
+
+/**
+ * Picks the upload to send an object's parts to. An earlier upload of the
+ * same object in this browser (remembered across reloads) wins when the
+ * server still holds some of its parts: its missing parts go to Hangar's
+ * part URLs, because the plan only gives URLs for the upload it just
+ * started. Otherwise the planned upload is used, resuming it when the
+ * server already holds parts of it.
+ */
+async function pickTarget(
+  repo: RepoPath,
+  item: UploadPlanItem,
+  file: File,
+  sha256: string,
+): Promise<Target | "verified"> {
+  const earlier = rememberedUpload(repo, sha256);
+  if (earlier && earlier.id !== item.upload_id && earlier.size === file.size) {
+    const s = await uploadStatus(repo, earlier.id);
+    if (s && s.sha256 === sha256 && s.size === file.size) {
+      if (s.state === "verified") return "verified";
+      if (s.part_size && s.part_size > 0 && s.parts.length > 0) {
+        return {
+          id: earlier.id,
+          urls: hangarPartUrls(repo, earlier.id, s.part_count),
+          partSize: s.part_size,
+          presigned: false,
+          done: doneParts(s),
+        };
+      }
+    }
+    forgetUpload(repo, sha256);
+  }
+  const id = item.upload_id;
+  const urls = item.part_urls ?? [];
+  if (!id || urls.length === 0)
+    throw new Error(`The Instance gave no upload URLs for ${item.path}.`);
+  const s = await uploadStatus(repo, id);
+  if (s?.state === "verified") return "verified";
+  return {
+    id,
+    urls,
+    partSize: item.part_size ?? file.size,
+    presigned: Boolean(item.presigned),
+    done: doneParts(s),
+  };
+}
 
 /**
  * Uploads one planned LFS object: asks which parts the server already
@@ -154,31 +230,22 @@ export async function uploadObject(
   repo: RepoPath,
   item: UploadPlanItem,
   file: File,
+  sha256: string,
   onBytes: (uploaded: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const id = item.upload_id;
-  const urls = item.part_urls ?? [];
-  const partSize = item.part_size ?? file.size;
-  if (!id || urls.length === 0) throw new Error(`The server gave no upload URLs for ${item.path}.`);
-  const status = await api.GET("/repos/{type}/{ns}/{name}/uploads/{id}", {
-    params: { path: { ...repo, id } },
-  });
-  const done = new Map<number, UploadedPart>();
-  if (status.response.ok && status.data) {
-    if (status.data.state === "verified") {
-      onBytes(file.size);
-      return;
-    }
-    for (const p of status.data.parts) done.set(p.number, p);
+  const target = await pickTarget(repo, item, file, sha256);
+  if (target === "verified") {
+    forgetUpload(repo, sha256);
+    onBytes(file.size);
+    return;
   }
-  let uploaded = [...done.values()].reduce(
-    (a, p) =>
-      a +
-      (p.size ??
-        partRange(file.size, partSize, p.number)[1] - partRange(file.size, partSize, p.number)[0]),
-    0,
-  );
+  const { id, urls, partSize, presigned, done } = target;
+  rememberUpload(repo, sha256, id, file.size);
+  let uploaded = [...done.values()].reduce((a, p) => {
+    const [start, end] = partRange(file.size, partSize, p.number);
+    return a + (p.size ?? end - start);
+  }, 0);
   onBytes(uploaded);
   const todo = urls.map((url, i) => ({ url, n: i + 1 })).filter((p) => !done.has(p.n));
   await pool(
@@ -186,7 +253,7 @@ export async function uploadObject(
     partConcurrency,
     async ({ url, n }) => {
       const [start, end] = partRange(file.size, partSize, n);
-      const etag = await putPart(url, file.slice(start, end), Boolean(item.presigned), signal);
+      const etag = await putPart(url, file.slice(start, end), presigned, signal);
       done.set(n, { number: n, etag, size: end - start });
       uploaded += end - start;
       onBytes(uploaded);
@@ -196,12 +263,19 @@ export async function uploadObject(
   const parts = [...done.values()]
     .sort((a, b) => a.number - b.number)
     .map((p) => ({ number: p.number, etag: p.etag }));
-  unwrap(
-    await api.POST("/repos/{type}/{ns}/{name}/uploads/{id}/complete", {
-      params: { path: { ...repo, id } },
-      body: { parts },
-    }),
-  );
+  try {
+    unwrap(
+      await api.POST("/repos/{type}/{ns}/{name}/uploads/{id}/complete", {
+        params: { path: { ...repo, id } },
+        body: { parts },
+      }),
+    );
+  } catch (e) {
+    // The server refused this upload's parts, so the next try starts afresh.
+    if (e instanceof ApiError && e.status < 500) forgetUpload(repo, sha256);
+    throw e;
+  }
+  forgetUpload(repo, sha256);
 }
 
 /** Base64 of a file's bytes, for small files sent inline in the Commit. */
@@ -271,12 +345,13 @@ export async function uploadAndCommit(
     const f = files[i] as StagedFile;
     const p = progress[i] as FileProgress;
     const item = plan.files.find((x) => x.path === f.path);
-    if (!item) throw new Error(`The server did not plan ${f.path}.`);
+    if (!item) throw new Error(`The Instance did not plan ${f.path}.`);
     if (item.action === "inline") {
       ops.push({ op: "add", path: f.path, content_base64: await base64Of(f.file) });
       p.state = "inline";
       p.uploaded = f.file.size;
     } else if (item.action === "exists") {
+      forgetUpload(repo, shas[i] as string);
       ops.push({ op: "add_lfs", path: f.path, sha256: shas[i], size: f.file.size });
       p.state = "stored";
       p.uploaded = f.file.size;
@@ -287,6 +362,7 @@ export async function uploadAndCommit(
         repo,
         item,
         f.file,
+        shas[i] as string,
         (n) => {
           p.uploaded = n;
           emit();

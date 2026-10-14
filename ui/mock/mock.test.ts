@@ -179,7 +179,12 @@ describe("mock server", () => {
     expect(files.map((f) => f.action)).toEqual(["inline", "upload"]);
     const up = files[1] as { upload_id: string; part_urls: string[] };
     expect(up.part_urls).toHaveLength(2);
-    const p1 = await call("PUT", up.part_urls[0] as string, new Uint8Array(5 * 1024 * 1024), {
+    // Part URLs are absolute, as W2 builds them from server.public_url.
+    expect(up.part_urls[0]).toBe(
+      `${base}${api}/repos/models/ada/bert-tiny-finetune/uploads/${up.upload_id}/parts/1`,
+    );
+    const partPath = (u: string | undefined) => new URL(u ?? "").pathname;
+    const p1 = await call("PUT", partPath(up.part_urls[0]), new Uint8Array(5 * 1024 * 1024), {
       "Content-Type": "application/octet-stream",
     });
     expect(p1.status).toBe(200);
@@ -197,7 +202,14 @@ describe("mock server", () => {
         )
       ).status,
     ).toBe(400);
-    await call("PUT", up.part_urls[1] as string, new Uint8Array(1024 * 1024), {
+    // Like W2, asking again starts a new upload; the browser resumes the
+    // first one by its remembered ID.
+    const again = await call("POST", `${api}/repos/models/ada/bert-tiny-finetune/uploads`, {
+      files: [{ path: "big.safetensors", size: 6 * 1024 * 1024, sha256: sha }],
+    });
+    const second = (again.json.files as { upload_id: string }[])[0];
+    expect(second?.upload_id).not.toBe(up.upload_id);
+    await call("PUT", partPath(up.part_urls[1]), new Uint8Array(1024 * 1024), {
       "Content-Type": "application/octet-stream",
     });
     const done = await call(

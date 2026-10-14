@@ -249,7 +249,8 @@ export function createMock(opts: MockOptions = {}) {
       send(res, problem(501, `The mock does not implement ${opId}.`));
       return;
     }
-    const ctx: Ctx = { state, params: m.params, query: url.searchParams, body, raw };
+    const origin = `http://${req.headers.host ?? "mock.local"}`;
+    const ctx: Ctx = { state, origin, params: m.params, query: url.searchParams, body, raw };
     const result = handler(ctx);
     if (
       opId === "adminListAudit" &&

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createApiClient, currentCsrfToken, setCsrfToken } from "./client";
+import { createApiClient, currentCsrfToken, isSameOrigin, setCsrfToken } from "./client";
 
 describe("api client", () => {
   it("calls the native API and sends the CSRF token only on state changes", async () => {
@@ -41,5 +41,21 @@ describe("api client", () => {
     setCsrfToken("from-me");
     expect(currentCsrfToken("hangar_csrf=cookie")).toBe("from-me");
     setCsrfToken(undefined);
+  });
+
+  it("treats paths and absolute URLs on the page's origin as this Instance", () => {
+    const origin = "https://hangar.example.com";
+    expect(isSameOrigin("/api/hangar/v1/me", origin)).toBe(true);
+    // Part URLs that Hangar builds from server.public_url are absolute.
+    expect(
+      isSameOrigin(
+        "https://hangar.example.com/api/hangar/v1/repos/models/a/b/uploads/u/parts/1",
+        origin,
+      ),
+    ).toBe(true);
+    expect(isSameOrigin("https://s3.example.com/bucket/part?sig=abc", origin)).toBe(false);
+    expect(isSameOrigin("//s3.example.com/part", origin)).toBe(false);
+    expect(isSameOrigin("https://hangar.example.com.evil.test/x", origin)).toBe(false);
+    expect(isSameOrigin("https://hangar.example.com/x", undefined)).toBe(false);
   });
 });
