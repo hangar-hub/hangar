@@ -122,17 +122,21 @@ type ListOptions struct {
 	Search string
 	Mirror *bool
 	// Metadata filters (BROWSE-1 and DATA-11).
-	Formats       []string
-	Tasks         []string
-	Libraries     []string
-	Quants        []string
-	Licences      []string
-	ParamsMin     int64
-	ParamsMax     int64
-	ContextMin    int64
-	SizeMax       int64
-	Tags          []string
-	IncludeFacets bool
+	Formats    []string
+	Tasks      []string
+	Libraries  []string
+	Quants     []string
+	Licences   []string
+	ParamsMin  int64
+	ParamsMax  int64
+	ContextMin int64
+	SizeMax    int64
+	Tags       []string
+	// Dataset filters (DATA-11).
+	Modalities     []string
+	Languages      []string
+	SizeCategories []string
+	IncludeFacets  bool
 	// Sort is one of updated, created, name, size, parameters, downloads, likes.
 	Sort string
 	// Desc reverses the order. The Hub sorts descending by default.
@@ -459,6 +463,11 @@ type Service interface {
 	Purge(ctx context.Context, repoUUID uuid.UUID) error
 	// UpdateSettings changes settings and returns the updated Repo.
 	UpdateSettings(ctx context.Context, id model.RepoID, u SettingsUpdate, actor model.Principal) (*Repo, error)
+	// SetMirrorState marks a Repo as a Mirror, which refuses direct writes,
+	// or detaches it into an ordinary Repo.
+	SetMirrorState(ctx context.Context, id model.RepoID, mirror bool) error
+	// CountByNamespace counts the live Repos of a Namespace that viewer can see.
+	CountByNamespace(ctx context.Context, namespaceID uuid.UUID, viewer model.Principal) (int, error)
 	// SetLFSPresence records LFS objects a Repo references and whether
 	// they are present, for Partial mirrors and Pulls.
 	SetLFSPresence(ctx context.Context, id model.RepoID, refs []LFSRef) error
@@ -520,6 +529,9 @@ type LFSStore interface {
 	CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 	// GetUpload returns an upload and the parts done so far.
 	GetUpload(ctx context.Context, id uuid.UUID) (*Upload, error)
+	// UploadRepo returns the Repo an upload was started for (uuid.Nil if
+	// none), so handlers can refuse parts sent through another Repo.
+	UploadRepo(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// PresignPart returns a direct URL for a part, or blob.ErrNotSupported.
 	PresignPart(ctx context.Context, id uuid.UUID, part int, ttl time.Duration) (string, error)
 	// PutPart uploads a part through Hangar and returns its ETag.

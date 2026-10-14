@@ -34,6 +34,7 @@ type fakeUpload struct {
 	repo.Upload
 	key      string
 	uploadID string
+	repoUUID uuid.UUID
 }
 
 var _ repo.LFSStore = (*FakeLFS)(nil)
@@ -116,7 +117,7 @@ func (f *FakeLFS) CreateUpload(ctx context.Context, p repo.UploadParams) (*repo.
 	if ttl == 0 {
 		ttl = 24 * time.Hour
 	}
-	u := &fakeUpload{Upload: repo.Upload{ID: uuid.New(), OID: p.OID, Size: p.Size, ExpiresAt: f.now().Add(ttl)}, key: model.LFSObjectKey(p.OID)}
+	u := &fakeUpload{Upload: repo.Upload{ID: uuid.New(), OID: p.OID, Size: p.Size, ExpiresAt: f.now().Add(ttl)}, key: model.LFSObjectKey(p.OID), repoUUID: p.RepoUUID}
 	if p.Multipart {
 		if p.PartSize <= 0 {
 			return nil, fmt.Errorf("%w: multipart uploads need a part size", repo.ErrInvalid)
@@ -163,6 +164,15 @@ func (f *FakeLFS) GetUpload(ctx context.Context, id uuid.UUID) (*repo.Upload, er
 		out.Done = parts
 	}
 	return &out, nil
+}
+
+// UploadRepo implements repo.LFSStore.
+func (f *FakeLFS) UploadRepo(_ context.Context, id uuid.UUID) (uuid.UUID, error) {
+	u, err := f.upload(id)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return u.repoUUID, nil
 }
 
 // PresignPart implements repo.LFSStore.

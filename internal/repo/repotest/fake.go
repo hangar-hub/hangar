@@ -39,7 +39,8 @@ const maxTextDiff = 1 << 20
 // and Tags filters and sorts by name, created or updated time; it returns
 // an error for metadata filters, which need the index.
 type Fake struct {
-	// LFS stores LFS objects. Commits with OpAddLFS need the object in it.
+	// LFS stores LFS objects. Commits with OpAddLFS need the object in it,
+	// and OpAdd stores paths that .gitattributes tracks with LFS in it.
 	LFS *FakeLFS
 
 	root string
@@ -49,7 +50,9 @@ type Fake struct {
 	repos     map[uuid.UUID]*fakeRepo
 	names     map[string]uuid.UUID
 	redirects map[string]uuid.UUID
-	now       func() time.Time
+	// namespaces maps lower-case Namespace names to IDs (MapNamespace).
+	namespaces map[string]uuid.UUID
+	now        func() time.Time
 }
 
 type fakeRepo struct {
@@ -70,14 +73,31 @@ func NewFake(t testing.TB) *Fake {
 		t.Fatalf("create git home: %v", err)
 	}
 	return &Fake{
-		LFS:       NewFakeLFS(blobtest.NewFake()),
-		root:      root,
-		git:       git{home: home},
-		repos:     map[uuid.UUID]*fakeRepo{},
-		names:     map[string]uuid.UUID{},
-		redirects: map[string]uuid.UUID{},
-		now:       func() time.Time { return time.Now().UTC().Truncate(time.Second) },
+		LFS:        NewFakeLFS(blobtest.NewFake()),
+		root:       root,
+		git:        git{home: home},
+		repos:      map[uuid.UUID]*fakeRepo{},
+		names:      map[string]uuid.UUID{},
+		redirects:  map[string]uuid.UUID{},
+		namespaces: map[string]uuid.UUID{},
+		now:        func() time.Time { return time.Now().UTC().Truncate(time.Second) },
 	}
+}
+
+// MapNamespace records a Namespace's ID, so Repos created in or transferred
+// to it get that NamespaceID, as the real service does for Organisation
+// Namespaces. Without a mapping, Create uses the actor's personal Namespace.
+func (f *Fake) MapNamespace(name string, id uuid.UUID) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.namespaces[strings.ToLower(name)] = id
+}
+
+func (f *Fake) namespaceID(name string, fallback uuid.UUID) uuid.UUID {
+	if id, ok := f.namespaces[strings.ToLower(name)]; ok {
+		return id
+	}
+	return fallback
 }
 
 // SetClock makes the fake use now for Commit times and timestamps.
@@ -181,7 +201,7 @@ func (f *Fake) Create(ctx context.Context, p repo.CreateParams) (*repo.Repo, err
 	now := f.now()
 	r := &fakeRepo{
 		Repo: repo.Repo{
-			UUID: uuid.Must(uuid.NewV7()), ID: p.ID, NamespaceID: p.Actor.NamespaceID, Visibility: vis,
+			UUID: uuid.Must(uuid.NewV7()), ID: p.ID, NamespaceID: f.namespaceID(p.ID.Namespace, p.Actor.NamespaceID), Visibility: vis,
 			DefaultBranch: model.DefaultBranch, HeadRef: model.DefaultHeadRef, Description: p.Description,
 			Tags: []string{}, Licence: p.Licence, Mirror: p.Mirror, CreatedBy: p.Actor.UserID,
 			CreatedAt: now, UpdatedAt: now, LastModified: now,
@@ -240,7 +260,8 @@ func (f *Fake) GetByUUID(_ context.Context, id uuid.UUID) (*repo.Repo, error) {
 
 // List implements repo.Service.
 func (f *Fake) List(_ context.Context, opts repo.ListOptions) (*repo.ListResult, error) {
-	if len(opts.Formats)+len(opts.Tasks)+len(opts.Libraries)+len(opts.Quants)+len(opts.Licences) > 0 ||
+	if len(opts.Formats)+len(opts.Tasks)+len(opts.Libraries)+len(opts.Quants)+len(opts.Licences)+
+		len(opts.Modalities)+len(opts.Languages)+len(opts.SizeCategories) > 0 ||
 		opts.ParamsMin+opts.ParamsMax+opts.ContextMin+opts.SizeMax > 0 || opts.IncludeFacets {
 		return nil, errors.New("repotest: metadata filters and facets need the index; the fake does not support them")
 	}
@@ -691,12 +712,35 @@ func (f *Fake) commitLocked(ctx context.Context, r *fakeRepo, p repo.CommitParam
 		_, err = run(nil, "update-index", "--add", "--cacheinfo", "100644,"+strings.TrimSpace(string(oid))+","+path)
 		return err
 	}
+	// Paths that .gitattributes at the parent tracks with LFS (the Hub's
+	// defaults without one) are stored as LFS objects, as the real service
+	// does.
+	attrs := repo.DefaultGitAttributes(r.ID.Type)
+	if parent != "" {
+		if out, err := run(nil, "cat-file", "blob", string(parent)+":.gitattributes"); err == nil {
+			attrs = out
+		}
+	}
+	rules := repo.ParseLFSRules(attrs)
 	var lfsRefs []repo.LFSRef
 	for _, op := range p.Operations {
 		clean, _ := model.CleanRepoPath(op.Path)
 		switch op.Kind {
 		case repo.OpAdd:
-			if err := addBlob(clean, op.Content); err != nil {
+			content := op.Content
+			if rules.IsLFS(clean) {
+				b, err := io.ReadAll(op.Content)
+				if err != nil {
+					return nil, err
+				}
+				obj, err := f.LFS.Put(ctx, b)
+				if err != nil {
+					return nil, err
+				}
+				lfsRefs = append(lfsRefs, repo.LFSRef{OID: obj.OID, Size: obj.Size, Present: true})
+				content = bytes.NewReader(model.LFSPointer{OID: obj.OID, Size: obj.Size}.Bytes())
+			}
+			if err := addBlob(clean, content); err != nil {
 				return nil, err
 			}
 		case repo.OpAddLFS:
@@ -1280,6 +1324,7 @@ func (f *Fake) move(id model.RepoID, to model.RepoID) (*repo.Repo, error) {
 	f.redirects[keyOf(r.ID)] = r.UUID
 	delete(f.redirects, keyOf(to))
 	r.ID = to
+	r.NamespaceID = f.namespaceID(to.Namespace, r.NamespaceID)
 	r.UpdatedAt = f.now()
 	f.names[keyOf(to)] = r.UUID
 	return copyRepo(r), nil
@@ -1405,6 +1450,24 @@ func (f *Fake) UpdateSettings(ctx context.Context, id model.RepoID, u repo.Setti
 	}
 	r.UpdatedAt = f.now()
 	return copyRepo(r), nil
+}
+
+// SetMirrorState implements repo.Service.
+func (f *Fake) SetMirrorState(_ context.Context, id model.RepoID, mirror bool) error {
+	return f.SetMirror(id, mirror)
+}
+
+// CountByNamespace implements repo.Service.
+func (f *Fake) CountByNamespace(_ context.Context, namespaceID uuid.UUID, viewer model.Principal) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, r := range f.repos {
+		if r.DeletedAt == nil && r.NamespaceID == namespaceID && visibleTo(&r.Repo, viewer) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // SetLFSPresence implements repo.Service.
