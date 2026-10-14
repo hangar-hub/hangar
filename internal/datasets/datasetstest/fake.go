@@ -192,14 +192,23 @@ func (v *Viewer) Splits(_ context.Context, p model.Principal, id model.RepoID) (
 		return nil, err
 	}
 	ready, pending := v.refs(id)
-	return &datasets.SplitsResponse{Splits: append(ready, pending...), Pending: orEmpty(pending), Failed: []datasets.SplitRef{}}, nil
+	resp := &datasets.SplitsResponse{Splits: append(ready, pending...), Pending: []datasets.ConfigRef{}, Failed: []datasets.FailedConfig{}}
+	seen := map[string]bool{}
+	for _, r := range pending {
+		if !seen[r.Config] {
+			seen[r.Config] = true
+			resp.Pending = append(resp.Pending, datasets.ConfigRef{Dataset: r.Dataset, Config: r.Config})
+		}
+	}
+	return resp, nil
 }
 
-func orEmpty(s []datasets.SplitRef) []datasets.SplitRef {
-	if s == nil {
-		return []datasets.SplitRef{}
+func cells(t *Table, row map[string]any) datasets.Cells {
+	out := make(datasets.Cells, 0, len(t.Columns))
+	for _, c := range t.Columns {
+		out = append(out, datasets.Cell{Name: c, Value: row[c]})
 	}
-	return s
+	return out
 }
 
 func page(t *Table, idx []int, offset int64, length int) *datasets.RowsResponse {
@@ -215,7 +224,7 @@ func page(t *Table, idx []int, offset int64, length int) *datasets.RowsResponse 
 		resp.Features = append(resp.Features, datasets.Feature{FeatureIdx: i, Name: c, Type: typ})
 	}
 	for i := offset; i < int64(len(idx)) && i < offset+int64(length); i++ {
-		resp.Rows = append(resp.Rows, datasets.Row{RowIdx: int64(idx[i]), Row: t.Rows[idx[i]], TruncatedCells: []string{}})
+		resp.Rows = append(resp.Rows, datasets.Row{RowIdx: int64(idx[i]), Row: cells(t, t.Rows[idx[i]]), TruncatedCells: []string{}})
 	}
 	return resp
 }
@@ -229,8 +238,13 @@ func all(t *Table) []int {
 }
 
 // FirstRows implements datasets.Viewer.
-func (v *Viewer) FirstRows(ctx context.Context, p model.Principal, id model.RepoID, config, split string) (*datasets.RowsResponse, error) {
-	return v.Rows(ctx, p, datasets.RowsRequest{Repo: id, Config: config, Split: split, Length: datasets.MaxRowsPerPage})
+func (v *Viewer) FirstRows(ctx context.Context, p model.Principal, id model.RepoID, config, split string) (*datasets.FirstRowsResponse, error) {
+	r, err := v.Rows(ctx, p, datasets.RowsRequest{Repo: id, Config: config, Split: split, Length: datasets.MaxRowsPerPage})
+	if err != nil {
+		return nil, err
+	}
+	return &datasets.FirstRowsResponse{Dataset: id.String(), Config: config, Split: split, Features: r.Features, Rows: r.Rows,
+		Truncated: r.NumRowsTotal > int64(len(r.Rows))}, nil
 }
 
 // Rows implements datasets.Viewer.
@@ -326,7 +340,7 @@ func (v *Viewer) Parquet(_ context.Context, p model.Principal, id model.RepoID, 
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	resp := &datasets.ParquetResponse{ParquetFiles: []datasets.ParquetFile{}, Pending: []datasets.SplitRef{}, Failed: []datasets.SplitRef{}}
+	resp := &datasets.ParquetResponse{ParquetFiles: []datasets.ParquetFile{}, Pending: []datasets.ConfigRef{}, Failed: []datasets.FailedConfig{}}
 	for _, f := range v.files[id.String()] {
 		if config == "" || f.Config == config {
 			resp.ParquetFiles = append(resp.ParquetFiles, f)

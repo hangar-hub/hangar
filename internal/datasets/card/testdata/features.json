@@ -1,0 +1,278 @@
+[
+ {
+  "name": "values",
+  "yaml": "- name: a\n  dtype: string\n- name: b\n  dtype: int64\n- name: c\n  dtype: float32\n- name: d\n  dtype: bool\n",
+  "features": {
+   "a": {
+    "dtype": "string",
+    "_type": "Value"
+   },
+   "b": {
+    "dtype": "int64",
+    "_type": "Value"
+   },
+   "c": {
+    "dtype": "float32",
+    "_type": "Value"
+   },
+   "d": {
+    "dtype": "bool",
+    "_type": "Value"
+   }
+  }
+ },
+ {
+  "name": "timestamps",
+  "yaml": "- name: t\n  dtype: timestamp[us, tz=UTC]\n- name: d\n  dtype: date32\n- name: dur\n  dtype: duration[ms]\n",
+  "features": {
+   "t": {
+    "dtype": "timestamp[us, tz=UTC]",
+    "_type": "Value"
+   },
+   "d": {
+    "dtype": "date32",
+    "_type": "Value"
+   },
+   "dur": {
+    "dtype": "duration[ms]",
+    "_type": "Value"
+   }
+  }
+ },
+ {
+  "name": "class_label",
+  "yaml": "- name: label\n  dtype:\n    class_label:\n      names:\n        '0': neg\n        '1': pos\n",
+  "features": {
+   "label": {
+    "names": [
+     "neg",
+     "pos"
+    ],
+    "_type": "ClassLabel"
+   }
+  }
+ },
+ {
+  "name": "list_simple",
+  "yaml": "- name: tags\n  list: string\n",
+  "features": {
+   "tags": {
+    "feature": {
+     "dtype": "string",
+     "_type": "Value"
+    },
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "list_dtype",
+  "yaml": "- name: tags\n  list:\n    dtype: int32\n",
+  "features": {
+   "tags": {
+    "feature": {
+     "dtype": "int32",
+     "_type": "Value"
+    },
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "large_list",
+  "yaml": "- name: big\n  large_list: string\n",
+  "features": {
+   "big": {
+    "feature": {
+     "dtype": "string",
+     "_type": "Value"
+    },
+    "_type": "LargeList"
+   }
+  }
+ },
+ {
+  "name": "list_of_struct",
+  "yaml": "- name: items\n  list:\n  - name: x\n    dtype: int64\n  - name: y\n    dtype: string\n",
+  "features": {
+   "items": {
+    "feature": {
+     "x": {
+      "dtype": "int64",
+      "_type": "Value"
+     },
+     "y": {
+      "dtype": "string",
+      "_type": "Value"
+     }
+    },
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "sequence_simple",
+  "yaml": "- name: s\n  sequence: string\n",
+  "features": {
+   "s": {
+    "feature": {
+     "dtype": "string",
+     "_type": "Value"
+    },
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "sequence_length",
+  "yaml": "- name: s\n  sequence: float32\n  length: 3\n",
+  "features": {
+   "s": {
+    "feature": {
+     "dtype": "float32",
+     "_type": "Value"
+    },
+    "length": 3,
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "sequence_of_struct",
+  "yaml": "- name: s\n  sequence:\n  - name: x\n    dtype: int64\n  - name: y\n    dtype: string\n",
+  "features": {
+   "s": {
+    "x": {
+     "feature": {
+      "dtype": "int64",
+      "_type": "Value"
+     },
+     "_type": "List"
+    },
+    "y": {
+     "feature": {
+      "dtype": "string",
+      "_type": "Value"
+     },
+     "_type": "List"
+    }
+   }
+  }
+ },
+ {
+  "name": "struct",
+  "yaml": "- name: meta\n  struct:\n  - name: source\n    dtype: string\n  - name: score\n    dtype: float64\n",
+  "features": {
+   "meta": {
+    "source": {
+     "dtype": "string",
+     "_type": "Value"
+    },
+    "score": {
+     "dtype": "float64",
+     "_type": "Value"
+    }
+   }
+  }
+ },
+ {
+  "name": "nested_struct",
+  "yaml": "- name: m\n  struct:\n  - name: inner\n    struct:\n    - name: v\n      dtype: int8\n",
+  "features": {
+   "m": {
+    "inner": {
+     "v": {
+      "dtype": "int8",
+      "_type": "Value"
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "image_audio",
+  "yaml": "- name: image\n  dtype: image\n- name: audio\n  dtype: audio\n",
+  "features": {
+   "image": {
+    "_type": "Image"
+   },
+   "audio": {
+    "_type": "Audio"
+   }
+  }
+ },
+ {
+  "name": "audio_options",
+  "yaml": "- name: audio\n  dtype:\n    audio:\n      sampling_rate: 16000\n",
+  "features": {
+   "audio": {
+    "sampling_rate": 16000,
+    "_type": "Audio"
+   }
+  }
+ },
+ {
+  "name": "array2d",
+  "yaml": "- name: m\n  dtype:\n    array2_d:\n      shape:\n      - 2\n      - 3\n      dtype: float32\n",
+  "features": {
+   "m": {
+    "shape": [
+     2,
+     3
+    ],
+    "dtype": "float32",
+    "_type": "Array2D"
+   }
+  }
+ },
+ {
+  "name": "translation",
+  "yaml": "- name: t\n  dtype:\n    translation:\n      languages:\n      - en\n      - fr\n",
+  "features": {
+   "t": {
+    "languages": [
+     "en",
+     "fr"
+    ],
+    "_type": "Translation"
+   }
+  }
+ },
+ {
+  "name": "list_of_lists",
+  "yaml": "- name: l\n  list:\n    list: int64\n",
+  "features": {
+   "l": {
+    "feature": {
+     "feature": {
+      "dtype": "int64",
+      "_type": "Value"
+     },
+     "_type": "List"
+    },
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "list_class_label",
+  "yaml": "- name: labels\n  list:\n    class_label:\n      names:\n        '0': a\n        '1': b\n",
+  "features": {
+   "labels": {
+    "feature": {
+     "names": [
+      "a",
+      "b"
+     ],
+     "_type": "ClassLabel"
+    },
+    "_type": "List"
+   }
+  }
+ },
+ {
+  "name": "class_label_missing_id",
+  "yaml": "- name: label\n  dtype:\n    class_label:\n      names:\n        '0': a\n        '2': c\n",
+  "error": "ValueError"
+ }
+]

@@ -1,0 +1,47 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.json"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 43,
+   "embedded_nbytes": 43,
+   "rows": [
+    {
+     "q": "x",
+     "n": 1,
+     "extra": null
+    },
+    {
+     "q": "y",
+     "n": 2,
+     "extra": [
+      1.5
+     ]
+    }
+   ]
+  }
+ },
+ "features": {
+  "q": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "n": {
+   "dtype": "int64",
+   "_type": "Value"
+  },
+  "extra": {
+   "feature": {
+    "dtype": "float64",
+    "_type": "Value"
+   },
+   "_type": "List"
+  }
+ }
+}

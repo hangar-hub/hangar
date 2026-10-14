@@ -1,0 +1,94 @@
+{
+ "builder": "csv",
+ "options": {},
+ "data_files": {
+  "train": [
+   "train.csv"
+  ],
+  "test": [
+   "test.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 140,
+   "embedded_nbytes": 140,
+   "rows": [
+    {
+     "id": 1,
+     "name": "a",
+     "score": 1.5,
+     "flag": true,
+     "mixed": "x",
+     "empty": null,
+     "when": "2020-01-01"
+    },
+    {
+     "id": 2,
+     "name": "b",
+     "score": null,
+     "flag": false,
+     "mixed": "1",
+     "empty": null,
+     "when": "2020-01-02"
+    },
+    {
+     "id": 3,
+     "name": null,
+     "score": 2.25,
+     "flag": true,
+     "mixed": "2.5",
+     "empty": null,
+     "when": null
+    }
+   ]
+  },
+  "test": {
+   "num_examples": 1,
+   "num_bytes": 50,
+   "embedded_nbytes": 50,
+   "rows": [
+    {
+     "id": 4,
+     "name": "d",
+     "score": 3.0,
+     "flag": false,
+     "mixed": "y",
+     "empty": null,
+     "when": "2021-01-01"
+    }
+   ]
+  }
+ },
+ "features": {
+  "id": {
+   "dtype": "int64",
+   "_type": "Value"
+  },
+  "name": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "score": {
+   "dtype": "float64",
+   "_type": "Value"
+  },
+  "flag": {
+   "dtype": "bool",
+   "_type": "Value"
+  },
+  "mixed": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "empty": {
+   "dtype": "float64",
+   "_type": "Value"
+  },
+  "when": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 5,
+   "num_bytes": 103,
+   "embedded_nbytes": 103,
+   "rows": [
+    {
+     "m": "0.1"
+    },
+    {
+     "m": "\"s \\ud83d\\ude00\""
+    },
+    {
+     "m": "[1e+20,0.00000015,3.0,0.0]"
+    },
+    {
+     "m": "{\"deep\":[1.25,null,true]}"
+    },
+    {
+     "m": "123456789.125"
+    }
+   ]
+  }
+ },
+ "features": {
+  "m": {
+   "_type": "Json"
+  }
+ }
+}

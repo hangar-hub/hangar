@@ -1,0 +1,47 @@
+{
+ "builder": "parquet",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.parquet"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 51,
+   "embedded_nbytes": 51,
+   "rows": [
+    {
+     "x": 1.5,
+     "d": {
+      "date": "2020-01-01"
+     },
+     "m": {
+      "dec": "1.25"
+     }
+    },
+    {
+     "x": null,
+     "d": null,
+     "m": null
+    }
+   ],
+   "hub_num_bytes": 217
+  }
+ },
+ "features": {
+  "x": {
+   "dtype": "float32",
+   "_type": "Value"
+  },
+  "d": {
+   "dtype": "date32",
+   "_type": "Value"
+  },
+  "m": {
+   "dtype": "decimal128(5, 2)",
+   "_type": "Value"
+  }
+ }
+}

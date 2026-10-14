@@ -31,9 +31,12 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/robfig/cron/v3` | v3.0.1 | Parsing the 5-field cron schedules in configuration and the `schedules` table. |
 | `github.com/google/uuid` | v1.6.0 | UUIDv7 row IDs. |
 | `github.com/gpustack/gguf-parser-go` | v0.26.4 | GGUF header parsing with ranged reads (MIT). Pinned until W7 imports it. |
-| `github.com/parquet-go/parquet-go` | v0.32.0 | Parquet reading and writing for datasets (Apache-2.0). Pinned until W10 imports it. |
-| `github.com/pierrec/lz4/v4` | v4.1.21 | Decodes the LZ4 frames in Xet xorb chunks (UP-7). Already in the module graph at this version; BSD-3-Clause. |
+| `github.com/parquet-go/parquet-go` | v0.32.0 | Parquet reading and writing for datasets (Apache-2.0). |
+| `github.com/klauspost/compress` | v1.20.1 | zstd for zstd-compressed dataset files and Arrow IPC buffers, and Snappy and zstd for checking Parquet pages before parquet-go reads them (Apache-2.0, BSD-3-Clause). Already required by parquet-go. |
+| `github.com/pierrec/lz4/v4` | v4.1.21 | Decodes the LZ4 frames in Xet xorb chunks (UP-7) and checks LZ4_RAW Parquet pages before parquet-go reads them (BSD-3-Clause). Already required by parquet-go. |
+| `github.com/andybalholm/brotli` | v1.1.1 | Brotli for checking Brotli Parquet pages before parquet-go reads them (MIT). Already required by parquet-go. |
 | `github.com/zeebo/blake3` | v0.2.4 | Keyed BLAKE3 for Xet chunk, xorb, file and verification hashes (UP-7); CC0-1.0. |
+| `go.yaml.in/yaml/v3` | v3.0.5 | Ordered YAML nodes for dataset card metadata, so `configs` and features keep their order (Apache-2.0, MIT). Already required by koanf. |
 | `github.com/oapi-codegen/runtime` | v1.7.0 | Runtime helpers for the generated native API code. |
 | `github.com/oapi-codegen/oapi-codegen/v2` (tool) | v2.8.0 | Generates `internal/api/gen` from `api/openapi.yaml`. |
 | `github.com/getkin/kin-openapi` | v0.142.0 | OpenAPI document model used by the generated embedded spec. |

@@ -1,0 +1,160 @@
+{
+ "columns": [
+  "i8",
+  "u16",
+  "u64",
+  "f16",
+  "f32",
+  "f64",
+  "b",
+  "s",
+  "ls",
+  "bin",
+  "d32",
+  "ts",
+  "tsz",
+  "t64",
+  "dur",
+  "dec",
+  "lst",
+  "fsl",
+  "st",
+  "nul",
+  "dic"
+ ],
+ "types": [
+  "int8",
+  "uint16",
+  "uint64",
+  "halffloat",
+  "float",
+  "double",
+  "bool",
+  "string",
+  "large_string",
+  "binary",
+  "date32[day]",
+  "timestamp[ms]",
+  "timestamp[us, tz=UTC]",
+  "time64[us]",
+  "duration[s]",
+  "decimal128(10, 2)",
+  "list<item: int64>",
+  "fixed_size_list<item: float>[2]",
+  "struct<a: int64, b: string>",
+  "null",
+  "dictionary<values=string, indices=int32, ordered=0>"
+ ],
+ "rows": [
+  [
+   1,
+   1,
+   18446744073709551615,
+   1.5,
+   0.10000000149011612,
+   1e+300,
+   true,
+   "a",
+   "x",
+   {
+    "bytes": "AAE="
+   },
+   {
+    "date": "2020-01-02"
+   },
+   {
+    "ts": "2020-01-02T03:04:05.678000"
+   },
+   {
+    "ts": "2020-01-02T00:00:00+00:00"
+   },
+   {
+    "time": "01:02:03"
+   },
+   {
+    "dur": 5.0
+   },
+   {
+    "dec": "-12.34"
+   },
+   [
+    1,
+    2
+   ],
+   [
+    1.0,
+    2.0
+   ],
+   {
+    "struct": [
+     1,
+     "x"
+    ]
+   },
+   null,
+   "red"
+  ],
+  [
+   -2,
+   65535,
+   0,
+   -0.25,
+   null,
+   -0.5,
+   null,
+   null,
+   "",
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   {
+    "dec": "0.05"
+   },
+   [],
+   null,
+   null,
+   null,
+   "blue"
+  ],
+  [
+   null,
+   null,
+   null,
+   null,
+   3.0,
+   null,
+   false,
+   "h\u00e9llo",
+   null,
+   {
+    "bytes": ""
+   },
+   {
+    "date": "1969-12-31"
+   },
+   {
+    "ts": "1970-01-01T00:00:00"
+   },
+   null,
+   null,
+   null,
+   null,
+   null,
+   [
+    3.0,
+    null
+   ],
+   {
+    "struct": [
+     null,
+     "z"
+    ]
+   },
+   null,
+   null
+  ]
+ ]
+}

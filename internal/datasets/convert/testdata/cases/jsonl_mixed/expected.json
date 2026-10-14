@@ -1,0 +1,120 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "train.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 229,
+   "embedded_nbytes": 229,
+   "rows": [
+    {
+     "a": 1.0,
+     "b": {
+      "ts": "2020-01-01T00:00:00"
+     },
+     "c": "2020-01-01 10:00:00",
+     "d": [
+      1,
+      2
+     ],
+     "e": "{\"x\":1}",
+     "f": "1",
+     "g": null,
+     "h": true,
+     "i": [
+      {
+       "k": 1
+      }
+     ],
+     "u": "é/ü"
+    },
+    {
+     "a": 2.5,
+     "b": {
+      "ts": "2021-02-03T00:00:00"
+     },
+     "c": "x",
+     "d": [],
+     "e": "{\"y\":\"s\"}",
+     "f": "\"str\"",
+     "g": null,
+     "h": false,
+     "i": [
+      {
+       "k": 2
+      },
+      {
+       "k": null
+      }
+     ],
+     "u": "x"
+    },
+    {
+     "a": null,
+     "b": null,
+     "c": null,
+     "d": null,
+     "e": null,
+     "f": "[1,{\"z\":2}]",
+     "g": null,
+     "h": null,
+     "i": null,
+     "u": null
+    }
+   ]
+  }
+ },
+ "features": {
+  "a": {
+   "dtype": "float64",
+   "_type": "Value"
+  },
+  "b": {
+   "dtype": "timestamp[s]",
+   "_type": "Value"
+  },
+  "c": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "d": {
+   "feature": {
+    "dtype": "int64",
+    "_type": "Value"
+   },
+   "_type": "List"
+  },
+  "e": {
+   "_type": "Json"
+  },
+  "f": {
+   "_type": "Json"
+  },
+  "g": {
+   "dtype": "null",
+   "_type": "Value"
+  },
+  "h": {
+   "dtype": "bool",
+   "_type": "Value"
+  },
+  "i": {
+   "feature": {
+    "k": {
+     "dtype": "int64",
+     "_type": "Value"
+    }
+   },
+   "_type": "List"
+  },
+  "u": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

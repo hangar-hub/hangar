@@ -1,0 +1,49 @@
+{
+ "builder": "imagefolder",
+ "options": {},
+ "data_files": {
+  "train": [
+   "train/0.png",
+   "train/sub/1.png",
+   "train/metadata.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 314,
+   "embedded_nbytes": 250,
+   "rows": [
+    {
+     "image": {
+      "media": "0.png",
+      "size": 86
+     },
+     "caption": "first",
+     "score": 1
+    },
+    {
+     "image": {
+      "media": "1.png",
+      "size": 103
+     },
+     "caption": "second",
+     "score": 2
+    }
+   ]
+  }
+ },
+ "features": {
+  "image": {
+   "_type": "Image"
+  },
+  "caption": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "score": {
+   "dtype": "int64",
+   "_type": "Value"
+  }
+ }
+}

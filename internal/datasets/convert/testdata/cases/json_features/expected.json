@@ -1,0 +1,99 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 70,
+   "embedded_nbytes": 70,
+   "rows": [
+    {
+     "n": 1.0,
+     "lab": 1,
+     "l": [
+      1,
+      2
+     ],
+     "t": {
+      "ts": "2020-01-01T00:00:00"
+     },
+     "s": {
+      "k": 1
+     }
+    },
+    {
+     "n": 2.5,
+     "lab": 0,
+     "l": [],
+     "t": null,
+     "s": null
+    }
+   ]
+  }
+ },
+ "card_features": {
+  "n": {
+   "dtype": "float32",
+   "_type": "Value"
+  },
+  "lab": {
+   "names": [
+    "a",
+    "b"
+   ],
+   "_type": "ClassLabel"
+  },
+  "l": {
+   "feature": {
+    "dtype": "int16",
+    "_type": "Value"
+   },
+   "_type": "List"
+  },
+  "t": {
+   "dtype": "timestamp[s]",
+   "_type": "Value"
+  },
+  "s": {
+   "k": {
+    "dtype": "int64",
+    "_type": "Value"
+   }
+  }
+ },
+ "features": {
+  "n": {
+   "dtype": "float32",
+   "_type": "Value"
+  },
+  "lab": {
+   "names": [
+    "a",
+    "b"
+   ],
+   "_type": "ClassLabel"
+  },
+  "l": {
+   "feature": {
+    "dtype": "int16",
+    "_type": "Value"
+   },
+   "_type": "List"
+  },
+  "t": {
+   "dtype": "timestamp[s]",
+   "_type": "Value"
+  },
+  "s": {
+   "k": {
+    "dtype": "int64",
+    "_type": "Value"
+   }
+  }
+ }
+}

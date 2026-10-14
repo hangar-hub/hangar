@@ -1,0 +1,42 @@
+{
+ "builder": "csv",
+ "options": {
+  "sep": ";",
+  "names": [
+   "p",
+   "q"
+  ]
+ },
+ "data_files": {
+  "train": [
+   "a.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 32,
+   "embedded_nbytes": 32,
+   "rows": [
+    {
+     "p": 1,
+     "q": 2
+    },
+    {
+     "p": 3,
+     "q": 4
+    }
+   ]
+  }
+ },
+ "features": {
+  "p": {
+   "dtype": "int64",
+   "_type": "Value"
+  },
+  "q": {
+   "dtype": "int64",
+   "_type": "Value"
+  }
+ }
+}

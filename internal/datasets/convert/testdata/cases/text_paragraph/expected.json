@@ -1,0 +1,35 @@
+{
+ "builder": "text",
+ "options": {
+  "sample_by": "paragraph"
+ },
+ "data_files": {
+  "train": [
+   "a.txt"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 28,
+   "embedded_nbytes": 28,
+   "rows": [
+    {
+     "text": "p1 l1\np1 l2"
+    },
+    {
+     "text": "\np2"
+    },
+    {
+     "text": "p3"
+    }
+   ]
+  }
+ },
+ "features": {
+  "text": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

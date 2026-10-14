@@ -1,0 +1,32 @@
+{
+ "builder": "text",
+ "options": {
+  "keep_linebreaks": true
+ },
+ "data_files": {
+  "train": [
+   "a.txt"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 12,
+   "embedded_nbytes": 12,
+   "rows": [
+    {
+     "text": "a\n"
+    },
+    {
+     "text": "b\n"
+    }
+   ]
+  }
+ },
+ "features": {
+  "text": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

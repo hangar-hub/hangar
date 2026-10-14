@@ -1,0 +1,36 @@
+{
+ "builder": "csv",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.csv.gz"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 33,
+   "embedded_nbytes": 33,
+   "rows": [
+    {
+     "k": "alpha",
+     "v": 1
+    },
+    {
+     "k": "beta",
+     "v": 2
+    }
+   ]
+  }
+ },
+ "features": {
+  "k": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "v": {
+   "dtype": "int64",
+   "_type": "Value"
+  }
+ }
+}

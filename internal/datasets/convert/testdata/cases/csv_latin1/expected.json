@@ -1,0 +1,34 @@
+{
+ "builder": "csv",
+ "options": {
+  "encoding": "latin-1"
+ },
+ "data_files": {
+  "train": [
+   "a.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 1,
+   "num_bytes": 21,
+   "embedded_nbytes": 21,
+   "rows": [
+    {
+     "name": "José",
+     "city": "München"
+    }
+   ]
+  }
+ },
+ "features": {
+  "name": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "city": {
+   "dtype": "string",
+   "_type": "Value"
+  }
+ }
+}

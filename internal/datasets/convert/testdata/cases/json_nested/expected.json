@@ -1,0 +1,80 @@
+{
+ "builder": "json",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.jsonl"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 2,
+   "num_bytes": 90,
+   "embedded_nbytes": 90,
+   "rows": [
+    {
+     "s": {
+      "a": {
+       "b": [
+        1,
+        2
+       ]
+      },
+      "c": "x"
+     },
+     "ll": [
+      [
+       1
+      ],
+      [
+       2,
+       3
+      ]
+     ],
+     "big": 1.2345678901234567e+19
+    },
+    {
+     "s": {
+      "a": {
+       "b": []
+      },
+      "c": null
+     },
+     "ll": [],
+     "big": 1.0
+    }
+   ]
+  }
+ },
+ "features": {
+  "s": {
+   "a": {
+    "b": {
+     "feature": {
+      "dtype": "int64",
+      "_type": "Value"
+     },
+     "_type": "List"
+    }
+   },
+   "c": {
+    "dtype": "string",
+    "_type": "Value"
+   }
+  },
+  "ll": {
+   "feature": {
+    "feature": {
+     "dtype": "int64",
+     "_type": "Value"
+    },
+    "_type": "List"
+   },
+   "_type": "List"
+  },
+  "big": {
+   "dtype": "float64",
+   "_type": "Value"
+  }
+ }
+}

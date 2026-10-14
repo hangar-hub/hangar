@@ -10,7 +10,11 @@ while IFS= read -r file; do
   for target in $(grep -oE '^func (Fuzz[A-Za-z0-9_]+)' "$file" | awk '{print $2}'); do
     found=$((found + 1))
     echo "== $pkg $target ($duration)"
-    go test -run '^$' -fuzz "^${target}\$" -fuzztime "$duration" "$pkg"
+    # Go minimises every input that finds new coverage, for up to 60s by
+    # default and in time that grows with the square of the input's size.
+    # On binary formats (Parquet) that left the fuzzer running almost no
+    # inputs, so cap minimisation at 2,000 tries.
+    go test -run '^$' -fuzz "^${target}\$" -fuzztime "$duration" -fuzzminimizetime 2000x "$pkg"
   done
 done < <(grep -rl --include='*_test.go' -E '^func Fuzz' cmd internal compat 2>/dev/null | sort)
 echo "Ran $found fuzz targets."

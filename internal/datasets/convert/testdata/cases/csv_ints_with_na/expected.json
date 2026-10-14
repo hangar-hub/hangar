@@ -1,0 +1,40 @@
+{
+ "builder": "csv",
+ "options": {},
+ "data_files": {
+  "train": [
+   "a.csv"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 50,
+   "embedded_nbytes": 50,
+   "rows": [
+    {
+     "a": 1.0,
+     "b": null
+    },
+    {
+     "a": 2.0,
+     "b": 3.0
+    },
+    {
+     "a": null,
+     "b": 4.0
+    }
+   ]
+  }
+ },
+ "features": {
+  "a": {
+   "dtype": "float64",
+   "_type": "Value"
+  },
+  "b": {
+   "dtype": "float64",
+   "_type": "Value"
+  }
+ }
+}

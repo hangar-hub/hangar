@@ -67,7 +67,8 @@ func TestViewer(t *testing.T) {
 	first, err := v.FirstRows(ctx, anon, ds, "default", "train")
 	require.NoError(t, err)
 	require.Len(t, first.Rows, 3)
-	require.Equal(t, int64(3), first.NumRowsTotal)
+	require.False(t, first.Truncated)
+	require.Equal(t, "train", first.Split)
 	require.Equal(t, "label", first.Features[1].Name)
 
 	page, err := v.Rows(ctx, anon, datasets.RowsRequest{Repo: ds, Config: "default", Split: "train", Offset: 1, Length: 1})

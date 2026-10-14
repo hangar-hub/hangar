@@ -1,0 +1,63 @@
+{
+ "builder": "arrow",
+ "options": {},
+ "data_files": {
+  "train": [
+   "data.arrow"
+  ]
+ },
+ "splits": {
+  "train": {
+   "num_examples": 3,
+   "num_bytes": 70,
+   "embedded_nbytes": 70,
+   "rows": [
+    {
+     "x": 1,
+     "s": "a",
+     "l": [
+      1.0
+     ],
+     "t": {
+      "ts": "2020-01-01T00:00:00"
+     }
+    },
+    {
+     "x": 2,
+     "s": null,
+     "l": [],
+     "t": null
+    },
+    {
+     "x": null,
+     "s": "c",
+     "l": null,
+     "t": {
+      "ts": "2020-01-03T00:00:00"
+     }
+    }
+   ]
+  }
+ },
+ "features": {
+  "x": {
+   "dtype": "int32",
+   "_type": "Value"
+  },
+  "s": {
+   "dtype": "string",
+   "_type": "Value"
+  },
+  "l": {
+   "feature": {
+    "dtype": "float32",
+    "_type": "Value"
+   },
+   "_type": "List"
+  },
+  "t": {
+   "dtype": "timestamp[ms]",
+   "_type": "Value"
+  }
+ }
+}
