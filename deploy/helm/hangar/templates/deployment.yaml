@@ -1,0 +1,61 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hangar.fullname" . }}
+  labels:
+    {{- include "hangar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: all
+spec:
+  replicas: 1
+  # One Pod holds the SQLite database and the ReadWriteOnce volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "hangar.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: all
+  template:
+    {{- include "hangar.podTemplate" (dict "ctx" . "component" "all" "role" "all" "values" .Values.web) | nindent 4 }}
+{{- else }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hangar.fullname" . }}-web
+  labels:
+    {{- include "hangar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  {{- if not .Values.web.autoscaling.enabled }}
+  replicas: {{ .Values.web.replicas }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels:
+      {{- include "hangar.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    {{- include "hangar.podTemplate" (dict "ctx" . "component" "web" "role" "web" "values" .Values.web) | nindent 4 }}
+{{- if or (gt (int .Values.worker.replicas) 0) .Values.worker.autoscaling.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hangar.fullname" . }}-worker
+  labels:
+    {{- include "hangar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hangar.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    {{- include "hangar.podTemplate" (dict "ctx" . "component" "worker" "role" "worker" "values" .Values.worker) | nindent 4 }}
+{{- end }}
+{{- end }}

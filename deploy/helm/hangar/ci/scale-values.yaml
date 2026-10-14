@@ -1,0 +1,45 @@
+# Rendered and validated in CI (helm lint, kubeconform). Installing it needs
+# Postgres and S3, which the Compose scale example provides instead.
+publicURL: https://hangar.example.test
+persistence:
+  enabled: false
+config:
+  database: {driver: postgres}
+  storage:
+    backend: s3
+    s3: {endpoint: minio.example.test:9000, bucket: hangar, use_path_style: true}
+secrets:
+  HANGAR_DATABASE_DSN: postgres://hangar:hangar@postgres:5432/hangar?sslmode=disable
+  HANGAR_STORAGE_S3_ACCESS_KEY_ID: hangar
+  HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: hangar-secret
+web:
+  replicas: 2
+  autoscaling: {enabled: true}
+  podDisruptionBudget: {enabled: true}
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels: {app.kubernetes.io/component: web}
+worker:
+  replicas: 2
+  podDisruptionBudget: {enabled: true}
+ingress:
+  enabled: true
+  className: nginx
+  datasetsServerHost: true
+  hosts: [{host: hangar.example.test}]
+  tls: [{secretName: hangar-tls, hosts: [hangar.example.test, datasets-server.hangar.example.test]}]
+httpRoute:
+  enabled: true
+  parentRefs: [{name: gateway}]
+  hostnames: [hangar.example.test]
+  datasetsServerHost: true
+metrics:
+  enabled: true
+  serviceMonitor: {enabled: true}
+networkPolicy:
+  enabled: true
+serviceAccount:
+  annotations: {eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/hangar"}

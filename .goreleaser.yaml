@@ -1,0 +1,102 @@
+# GoReleaser builds the hangar binaries, archives, checksums, SBOMs and
+# cosign signatures, and updates the Homebrew tap (docs/spec/12-packaging-and-release.md).
+# The container image and the Helm chart are built by .github/workflows/release.yml.
+#
+# Check the file with `goreleaser check`; try a local build with
+# `goreleaser release --snapshot --clean --skip=sign,sbom,publish`.
+version: 2
+
+project_name: hangar
+
+before:
+  hooks:
+    # The UI is embedded in the binary, so it is built once before every target.
+    - corepack enable
+    - make ui
+
+builds:
+  - id: hangar
+    main: ./cmd/hangar
+    binary: hangar
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .ShortCommit }} -X main.date={{ .CommitDate }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: hangar
+    ids: [hangar]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - id: archives
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.spdx.json"
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+signs:
+  # Keyless signing with the workflow's GitHub OIDC identity.
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+
+changelog:
+  # release-please writes CHANGELOG.md; the GitHub release reuses it.
+  disable: true
+
+release:
+  github:
+    owner: jamesagarside
+    name: hangar
+  # release-please creates the release; GoReleaser adds the files to it.
+  mode: keep-existing
+  footer: |
+    Container image: `ghcr.io/jamesagarside/hangar:{{ .Version }}` (linux/amd64 and linux/arm64, signed with cosign).
+    Helm chart: `oci://ghcr.io/jamesagarside/charts/hangar` version {{ .Version }}.
+    Hangar is source-available under the Elastic License 2.0.
+
+homebrew_casks:
+  - name: hangar
+    ids: [hangar]
+    repository:
+      owner: jamesagarside
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: https://jamesagarside.github.io/hangar/
+    description: Self-hosted home for your arsenal of models, compatible with the Hugging Face Hub
+    license: Elastic-2.0
+    commit_author:
+      name: hangar-release
+      email: hangar-release@users.noreply.github.com
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/hangar"]
+          end
