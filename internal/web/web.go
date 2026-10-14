@@ -34,7 +34,7 @@ var hashedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$`)
 
 // NonceMeta is the name of the meta element that carries the per-response
 // style nonce to the UI, which hands it to the libraries that add style
-// elements at run time (dialogs lock page scrolling that way).
+// elements at run time (modal windows lock page scrolling that way).
 const NonceMeta = "csp-nonce"
 
 // CSP returns the Content Security Policy for UI pages: no inline scripts,

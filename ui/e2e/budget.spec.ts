@@ -3,9 +3,9 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
 
 // 09-web-ui.md "Performance": initial JavaScript under 250 KB gzipped, with
-// routes split by page. "Initial" is every script the page loads before its
-// heading shows. Markdown, syntax highlighting and other content libraries
-// load after that, when the content that needs them arrives.
+// routes split by page. "Initial" is every script the page requests before
+// its heading appears. Markdown, syntax highlighting and other content
+// libraries load after that, when the content that needs them arrives.
 const budget = 250 * 1024;
 
 for (const [name, path, auth] of [
@@ -17,6 +17,16 @@ for (const [name, path, auth] of [
   test(`the ${name} starts with under 250 KB of gzipped JavaScript`, async ({ page }, info) => {
     test.skip(info.project.name !== "desktop", "The budget does not depend on the viewport.");
     if (auth) await signIn(page);
+    // Record, in the page, when the first h1 appears.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __h1At?: number };
+      new MutationObserver((_, obs) => {
+        if (document.querySelector("h1")) {
+          w.__h1At = performance.now();
+          obs.disconnect();
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
     const sizes: Record<string, number> = {};
     const pending: Promise<void>[] = [];
     page.on("response", (res) => {
@@ -32,8 +42,22 @@ for (const [name, path, auth] of [
     });
     await page.goto(path);
     await expect(page.locator("h1")).toBeVisible();
+    await page.waitForLoadState("networkidle");
     await Promise.all(pending);
-    const initial = { ...sizes };
+    const early = await page.evaluate(() => {
+      const at = (window as unknown as { __h1At?: number }).__h1At ?? Number.POSITIVE_INFINITY;
+      return performance
+        .getEntriesByType("resource")
+        .filter(
+          (e) =>
+            (e as PerformanceResourceTiming).initiatorType === "script" || e.name.endsWith(".js"),
+        )
+        .filter((e) => e.startTime <= at)
+        .map((e) => new URL(e.name).pathname);
+    });
+    const initial = Object.fromEntries(
+      Object.entries(sizes).filter(([path]) => early.includes(path)),
+    );
     const total = Object.values(initial).reduce((a, n) => a + n, 0);
     expect(Object.keys(initial).length).toBeGreaterThan(0);
     expect(total, JSON.stringify(initial, null, 2)).toBeLessThan(budget);

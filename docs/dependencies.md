@@ -52,3 +52,15 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `@biomejs/biome` | Lint and format. |
 | `vitest`, `jsdom`, `@testing-library/*` | Unit tests. |
 | `@playwright/test`, `@axe-core/playwright` | End-to-end and accessibility tests. |
+| `radix-ui` | Accessible primitives (dialog, menu, tabs, switch, tooltip) under the shadcn/ui-style components. |
+| `class-variance-authority` | Component variants for the shadcn/ui-style buttons and badges. |
+| `lucide-react` | Icons. |
+| `cmdk` | The command palette behind global search (BROWSE-6). |
+| `react-markdown`, `remark-gfm`, `rehype-raw`, `rehype-sanitize` | Model cards and discussions, with raw HTML sanitised to the Hub's allowed subset. |
+| `shiki` | Syntax highlighting, loaded lazily, with its JavaScript regex engine so the Content Security Policy needs no WebAssembly. |
+| `@tanstack/react-virtual` | Virtualised lists and the Dataset Viewer table. |
+| `@noble/hashes` | Streaming SHA-256 in a Web Worker for browser uploads; pure JavaScript, so no WebAssembly. |
+| `yaml` | Reading and writing card metadata, and the mock server's copy of `api/openapi.yaml`. |
+| `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` | Drag and keyboard reordering of Collection items. |
+| `get-nonce` | Hands the per-response style nonce to the dialog libraries, which add a style element to lock page scrolling. |
+| `ajv`, `ajv-formats` | The development mock server validates every request and response against `api/openapi.yaml`. |

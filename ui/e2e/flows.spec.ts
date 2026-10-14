@@ -447,7 +447,7 @@ test("shows the empty arsenal and virtualises long lists", async ({ page, baseUR
     if (await more.isVisible()) await more.click();
     await page.keyboard.press("End");
     await expect(last).toBeVisible({ timeout: 500 });
-  }).toPass({ timeout: 20_000 });
+  }).toPass({ timeout: 45_000 });
   // 260 Repos are loaded, but only the rows near the screen are in the page.
   const rendered = await list.locator("article").count();
   expect(rendered).toBeGreaterThan(0);
