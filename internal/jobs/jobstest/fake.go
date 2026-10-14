@@ -97,7 +97,8 @@ func (f *Fake) Enqueue(_ context.Context, nj jobs.NewJob) (jobs.JobID, error) {
 	j := &jobs.Job{
 		ID: uuid.Must(uuid.NewV7()), Kind: nj.Kind, DedupeKey: nj.DedupeKey, Payload: payload,
 		Status: jobs.StatusPending, Priority: nj.Priority, MaxAttempts: maxAttempts, RunAfter: runAfter,
-		Result: json.RawMessage("{}"), CreatedBy: nj.CreatedBy, ParentID: nj.ParentID, CreatedAt: now, UpdatedAt: now,
+		Result: json.RawMessage("{}"), CreatedBy: nj.CreatedBy, ParentID: nj.ParentID, Repo: nj.Repo,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	f.jobs[j.ID] = j
 	f.order = append(f.order, j.ID)
@@ -182,7 +183,7 @@ func (f *Fake) Retry(ctx context.Context, id jobs.JobID) (jobs.JobID, error) {
 		return uuid.Nil, fmt.Errorf("%w: %s is %s", jobs.ErrNotRetrying, id, old.Status)
 	}
 	return f.Enqueue(ctx, jobs.NewJob{Kind: old.Kind, DedupeKey: old.DedupeKey, Payload: old.Payload, Priority: old.Priority,
-		MaxAttempts: old.MaxAttempts, CreatedBy: old.CreatedBy, ParentID: old.ParentID})
+		MaxAttempts: old.MaxAttempts, CreatedBy: old.CreatedBy, ParentID: old.ParentID, Repo: old.Repo})
 }
 
 // SetSchedule implements jobs.Queue.
@@ -316,9 +317,9 @@ func (f *Fake) finish(id jobs.JobID, reg jobs.Registration, err error) {
 	case err == nil:
 		j.Status, j.FinishedAt, j.Error = jobs.StatusSucceeded, &now, ""
 	case jobs.IsPermanent(err) || j.Attempts >= j.MaxAttempts:
-		j.Status, j.FinishedAt, j.Error = jobs.StatusFailed, &now, err.Error()
+		j.Status, j.FinishedAt, j.Error = jobs.StatusFailed, &now, jobs.RedactError(err)
 	default:
-		j.Status, j.Error = jobs.StatusPending, err.Error()
+		j.Status, j.Error = jobs.StatusPending, jobs.RedactError(err)
 		j.RunAfter = now.Add(reg.Options.Backoff(j.Attempts))
 	}
 }

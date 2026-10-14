@@ -221,3 +221,30 @@ const (
 	// SentinelKey is the object /readyz stats to check the store is reachable.
 	SentinelKey = "hangar/sentinel"
 )
+
+// IncompleteUpload is a multipart upload that was started and neither
+// completed nor aborted.
+type IncompleteUpload struct {
+	Key       string
+	UploadID  string
+	Initiated time.Time
+}
+
+// UploadLister is implemented by stores that can list incomplete multipart
+// uploads, so garbage collection can abort abandoned ones. Stores that
+// cannot return ErrNotSupported.
+type UploadLister interface {
+	ListUploads(ctx context.Context, fn func(IncompleteUpload) error) error
+}
+
+// StagingSweeper is implemented by stores that stage writes outside the key
+// space, such as the filesystem backend's <root>/.staging, where a crash or
+// a killed process can leave a partial file that List never shows. Garbage
+// collection calls it to remove them. Stores that stage nothing return
+// ErrNotSupported.
+type StagingSweeper interface {
+	// SweepStaging removes staging files last written before cutoff and
+	// returns how many it removed. A write in progress keeps its file's
+	// modification time current, so a cutoff of hours never touches one.
+	SweepStaging(ctx context.Context, cutoff time.Time) (int, error)
+}

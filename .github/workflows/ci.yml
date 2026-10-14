@@ -52,6 +52,9 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       HANGAR_TEST_POSTGRES_DSN: postgres://hangar:hangar@localhost:5432/postgres?sslmode=disable
+      # The S3 Blob store tests start MinIO with testcontainers on the
+      # runner's Docker, as `make test` does.
+      HANGAR_TEST_MINIO: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

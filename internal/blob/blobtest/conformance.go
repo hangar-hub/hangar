@@ -26,6 +26,12 @@ type Capabilities struct {
 	// MinPartSize is the smallest non-final multipart part the backend
 	// accepts; S3 needs 5 MiB. Zero means any size.
 	MinPartSize int64
+	// PresignHTTP is true when presigned URLs are real: the suite then
+	// downloads and uploads through them with a plain HTTP client.
+	PresignHTTP bool
+	// ChecksumPresign is true when the store rejects a presigned PUT whose
+	// body does not match the signed x-amz-checksum-sha256.
+	ChecksumPresign bool
 }
 
 // RunConformance runs the Blob store conformance suite. newStore must
@@ -245,6 +251,8 @@ func RunConformance(t *testing.T, caps Capabilities, newStore func(t *testing.T)
 		first := got[0]
 		require.Equal(t, bytes.Repeat([]byte{first}, 1000), got, "readers never see a mix of two writes")
 	})
+
+	runExtended(t, caps, newStore)
 
 	t.Run("ListOrder", func(t *testing.T) {
 		s := newStore(t)

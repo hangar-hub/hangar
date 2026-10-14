@@ -1,6 +1,7 @@
 package blob_test
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,4 +46,21 @@ func TestRangeHelpers(t *testing.T) {
 	require.Equal(t, int64(0), blob.Range{Start: 9, End: 3}.Length(10))
 	require.NoError(t, blob.ValidateKey("lfs/sha256/aa/bb/cc"))
 	require.ErrorIs(t, blob.ValidateKey("a/./b"), blob.ErrInvalidKey)
+}
+
+func TestContentDisposition(t *testing.T) {
+	require.Equal(t, "attachment; filename=model.gguf", blob.ContentDisposition("model.gguf"))
+	require.Contains(t, blob.ContentDisposition("naïve.gguf"), "filename*=utf-8''na%C3%AFve.gguf")
+	require.Equal(t, "attachment", blob.ContentDisposition(""), "a download without a name is still an attachment")
+	require.Equal(t, `attachment; filename="a \"b\".html"`, blob.ContentDisposition(`a "b".html`))
+}
+
+func TestSetDownloadHeadersOverridesCallerValues(t *testing.T) {
+	h := http.Header{}
+	h.Set("Content-Type", "image/svg+xml")
+	h.Set("Content-Disposition", "inline")
+	blob.SetDownloadHeaders(h, "logo.svg")
+	require.Equal(t, blob.SafeContentType, h.Get("Content-Type"))
+	require.Equal(t, "attachment; filename=logo.svg", h.Get("Content-Disposition"))
+	require.Equal(t, "nosniff", h.Get("X-Content-Type-Options"))
 }
