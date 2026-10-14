@@ -95,11 +95,15 @@ export function snippets(i: SnippetInput): Snippet[] {
       code: i.quants.map((quant) => `ollama pull ${host}/${i.id}:${quant}`).join("\n"),
     });
   }
+  // 08-local-tools.md: `hangar lmstudio install <ns>/<name>[:<quant>]`,
+  // one line per quant for GGUF Repos, as for Ollama.
+  const lmFlags = `--url ${i.origin}${i.revision ? ` --revision ${i.revision}` : ""}`;
+  const lmRefs = isGguf && i.quants?.length ? i.quants.map((quant) => `${i.id}:${quant}`) : [i.id];
   out.push({
     id: "lmstudio",
     label: "LM Studio",
     language: "shellscript",
-    code: `hangar lmstudio install ${i.id}${isGguf && i.quants?.[0] ? ` --quant ${i.quants[0]}` : ""}`,
+    code: lmRefs.map((ref) => `hangar lmstudio install ${lmFlags} ${ref}`).join("\n"),
   });
   if (!isGguf) {
     out.push({

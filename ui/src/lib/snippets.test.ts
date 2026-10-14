@@ -38,9 +38,11 @@ describe("Use this model snippets", () => {
     expect(s.find((x) => x.id === "ollama")?.code).toBe(
       "ollama pull hangar.example.com/TinyLlama/Chat-GGUF:Q4_K_M\nollama pull hangar.example.com/TinyLlama/Chat-GGUF:Q8_0",
     );
+    // 08-local-tools.md: `hangar lmstudio install <ns>/<name>[:<quant>]`, no --quant flag.
     expect(s.find((x) => x.id === "lmstudio")?.code).toBe(
-      "hangar lmstudio install TinyLlama/Chat-GGUF --quant Q4_K_M",
+      `hangar lmstudio install --url ${origin} TinyLlama/Chat-GGUF:Q4_K_M\nhangar lmstudio install --url ${origin} TinyLlama/Chat-GGUF:Q8_0`,
     );
+    expect(s.find((x) => x.id === "lmstudio")?.code).not.toContain("--quant");
     expect(s.some((x) => x.id === "transformers")).toBe(false);
   });
 
@@ -54,6 +56,9 @@ describe("Use this model snippets", () => {
     });
     expect(st.find((x) => x.id === "sentence-transformers")?.code).toContain(
       'SentenceTransformer("a/b", revision="v1")',
+    );
+    expect(st.find((x) => x.id === "lmstudio")?.code).toBe(
+      `hangar lmstudio install --url ${origin} --revision v1 a/b`,
     );
     expect(st.find((x) => x.id === "hf")?.code).toBe(
       `export HF_ENDPOINT=${origin}\nhf download a/b --revision v1`,
