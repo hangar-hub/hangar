@@ -31,7 +31,7 @@ It exits with 1 if any check fails, so you can use it in scripts.
 
 **Index or scan results look out of date.** `hangar admin reindex` queues index and scan Jobs for every branch head, or for the Repos you name; the workers run them.
 
-**`/readyz` answers 503.** The body lists the failed checks: usually the database, a pending migration (run `hangar admin migrate`) or the Blob store.
+**`/readyz` answers 503.** The body lists the failed checks: usually the database, a pending migration (run `hangar admin migrate`) or the Blob store. A `startup` failure means the process is still building the Instance; it clears when the process logs `hangar started`.
 
 **Downloads fail with a 403 from the store, or a TLS error.** In S3 `redirect` mode, clients download straight from the store, so they must reach `storage.s3.endpoint` and trust its certificate, and the clocks must agree. Use `download_mode: proxy` if clients cannot reach the store.
 

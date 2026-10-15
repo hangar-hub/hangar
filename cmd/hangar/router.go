@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,10 +30,11 @@ import (
 )
 
 // newHealth builds the readiness checks: database reachable, migrations at
-// the expected version, and the Blob store sentinel readable.
-func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
-	return httpx.NewHealth(
-		httpx.Check{Name: "database", Run: func(ctx context.Context) error {
+// the expected version, and the Blob store sentinel readable, followed by
+// any extra checks, such as the start-up check that serve adds.
+func newHealth(d *db.DB, blobs blob.Store, extra ...httpx.Check) *httpx.Health {
+	checks := []httpx.Check{
+		{Name: "database", Run: func(ctx context.Context) error {
 			if err := d.PingContext(ctx); err != nil {
 				return fmt.Errorf("database unreachable: %w", err)
 			}
@@ -45,11 +47,25 @@ func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
 			}
 			return nil
 		}},
-		httpx.Check{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
+		{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
 			_, err := blobs.Stat(ctx, blob.SentinelKey)
 			return err
 		}},
-	)
+	}
+	return httpx.NewHealth(append(checks, extra...)...)
+}
+
+// startupCheck fails until started is set, which serve does once the full
+// handler is installed, so /readyz answers 503 while the Instance is still
+// being built and no load balancer sends API traffic to the health-only
+// handler.
+func startupCheck(started *atomic.Bool) httpx.Check {
+	return httpx.Check{Name: "startup", Run: func(context.Context) error {
+		if !started.Load() {
+			return errors.New("the server is still starting")
+		}
+		return nil
+	}}
 }
 
 // ensureSentinel writes the Blob store sentinel that /readyz checks.
