@@ -158,6 +158,13 @@ func (g Git) BatchCheck(ctx context.Context, dir string, oids []string) ([]Objec
 // object in order. It uses one git process and reads each object into
 // memory, so callers must only pass small objects.
 func (g Git) BatchRead(ctx context.Context, dir string, oids []string, fn func(info ObjectInfo, content []byte) error) error {
+	return g.BatchReadHead(ctx, dir, oids, -1, fn)
+}
+
+// BatchReadHead is BatchRead that keeps at most limit bytes of each object
+// (all of it when limit is negative) and discards the rest, so many objects
+// can be probed with one git process. info.Size is always the full size.
+func (g Git) BatchReadHead(ctx context.Context, dir string, oids []string, limit int64, fn func(info ObjectInfo, content []byte) error) error {
 	if len(oids) == 0 {
 		return nil
 	}
@@ -195,11 +202,19 @@ func (g Git) BatchRead(ctx context.Context, dir string, oids []string, fn func(i
 			if _, err := fmt.Sscan(fields[2], &size); err != nil {
 				return fmt.Errorf("unexpected cat-file header %q", header)
 			}
-			buf := make([]byte, size+1)
+			keep := size
+			if limit >= 0 && keep > limit {
+				keep = limit
+			}
+			buf := make([]byte, keep)
 			if _, err := io.ReadFull(br, buf); err != nil {
 				return fmt.Errorf("read cat-file body: %w", err)
 			}
-			if err := fn(ObjectInfo{OID: fields[0], Type: fields[1], Size: size}, buf[:size]); err != nil {
+			// The rest of the body and the newline that ends it.
+			if _, err := br.Discard(int(size - keep + 1)); err != nil {
+				return fmt.Errorf("read cat-file body: %w", err)
+			}
+			if err := fn(ObjectInfo{OID: fields[0], Type: fields[1], Size: size}, buf); err != nil {
 				return err
 			}
 		}

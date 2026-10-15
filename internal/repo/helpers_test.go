@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/audit/audittest"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
 	"github.com/jamesagarside/hangar/internal/db"
@@ -150,6 +151,17 @@ func (e *env) addUser(name string) model.Principal {
 	_, err = e.d.NewInsert().Model(u).Exec(e.ctx)
 	require.NoError(e.t, err)
 	return model.Principal{Kind: model.PrincipalUser, UserID: u.ID, NamespaceID: ns.ID, Username: name, DisplayName: ns.DisplayName, Email: email, Method: model.AuthSession}
+}
+
+// auditEvents returns the recorded audit events with one action, in order.
+func (e *env) auditEvents(action audit.Action) []audit.Event {
+	var out []audit.Event
+	for _, ev := range e.audit.Events() {
+		if ev.Action == action {
+			out = append(out, ev)
+		}
+	}
+	return out
 }
 
 func (e *env) create(p repo.CreateParams) *repo.Repo {

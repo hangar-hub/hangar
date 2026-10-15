@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -102,14 +104,19 @@ func (st *Staging) PackLoose(ctx context.Context) (sha string, ok bool, err erro
 	return sha, true, nil
 }
 
-// PackObjects lists the objects in a pack of the staging repository.
+// PackObjects lists the objects in a pack of the staging repository, in
+// the order of its index. A version 2 index, which is what git writes, is
+// read directly; any other version goes through `git show-index`.
 func (st *Staging) PackObjects(ctx context.Context, sha string) ([]string, error) {
-	idx, err := os.Open(filepath.Join(st.PackDir(), "pack-"+sha+".idx")) //nolint:gosec // a pack in the staging directory.
+	path := filepath.Join(st.PackDir(), "pack-"+sha+".idx")
+	b, err := os.ReadFile(path) //nolint:gosec // a pack in the staging directory.
 	if err != nil {
 		return nil, err
 	}
-	defer idx.Close()
-	out, err := st.Run(ctx, idx, nil, "show-index")
+	if oids, ok, err := indexV2Objects(b); ok || err != nil {
+		return oids, err
+	}
+	out, err := st.Run(ctx, bytes.NewReader(b), nil, "show-index")
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +130,33 @@ func (st *Staging) PackObjects(ctx context.Context, sha string) ([]string, error
 	}
 	return oids, sc.Err()
 }
+
+// indexV2Magic starts a version 2 pack index.
+var indexV2Magic = []byte{0xff, 't', 'O', 'c', 0, 0, 0, 2}
+
+// indexV2Objects lists the SHA-1 object IDs in a version 2 pack index
+// (gitformat-pack(5)): an 8-byte header, a 256-entry fan-out table whose
+// last entry is the object count, then the sorted object IDs. ok is false
+// when b is not a version 2 index.
+func indexV2Objects(b []byte) (oids []string, ok bool, err error) {
+	const header = 8 + 256*4
+	if len(b) < header || !bytes.Equal(b[:8], indexV2Magic) {
+		return nil, false, nil
+	}
+	n := int64(binary.BigEndian.Uint32(b[header-4 : header]))
+	// Object IDs, CRC32s and 4-byte offsets, then the pack and index checksums.
+	if int64(len(b)) < header+n*(sha1Size+4+4)+2*sha1Size {
+		return nil, true, errors.New("gitstore: truncated pack index")
+	}
+	oids = make([]string, n)
+	for i := range oids {
+		off := header + i*sha1Size
+		oids[i] = hex.EncodeToString(b[off : off+sha1Size])
+	}
+	return oids, true, nil
+}
+
+const sha1Size = 20
 
 // StorePack uploads a pack written in the staging repository to the Blob
 // store and records it as pending. The caller marks it live in the same
