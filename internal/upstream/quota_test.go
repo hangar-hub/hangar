@@ -395,6 +395,132 @@ func TestPullQuotaRefusalsOfASharedTransferStayWithEachNamespace(t *testing.T) {
 	})
 }
 
+// TestPullQuotaOfAnotherNamespaceCannotStarveAPull keeps a full
+// Namespace's Pulls of an object coming while a Pull from a Namespace with
+// room waits for the same object. Each acme Pull plans while acme has room
+// and its transfer is refused once acme fills up. beta's Pull joined the
+// first of those shared transfers; after that refusal it must queue a
+// transfer only beta's Pulls can join, instead of joining acme's next one,
+// and finish.
+func TestPullQuotaOfAnotherNamespaceCannotStarveAPull(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		w := bytes.Repeat([]byte("contended transfer "), 200)
+		twin := model.RepoID{Type: model.RepoTypeModel, Namespace: "beta", Name: "twin"}
+		twinCommit := e.Seed(twin, nil, map[string][]byte{"model.safetensors": w})
+		acme := e.MirrorNamespace("acme")
+		const acmeLimit = 1 << 20
+		e.Quota.SetLimit(acme, acmeLimit)
+		const rounds = 2
+		acmeRepos := make([]model.RepoID, rounds+1)
+		for i := range acmeRepos {
+			acmeRepos[i] = model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "copy-" + string(rune('a'+i))}
+			e.Seed(acmeRepos[i], nil, map[string][]byte{"model.safetensors": w})
+		}
+		closed := upstream.Settings{Windows: []string{"01:00-07:00"}, AllowOverrideWindows: true}
+		run := func() { e.Queue.RunPending(e.Ctx) }
+		// refuseAcme fills acme and opens the window, so the transfer
+		// acme's Pull queued runs and is refused.
+		refuseAcme := func() {
+			e.Quota.SetUsed(acme, acmeLimit-8)
+			e.SetSettings(upstream.Settings{})
+			e.Advance(10 * time.Minute)
+			run()
+		}
+
+		e.SetSettings(closed)
+		acmePulls := []jobs.JobID{}
+		a, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: acmeRepos[0], Actor: alice})
+		require.NoError(t, err)
+		acmePulls = append(acmePulls, a)
+		b, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: twin, Actor: alice})
+		require.NoError(t, err)
+		run()
+		fileJob := func(id jobs.JobID) string {
+			fs, _ := pullState(t, e.Job(id))["files"].([]any)
+			require.Len(t, fs, 1)
+			return fs[0].(map[string]any)["job"].(string)
+		}
+		require.Equal(t, fileJob(a), fileJob(b), "beta's Pull joined the transfer acme's Pull started")
+		refuseAcme()
+
+		for i := 1; i <= rounds; i++ {
+			// acme has room again and Pulls the object once more, before
+			// beta's Pull sees the refusal.
+			e.SetSettings(closed)
+			e.Quota.SetUsed(acme, 0)
+			a, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: acmeRepos[i], Actor: alice})
+			require.NoError(t, err)
+			acmePulls = append(acmePulls, a)
+			run()
+			e.Advance(10 * time.Minute)
+			run()
+			refuseAcme()
+		}
+
+		jb := e.Job(b)
+		require.Equal(t, jobs.StatusSucceeded, jb.Status, "acme's refusals do not hold beta's Pull up: %s", jb.Error)
+		require.Nil(t, pullState(t, jb)["reason"])
+		require.Equal(t, w, readFile(t, e.Repos, twin, twinCommit, "model.safetensors"))
+		require.Contains(t, e.Repos.MarkedPresent(twin), sha(w))
+
+		// Once beta holds the object, later acme Pulls find it in the
+		// Instance at planning and need no transfer.
+		acmeTransfers := map[string]bool{}
+		for _, id := range acmePulls {
+			fs, _ := pullState(t, e.Job(id))["files"].([]any)
+			for _, f := range fs {
+				if job, ok := f.(map[string]any)["job"].(string); ok {
+					acmeTransfers[job] = true
+				}
+			}
+		}
+		var betaTransfers []*jobs.Job
+		for _, fj := range pullFileJobs(t, e) {
+			if fj.ParentID == b {
+				betaTransfers = append(betaTransfers, fj)
+			}
+		}
+		require.Len(t, betaTransfers, 1, "beta's Pull requeued the file once")
+		require.False(t, acmeTransfers[betaTransfers[0].ID.String()], "no acme Pull joined beta's own transfer")
+		require.Equal(t, jobs.StatusSucceeded, betaTransfers[0].Status)
+		require.Equal(t, jobs.StatusFailed, e.Job(acmePulls[0]).Status, "acme's first Pull was refused")
+		require.NotContains(t, string(jb.Result), "1048576", "beta never sees acme's limit")
+	})
+}
+
+// TestPullQuotaRefusalOfAJoinedTransferStandsWithinANamespace covers two
+// Pulls into Repos of the same Namespace: the refusal of the transfer
+// they share is their own Namespace's, so neither queues another.
+func TestPullQuotaRefusalOfAJoinedTransferStandsWithinANamespace(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		w := bytes.Repeat([]byte("shared transfer "), 200)
+		e.Seed(tiny, nil, map[string][]byte{"model.safetensors": w})
+		sibling := model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "sibling"}
+		e.Seed(sibling, nil, map[string][]byte{"model.safetensors": w})
+		acme := e.MirrorNamespace("acme")
+		const limit = 1 << 20
+		e.Quota.SetLimit(acme, limit)
+
+		e.SetSettings(upstream.Settings{Windows: []string{"01:00-07:00"}, AllowOverrideWindows: true})
+		a, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		b, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: sibling, Actor: alice})
+		require.NoError(t, err)
+		e.Run(1)
+		e.Quota.SetUsed(acme, limit-8)
+		e.SetSettings(upstream.Settings{})
+		e.Run(20)
+
+		requireQuotaFailure(t, e, a, tiny)
+		requireQuotaFailure(t, e, b, sibling)
+		require.Len(t, pullFileJobs(t, e), 1, "a refusal by the Namespace's own quota is not requeued")
+	})
+}
+
 func TestPullQuotaCheckFailuresAreRetried(t *testing.T) {
 	forEachDB(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d, upstreamtest.HarnessOptions{})
