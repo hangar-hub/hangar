@@ -10,6 +10,9 @@ metadata:
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false
+  # No HANGAR_SERVICE_HOST and the like from the Service; Hangar rejects
+  # unknown HANGAR_* variables.
+  enableServiceLinks: false
   securityContext:
     {{- toYaml .Values.podSecurityContext | nindent 4 }}
   containers:

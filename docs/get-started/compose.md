@@ -74,13 +74,13 @@ Every replica reads the same `HANGAR_INSTANCE_KEY` and `HANGAR_ADMIN_PASSWORD` f
 docker compose -f oidc-keycloak.yaml up -d
 ```
 
-Open <http://localhost:8080> and choose **Sign in with Keycloak**. The realm has two users: `alice` (password `alice-password`, an Instance admin through the `hangar-admins` group) and `bob` (password `bob-password`, a write Member of the `ml` Organisation through the `ml-team` group). Keycloak answers at `http://keycloak.localhost:8081`; browsers resolve any `*.localhost` name to your machine, and the Hangar container reaches Keycloak at the same address through a network alias, so the issuer matches on both sides. Keycloak is published on `127.0.0.1` only, so these example users and its admin console (user `admin`, password `KEYCLOAK_ADMIN_PASSWORD`) are reachable from this machine only. The realm reads the `hangar` client's secret from `HANGAR_OIDC_CLIENT_SECRET`. See [OIDC with Keycloak](../operate/oidc/keycloak.md).
+Open <http://localhost:8080> and choose **Sign in with Keycloak**. The realm has two users: `alice` (password `alice-password`, an Instance admin through the `hangar-admins` group) and `bob` (password `bob-password`, a write Member of the `ml` Organisation through the `ml-team` group). Keycloak answers at `http://keycloak.localhost:8081`; browsers resolve any `*.localhost` name to your machine, and the Hangar container reaches Keycloak at the same address through a network alias, so the issuer matches on both sides. Keycloak is published on `127.0.0.1` only, so these example users and its admin console (user `admin`, password `KEYCLOAK_ADMIN_PASSWORD`) are reachable from this machine only. The realm reads the `hangar` client's secret from `HANGAR_OIDC_CLIENT_SECRET` and its redirect URI from `HANGAR_PUBLIC_URL`, so sign-in works on another port too. See [OIDC with Keycloak](../operate/oidc/keycloak.md).
 
 ## Use another image
 
-Every example takes `HANGAR_IMAGE`, `HANGAR_PORT` and `HANGAR_PUBLIC_URL`:
+Every example takes `HANGAR_IMAGE`, `HANGAR_PORT` and `HANGAR_PUBLIC_URL`. `HANGAR_PUBLIC_URL` defaults to `http://localhost:` followed by `HANGAR_PORT`; set it when people reach Hangar at another address.
 
 ```sh
 HANGAR_IMAGE=ghcr.io/jamesagarside/hangar:1.0.0 HANGAR_PORT=9090 \
-  HANGAR_PUBLIC_URL=http://localhost:9090 docker compose -f quickstart.yaml up -d
+  docker compose -f quickstart.yaml up -d
 ```

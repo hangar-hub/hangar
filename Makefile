@@ -165,6 +165,8 @@ lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Com
 	@# chart's own Secrets (secrets: in values) once more with a dummy value.
 	helm template hangar deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml \
 	  --set existingSecret= --set secrets.HANGAR_DATABASE_DSN=postgres://lint@postgres/hangar | $(KUBECONFORM)
+	@# Render the chart and check every Pod spec (deploy/chart_test.go).
+	$(GO) test -count=1 -tags helm -run '^TestChart' ./deploy/
 	@for f in deploy/compose/*.yaml; do HANGAR_INSTANCE_KEY=x HANGAR_ADMIN_PASSWORD=x POSTGRES_PASSWORD=x MINIO_ROOT_PASSWORD=x \
 	  KEYCLOAK_ADMIN_PASSWORD=x HANGAR_OIDC_CLIENT_SECRET=x docker compose -f $$f config -q && echo "$$f ok"; done
 	goreleaser check

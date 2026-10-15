@@ -27,6 +27,10 @@ func TestPushCreatesAndCommitsWithMultipartUploads(t *testing.T) {
 			e := newEnv(t)
 			e.login()
 			e.inst.Presign = presign
+			// An Instance with hfapi.regular_upload_max at 1 KiB, so a small
+			// file that .gitattributes leaves out of LFS still goes up as an
+			// upload.
+			e.inst.InlineMax = 1 << 10
 			dir := filepath.Join(e.home, "model")
 			files := map[string][]byte{
 				"config.json":          []byte(`{"a":1}`),

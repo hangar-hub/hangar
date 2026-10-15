@@ -34,7 +34,7 @@ x-hangar: &hangar
     - /var/cache/hangar:uid=65532,gid=65532
     - /var/lib/hangar:uid=65532,gid=65532
   environment: &hangar-env
-    HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:8080}
+    HANGAR_SERVER_PUBLIC_URL: ${HANGAR_PUBLIC_URL:-http://localhost:${HANGAR_PORT:-8080}}
     # Traefik is on the Compose network, in one of the private ranges.
     HANGAR_SERVER_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     HANGAR_SECURITY_INSTANCE_KEY: ${HANGAR_INSTANCE_KEY:?Set HANGAR_INSTANCE_KEY in .env, for example with openssl rand -base64 32}

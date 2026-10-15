@@ -90,6 +90,53 @@ func TestPullFromUpstreamIntoTheHFCache(t *testing.T) {
 	require.True(t, e.inst.Present(id, "main", "Tiny-Q8_0.gguf"))
 }
 
+// A GGUF file under hfapi.regular_upload_max is a regular git blob, because
+// the default .gitattributes has no *.gguf rule, so a quant cannot be chosen
+// by LFS status alone.
+func TestPullQuantOfRegularBlobGGUFs(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	files := map[string][]byte{
+		"README.md":            []byte("# Tiny\n"),
+		"tiny-Q4_K_M.gguf":     blobOf("q4", 30<<10),
+		"tiny-Q8_0.gguf":       blobOf("q8", 40<<10),
+		"mmproj-tiny-f16.gguf": blobOf("pj", 10<<10),
+		"model.safetensors":    blobOf("st", 20<<10),
+	}
+	src := filepath.Join(e.home, "src")
+	writeTree(t, src, files)
+	e.ok("push", src, "acme/tiny", "--create")
+	id := mustID(t, model.RepoTypeModel, "acme/tiny")
+	for _, p := range []string{"tiny-Q4_K_M.gguf", "tiny-Q8_0.gguf", "mmproj-tiny-f16.gguf"} {
+		require.False(t, e.inst.IsLFS(id, "main", p), "%s is a regular blob", p)
+	}
+	require.True(t, e.inst.IsLFS(id, "main", "model.safetensors"))
+
+	want := []string{".gitattributes", "README.md", "mmproj-tiny-f16.gguf", "tiny-Q4_K_M.gguf"}
+	r := e.ok("pull", "acme/tiny:Q4_K_M", "--json")
+	var res pullResult
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	var got []string
+	for _, f := range res.Files {
+		got = append(got, f.Path)
+	}
+	require.ElementsMatch(t, want, got, "only the chosen quant, its projector and the small files")
+
+	lm := filepath.Join(e.home, "lmstudio")
+	r = e.ok("lmstudio", "install", "acme/tiny:Q8_0", "--lmstudio-dir", lm)
+	require.Contains(t, r.stdout, "(4 files)")
+	dir := filepath.Join(lm, "acme", "tiny")
+	for _, p := range []string{"tiny-Q8_0.gguf", "mmproj-tiny-f16.gguf", "README.md"} {
+		b, err := os.ReadFile(filepath.Join(dir, p))
+		require.NoError(t, err, p)
+		require.Equal(t, files[p], b, p)
+	}
+	for _, p := range []string{"tiny-Q4_K_M.gguf", "model.safetensors"} {
+		_, err := os.Stat(filepath.Join(dir, p))
+		require.True(t, os.IsNotExist(err), "%s is not installed", p)
+	}
+}
+
 func TestPullToAFolderAndResume(t *testing.T) {
 	e := newEnv(t)
 	e.login()
