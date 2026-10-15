@@ -51,6 +51,8 @@ Blob store for LFS objects, git data and uploads.
 | `storage.s3.download_mode`<br>`HANGAR_STORAGE_S3_DOWNLOAD_MODE` | string | `redirect` | redirect sends clients to presigned URLs; proxy streams bytes through Hangar. |
 | `storage.s3.upload_mode`<br>`HANGAR_STORAGE_S3_UPLOAD_MODE` | string | `direct` | direct gives clients presigned URLs to upload LFS objects and parts to the store; proxy has them upload through Hangar. Use proxy when clients cannot reach the endpoint. |
 | `storage.s3.presign_ttl`<br>`HANGAR_STORAGE_S3_PRESIGN_TTL` | duration | `1h` | Lifetime of presigned download URLs. |
+| `storage.s3.retries`<br>`HANGAR_STORAGE_S3_RETRIES` | int | `5` | How many times Hangar sends a failed part or object upload again, waiting longer each time. Part bodies are spooled to the temporary directory while they are sent. 0 turns retries off. |
+| `storage.s3.stall_timeout`<br>`HANGAR_STORAGE_S3_STALL_TIMEOUT` | duration | `2m` | How long a request to the store may go without sending data or getting a response before Hangar cancels it and, for uploads, retries. Raise it on slow or congested links. |
 
 ## `security`
 

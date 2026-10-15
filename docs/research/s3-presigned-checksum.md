@@ -32,5 +32,30 @@ Evidence labels:
 
 ## Not tested
 
-- **AWS S3** [untested]. No AWS credentials were available. The AWS user guide documents `x-amz-checksum-sha256` on `PutObject` and rejection of a mismatched body [doc] ("Checking object integrity in Amazon S3", AWS S3 User Guide), but a presigned URL with the header signed in has not been run against AWS. Run `HANGAR_TEST_S3_ENDPOINT=https://s3.<region>.amazonaws.com HANGAR_TEST_S3_ACCESS_KEY=... HANGAR_TEST_S3_SECRET_KEY=... HANGAR_TEST_S3_BUCKET=... HANGAR_TEST_S3_REGION=<region> go test ./internal/blob/s3/` to check; the conformance suite asserts findings 3, 5, 6 and 7.
 - Other S3-compatible stores (Ceph RGW, R2, B2, Garage) [untested]. Stores that ignore the checksum would accept a corrupt body, which `verify` still catches.
+
+## AWS S3
+
+Run on 2026-10-15 from a Mac on a home connection (about 30 Mbit/s up) against throwaway private buckets in `eu-west-2`, with the public access block on, deleted after each run. minio-go v7.4.1 turns on the dual-stack endpoint for AWS by default, so requests went to `s3.dualstack.eu-west-2.amazonaws.com`. Command:
+
+```sh
+HANGAR_TEST_S3_ENDPOINT=https://s3.eu-west-2.amazonaws.com HANGAR_TEST_S3_ACCESS_KEY=... HANGAR_TEST_S3_SECRET_KEY=... \
+HANGAR_TEST_S3_BUCKET=<bucket> HANGAR_TEST_S3_REGION=eu-west-2 go test -count=1 -timeout 90m -v ./internal/blob/s3/
+```
+
+- **The whole S3 suite passes on AWS**, twice: every conformance subtest, `TestCheck`, `TestStreamsLargeObjects` (48 MiB, peak heap growth 2 MiB or less), `TestStoredContentTypeIsPinned` and the presign tests. [test]
+- **Findings 3, 5, 6 and 7 hold on AWS**: a signed checksum rejects a corrupt body, a matching body succeeds, presigned parts round-trip and presigned GETs carry the forced `Content-Type` and `Content-Disposition`. [test] conformance subtests `PresignPutHTTP`, `PresignPartHTTP`, `PresignGetHTTP`, `PresignedDownloadsAreAttachments`.
+- **AWS answers differ from MinIO's.** A one-off probe against a URL with `Content-Type` and `x-amz-checksum-sha256` signed in got: [test]
+  - a corrupt body: `400 BadDigest` ("The SHA256 you specified did not match the calculated checksum."); MinIO answers `400 XAmzContentChecksumMismatch`.
+  - no headers, as `huggingface_hub` sends on a `basic` upload, or the type without the checksum: `403 SignatureDoesNotMatch`; MinIO answers `400 AccessDenied` ("There were headers present in the request which were not signed"). Finding 4 holds on AWS: a client that leaves out a signed header cannot use the URL.
+  - another `Content-Type`: `403 SignatureDoesNotMatch` on both.
+- **Concurrent PUTs to one key get `503 SlowDown`** on AWS (subtest `ConcurrentPuts`), and the store's upload retries recover them. [test]
+
+### First run, 2026-10-14, and what changed
+
+The first run, on 2026-10-14 over the same connection while it was busier, passed the checksum, part and GET presign tests and failed four others. Both causes were in Hangar, not AWS:
+
+- `TestCheck`: AWS answers `HEAD` for an object in a missing bucket with a bare `404`, the same as for a missing object; MinIO adds an `X-Minio-Error-Code: NoSuchBucket` header. `Stat` reported a missing object. `Stat` now confirms the bucket with `HeadBucket` when an object is missing, at most once a minute while the bucket exists, and `Check` explains a missing bucket, a bucket in another region (from `x-amz-bucket-region` on a `301`) and a `403`.
+- `PutVerifiedMultipart`, `MultipartPartRetryWithNewContent` and `TestStreamsLargeObjects` failed on single part PUTs with "Connection closed by foreign host" (the connection closed before a response), "net/http: timeout awaiting response headers" and "use of closed network connection". minio-go retries a request only when its body is an `io.Seeker` (`executeMethod`, `api.go`), and Hangar wrapped every part body in non-seekable readers, so one dropped connection failed the whole upload. minio-go's transport also waits only one minute for response headers, a clock that starts when the last body bytes reach the socket buffer, not the server. [src] minio-go v7.4.1 `api.go` and `transport.go`.
+
+The store now retries part and single PUTs itself (`storage.s3.retries`, 5 by default, backing off from 1 to 30 seconds), cancels and retries a request that sends nothing and gets no answer for `storage.s3.stall_timeout` (2 minutes), and uses that timeout for response headers. A body it cannot rewind is copied to a temporary file as it is sent, so a retry replays the same bytes and the source is still read once. The fault-injection tests in `internal/blob/s3` (`TestPartUploadRetriesFaults`, `TestPutVerifiedMultipartSurvivesFaults`, `TestPartRetriesOnMinIO`) reproduce a reset connection, a stall in the middle of the body, no response and `SlowDown`. The busy-link conditions of the first run did not recur on 2026-10-15, so the retries on AWS were seen only for `SlowDown`; the dual-stack endpoint is unchanged, and nothing showed it to be a cause.

@@ -96,6 +96,8 @@ type S3Config struct {
 	DownloadMode    string        `koanf:"download_mode" desc:"redirect sends clients to presigned URLs; proxy streams bytes through Hangar."`
 	UploadMode      string        `koanf:"upload_mode" desc:"direct gives clients presigned URLs to upload LFS objects and parts to the store; proxy has them upload through Hangar. Use proxy when clients cannot reach the endpoint."`
 	PresignTTL      time.Duration `koanf:"presign_ttl" desc:"Lifetime of presigned download URLs."`
+	Retries         int           `koanf:"retries" desc:"How many times Hangar sends a failed part or object upload again, waiting longer each time. Part bodies are spooled to the temporary directory while they are sent. 0 turns retries off."`
+	StallTimeout    time.Duration `koanf:"stall_timeout" desc:"How long a request to the store may go without sending data or getting a response before Hangar cancels it and, for uploads, retries. Raise it on slow or congested links."`
 }
 
 // Registration modes.
@@ -285,6 +287,8 @@ func Default() Config {
 				DownloadMode: DownloadRedir,
 				UploadMode:   UploadDirect,
 				PresignTTL:   time.Hour,
+				Retries:      5,
+				StallTimeout: 2 * time.Minute,
 			},
 		},
 		Security: SecurityConfig{

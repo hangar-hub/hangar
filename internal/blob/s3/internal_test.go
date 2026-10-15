@@ -1,8 +1,11 @@
 package s3
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -88,4 +91,45 @@ func TestProxyModesRefusePresigning(t *testing.T) {
 	u, err = s.PresignGet(ctx, "lfs/sha256/ab/cd/x", time.Minute, "x.bin")
 	require.NoError(t, err)
 	require.Contains(t, u, "X-Amz-Signature")
+}
+
+func TestRetryReason(t *testing.T) {
+	require.Equal(t, "stalled", retryReason(fmt.Errorf("upload: %w", errStalled)))
+	require.Equal(t, "s3.SlowDown", retryReason(minio.ErrorResponse{Code: "SlowDown", StatusCode: 503}))
+	require.Equal(t, "http.502", retryReason(minio.ErrorResponse{StatusCode: 502}))
+	require.Equal(t, "connection", retryReason(&url.Error{Op: "Put", URL: "https://h/k?uploadId=1", Err: errors.New("Connection closed by foreign host")}))
+	require.Equal(t, "timeout", retryReason(&url.Error{Op: "Put", URL: "https://h/k", Err: timeoutErr{}}))
+}
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "net/http: timeout awaiting response headers" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+func TestRetryable(t *testing.T) {
+	ctx := context.Background()
+	require.True(t, retryable(ctx, errStalled))
+	require.True(t, retryable(ctx, minio.ErrorResponse{Code: "RequestTimeout", StatusCode: 400}))
+	require.True(t, retryable(ctx, minio.ErrorResponse{Code: "InternalError", StatusCode: 500}))
+	require.True(t, retryable(ctx, minio.ErrorResponse{StatusCode: 503}))
+	require.True(t, retryable(ctx, &url.Error{Op: "Put", URL: "https://h", Err: errors.New("use of closed network connection")}))
+	require.False(t, retryable(ctx, minio.ErrorResponse{Code: "AccessDenied", StatusCode: 403}))
+	require.False(t, retryable(ctx, minio.ErrorResponse{Code: "NoSuchUpload", StatusCode: 404}))
+	require.False(t, retryable(ctx, minio.ErrorResponse{Code: "EntityTooSmall", StatusCode: 400}))
+	require.False(t, retryable(ctx, blob.ErrSizeMismatch))
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.False(t, retryable(cancelled, errors.New("connection reset")))
+}
+
+func TestBackoff(t *testing.T) {
+	for n := range 10 {
+		ceiling := min(time.Second<<n, maxRetryBackoff)
+		for range 50 {
+			d := backoff(time.Second, n)
+			require.GreaterOrEqual(t, d, ceiling/2)
+			require.LessOrEqual(t, d, ceiling)
+		}
+	}
 }

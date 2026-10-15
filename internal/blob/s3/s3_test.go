@@ -5,10 +5,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -231,4 +235,85 @@ func TestStoredContentTypeIsPinned(t *testing.T) {
 	for _, key := range []string{"tmp/put", "lfs/sha256/verified", "lfs/sha256/multipart", "lfs/sha256/copied"} {
 		require.Equal(t, blob.SafeContentType, stored(key), key)
 	}
+}
+
+// flakyTransport breaks the first attempt of every part upload halfway
+// through its body, as a reset connection on a poor link does.
+type flakyTransport struct {
+	base http.RoundTripper
+	mu   sync.Mutex
+	seen map[string]bool
+	hits int
+}
+
+func (f *flakyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	q := req.URL.Query()
+	if req.Method == http.MethodPut && q.Has("partNumber") {
+		id := req.URL.Path + "#" + q.Get("uploadId") + "#" + q.Get("partNumber")
+		f.mu.Lock()
+		first := !f.seen[id]
+		f.seen[id] = true
+		if first {
+			f.hits++
+		}
+		f.mu.Unlock()
+		if first && req.Body != nil {
+			req = req.Clone(req.Context())
+			req.Body = &breakingBody{r: req.Body, left: req.ContentLength / 2}
+		}
+	}
+	return f.base.RoundTrip(req)
+}
+
+type breakingBody struct {
+	r    io.ReadCloser
+	left int64
+}
+
+func (b *breakingBody) Read(p []byte) (int, error) {
+	if b.left <= 0 {
+		return 0, errors.New("injected: connection reset by peer")
+	}
+	n, err := b.r.Read(p[:min(int64(len(p)), b.left)])
+	b.left -= int64(n)
+	return n, err
+}
+
+func (b *breakingBody) Close() error { return b.r.Close() }
+
+// TestPartRetriesOnMinIO breaks the first attempt of every part against a
+// real S3 server, which checks each retried request's signature and
+// length, and checks streamed uploads still stream and store the right
+// bytes.
+func TestPartRetriesOnMinIO(t *testing.T) {
+	if !s3Enabled(t) {
+		return
+	}
+	srv := blobtest.S3TestServer(t)
+	if !strings.HasPrefix(srv.Endpoint, "http://") {
+		t.Logf("fault injection needs a plain HTTP test server; %s is not one", srv.Endpoint)
+		return
+	}
+	base, err := minio.DefaultTransport(false)
+	require.NoError(t, err)
+	flaky := &flakyTransport{base: base, seen: map[string]bool{}}
+	opts := srv.Options()
+	opts.Prefix = fmt.Sprintf("flaky-%d", time.Now().UnixNano())
+	opts.Transport = flaky
+	opts.RetryBackoff = 10 * time.Millisecond
+	opts.SpoolDir = t.TempDir()
+	st, err := s3.New(opts)
+	require.NoError(t, err)
+	require.NoError(t, st.EnsureBucket(context.Background(), srv.Region))
+	t.Cleanup(func() {
+		_ = st.List(context.Background(), "", func(i blob.Info) error { return st.Delete(context.Background(), i.Key) })
+	})
+	blobtest.RunStreaming(t, st, 48<<20, 16<<20)
+	flaky.mu.Lock()
+	hits := flaky.hits
+	flaky.mu.Unlock()
+	require.GreaterOrEqual(t, hits, 6, "every part of both uploads failed once")
+	entries, err := os.ReadDir(opts.SpoolDir)
+	require.NoError(t, err)
+	require.Empty(t, entries, "no spool file is left behind")
 }

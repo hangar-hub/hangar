@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -54,6 +55,22 @@ type Options struct {
 	// download, zip exports included, streams through Hangar
 	// (storage.s3.download_mode proxy).
 	ProxyDownloads bool
+	// Retries is how many times a failed part or object upload is sent
+	// again, after a wait that starts at RetryBackoff and doubles up to 30
+	// seconds. Zero means DefaultRetries; a negative value turns retries
+	// off. A body that cannot be rewound is spooled to SpoolDir as it is
+	// sent, so a retry can replay it.
+	Retries int
+	// RetryBackoff is the first wait before a retry. Zero means one second.
+	RetryBackoff time.Duration
+	// StallTimeout is how long an upload request may go without sending a
+	// body byte or getting its response before it is cancelled and
+	// retried. It is also the response header timeout of every request.
+	// Zero means DefaultStallTimeout.
+	StallTimeout time.Duration
+	// SpoolDir holds upload parts while they are sent, so a failed request
+	// can be retried. Empty means the system temporary directory.
+	SpoolDir string
 	// Transport overrides the HTTP transport, for tests.
 	Transport http.RoundTripper
 }
@@ -67,10 +84,25 @@ type Store struct {
 	client *minio.Client
 	core   *minio.Core
 	bucket string
+	region string
 	prefix string
 
 	proxyUploads, proxyDownloads bool
+
+	retries      int
+	retryBackoff time.Duration
+	stallTimeout time.Duration
+	spoolDir     string
+
+	// bucketSeen is when a request last showed that the bucket exists, in
+	// Unix nanoseconds, so Stat can tell a missing object from a missing
+	// bucket without asking every time.
+	bucketSeen atomic.Int64
 }
+
+// bucketRecheck is how long Stat trusts that the bucket exists before it
+// checks again on a missing object.
+const bucketRecheck = time.Minute
 
 var (
 	_ blob.Store          = (*Store)(nil)
@@ -101,22 +133,51 @@ func New(opts Options) (*Store, error) {
 	if opts.UsePathStyle {
 		lookup = minio.BucketLookupPath
 	}
+	st := &Store{
+		bucket: opts.Bucket, region: opts.Region,
+		retries: opts.Retries, retryBackoff: opts.RetryBackoff, stallTimeout: opts.StallTimeout, spoolDir: opts.SpoolDir,
+		proxyUploads: opts.ProxyUploads, proxyDownloads: opts.ProxyDownloads,
+	}
+	switch {
+	case st.retries == 0:
+		st.retries = DefaultRetries
+	case st.retries < 0:
+		st.retries = 0
+	}
+	if st.retryBackoff <= 0 {
+		st.retryBackoff = defaultRetryBackoff
+	}
+	if st.stallTimeout <= 0 {
+		st.stallTimeout = DefaultStallTimeout
+	}
+	transport := opts.Transport
+	if transport == nil {
+		tr, err := minio.DefaultTransport(secure)
+		if err != nil {
+			return nil, fmt.Errorf("s3 blob store: %w", err)
+		}
+		// minio-go waits one minute for response headers. On a slow
+		// uplink the last few megabytes of a part can still be in the
+		// socket buffer when that clock starts, so use the stall timeout.
+		tr.ResponseHeaderTimeout = st.stallTimeout
+		transport = tr
+	}
 	core, err := minio.NewCore(host, &minio.Options{
 		Creds:        creds,
 		Secure:       secure,
 		Region:       opts.Region,
 		BucketLookup: lookup,
-		Transport:    opts.Transport,
+		Transport:    transport,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("s3 blob store: %w", err)
 	}
-	prefix := strings.Trim(opts.Prefix, "/")
-	if prefix != "" {
-		prefix += "/"
+	st.client, st.core = core.Client, core
+	st.prefix = strings.Trim(opts.Prefix, "/")
+	if st.prefix != "" {
+		st.prefix += "/"
 	}
-	return &Store{client: core.Client, core: core, bucket: opts.Bucket, prefix: prefix,
-		proxyUploads: opts.ProxyUploads, proxyDownloads: opts.ProxyDownloads}, nil
+	return st, nil
 }
 
 func parseEndpoint(endpoint string) (host string, secure bool, err error) {
@@ -140,16 +201,59 @@ func parseEndpoint(endpoint string) (host string, secure bool, err error) {
 	}
 }
 
-// Check makes sure the bucket exists and the credentials can reach it.
+// Check makes sure the bucket exists and the credentials can reach it,
+// with a bucket-level request (HeadBucket), and explains the usual
+// configuration mistakes: a missing bucket, a bucket in another region,
+// and credentials from another account or without access.
 func (s *Store) Check(ctx context.Context) error {
-	ok, err := s.client.BucketExists(ctx, s.bucket)
+	ok, err := s.bucketExists(ctx)
 	if err != nil {
-		return fmt.Errorf("s3 blob store: %w", err)
+		return err
 	}
 	if !ok {
-		return fmt.Errorf("s3 blob store: bucket %q does not exist", s.bucket)
+		return fmt.Errorf("s3 blob store: bucket %q does not exist: create it, or set storage.s3.bucket to an existing bucket", s.bucket)
 	}
 	return nil
+}
+
+// bucketExists asks S3 whether the bucket exists and records the answer
+// for Stat.
+func (s *Store) bucketExists(ctx context.Context) (bool, error) {
+	ok, err := s.client.BucketExists(ctx, s.bucket)
+	if err != nil {
+		return false, s.bucketError(err)
+	}
+	if ok {
+		s.bucketSeen.Store(time.Now().UnixNano())
+	}
+	return ok, nil
+}
+
+// bucketError explains an error from a bucket-level request.
+func (s *Store) bucketError(err error) error {
+	var resp minio.ErrorResponse
+	if !errors.As(err, &resp) {
+		return fmt.Errorf("s3 blob store: reach bucket %q: %w", s.bucket, err)
+	}
+	if resp.Region != "" && resp.Region != s.region && (resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusBadRequest ||
+		resp.Code == "PermanentRedirect" || resp.Code == "AuthorizationHeaderMalformed" || resp.Code == "InvalidRegion") {
+		configured := ""
+		if s.region != "" {
+			configured = fmt.Sprintf(", not %q", s.region)
+		}
+		return fmt.Errorf("s3 blob store: bucket %q is in region %q%s: set storage.s3.region to %q: %w",
+			s.bucket, resp.Region, configured, resp.Region, &apiError{code: "WrongRegion", err: err})
+	}
+	switch resp.StatusCode {
+	case http.StatusMovedPermanently:
+		return fmt.Errorf("s3 blob store: bucket %q is not at this endpoint (HTTP 301): check storage.s3.endpoint and storage.s3.region: %w",
+			s.bucket, &apiError{code: "PermanentRedirect", err: err})
+	case http.StatusForbidden:
+		return fmt.Errorf("s3 blob store: access to bucket %q is denied (HTTP 403): check that the credentials are valid, "+
+			"belong to the account that owns the bucket or one its policy allows, and that the bucket name is right: %w",
+			s.bucket, &apiError{code: "AccessDenied", err: err})
+	}
+	return fmt.Errorf("s3 blob store: reach bucket %q: %w", s.bucket, mapErr(err, s.bucket))
 }
 
 // EnsureBucket creates the bucket if it does not exist. Tests and the
@@ -230,9 +334,34 @@ func (s *Store) Stat(ctx context.Context, key string) (blob.Info, error) {
 	}
 	oi, err := s.client.StatObject(ctx, s.bucket, k, minio.StatObjectOptions{})
 	if err != nil {
-		return blob.Info{}, mapErr(err, key)
+		err = mapErr(err, key)
+		if errors.Is(err, blob.ErrNotFound) {
+			return blob.Info{}, s.notFound(ctx, err)
+		}
+		return blob.Info{}, err
 	}
+	s.bucketSeen.Store(time.Now().UnixNano())
 	return infoFrom(key, oi), nil
+}
+
+// notFound checks that a missing object is not a missing bucket. A HEAD
+// request has no error body, and AWS S3 answers HEAD for an object in a
+// missing bucket with a bare 404, the same as for a missing object (MinIO
+// adds an error code header). The bucket is checked at most once a minute
+// while it exists.
+func (s *Store) notFound(ctx context.Context, err error) error {
+	if time.Since(time.Unix(0, s.bucketSeen.Load())) < bucketRecheck {
+		return err
+	}
+	ok, berr := s.bucketExists(ctx)
+	switch {
+	case berr != nil:
+		return berr
+	case !ok:
+		return fmt.Errorf("s3 blob store: bucket %q does not exist: %w", s.bucket,
+			&apiError{code: "NoSuchBucket", err: minio.ErrorResponse{Code: "NoSuchBucket", StatusCode: http.StatusNotFound, BucketName: s.bucket}})
+	}
+	return err
 }
 
 // Get implements blob.Store. The request is made before Get returns, so
@@ -315,9 +444,15 @@ func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64) er
 }
 
 func (s *Store) putBytes(ctx context.Context, objectKey string, buf []byte) error {
-	sum := sha256.Sum256(buf)
-	_, err := s.core.PutObject(ctx, s.bucket, objectKey, bytes.NewReader(buf), int64(len(buf)), "", hex.EncodeToString(sum[:]),
-		minio.PutObjectOptions{DisableMultipart: true, ContentType: blob.SafeContentType})
+	h := sha256.Sum256(buf)
+	sum := hex.EncodeToString(h[:])
+	body := newReplayBody(ctx, bytes.NewReader(buf), int64(len(buf)), s.spoolDir, s.retries > 0)
+	defer body.close()
+	err := s.upload(ctx, body, func(ctx context.Context, r io.Reader) error {
+		_, err := s.core.PutObject(ctx, s.bucket, objectKey, r, int64(len(buf)), "", sum,
+			minio.PutObjectOptions{DisableMultipart: true, ContentType: blob.SafeContentType})
+		return err
+	})
 	return mapErr(err, objectKey)
 }
 
@@ -505,23 +640,28 @@ func (s *Store) PutPart(ctx context.Context, key, uploadID string, part int, r i
 	if size < 0 || size > blob.MaxPartSize {
 		return "", fmt.Errorf("part %d: the size must be known and at most 5 GiB", part)
 	}
-	hr := blob.NewHashingReader(blob.ContextReader(ctx, r))
-	op, err := s.core.PutObjectPart(ctx, s.bucket, k, uploadID, part, io.LimitReader(hr, size), size, minio.PutObjectPartOptions{})
+	body := newReplayBody(ctx, r, size, s.spoolDir, s.retries > 0)
+	var etag string
+	err = s.upload(ctx, body, func(ctx context.Context, br io.Reader) error {
+		op, err := s.core.PutObjectPart(ctx, s.bucket, k, uploadID, part, br, size, minio.PutObjectPartOptions{})
+		etag = op.ETag
+		return err
+	})
+	read := body.sourceRead()
+	body.close()
 	if err != nil {
-		if hr.N() < size {
-			if _, rerr := r.Read(make([]byte, 1)); errors.Is(rerr, io.EOF) {
-				return "", fmt.Errorf("%w: part %d read %d bytes, want %d", blob.ErrSizeMismatch, part, hr.N(), size)
-			}
+		if errors.Is(err, blob.ErrSizeMismatch) {
+			return "", fmt.Errorf("%w: part %d read %d bytes, want %d", blob.ErrSizeMismatch, part, read, size)
 		}
-		return "", mapErr(err, key)
+		return "", fmt.Errorf("upload part %d: %w", part, mapErr(err, key))
 	}
-	if hr.N() != size {
-		return "", fmt.Errorf("%w: part %d read %d bytes, want %d", blob.ErrSizeMismatch, part, hr.N(), size)
+	if read != size {
+		return "", fmt.Errorf("%w: part %d read %d bytes, want %d", blob.ErrSizeMismatch, part, read, size)
 	}
 	if n, _ := io.ReadFull(r, make([]byte, 1)); n > 0 {
 		return "", fmt.Errorf("%w: part %d is longer than %d bytes", blob.ErrSizeMismatch, part, size)
 	}
-	return strings.Trim(op.ETag, `"`), nil
+	return strings.Trim(etag, `"`), nil
 }
 
 // ListParts implements blob.Store.

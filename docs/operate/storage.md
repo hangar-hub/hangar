@@ -29,6 +29,8 @@ storage:
     download_mode: redirect                # redirect | proxy
     upload_mode: direct                    # direct | proxy
     presign_ttl: 1h
+    retries: 5                             # resend a failed part or object upload; 0 = never
+    stall_timeout: 2m                      # cancel and retry a request that makes no progress
 ```
 
 - In `redirect` mode, LFS downloads and zip exports answer with a presigned URL, so file bytes go straight from the store to the client. Clients must reach the store's endpoint; if they cannot, use `proxy`, which streams through Hangar.
@@ -44,7 +46,15 @@ storage:
 | Backblaze B2 | `endpoint: s3.<region>.backblazeb2.com`, `region: <region>` | Use an application key limited to the bucket. |
 | Garage | `endpoint` of a Garage node, `region: garage`, `use_path_style: true` | |
 
-The automated suite runs against MinIO; the other providers are configured as above but are not part of CI yet. `hangar admin doctor` checks a write, read and delete, the clock against the store and, in `redirect` mode, that a presigned URL works from the server.
+### Slow or unreliable links
+
+Hangar often runs on home hardware and uploads to a cloud bucket over a home connection, where a connection can be reset or stall part of the way through a request. Hangar sends each multipart part and each single upload again when the connection fails, makes no progress for `stall_timeout`, or the store answers with a server error, `SlowDown` or `RequestTimeout`. It waits about 1 second before the first retry and doubles the wait each time, up to 30 seconds, for up to `retries` retries. Errors that describe the request itself, such as `AccessDenied` or a missing upload, are not retried.
+
+So that a retry can send the same bytes again, Hangar copies each part to a file in the temporary directory (`TMPDIR`, `/tmp` in the container image) while it sends it, and deletes the file when the part is done. Each upload in progress uses up to one part of space there: 16 MiB for objects up to 156 GiB, and more for larger objects. Parts read from a file or from memory are rewound instead of copied.
+
+On a congested link, raise `stall_timeout` rather than `retries`: after the last bytes leave Hangar they can still wait in the operating system's send buffer and the router's queue, and the store only answers once they arrive.
+
+The automated suite runs against MinIO, and passed against AWS S3 (`eu-west-2`) on 2026-10-15; the other providers are configured as above but are not part of CI yet. `hangar admin doctor` checks a write, read and delete, the clock against the store and, in `redirect` mode, that a presigned URL works from the server.
 
 ## Multipart uploads left behind
 

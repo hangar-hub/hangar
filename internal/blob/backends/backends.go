@@ -35,10 +35,17 @@ func Open(ctx context.Context, cfg config.StorageConfig) (blob.Store, error) {
 
 // S3Options converts storage.s3 into s3.Options.
 func S3Options(c config.S3Config) s3.Options {
+	retries := c.Retries
+	if retries == 0 {
+		// In s3.Options zero means the default; storage.s3.retries 0
+		// means none.
+		retries = -1
+	}
 	return s3.Options{
 		Endpoint: c.Endpoint, Region: c.Region, Bucket: c.Bucket, Prefix: c.Prefix,
 		AccessKeyID: c.AccessKeyID, SecretAccessKey: c.SecretAccessKey, UsePathStyle: c.UsePathStyle,
 		ProxyUploads: c.UploadMode == config.UploadProxy, ProxyDownloads: c.DownloadMode == config.DownloadProxy,
+		Retries: retries, StallTimeout: c.StallTimeout,
 	}
 }
 
