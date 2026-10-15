@@ -213,6 +213,11 @@ type HarnessOptions struct {
 	Limiter jobs.Limiter
 	// Downloads is the Service's download gate; nil checks nothing.
 	Downloads upstream.DownloadGate
+	// PullThroughWait bounds how long a Pull-through waits for planning.
+	// Zero means the Service's default (30 seconds), which a test that
+	// expects planning to finish keeps: planning runs git and takes
+	// seconds on a loaded machine.
+	PullThroughWait time.Duration
 }
 
 // Harness is an upstream.Service over fakes: a Fake Upstream behind a
@@ -243,6 +248,7 @@ type Harness struct {
 
 	mu        sync.Mutex
 	partSize  int64
+	ptWait    time.Duration
 	downloads upstream.DownloadGate
 	settings  upstream.Settings
 	now       time.Time
@@ -263,7 +269,8 @@ func NewHarness(t testing.TB, d *db.DB, o HarnessOptions) *Harness {
 	require.NoError(t, err)
 	h := &Harness{T: t, Ctx: ctx, DB: d, Remote: NewFake(t), Orgs: orgtest.NewFake(), Jobs: jobs.NewRegistry(), Limiter: &HookLimiter{},
 		Authz: authtest.NewAuthz(), Layout: datasetstest.NewLayout(), Hooks: &webhooktest.Fake{}, Audit: audittest.NewFake(), Quota: NewQuota(),
-		now: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC), tokens: map[uuid.UUID]string{}, Signer: signer, partSize: o.PartSize, downloads: o.Downloads}
+		now: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC), tokens: map[uuid.UUID]string{}, Signer: signer, partSize: o.PartSize,
+		ptWait: o.PullThroughWait, downloads: o.Downloads}
 	h.settings = upstream.Settings{AllowOverrideWindows: true, PullThroughAllow: []string{"*"}, PullThroughMinRole: "user"}
 	h.Server = NewServer(t, h.Remote)
 	local := repotest.NewFake(t)
@@ -301,7 +308,7 @@ func NewHarness(t testing.TB, d *db.DB, o HarnessOptions) *Harness {
 		ParseWindows: ParseHourWindows,
 		Snooze:       func(until time.Time, reason string) error { return &Snoozed{Until: until, Reason: reason} },
 		Signer:       signer, Downloads: o.Downloads, PublicURL: "http://hangar.test", Dependencies: dc, UserTokens: h, Quota: h.Quota, Audit: h.Audit,
-		PartSize: o.PartSize, PullAttempts: 100, PollInterval: time.Second, PullThroughWait: 5 * time.Second, SpoolDir: t.TempDir(), Now: h.Now})
+		PartSize: o.PartSize, PullAttempts: 100, PollInterval: time.Second, PullThroughWait: o.PullThroughWait, SpoolDir: t.TempDir(), Now: h.Now})
 	require.NoError(t, err)
 	require.NoError(t, h.Service.RegisterJobs(h.Jobs))
 	return h
@@ -411,7 +418,7 @@ func (h *Harness) NewService(limiter jobs.Limiter) *upstream.Service {
 		ParseWindows: ParseHourWindows,
 		Snooze:       func(until time.Time, reason string) error { return &Snoozed{Until: until, Reason: reason} },
 		Signer:       h.Signer, PublicURL: "http://hangar.test", UserTokens: h, Quota: h.Quota, Audit: h.Audit, PartSize: h.partSize, Downloads: h.downloads,
-		PullAttempts: 100, PollInterval: time.Second, PullThroughWait: 30 * time.Second, SpoolDir: h.T.TempDir(), Now: h.Now})
+		PullAttempts: 100, PollInterval: time.Second, PullThroughWait: h.ptWait, SpoolDir: h.T.TempDir(), Now: h.Now})
 	require.NoError(h.T, err)
 	return svc
 }

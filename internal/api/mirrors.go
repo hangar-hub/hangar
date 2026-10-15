@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/jamesagarside/hangar/internal/api/gen"
 	"github.com/jamesagarside/hangar/internal/httpx"
@@ -33,9 +32,15 @@ func (h *Upstreams) mirrorResource(ctx context.Context, p model.Principal, rp *r
 		out.LastError = ptr(m.LastError)
 	}
 	if withUpdate && m.DetachedAt == nil {
-		uctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		// The answer is still useful without update_available, so an
+		// Upstream that is down or slow leaves it out instead of failing.
+		uctx, cancel := context.WithTimeout(ctx, h.updateCheckTimeout())
 		defer cancel()
-		if avail, err := h.Service.UpdateAvailable(uctx, p, rp); err == nil {
+		avail, err := h.Service.UpdateAvailable(uctx, p, rp)
+		if err != nil {
+			h.log().InfoContext(ctx, "update check failed; answering without update_available", "repo", rp.ID.String(),
+				"upstream", up.Name, "error", err.Error())
+		} else {
 			out.UpdateAvailable = ptr(avail)
 		}
 	}
