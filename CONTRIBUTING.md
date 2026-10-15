@@ -29,7 +29,7 @@ make dev          # the server on :8080 and the UI with live reload on :5173
 | `make test` | Unit and integration tests, on SQLite and Postgres and against MinIO (needs Docker). |
 | `make test-compat` | The client compatibility suites in `compat/`. |
 | `make generate` | Regenerate the API code, the configuration, CLI and metrics references and the dashboards. CI fails if they are out of date. |
-| `make lint-deploy` | Lint the Helm chart, check the Compose files, and check that every GitHub Action the workflows use exists at the version they name. |
+| `make lint-deploy` | Lint the Helm chart, check the Compose files, and check that every GitHub Action the workflows use exists at the version they name, and that every job that runs uv installs it (needs `yq`). |
 | `make image` | Build the container image. |
 | `make docs` | Build the documentation site. |
 | `make help` | Everything else. |
