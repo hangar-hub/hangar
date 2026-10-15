@@ -207,7 +207,8 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	in.datasets = &pipeline.Store{DB: d, Blobs: in.blobs}
 
 	// The security scan (W7). One gate enforces scan.block_unsafe_downloads
-	// for every protocol that serves file bytes, Pull-through included.
+	// for every protocol that serves file bytes, Pull-through links
+	// included, so it exists before the Upstream service.
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
 	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
 		s, err := in.auth.Settings.Get(ctx)
@@ -347,7 +348,13 @@ func (in *instance) afterIndex(ctx context.Context, job index.CommitJob, _ *inde
 	if warnings, err := in.pulls.ResolveDependencies(ctx, job.RepoUUID, job.Commit); err != nil {
 		// GET .../dependencies resolves a head Commit with no rows on
 		// first read, so a failure here is not worth retrying the index.
-		in.log.WarnContext(ctx, "resolve dependencies", "repo.id", job.Repo, "commit", string(job.Commit), "error", err.Error())
+		// A Repo deleted since the index ran has no Dependencies to
+		// resolve, which is not worth a warning.
+		if r, gerr := in.repos.GetByUUID(ctx, job.RepoUUID); errors.Is(gerr, repo.ErrNotFound) || (gerr == nil && r.DeletedAt != nil) {
+			in.log.DebugContext(ctx, "resolve dependencies: repo deleted", "repo.id", job.Repo, "commit", string(job.Commit))
+		} else {
+			in.log.WarnContext(ctx, "resolve dependencies", "repo.id", job.Repo, "commit", string(job.Commit), "error", err.Error())
+		}
 	} else if len(warnings) > 0 {
 		in.log.InfoContext(ctx, "dependencies not pulled", "repo.id", job.Repo, "commit", string(job.Commit), "warnings", warnings)
 	}

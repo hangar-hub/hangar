@@ -408,11 +408,20 @@ func (s *Service) HandleJob(ctx context.Context, j *jobs.Job, _ jobs.Progress) e
 	if s.o.Instruments != nil && s.o.Instruments.IndexDuration != nil {
 		s.o.Instruments.IndexDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attribute.String(telemetry.MetricOutcome, outcome)))
 	}
+	if err != nil && s.deletedMeanwhile(ctx, r) {
+		return nil
+	}
 	if errors.Is(err, repo.ErrRevisionNotFound) || errors.Is(err, repo.ErrNotFound) {
 		return jobs.Permanent(err)
 	}
 	if err != nil {
 		return err
+	}
+	// A file the index could not read is an entry in the results, not a
+	// failure, so a Repo deleted meanwhile is checked here: it gets no
+	// index.completed event and no Dependency resolution.
+	if s.deletedMeanwhile(ctx, r) {
+		return nil
 	}
 	if s.o.Webhooks != nil {
 		data := map[string]any{"commit": string(p.Commit), "formats": sum.Formats}
@@ -426,10 +435,25 @@ func (s *Service) HandleJob(ctx context.Context, j *jobs.Job, _ jobs.Progress) e
 	if s.o.AfterIndex != nil {
 		p.Repo, p.Type = r.ID.String(), r.ID.Type
 		if err := s.o.AfterIndex(ctx, p, sum); err != nil {
+			if s.deletedMeanwhile(ctx, r) {
+				return nil
+			}
 			return err
 		}
 	}
 	return nil
+}
+
+// deletedMeanwhile reports whether the Repo was deleted or purged while
+// its Job ran, so a failure caused by the deletion ends the Job quietly
+// instead of failing it.
+func (s *Service) deletedMeanwhile(ctx context.Context, r *repo.Repo) bool {
+	now, err := s.o.Repos.GetByUUID(ctx, r.UUID)
+	if errors.Is(err, repo.ErrNotFound) || (err == nil && now.DeletedAt != nil) {
+		s.o.Log.DebugContext(ctx, "index stopped: repo deleted", "repo.id", r.ID.String())
+		return true
+	}
+	return false
 }
 
 // ReindexStale enqueues low-priority index Jobs for branch heads whose

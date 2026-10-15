@@ -259,6 +259,27 @@ func TestDatasetWiring(t *testing.T) {
 	require.NoError(t, in.afterIndex(ctx, index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: head}, nil))
 }
 
+// TestAfterIndexOfADeletedRepo checks that an index Job that finishes after
+// its Repo is deleted does not warn that the Repo's Dependencies could not
+// be resolved.
+func TestAfterIndexOfADeletedRepo(t *testing.T) {
+	in := newTestInstance(t, nil)
+	ctx := context.Background()
+	p := testUser(t, in, "alice")
+	m, err := in.repos.Create(ctx, repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "gone"}, Actor: p,
+		InitialReadme: true, Visibility: model.VisibilityPublic})
+	require.NoError(t, err)
+	head, err := in.repos.Resolve(ctx, m.ID, "")
+	require.NoError(t, err)
+	require.NoError(t, in.repos.Delete(ctx, m.ID, p))
+
+	var logs bytes.Buffer
+	in.log = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	require.NoError(t, in.afterIndex(ctx, index.CommitJob{RepoUUID: m.UUID, Repo: m.ID.String(), Type: m.ID.Type, Commit: head}, nil))
+	require.NotContains(t, logs.String(), `"level":"WARN"`)
+	require.Contains(t, logs.String(), "resolve dependencies: repo deleted")
+}
+
 // presigningStore is a Blob store that presigns uploads to a fixed URL.
 type presigningStore struct {
 	blob.Store

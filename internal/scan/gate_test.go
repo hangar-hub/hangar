@@ -3,11 +3,13 @@ package scan_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -116,4 +118,181 @@ func TestBlockedErrorMessages(t *testing.T) {
 func deleteOp(id model.RepoID, p string) repo.CommitParams {
 	return repo.CommitParams{Repo: id, Revision: model.DefaultBranch, Summary: "remove " + p, Actor: indextest.Owner(id.Namespace),
 		Operations: []repo.Operation{{Kind: repo.OpDelete, Path: p}}}
+}
+
+// gateFixture is a Repo with blocking on and helpers to read its files.
+type gateFixture struct {
+	t    *testing.T
+	fake *repotest.Fake
+	s    *scan.Service
+	g    *scan.Gate
+	r    *repo.Repo
+	id   model.RepoID
+}
+
+func newGateFixture(t *testing.T, d *db.DB, name string) *gateFixture {
+	t.Helper()
+	fake := repotest.NewFake(t)
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: name}
+	r := indextest.CreateRepo(t, fake, id, model.VisibilityPublic)
+	indextest.InsertRepoRow(t, d, r)
+	s := scan.New(scan.Options{DB: d, Repos: fake, LFS: fake.LFS})
+	g := s.NewGate(func(context.Context) (bool, error) { return true, nil })
+	return &gateFixture{t: t, fake: fake, s: s, g: g, r: r, id: id}
+}
+
+func (f *gateFixture) oid(commit model.CommitSHA, p string) string {
+	f.t.Helper()
+	e, err := f.fake.Entry(f.t.Context(), f.id, commit, p)
+	require.NoError(f.t, err)
+	require.NotNil(f.t, e.LFS, p)
+	return e.LFS.OID
+}
+
+func (f *gateFixture) scanCommit(commit model.CommitSHA) {
+	f.t.Helper()
+	_, err := f.s.ScanCommit(f.t.Context(), f.r.UUID, f.id, commit)
+	require.NoError(f.t, err)
+}
+
+func (f *gateFixture) checkObjects(oids ...string) map[string]error {
+	f.t.Helper()
+	blocked, err := f.g.CheckObjects(f.t.Context(), f.r.UUID, f.id, oids)
+	require.NoError(f.t, err)
+	return blocked
+}
+
+func TestGateRefusesObjectsThatOnlyUnscannedCommitsHold(t *testing.T) {
+	f := newGateFixture(t, dbtest.SQLite(t), "history")
+	ctx := t.Context()
+	// Commit A adds a pickle that runs os.system and safe weights, Commit
+	// B deletes both, and only B, the branch head, is scanned.
+	a := indextest.Commit(t, f.fake, f.id, map[string][]byte{
+		"evil.pkl":            scantest.OSSystemProtocol0(),
+		"weights.safetensors": indextest.Safetensors(t, nil),
+	})
+	evil, st := f.oid(a, "evil.pkl"), f.oid(a, "weights.safetensors")
+	_, err := f.fake.Commit(ctx, deleteOp(f.id, "evil.pkl"))
+	require.NoError(t, err)
+	b, err := f.fake.Commit(ctx, deleteOp(f.id, "weights.safetensors"))
+	require.NoError(t, err)
+	f.scanCommit(b.SHA)
+
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, f.g.CheckFile(ctx, f.r.UUID, f.id, a, "evil.pkl")))
+	blocked := f.checkObjects(evil, st)
+	require.Contains(t, blocked, evil, "the pickle of an unscanned Commit must not download by OID")
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, blocked[evil]))
+	var be *scan.BlockedError
+	require.ErrorAs(t, blocked[evil], &be)
+	require.Equal(t, "evil.pkl", be.Path)
+	require.NotContains(t, blocked, st, "a file that cannot run code downloads from history, as it does by path")
+
+	// Once Commit A is scanned the pickle is refused as unsafe, by path and
+	// by OID.
+	f.scanCommit(a)
+	require.Equal(t, scan.BlockUnsafe, blockedReason(t, f.g.CheckFile(ctx, f.r.UUID, f.id, a, "evil.pkl")))
+	require.Equal(t, scan.BlockUnsafe, blockedReason(t, f.checkObjects(evil)[evil]))
+}
+
+func TestGateRefusesObjectsNoCommitPlaces(t *testing.T) {
+	f := newGateFixture(t, dbtest.SQLite(t), "unplaced")
+	ctx := t.Context()
+	sha := indextest.Commit(t, f.fake, f.id, map[string][]byte{"README.md": []byte("# hi")})
+	f.scanCommit(sha)
+	obj, err := f.fake.LFS.Put(ctx, scantest.OSSystemProtocol0())
+	require.NoError(t, err)
+	require.NoError(t, f.fake.SetLFSPresence(ctx, f.id, []repo.LFSRef{{OID: obj.OID, Size: obj.Size, Present: true}}))
+
+	blocked := f.checkObjects(obj.OID)
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, blocked[obj.OID]),
+		"an object no reachable Commit holds has no path to say whether it runs code")
+}
+
+func TestGateTakesTheResultOfTheSameFileInAScannedCommit(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		f := newGateFixture(t, d, "same-file")
+		ctx := t.Context()
+		// Commit A adds a safe checkpoint and Commit B, the head, only edits the
+		// card. Only B is scanned, as when both arrive in one push.
+		a := indextest.Commit(t, f.fake, f.id, map[string][]byte{"model.ckpt": scantest.TorchStateDict(), "README.md": []byte("# v1")})
+		ckpt := f.oid(a, "model.ckpt")
+		b := indextest.Commit(t, f.fake, f.id, map[string][]byte{"README.md": []byte("# v2")})
+		f.scanCommit(b)
+		require.NoError(t, f.g.CheckFile(ctx, f.r.UUID, f.id, a, "model.ckpt"), "Commit A's checkpoint is the file B's scan found safe")
+
+		// After a Commit deletes it, the object of an older checkout still
+		// downloads by OID: the Commit that added it takes B's result.
+		c, err := f.fake.Commit(ctx, deleteOp(f.id, "model.ckpt"))
+		require.NoError(t, err)
+		f.scanCommit(c.SHA)
+		require.Empty(t, f.checkObjects(ckpt))
+
+		// A different file at the same path in an unscanned Commit is not
+		// covered by B's result.
+		later := indextest.Commit(t, f.fake, f.id, map[string][]byte{"model.ckpt": scantest.SubprocessInst()})
+		require.Equal(t, scan.BlockNotScanned, blockedReason(t, f.g.CheckFile(ctx, f.r.UUID, f.id, later, "model.ckpt")))
+		other := f.oid(later, "model.ckpt")
+		require.Equal(t, scan.BlockNotScanned, blockedReason(t, f.checkObjects(other)[other]))
+	})
+}
+
+func TestGateRefusesPartialMirrorPickleByOID(t *testing.T) {
+	f := newGateFixture(t, dbtest.SQLite(t), "partial")
+	ctx := t.Context()
+	sha := indextest.Commit(t, f.fake, f.id, map[string][]byte{
+		"evil.pkl":            scantest.OSSystemProtocol0(),
+		"weights.safetensors": indextest.Safetensors(t, nil),
+	})
+	evil, st := f.oid(sha, "evil.pkl"), f.oid(sha, "weights.safetensors")
+	// The Mirror names both files but holds neither, and its head is
+	// scanned without them.
+	e, err := f.fake.Entry(ctx, f.id, sha, "evil.pkl")
+	require.NoError(t, err)
+	s, err := f.fake.Entry(ctx, f.id, sha, "weights.safetensors")
+	require.NoError(t, err)
+	require.NoError(t, f.fake.SetLFSPresence(ctx, f.id, []repo.LFSRef{{OID: evil, Size: e.Size}, {OID: st, Size: s.Size}}))
+	f.scanCommit(sha)
+
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, f.g.CheckFile(ctx, f.r.UUID, f.id, sha, "evil.pkl")))
+	blocked := f.checkObjects(evil, st)
+	require.Contains(t, blocked, evil, "by OID (git-lfs batch, then Pull-through) the absent pickle must fail closed")
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, blocked[evil]))
+	require.NotContains(t, blocked, st)
+}
+
+func TestGateChecksObjectsOfTags(t *testing.T) {
+	f := newGateFixture(t, dbtest.SQLite(t), "tags")
+	ctx := t.Context()
+	a := indextest.Commit(t, f.fake, f.id, map[string][]byte{"evil.pkl": scantest.OSSystemProtocol0()})
+	evil := f.oid(a, "evil.pkl")
+	require.NoError(t, f.fake.CreateTag(ctx, repo.TagParams{Repo: f.id, Tag: "v1", Revision: string(a), Actor: indextest.Owner("alice")}))
+	b, err := f.fake.Commit(ctx, deleteOp(f.id, "evil.pkl"))
+	require.NoError(t, err)
+	f.scanCommit(b.SHA)
+
+	// The tag's Commit is not scanned yet: its pickle fails closed.
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, f.checkObjects(evil)[evil]))
+	// Scanned, it is refused as unsafe.
+	f.scanCommit(a)
+	require.Equal(t, scan.BlockUnsafe, blockedReason(t, f.checkObjects(evil)[evil]))
+}
+
+func TestScannedTakesTheNewestScannerVersion(t *testing.T) {
+	d := dbtest.SQLite(t)
+	ctx := t.Context()
+	f := newGateFixture(t, d, "versions")
+	a := model.CommitSHA(strings.Repeat("a", 40))
+	b := model.CommitSHA(strings.Repeat("b", 40))
+	for _, row := range []db.ScanResult{
+		{RepoID: f.r.UUID, Commit: string(a), Path: "w.pkl", ScannerVersion: scan.Version - 1, Status: string(scan.StatusUnsafe), Findings: db.JSON("{}")},
+		{RepoID: f.r.UUID, Commit: string(a), Path: "w.pkl", ScannerVersion: scan.Version, Status: string(scan.StatusSafe), Findings: db.JSON("{}")},
+		{RepoID: f.r.UUID, Commit: string(b), Path: "w.pkl", ScannerVersion: scan.Version, Status: string(scan.StatusSuspicious), Findings: db.JSON("{}")},
+		{RepoID: f.r.UUID, Commit: string(b), Path: "other.pkl", ScannerVersion: scan.Version, Status: string(scan.StatusUnsafe), Findings: db.JSON("{}")},
+	} {
+		_, err := d.NewInsert().Model(&row).Exec(ctx)
+		require.NoError(t, err)
+	}
+	got, err := f.s.Scanned(ctx, f.r.UUID, "w.pkl")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []scan.ScannedFile{{Commit: a, Status: scan.StatusSafe}, {Commit: b, Status: scan.StatusSuspicious}}, got)
 }

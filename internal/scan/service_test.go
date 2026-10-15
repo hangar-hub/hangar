@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -276,7 +277,7 @@ func FuzzScanFile(f *testing.F) {
 	})
 }
 
-func TestRescanStaleQueuesBranchHeadsOnly(t *testing.T) {
+func TestRescanStaleQueuesRefTipsOnly(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := t.Context()
 		fake := repotest.NewFake(t)
@@ -303,5 +304,68 @@ func TestRescanStaleQueuesBranchHeadsOnly(t *testing.T) {
 		var p index.CommitJob
 		require.NoError(t, list[0].DecodePayload(&p))
 		require.Equal(t, head, p.Commit)
+
+		// A tag makes the older Commit a ref tip, which is rescanned too.
+		require.NoError(t, fake.CreateTag(ctx, repo.TagParams{Repo: id, Tag: "v1", Revision: string(old), Actor: indextest.Owner("alice")}))
+		q = jobstest.NewFake(jobs.NewRegistry())
+		n, err = s.RescanStale(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
 	})
+}
+
+// deletingRepos deletes (or purges) the Repo when the scan first opens a
+// file, as a user deleting the Repo while its scan Job runs does.
+type deletingRepos struct {
+	*repotest.Fake
+	id    model.RepoID
+	purge bool
+	once  sync.Once
+}
+
+func (d *deletingRepos) OpenFile(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, rng *blob.Range) (io.ReadCloser, model.Entry, error) {
+	d.once.Do(func() {
+		r, err := d.Get(ctx, d.id)
+		if err != nil {
+			panic(err)
+		}
+		if err := d.Delete(ctx, d.id, indextest.Owner(d.id.Namespace)); err != nil {
+			panic(err)
+		}
+		if d.purge {
+			if err := d.Purge(ctx, r.UUID); err != nil {
+				panic(err)
+			}
+		}
+	})
+	return d.Fake.OpenFile(ctx, id, commit, p, rng)
+}
+
+func TestScanJobOfARepoDeletedWhileItRuns(t *testing.T) {
+	for _, purge := range []bool{false, true} {
+		t.Run(map[bool]string{false: "deleted", true: "purged"}[purge], func(t *testing.T) {
+			d := dbtest.SQLite(t)
+			ctx := t.Context()
+			fake := repotest.NewFake(t)
+			id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "deleted-mid-scan"}
+			r := indextest.CreateRepo(t, fake, id, model.VisibilityPublic)
+			indextest.InsertRepoRow(t, d, r)
+			sha := indextest.Commit(t, fake, id, map[string][]byte{"weights.bin": scantest.TorchStateDict(), "README.md": []byte("# hi")})
+			hooks := &webhooktest.Fake{}
+			s := scan.New(scan.Options{DB: d, Repos: &deletingRepos{Fake: fake, id: id, purge: purge}, Webhooks: hooks})
+			reg := jobs.NewRegistry()
+			require.NoError(t, s.Register(reg))
+			q := jobstest.NewFake(reg)
+			job := index.CommitJob{RepoUUID: r.UUID, Repo: id.String(), Type: id.Type, Commit: sha}
+			jid, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: job.DedupeKey(), Payload: job})
+			require.NoError(t, err)
+			q.RunPending(ctx)
+			j, err := q.Get(ctx, jid)
+			require.NoError(t, err)
+			require.Equal(t, jobs.StatusSucceeded, j.Status, "a Repo deleted mid-scan ends the Job without failing it: %s", j.Error)
+			require.Empty(t, hooks.Names(), "no scan.completed for a deleted Repo")
+			_, err = s.Results(ctx, r.UUID, sha)
+			require.ErrorIs(t, err, scan.ErrNotScanned)
+		})
+	}
 }

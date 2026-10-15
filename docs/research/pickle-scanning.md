@@ -43,4 +43,4 @@ Research behind Hangar's pickle scanner (META-2, [07](../spec/07-indexing-and-sc
 
 - The scanner trusts the structure it can see. A pickle can build a callable without importing it by name only through an import, so every way to reach code goes through an import the scanner lists; but a safe-listed callable that is later found to be exploitable would pass until the lists change.
 - Pickles nested inside other formats that Hangar does not open (for example a pickle stored as a string inside another pickle, or inside `.npz` files) are not scanned. picklescan scans `.npz`; Hangar does not in v1.0.
-- Results are keyed by scanner version (`scan.Version`). Change it with the lists: `scan.Service.RescanStale` then queues scans of every branch head with older results, which stay readable until the new ones are stored.
+- Results are keyed by scanner version (`scan.Version`). Change it with the lists: `scan.Service.RescanStale` then queues scans of every branch, tag and pull request tip with older results, which stay readable until the new ones are stored.

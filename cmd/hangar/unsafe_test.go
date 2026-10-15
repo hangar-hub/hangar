@@ -168,11 +168,18 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 		return out.Objects[0].Actions["download"].Href
 	}
 
-	// With the setting off every route serves the file. The signed link
-	// is kept to check that links issued before an admin turns blocking on
+	// With the setting off every route serves the file. The signed links
+	// are kept to check that links issued before an admin turns blocking on
 	// are refused too.
 	href := signedHref()
 	require.NotEmpty(t, href)
+	// A Pull-through link signed the same way for a Repo that is not a
+	// Mirror: the gate decides it before the Mirror lookup.
+	nonMirrorHref, err := in.signer.Sign(pub+upstream.PullThroughPath+r.UUID.String()+"/"+oid+"?size="+jsonInt(e.Size),
+		"pull-through:"+r.UUID.String()+":"+oid, time.Hour)
+	require.NoError(t, err)
+	resp, body := do(http.MethodGet, nonMirrorHref, "", false)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode, "the link verifies and the Repo is not a Mirror: %s", body)
 	setBlock(true)
 
 	checks := map[string]func(){
@@ -217,6 +224,9 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode, body)
 			require.Contains(t, body, "evil.pkl")
 			require.Equal(t, cdn, upSrv.Requests("cdn"), "a refused download never reaches the Upstream")
+			resp, body = do(http.MethodGet, nonMirrorHref, "", false)
+			require.Equal(t, http.StatusForbidden, resp.StatusCode, body)
+			require.Contains(t, body, "marked unsafe")
 		},
 	}
 	require.Len(t, checks, len(unsafeDownloadRoutes), "every listed route has a check")
@@ -225,12 +235,12 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 	}
 
 	// Safe files still download everywhere.
-	resp, _ := do(http.MethodGet, pub+"/alice/m/resolve/main/README.md", "", false)
+	resp, _ = do(http.MethodGet, pub+"/alice/m/resolve/main/README.md", "", false)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Turned off again, the links issued earlier download.
 	setBlock(false)
-	resp, body := do(http.MethodGet, href, "", false)
+	resp, body = do(http.MethodGet, href, "", false)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, string(scantest.OSSystemProtocol0()), body)
 	resp, body = do(http.MethodGet, zr.URL, "", false)
