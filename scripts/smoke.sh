@@ -102,7 +102,10 @@ fi
 if want clone; then
   proto="${url%%://*}"
   hostpath="${url#*://}"
-  GIT_TERMINAL_PROMPT=0 git clone -q "$proto://${username}:${token}@${hostpath}/$repo.git" "$work/clone" 2>/dev/null ||
+  # No credential helpers: a GUI helper such as osxkeychain can block the
+  # clone, and git offers URL credentials to helpers for storage, which would
+  # leave the smoke Token in the host's credential store.
+  GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone -q "$proto://${username}:${token}@${hostpath}/$repo.git" "$work/clone" 2>/dev/null ||
     fail clone "git clone"
   [[ "$(cat "$work/clone/smoke.txt")" == "$content" ]] || fail clone "cloned content differs"
   pass "git clone"
