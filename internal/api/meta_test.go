@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/jamesagarside/hangar/internal/api"
 	"github.com/jamesagarside/hangar/internal/api/gen"
+	"github.com/jamesagarside/hangar/internal/audit"
 	"github.com/jamesagarside/hangar/internal/audit/audittest"
 	"github.com/jamesagarside/hangar/internal/auth/authtest"
 	"github.com/jamesagarside/hangar/internal/collections"
@@ -435,5 +437,24 @@ func TestWebhookEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, status)
 	status, _ = e.do("DELETE", "/webhooks/"+repoHook.Id.String(), "alice-token", nil)
 	require.Equal(t, http.StatusNotFound, status)
-	require.Len(t, e.audit.Events(), 4)
+
+	// Every change is audited as webhook.changed (EVT-2), with the URL's
+	// host only, and refused changes are not.
+	receiver, err := url.Parse(e.receiver.URL)
+	require.NoError(t, err)
+	want := []struct{ id, change string }{
+		{nsHook.Id.String(), "created"}, {repoHook.Id.String(), "created"},
+		{repoHook.Id.String(), "updated"}, {repoHook.Id.String(), "deleted"},
+	}
+	audited := e.audit.Events()
+	require.Len(t, audited, len(want))
+	for i, w := range want {
+		ev := audited[i]
+		require.Equal(t, audit.WebhookChanged, ev.Action, "event %d", i)
+		require.Equal(t, "webhook.changed", string(ev.Action))
+		require.Equal(t, "alice", ev.Actor.Username, "event %d", i)
+		require.Equal(t, "webhook", ev.TargetType)
+		require.Equal(t, w.id, ev.TargetID, "event %d", i)
+		require.Equal(t, map[string]any{"change": w.change, "url_host": receiver.Host}, ev.Data, "event %d", i)
+	}
 }

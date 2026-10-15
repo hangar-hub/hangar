@@ -109,6 +109,19 @@ func TestRenameAndTransferRedirect(t *testing.T) {
 		moved, err := e.svc.Transfer(e.ctx, renamed.ID, "bob", alice)
 		require.NoError(t, err)
 		require.Equal(t, model.RepoID{Type: model.RepoTypeModel, Namespace: "bob", Name: "second"}, moved.ID)
+
+		// Both moves are audited with the old and new IDs (EVT-2).
+		renames := e.auditEvents(audit.RepoRenamed)
+		require.Len(t, renames, 1)
+		require.Equal(t, alice.UserID, renames[0].Actor.UserID)
+		require.Equal(t, "repo", renames[0].TargetType)
+		require.Equal(t, "model:alice/second", renames[0].TargetID)
+		require.Equal(t, map[string]any{"from": "alice/first", "to": "alice/second"}, renames[0].Data)
+		transfers := e.auditEvents(audit.RepoTransferred)
+		require.Len(t, transfers, 1)
+		require.Equal(t, alice.UserID, transfers[0].Actor.UserID)
+		require.Equal(t, "model:bob/second", transfers[0].TargetID)
+		require.Equal(t, map[string]any{"from": "alice/second", "to": "bob/second"}, transfers[0].Data)
 		for _, id := range []model.RepoID{old, renamed.ID, {Type: model.RepoTypeModel, Namespace: "BOB", Name: "SECOND"}} {
 			got, err := e.svc.Get(e.ctx, id)
 			require.NoError(t, err, id.String())
@@ -131,6 +144,8 @@ func TestRenameAndTransferRedirect(t *testing.T) {
 		e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "bob", Name: "first"}, Actor: alice})
 		_, err = e.svc.Transfer(e.ctx, old, "bob", alice)
 		require.ErrorIs(t, err, repo.ErrExists)
+		require.Len(t, e.auditEvents(audit.RepoRenamed), 1, "a refused rename is not audited")
+		require.Len(t, e.auditEvents(audit.RepoTransferred), 1, "a refused transfer is not audited")
 		// A change of case keeps the same ID working.
 		cased, err := e.svc.Rename(e.ctx, old, "FIRST", alice)
 		require.NoError(t, err)
