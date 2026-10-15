@@ -35,7 +35,9 @@ function Event({ e }: { e: DiscussionEvent }) {
           {e.hidden ? (
             <p className="text-sm text-muted">This comment is hidden.</p>
           ) : (
-            <LazyMarkdown externalImages={external}>{e.body ?? ""}</LazyMarkdown>
+            <LazyMarkdown externalImages={external} headingLevel={3}>
+              {e.body ?? ""}
+            </LazyMarkdown>
           )}
         </div>
       </li>
