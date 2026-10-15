@@ -79,6 +79,26 @@ func JobResource(j *jobs.Job) gen.Job {
 	return out
 }
 
+// resource is JobResource with the Repo's current ID in payload.repo when
+// the payload does not name it, as dataset.convert and mirror.sync Jobs
+// carry only the Repo UUID. The Jobs drawer titles Jobs by Repo. repos
+// holds the Repos jobAccess read.
+func (h *Jobs) resource(j *jobs.Job, repos map[uuid.UUID]*repo.Repo) gen.Job {
+	out := JobResource(j)
+	r := repos[j.Repo]
+	if j.Repo == uuid.Nil || r == nil {
+		return out
+	}
+	if out.Payload == nil {
+		m := map[string]any{}
+		out.Payload = &m
+	}
+	if _, ok := (*out.Payload)["repo"]; !ok {
+		(*out.Payload)["repo"] = r.ID.String()
+	}
+	return out
+}
+
 func jobJSONObject(raw json.RawMessage) map[string]any {
 	if len(raw) == 0 {
 		return nil
@@ -283,7 +303,7 @@ func (h *Jobs) listVisible(ctx context.Context, p model.Principal, f jobs.Filter
 			case err != nil:
 				return out, err
 			}
-			out.Items = append(out.Items, JobResource(j))
+			out.Items = append(out.Items, h.resource(j, repos))
 			if len(out.Items) == f.Limit {
 				if i < len(list)-1 || next != "" {
 					c := j.ID.String()
@@ -315,12 +335,11 @@ func knownJobKind(k jobs.Kind) bool {
 // lookup returns a Job the caller may see and, with write, change, or
 // writes 401, 403 or 404. A Job the caller may not see is 404 whatever
 // their Token's scope; one they may see but not change is 403.
-func (h *Jobs) lookup(w http.ResponseWriter, r *http.Request, id gen.ID, write bool) (model.Principal, *jobs.Job, bool) {
+func (h *Jobs) lookup(w http.ResponseWriter, r *http.Request, id gen.ID, write bool, repos map[uuid.UUID]*repo.Repo) (model.Principal, *jobs.Job, bool) {
 	p, ok := jobsCaller(w, r)
 	if !ok {
 		return p, nil, false
 	}
-	repos := map[uuid.UUID]*repo.Repo{}
 	j, err := h.Queue.Get(r.Context(), id)
 	if err == nil {
 		err = h.jobAccess(r.Context(), p, j, false, repos)
@@ -347,8 +366,9 @@ func (h *Jobs) lookup(w http.ResponseWriter, r *http.Request, id gen.ID, write b
 
 // GetJob implements gen.ServerInterface.
 func (h *Jobs) GetJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
-	if _, j, ok := h.lookup(w, r, id, false); ok {
-		httpx.WriteJSON(w, r, http.StatusOK, JobResource(j))
+	repos := map[uuid.UUID]*repo.Repo{}
+	if _, j, ok := h.lookup(w, r, id, false, repos); ok {
+		httpx.WriteJSON(w, r, http.StatusOK, h.resource(j, repos))
 	}
 }
 
@@ -362,7 +382,8 @@ func jobsCanWrite(w http.ResponseWriter, r *http.Request, p model.Principal) boo
 
 // CancelJob implements gen.ServerInterface.
 func (h *Jobs) CancelJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
-	if _, _, ok := h.lookup(w, r, id, true); !ok {
+	repos := map[uuid.UUID]*repo.Repo{}
+	if _, _, ok := h.lookup(w, r, id, true, repos); !ok {
 		return
 	}
 	switch err := h.Queue.Cancel(r.Context(), id); {
@@ -381,12 +402,13 @@ func (h *Jobs) CancelJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
 		platformFail(w, r, "Could not read the Job.", err)
 		return
 	}
-	httpx.WriteJSON(w, r, http.StatusOK, JobResource(j))
+	httpx.WriteJSON(w, r, http.StatusOK, h.resource(j, repos))
 }
 
 // RetryJob implements gen.ServerInterface. It answers with the new Job.
 func (h *Jobs) RetryJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
-	if _, _, ok := h.lookup(w, r, id, true); !ok {
+	repos := map[uuid.UUID]*repo.Repo{}
+	if _, _, ok := h.lookup(w, r, id, true, repos); !ok {
 		return
 	}
 	newID, err := h.Queue.Retry(r.Context(), id)
@@ -403,5 +425,5 @@ func (h *Jobs) RetryJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
 		platformFail(w, r, "Could not read the Job.", err)
 		return
 	}
-	httpx.WriteJSON(w, r, http.StatusAccepted, JobResource(j))
+	httpx.WriteJSON(w, r, http.StatusAccepted, h.resource(j, repos))
 }
