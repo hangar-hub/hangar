@@ -32,9 +32,11 @@ const (
 	// chunks one shard holds in memory at once: 16 whole xorbs, about
 	// 5.5 MiB at 44 bytes a chunk.
 	DefaultMaxShardIndexChunks = 16 * MaxXorbChunks
-	// indexLoadsFactor is how many times MaxShardChunks of index one shard
-	// may load in all. A shard is checked in passes (ranges, CAS info,
-	// files, rebuilds), and each may load every index again.
+	// indexLoadsFactor is the number of passes a shard is checked in
+	// (ranges, CAS info, files, rebuilds), each of which may load every
+	// index again. It sets the default of MaxShardIndexLoads (this many
+	// times MaxShardChunks) and the index a shard pays for: this many loads
+	// of each xorb it names, and this many index chunks per chunk it names.
 	indexLoadsFactor = 4
 )
 
@@ -63,8 +65,9 @@ type Limits struct {
 	// it should be at least MaxXorbChunks.
 	MaxShardIndexChunks int64
 	// MaxShardIndexLoads is the most xorb index chunks one shard may load
-	// in all, reloads after a drop included. It bounds the reading and
-	// hashing a shard can cause by naming many xorbs.
+	// in all, reloads after a drop included, whatever the shard names. It
+	// is a ceiling: each shard may also load only what it pays for (see
+	// Shard.indexReloadAllowance), which is far less for a small shard.
 	MaxShardIndexLoads int64
 }
 
@@ -99,7 +102,16 @@ func (l Limits) WithDefaults() Limits {
 	return l
 }
 
-// satMul multiplies two positive numbers, saturating at math.MaxInt64.
+// satAdd adds two non-negative numbers, saturating at math.MaxInt64.
+func satAdd(a, b int64) int64 {
+	if b > math.MaxInt64-a {
+		return math.MaxInt64
+	}
+	return a + b
+}
+
+// satMul multiplies a positive number by a non-negative one, saturating at
+// math.MaxInt64.
 func satMul(a, b int64) int64 {
 	if b > math.MaxInt64/a {
 		return math.MaxInt64
@@ -164,6 +176,31 @@ func CheckRanges(s *Shard, index IndexFunc) error {
 		}
 	}
 	return nil
+}
+
+// indexReloadAllowance is the index chunks the shard may load beyond
+// indexLoadsFactor loads of each xorb it names: MaxShardIndexChunks (one
+// refill of the index cache) plus indexLoadsFactor index chunks for each
+// chunk its terms and CAS info name. Loading an index costs about as much
+// as hashing as many chunk references, so a shard can make Hangar reload
+// indexes only in proportion to the chunks it declares, which its checks
+// hash anyway. Without it, a shard of one-chunk terms cycling through more
+// xorbs than the cache holds reloads a whole xorb index per 48-byte term,
+// up to the MaxShardIndexLoads ceiling.
+func (s *Shard) indexReloadAllowance(l Limits) int64 {
+	l = l.WithDefaults()
+	var refs int64
+	for i := range s.Files {
+		for _, t := range s.Files[i].Terms {
+			if t.End > t.Start {
+				refs = satAdd(refs, int64(t.End-t.Start))
+			}
+		}
+	}
+	for i := range s.Xorbs {
+		refs = satAdd(refs, int64(len(s.Xorbs[i].Chunks)))
+	}
+	return satAdd(l.MaxShardIndexChunks, satMul(indexLoadsFactor, refs))
 }
 
 // spend takes n bytes from a shard's rebuild budget, or reports that

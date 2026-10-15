@@ -20,18 +20,33 @@ import (
 	"github.com/jamesagarside/hangar/internal/xet/xettest"
 )
 
-// indexReads counts reads of stored xorb indexes: ranged reads from the
-// start of a xorb object.
+// indexReads counts reads of stored xorb indexes (ranged reads from the
+// start of a xorb object) and the bytes the last one read.
 type indexReads struct {
 	blob.Store
-	n atomic.Int64
+	n    atomic.Int64
+	last *atomic.Int64
 }
 
 func (s *indexReads) Get(ctx context.Context, key string, rng *blob.Range) (io.ReadCloser, blob.Info, error) {
-	if strings.HasPrefix(key, "xet/xorbs/") && rng != nil && rng.Start == 0 {
-		s.n.Add(1)
+	rc, info, err := s.Store.Get(ctx, key, rng)
+	if err != nil || !strings.HasPrefix(key, "xet/xorbs/") || rng == nil || rng.Start != 0 {
+		return rc, info, err
 	}
-	return s.Store.Get(ctx, key, rng)
+	s.n.Add(1)
+	s.last = &atomic.Int64{}
+	return countingReader{rc, s.last}, info, nil
+}
+
+type countingReader struct {
+	io.ReadCloser
+	n *atomic.Int64
+}
+
+func (r countingReader) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	r.n.Add(int64(n))
+	return n, err
 }
 
 // indexEnv is an env whose index reads are counted and whose AcceptShard
@@ -60,6 +75,15 @@ func newIndexEnv(t *testing.T, lim xet.Limits) *indexEnv {
 // as loaded in all and held at most at once.
 func (ie *indexEnv) indexChunks(t *testing.T) (loaded, peak int64) {
 	t.Helper()
+	loaded, peak, _ = ie.indexStats(t)
+	return loaded, peak
+}
+
+// indexStats returns the index chunks the last AcceptShard span recorded
+// as loaded in all, held at most at once, and allowed for what the shard
+// names.
+func (ie *indexEnv) indexStats(t *testing.T) (loaded, peak, allowed int64) {
+	t.Helper()
 	ended := ie.spans.Ended()
 	for i := len(ended) - 1; i >= 0; i-- {
 		if ended[i].Name() != "xet.AcceptShard" {
@@ -74,13 +98,16 @@ func (ie *indexEnv) indexChunks(t *testing.T) (loaded, peak int64) {
 			case attribute.Key("xet.shard.index_chunks_peak"):
 				peak = kv.Value.AsInt64()
 				found++
+			case attribute.Key("xet.shard.index_chunks_allowed"):
+				allowed = kv.Value.AsInt64()
+				found++
 			}
 		}
-		require.Equal(t, 2, found, "the span does not record the index chunks")
-		return loaded, peak
+		require.Equal(t, 3, found, "the span does not record the index chunks")
+		return loaded, peak, allowed
 	}
 	t.Fatal("no xet.AcceptShard span")
-	return 0, 0
+	return 0, 0, 0
 }
 
 // fullXorbs stores n distinct xorbs of chunks one-byte chunks each: the
@@ -100,9 +127,18 @@ func (ie *indexEnv) fullXorbs(t *testing.T, n, chunks int) []xettest.Xorb {
 // oneChunkOfEach is a file of one term per xorb, each naming one chunk:
 // the most index loaded per byte of shard.
 func oneChunkOfEach(xorbs []xettest.Xorb) (xet.ShardFile, []byte) {
-	parts := make([]xorbPart, len(xorbs))
-	for i, x := range xorbs {
-		parts[i] = xorbPart{x, chunkRange{0, 1}}
+	return cycle(xorbs, 1, 1)
+}
+
+// cycle is a file that names the first chunks chunks of each xorb in turn,
+// rounds times over. With more xorbs than the index cache holds, every term
+// needs its xorb's index loaded again.
+func cycle(xorbs []xettest.Xorb, chunks uint32, rounds int) (xet.ShardFile, []byte) {
+	var parts []xorbPart
+	for range rounds {
+		for _, x := range xorbs {
+			parts = append(parts, xorbPart{x, chunkRange{0, chunks}})
+		}
 	}
 	return buildFileFrom(parts...)
 }
@@ -124,14 +160,77 @@ func TestShardIndexMemoryIsBounded(t *testing.T) {
 		_, err := ie.acceptFiles(t, f)
 		require.NoError(t, err)
 		require.Equal(t, data, ie.objectBytes(t, sha(data)))
-		loaded, peak := ie.indexChunks(t)
+		loaded, peak, allowed := ie.indexStats(t)
 		require.LessOrEqual(t, peak, int64(xet.DefaultMaxShardIndexChunks))
 		require.Greater(t, loaded, int64(20*xet.MaxXorbChunks), "the indexes were never dropped and reloaded")
 		require.LessOrEqual(t, loaded, xet.Limits{}.WithDefaults().MaxShardIndexLoads)
+		// One cache refill and four index chunks per chunk named, plus four
+		// loads of each xorb named.
+		require.Equal(t, int64(xet.DefaultMaxShardIndexChunks+4*20+4*20*xet.MaxXorbChunks), allowed)
+		require.LessOrEqual(t, loaded, allowed)
+	})
+
+	t.Run("reloads are paid for by the chunks a shard names", func(t *testing.T) {
+		// The 1.34 MB probe, scaled down: one chunk of each of 17 full
+		// xorbs, one more than the cache holds, named six times over in a
+		// shard of about 10 KB, so every term reloads a whole 8,192-chunk
+		// index. Against the fixed ceiling alone (104,857,600 index chunks
+		// at the defaults) it was accepted after 306 index loads; a 1.34 MB
+		// shard of the same shape could make Hangar load the whole ceiling.
+		ie := newIndexEnv(t, xet.Limits{})
+		const n = 17
+		xorbs := ie.fullXorbs(t, n, xet.MaxXorbChunks)
+		f, data := cycle(xorbs, 1, 6)
+		ie.reads.n.Store(0)
+		_, err := ie.acceptFiles(t, f)
+		require.ErrorIs(t, err, xet.ErrTooLarge)
+		require.ErrorContains(t, err, "index chunks it may load for the xorbs and chunks it names")
+		require.False(t, ie.stored(t, data))
+
+		loaded, peak, allowed := ie.indexStats(t)
+		// What the shard pays for follows from what it names: one cache
+		// refill, four index chunks for each of its 102 chunk references,
+		// and four loads of each of its 17 xorbs.
+		require.Equal(t, int64(xet.DefaultMaxShardIndexChunks+4*6*n+4*n*xet.MaxXorbChunks), allowed)
+		require.LessOrEqual(t, loaded, allowed)
+		require.Greater(t, loaded, allowed-xet.MaxXorbChunks, "refused before the allowance was used up")
+		require.LessOrEqual(t, peak, int64(xet.DefaultMaxShardIndexChunks))
+		require.Less(t, loaded*100, xet.Limits{}.WithDefaults().MaxShardIndexLoads,
+			"the fixed ceiling is still what bounds the shard")
+		// Every load was charged from its header, and the refused one read
+		// only the 24-byte header: no entry was read or decoded.
+		require.Equal(t, loaded/xet.MaxXorbChunks+1, ie.reads.n.Load())
+		require.Equal(t, int64(24), ie.reads.last.Load())
 	})
 
 	// Xorbs of 64 chunks; a shard may hold two of them at once.
 	lim := xet.Limits{MaxShardIndexChunks: 128}
+
+	t.Run("whole-xorb terms may reload as often as they name", func(t *testing.T) {
+		// Three 64-chunk xorbs cycled four times through a cache that holds
+		// two: every term reloads its xorb in every pass. Naming whole
+		// xorbs pays for that; naming one chunk of each the same number of
+		// times does not.
+		ie := newIndexEnv(t, lim)
+		xorbs := ie.fullXorbs(t, 3, 64)
+		f, data := cycle(xorbs, 64, 4)
+		_, err := ie.acceptFiles(t, f)
+		require.NoError(t, err)
+		require.Equal(t, data, ie.objectBytes(t, sha(data)))
+		loaded, peak, allowed := ie.indexStats(t)
+		require.Equal(t, int64(3*12*64), loaded, "ranges, file check and rebuild each reload all 12 terms")
+		require.Equal(t, int64(128+4*12*64+4*3*64), allowed)
+		require.LessOrEqual(t, peak, int64(128))
+
+		f, data = cycle(xorbs, 1, 4)
+		_, err = ie.acceptFiles(t, f)
+		require.ErrorIs(t, err, xet.ErrTooLarge)
+		require.ErrorContains(t, err, "over the 944 index chunks it may load for the xorbs and chunks it names")
+		require.False(t, ie.stored(t, data))
+		loaded, _, allowed = ie.indexStats(t)
+		require.Equal(t, int64(128+4*12+4*3*64), allowed)
+		require.LessOrEqual(t, loaded, allowed)
+	})
 
 	t.Run("more xorbs than fit are still accepted", func(t *testing.T) {
 		ie := newIndexEnv(t, lim)
