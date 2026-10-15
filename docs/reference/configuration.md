@@ -49,6 +49,7 @@ Blob store for LFS objects, git data and uploads.
 | `storage.s3.secret_access_key`<br>`HANGAR_STORAGE_S3_SECRET_ACCESS_KEY` | string | `""` | Secret access key. |
 | `storage.s3.use_path_style`<br>`HANGAR_STORAGE_S3_USE_PATH_STYLE` | bool | `false` | Use path-style bucket addressing, as MinIO and some other stores need. |
 | `storage.s3.download_mode`<br>`HANGAR_STORAGE_S3_DOWNLOAD_MODE` | string | `redirect` | redirect sends clients to presigned URLs; proxy streams bytes through Hangar. |
+| `storage.s3.upload_mode`<br>`HANGAR_STORAGE_S3_UPLOAD_MODE` | string | `direct` | direct gives clients presigned URLs to upload LFS objects and parts to the store; proxy has them upload through Hangar. Use proxy when clients cannot reach the endpoint. |
 | `storage.s3.presign_ttl`<br>`HANGAR_STORAGE_S3_PRESIGN_TTL` | duration | `1h` | Lifetime of presigned download URLs. |
 
 ## `security`

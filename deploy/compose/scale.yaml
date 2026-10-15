@@ -49,6 +49,7 @@ x-hangar: &hangar
     HANGAR_STORAGE_S3_ACCESS_KEY_ID: hangar
     HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
     HANGAR_STORAGE_S3_DOWNLOAD_MODE: proxy
+    HANGAR_STORAGE_S3_UPLOAD_MODE: proxy
     OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     HANGAR_TELEMETRY_ENVIRONMENT: compose-scale

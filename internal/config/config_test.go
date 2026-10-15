@@ -33,6 +33,7 @@ func TestDefaultsValidateWithRequiredKeys(t *testing.T) {
 	require.Equal(t, "https://huggingface.co", cfg.Upstreams["huggingface"].BaseURL)
 	require.Equal(t, "hangar-admin", cfg.Security.BootstrapAdmin.Username, "admin is a reserved Namespace name")
 	require.Equal(t, "http://localhost:8080/xet-cas", cfg.CASURL())
+	require.Equal(t, config.UploadDirect, cfg.Storage.S3.UploadMode, "clients upload straight to the store by default")
 	key, err := cfg.InstanceKeyBytes()
 	require.NoError(t, err)
 	require.Len(t, key, 32)
@@ -45,6 +46,8 @@ func TestValidateReportsEveryError(t *testing.T) {
 	cfg.Pull.Windows = []string{"25:00-07:00"}
 	cfg.GC.Schedule = "every day"
 	cfg.Telemetry.LogLevel = "trace"
+	cfg.Storage.S3.DownloadMode = "stream"
+	cfg.Storage.S3.UploadMode = "presigned"
 	err := cfg.Validate()
 	require.Error(t, err)
 	var errs config.Errors
@@ -58,10 +61,12 @@ func TestValidateReportsEveryError(t *testing.T) {
 		"pull.windows",
 		"gc.schedule",
 		"telemetry.log_level",
+		`storage.s3.download_mode "stream" must be redirect or proxy`,
+		`storage.s3.upload_mode "presigned" must be direct or proxy`,
 	} {
 		require.Contains(t, msg, want)
 	}
-	require.GreaterOrEqual(t, len(errs), 7)
+	require.GreaterOrEqual(t, len(errs), 9)
 }
 
 func TestLoadOrderFileEnvFlags(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/require"
@@ -57,4 +58,34 @@ func TestMapErrKeepsS3CodeForTelemetry(t *testing.T) {
 	_, ok = errors.AsType[blob.CodedError](mapErr(noCode, "x"))
 	require.False(t, ok, "a response with no code has nothing to record")
 	require.NoError(t, mapErr(nil, "x"))
+}
+
+// TestProxyModesRefusePresigning checks that the proxy upload and
+// download modes make the store refuse to presign, so every caller falls
+// back to URLs that Hangar serves. No request reaches the endpoint.
+func TestProxyModesRefusePresigning(t *testing.T) {
+	ctx := t.Context()
+	s, err := New(Options{Endpoint: "http://minio.invalid:9000", Bucket: "hangar", AccessKeyID: "k", SecretAccessKey: "s", Region: "us-east-1",
+		UsePathStyle: true, ProxyUploads: true, ProxyDownloads: true})
+	require.NoError(t, err)
+	_, err = s.PresignPut(ctx, "lfs/sha256/ab/cd/x", 10, nil, time.Minute)
+	require.ErrorIs(t, err, blob.ErrNotSupported)
+	_, err = s.PresignPart(ctx, "lfs/sha256/ab/cd/x", "upload", 1, time.Minute)
+	require.ErrorIs(t, err, blob.ErrNotSupported)
+	_, err = s.PresignGet(ctx, "lfs/sha256/ab/cd/x", time.Minute, "x.bin")
+	require.ErrorIs(t, err, blob.ErrNotSupported)
+
+	// Without them the store presigns locally, also with no request.
+	s, err = New(Options{Endpoint: "http://minio.invalid:9000", Bucket: "hangar", AccessKeyID: "k", SecretAccessKey: "s", Region: "us-east-1",
+		UsePathStyle: true})
+	require.NoError(t, err)
+	pr, err := s.PresignPut(ctx, "lfs/sha256/ab/cd/x", 10, nil, time.Minute)
+	require.NoError(t, err)
+	require.Contains(t, pr.URL, "minio.invalid:9000")
+	u, err := s.PresignPart(ctx, "lfs/sha256/ab/cd/x", "upload", 1, time.Minute)
+	require.NoError(t, err)
+	require.Contains(t, u, "partNumber=1")
+	u, err = s.PresignGet(ctx, "lfs/sha256/ab/cd/x", time.Minute, "x.bin")
+	require.NoError(t, err)
+	require.Contains(t, u, "X-Amz-Signature")
 }

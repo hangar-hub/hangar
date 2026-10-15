@@ -31,6 +31,15 @@ func TestOpenErrors(t *testing.T) {
 	require.Error(t, err, "the bucket is required")
 }
 
+func TestS3OptionsProxyModes(t *testing.T) {
+	o := backends.S3Options(config.S3Config{Bucket: "hangar", DownloadMode: config.DownloadRedir, UploadMode: config.UploadDirect})
+	require.False(t, o.ProxyUploads)
+	require.False(t, o.ProxyDownloads)
+	o = backends.S3Options(config.S3Config{Bucket: "hangar", DownloadMode: config.DownloadProxy, UploadMode: config.UploadProxy})
+	require.True(t, o.ProxyUploads, "upload_mode proxy stops presigned uploads")
+	require.True(t, o.ProxyDownloads, "download_mode proxy stops presigned downloads, zip exports included")
+}
+
 func TestOpenS3(t *testing.T) {
 	if !blobtest.S3Enabled() {
 		t.Logf("S3 tests not registered: set %s=1 (needs Docker)", blobtest.EnvMinIO)
@@ -41,7 +50,7 @@ func TestOpenS3(t *testing.T) {
 	cfg := config.StorageConfig{Backend: config.BackendS3, S3: config.S3Config{
 		Endpoint: srv.Endpoint, Region: srv.Region, Bucket: srv.Bucket, Prefix: "backends",
 		AccessKeyID: srv.AccessKey, SecretAccessKey: srv.SecretKey, UsePathStyle: true,
-		DownloadMode: blob.DownloadRedirect, PresignTTL: time.Minute,
+		DownloadMode: blob.DownloadRedirect, UploadMode: config.UploadDirect, PresignTTL: time.Minute,
 	}}
 	s, err := backends.Open(context.Background(), cfg)
 	require.NoError(t, err)
@@ -52,10 +61,21 @@ func TestOpenS3(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, u, "X-Amz-Signature")
 
+	_, err = s.PresignPut(context.Background(), "lfs/x", 1, nil, time.Minute)
+	require.NoError(t, err, "upload_mode direct presigns uploads")
+
 	cfg.S3.DownloadMode = blob.DownloadProxy
 	_, ok, err = backends.Downloads(cfg, s).RedirectURL(context.Background(), "lfs/x", "x.bin")
 	require.NoError(t, err)
 	require.False(t, ok)
+
+	cfg.S3.UploadMode = config.UploadProxy
+	s, err = backends.Open(context.Background(), cfg)
+	require.NoError(t, err)
+	_, err = s.PresignPut(context.Background(), "lfs/x", 1, nil, time.Minute)
+	require.ErrorIs(t, err, blob.ErrNotSupported, "upload_mode proxy makes callers fall back to Hangar URLs")
+	_, err = s.PresignGet(context.Background(), "lfs/x", time.Minute, "x.bin")
+	require.ErrorIs(t, err, blob.ErrNotSupported, "download_mode proxy makes zip exports stream too")
 
 	cfg.S3.Bucket = "hangar-no-such-bucket"
 	_, err = backends.Open(context.Background(), cfg)

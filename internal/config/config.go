@@ -62,12 +62,14 @@ type DatabaseConfig struct {
 	MaxOpenConns int    `koanf:"max_open_conns" desc:"Maximum open database connections per process."`
 }
 
-// Storage backends and download modes.
+// Storage backends, download modes and upload modes.
 const (
 	BackendFS     = "fs"
 	BackendS3     = "s3"
 	DownloadRedir = "redirect"
 	DownloadProxy = "proxy"
+	UploadDirect  = "direct"
+	UploadProxy   = "proxy"
 )
 
 // StorageConfig configures the Blob store.
@@ -92,6 +94,7 @@ type S3Config struct {
 	SecretAccessKey string        `koanf:"secret_access_key" desc:"Secret access key." secret:"true"`
 	UsePathStyle    bool          `koanf:"use_path_style" desc:"Use path-style bucket addressing, as MinIO and some other stores need."`
 	DownloadMode    string        `koanf:"download_mode" desc:"redirect sends clients to presigned URLs; proxy streams bytes through Hangar."`
+	UploadMode      string        `koanf:"upload_mode" desc:"direct gives clients presigned URLs to upload LFS objects and parts to the store; proxy has them upload through Hangar. Use proxy when clients cannot reach the endpoint."`
 	PresignTTL      time.Duration `koanf:"presign_ttl" desc:"Lifetime of presigned download URLs."`
 }
 
@@ -279,6 +282,7 @@ func Default() Config {
 				Region:       "eu-west-2",
 				Bucket:       "hangar",
 				DownloadMode: DownloadRedir,
+				UploadMode:   UploadDirect,
 				PresignTTL:   time.Hour,
 			},
 		},

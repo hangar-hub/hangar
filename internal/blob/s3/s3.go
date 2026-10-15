@@ -45,6 +45,15 @@ type Options struct {
 	// UsePathStyle selects path-style bucket addressing, as MinIO and some
 	// other stores need.
 	UsePathStyle bool
+	// ProxyUploads makes PresignPut and PresignPart return
+	// blob.ErrNotSupported, so callers hand clients upload URLs that Hangar
+	// serves, for stores whose endpoint clients cannot reach
+	// (storage.s3.upload_mode proxy).
+	ProxyUploads bool
+	// ProxyDownloads makes PresignGet return blob.ErrNotSupported, so every
+	// download, zip exports included, streams through Hangar
+	// (storage.s3.download_mode proxy).
+	ProxyDownloads bool
 	// Transport overrides the HTTP transport, for tests.
 	Transport http.RoundTripper
 }
@@ -59,6 +68,8 @@ type Store struct {
 	core   *minio.Core
 	bucket string
 	prefix string
+
+	proxyUploads, proxyDownloads bool
 }
 
 var (
@@ -104,7 +115,8 @@ func New(opts Options) (*Store, error) {
 	if prefix != "" {
 		prefix += "/"
 	}
-	return &Store{client: core.Client, core: core, bucket: opts.Bucket, prefix: prefix}, nil
+	return &Store{client: core.Client, core: core, bucket: opts.Bucket, prefix: prefix,
+		proxyUploads: opts.ProxyUploads, proxyDownloads: opts.ProxyDownloads}, nil
 }
 
 func parseEndpoint(endpoint string) (host string, secure bool, err error) {
@@ -460,8 +472,12 @@ func (s *Store) CreateMultipart(ctx context.Context, key string) (string, error)
 	return id, mapErr(err, key)
 }
 
-// PresignPart implements blob.Store.
+// PresignPart implements blob.Store. It returns blob.ErrNotSupported with
+// Options.ProxyUploads.
 func (s *Store) PresignPart(ctx context.Context, key, uploadID string, part int, ttl time.Duration) (string, error) {
+	if s.proxyUploads {
+		return "", blob.ErrNotSupported
+	}
 	k, err := s.objectKey(key)
 	if err != nil {
 		return "", err
@@ -562,7 +578,12 @@ func (s *Store) AbortMultipart(ctx context.Context, key, uploadID string) error 
 // attachment naming filename, whatever the object was stored with, so a
 // browser never renders an uploaded file (HTML, SVG) on the bucket's
 // origin.
+//
+// It returns blob.ErrNotSupported with Options.ProxyDownloads.
 func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration, filename string) (string, error) {
+	if s.proxyDownloads {
+		return "", blob.ErrNotSupported
+	}
 	k, err := s.objectKey(key)
 	if err != nil {
 		return "", err
@@ -586,8 +607,12 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration, f
 // and a signed header it leaves out fails the upload; the stored type is
 // then whatever the client sent, which is safe because every download
 // forces blob.SafeContentType (PresignGet, blob.Downloads.Serve). Objects
-// over 5 GiB need multipart.
+// over 5 GiB need multipart. It returns blob.ErrNotSupported with
+// Options.ProxyUploads.
 func (s *Store) PresignPut(ctx context.Context, key string, size int64, sum []byte, ttl time.Duration) (blob.PresignedRequest, error) {
+	if s.proxyUploads {
+		return blob.PresignedRequest{}, blob.ErrNotSupported
+	}
 	k, err := s.objectKey(key)
 	if err != nil {
 		return blob.PresignedRequest{}, err

@@ -35,6 +35,8 @@ It exits with 1 if any check fails, so you can use it in scripts.
 
 **Downloads fail with a 403 from the store, or a TLS error.** In S3 `redirect` mode, clients download straight from the store, so they must reach `storage.s3.endpoint` and trust its certificate, and the clocks must agree. Use `download_mode: proxy` if clients cannot reach the store.
 
+**Large-file uploads fail with a host lookup or connection error for the store's endpoint.** In S3 `direct` upload mode, git-lfs, `huggingface_hub` and `hangar push` upload LFS objects straight to the store, so clients must reach `storage.s3.endpoint`. Use `upload_mode: proxy` if they cannot.
+
 **`huggingface_hub` says a Repo does not exist.** Private Repos answer as missing without a Token that can read them. Check `HF_TOKEN` and `hangar whoami`. For a Mirror, check the Pull finished under **Jobs**.
 
 **`load_dataset` hangs before it starts.** It is waiting for `datasets-server.<host>`; see [Datasets](../guides/datasets.md#the-datasets-server-name).

@@ -109,6 +109,11 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	default:
 		e.addf("storage.s3.download_mode %q must be redirect or proxy", c.Storage.S3.DownloadMode)
 	}
+	switch c.Storage.S3.UploadMode {
+	case UploadDirect, UploadProxy:
+	default:
+		e.addf("storage.s3.upload_mode %q must be direct or proxy", c.Storage.S3.UploadMode)
+	}
 	if c.Storage.S3.PresignTTL < time.Minute || c.Storage.S3.PresignTTL > 7*24*time.Hour {
 		e.addf("storage.s3.presign_ttl must be between 1m and 168h (the S3 limit)")
 	}

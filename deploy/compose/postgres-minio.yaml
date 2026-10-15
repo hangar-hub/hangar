@@ -90,9 +90,11 @@ services:
       HANGAR_STORAGE_S3_USE_PATH_STYLE: "true"
       HANGAR_STORAGE_S3_ACCESS_KEY_ID: hangar
       HANGAR_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
-      # MinIO is not reachable from your browser at http://minio:9000, so
-      # downloads stream through Hangar instead of redirecting.
+      # MinIO is not reachable from your browser or your clients at
+      # http://minio:9000, so downloads and uploads go through Hangar
+      # instead of presigned MinIO URLs.
       HANGAR_STORAGE_S3_DOWNLOAD_MODE: proxy
+      HANGAR_STORAGE_S3_UPLOAD_MODE: proxy
     volumes:
       # Only secrets.yaml (the generated Instance key and admin password).
       - hangar-data:/var/lib/hangar
