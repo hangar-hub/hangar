@@ -262,7 +262,7 @@ func (f *Fake) GetByUUID(_ context.Context, id uuid.UUID) (*repo.Repo, error) {
 func (f *Fake) List(_ context.Context, opts repo.ListOptions) (*repo.ListResult, error) {
 	if len(opts.Formats)+len(opts.Tasks)+len(opts.Libraries)+len(opts.Quants)+len(opts.Licences)+
 		len(opts.Modalities)+len(opts.Languages)+len(opts.SizeCategories) > 0 ||
-		opts.ParamsMin+opts.ParamsMax+opts.ContextMin+opts.SizeMax > 0 || opts.IncludeFacets {
+		opts.ParamsMin+opts.ParamsMax+opts.ContextMin+opts.SizeMax+opts.RowsMin+opts.RowsMax > 0 || opts.IncludeFacets {
 		return nil, errors.New("repotest: metadata filters and facets need the index; the fake does not support them")
 	}
 	f.mu.Lock()

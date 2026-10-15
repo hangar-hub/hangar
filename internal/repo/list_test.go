@@ -133,6 +133,13 @@ func TestListMetadataFiltersAndFacets(t *testing.T) {
 			SizeCategory: "n<1K", Formats: []string{"parquet"}, Tasks: []string{"text-classification"}}})
 		_, err = idx.Index(e.ctx, ds.UUID, ds.ID, head)
 		require.NoError(t, err)
+		big := e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "big"}, Actor: alice})
+		head, err = e.svc.Resolve(e.ctx, big.ID, "")
+		require.NoError(t, err)
+		idx.SetSummary(big.UUID, head, &index.Summary{Dataset: &index.DatasetSummary{Rows: 50_000, SizeCategory: "10K<n<100K",
+			SplitSizes: []index.SplitSize{{Config: "default", Split: "train", Rows: 50_000}}}})
+		_, err = idx.Index(e.ctx, big.UUID, big.ID, head)
+		require.NoError(t, err)
 		require.NoError(t, comm.Like(e.ctx, alice.UserID, st.UUID))
 
 		list := func(o repo.ListOptions) *repo.ListResult {
@@ -151,7 +158,14 @@ func TestListMetadataFiltersAndFacets(t *testing.T) {
 		require.Equal(t, []string{"dataset:alice/ds"}, ids(list(repo.ListOptions{Modalities: []string{"text"}, Languages: []string{"en"}, SizeCategories: []string{"n<1K"}})))
 		require.Equal(t, []string{"model:alice/gguf", "model:alice/st"}, ids(list(repo.ListOptions{Sort: "parameters", Desc: true, Formats: []string{"gguf", "safetensors"}})))
 		require.Equal(t, "model:alice/st", ids(list(repo.ListOptions{Sort: "likes", Desc: true}))[0])
-		require.Len(t, ids(list(repo.ListOptions{Sort: "downloads"})), 4)
+		require.Len(t, ids(list(repo.ListOptions{Sort: "downloads"})), 5)
+
+		// Rows (DATA-11): only datasets whose row count is known match a bound.
+		require.Equal(t, []string{"dataset:alice/big"}, ids(list(repo.ListOptions{RowsMin: 10_000})))
+		require.Equal(t, []string{"dataset:alice/big"}, ids(list(repo.ListOptions{RowsMin: 50_000, RowsMax: 50_000})))
+		require.Empty(t, ids(list(repo.ListOptions{RowsMax: 49_999})), "a dataset with no known rows does not match a maximum")
+		require.Empty(t, ids(list(repo.ListOptions{RowsMin: 50_001})))
+		require.Equal(t, []string{"dataset:alice/big"}, ids(list(repo.ListOptions{SizeCategories: []string{"10K<n<100K"}})))
 
 		res := list(repo.ListOptions{IncludeFacets: true, Limit: 1})
 		require.Len(t, res.Repos, 1)
@@ -160,7 +174,8 @@ func TestListMetadataFiltersAndFacets(t *testing.T) {
 		require.Equal(t, 1, res.Facets[repo.FacetFormat]["parquet"])
 		require.Equal(t, 1, res.Facets[repo.FacetQuant]["Q4_K_M"])
 		require.Equal(t, 3, res.Facets[repo.FacetType]["model"])
-		require.Equal(t, 4, res.Facets[repo.FacetMirror]["false"])
-		require.Equal(t, 4, res.Facets[repo.FacetNamespaces]["alice"])
+		require.Equal(t, 5, res.Facets[repo.FacetMirror]["false"])
+		require.Equal(t, 5, res.Facets[repo.FacetNamespaces]["alice"])
+		require.Equal(t, 1, res.Facets[repo.FacetSize]["10K<n<100K"])
 	}, func(o *repo.Options) { o.Index = idx; o.Community = comm })
 }
