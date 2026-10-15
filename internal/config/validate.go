@@ -286,6 +286,7 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	}
 	positiveDuration(&e, "viewer.max_scan_seconds", c.Viewer.MaxScanTime)
 	positiveSize(&e, "viewer.max_cell_bytes", c.Viewer.MaxCellBytes)
+	positiveSize(&e, "viewer.max_request_bytes", c.Viewer.MaxRequestBytes)
 	if c.Viewer.ConvertConcurrency < 1 {
 		e.addf("viewer.convert_concurrency must be at least 1")
 	}

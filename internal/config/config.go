@@ -245,6 +245,7 @@ type ViewerConfig struct {
 	MaxScanRows        int           `koanf:"max_scan_rows" desc:"Rows scanned by one filter or search request before it returns partial results."`
 	MaxScanTime        time.Duration `koanf:"max_scan_seconds" desc:"Time limit of one filter or search request before it returns partial results."`
 	MaxCellBytes       ByteSize      `koanf:"max_cell_bytes" desc:"Cells larger than this are truncated in Viewer responses."`
+	MaxRequestBytes    ByteSize      `koanf:"max_request_bytes" desc:"Decoded Parquet data one Dataset Viewer request may hold; requests that need more answer with an error, as the Hub's do."`
 	ConvertConcurrency int           `koanf:"convert_concurrency" desc:"dataset.convert Jobs per worker."`
 }
 
@@ -330,6 +331,7 @@ func Default() Config {
 			MaxScanRows:        5_000_000,
 			MaxScanTime:        10 * time.Second,
 			MaxCellBytes:       100 * KiB,
+			MaxRequestBytes:    300_000_000,
 			ConvertConcurrency: 1,
 		},
 		Telemetry: TelemetryConfig{

@@ -34,6 +34,7 @@ func TestDefaultsValidateWithRequiredKeys(t *testing.T) {
 	require.Equal(t, "hangar-admin", cfg.Security.BootstrapAdmin.Username, "admin is a reserved Namespace name")
 	require.Equal(t, "http://localhost:8080/xet-cas", cfg.CASURL())
 	require.Equal(t, config.UploadDirect, cfg.Storage.S3.UploadMode, "clients upload straight to the store by default")
+	require.Equal(t, config.ByteSize(300_000_000), cfg.Viewer.MaxRequestBytes, "the Hub's 300 MB Viewer budget")
 	key, err := cfg.InstanceKeyBytes()
 	require.NoError(t, err)
 	require.Len(t, key, 32)
@@ -48,6 +49,7 @@ func TestValidateReportsEveryError(t *testing.T) {
 	cfg.Telemetry.LogLevel = "trace"
 	cfg.Storage.S3.DownloadMode = "stream"
 	cfg.Storage.S3.UploadMode = "presigned"
+	cfg.Viewer.MaxRequestBytes = 0
 	err := cfg.Validate()
 	require.Error(t, err)
 	var errs config.Errors
@@ -63,10 +65,11 @@ func TestValidateReportsEveryError(t *testing.T) {
 		"telemetry.log_level",
 		`storage.s3.download_mode "stream" must be redirect or proxy`,
 		`storage.s3.upload_mode "presigned" must be direct or proxy`,
+		"viewer.max_request_bytes",
 	} {
 		require.Contains(t, msg, want)
 	}
-	require.GreaterOrEqual(t, len(errs), 9)
+	require.GreaterOrEqual(t, len(errs), 10)
 }
 
 func TestLoadOrderFileEnvFlags(t *testing.T) {

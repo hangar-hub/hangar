@@ -258,7 +258,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 		in.viewer, err = viewer.New(viewer.Deps{Repos: in.repos, Authz: in.auth.Authz(), Store: in.datasets, Jobs: in.queue,
 			Blobs: in.blobs, Signer: in.signer, Log: in.log, Now: time.Now},
 			viewer.Options{PublicURL: cfg.Server.PublicURL, MaxScanRows: int64(cfg.Viewer.MaxScanRows), MaxScanTime: cfg.Viewer.MaxScanTime,
-				MaxCellBytes: int(cfg.Viewer.MaxCellBytes.Int64())})
+				MaxCellBytes: int(cfg.Viewer.MaxCellBytes.Int64()), MaxRequestBytes: cfg.Viewer.MaxRequestBytes.Int64()})
 		if err != nil {
 			return nil, err
 		}

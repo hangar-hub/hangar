@@ -200,6 +200,7 @@ Dataset Viewer and Parquet export.
 | `viewer.max_scan_rows`<br>`HANGAR_VIEWER_MAX_SCAN_ROWS` | int | `5000000` | Rows scanned by one filter or search request before it returns partial results. |
 | `viewer.max_scan_seconds`<br>`HANGAR_VIEWER_MAX_SCAN_SECONDS` | duration | `10s` | Time limit of one filter or search request before it returns partial results. |
 | `viewer.max_cell_bytes`<br>`HANGAR_VIEWER_MAX_CELL_BYTES` | size | `100KiB` | Cells larger than this are truncated in Viewer responses. |
+| `viewer.max_request_bytes`<br>`HANGAR_VIEWER_MAX_REQUEST_BYTES` | size | `300000000` | Decoded Parquet data one Dataset Viewer request may hold; requests that need more answer with an error, as the Hub's do. |
 | `viewer.convert_concurrency`<br>`HANGAR_VIEWER_CONVERT_CONCURRENCY` | int | `1` | dataset.convert Jobs per worker. |
 
 ## `telemetry`
