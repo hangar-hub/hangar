@@ -942,6 +942,19 @@ paths:
       responses:
         "200": {description: The discussion., content: {application/json: {schema: {$ref: "#/components/schemas/Discussion"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/discussions/{num}/diff:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
+    get:
+      tags: [community]
+      operationId: getPullRequestFileDiff
+      summary: Get the diff of one file in a pull request
+      description: >-
+        The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull
+        request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+      parameters: [{name: path, in: query, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: The diff., content: {application/json: {schema: {$ref: "#/components/schemas/FileDiff"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /repos/{type}/{ns}/{name}/discussions/{num}/comments:
     parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
     post:

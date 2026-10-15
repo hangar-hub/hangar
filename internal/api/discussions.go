@@ -216,6 +216,58 @@ func (a *CommunityAPI) GetDiscussion(w http.ResponseWriter, r *http.Request, pTy
 	httpx.WriteJSON(w, r, http.StatusOK, out)
 }
 
+// GetPullRequestFileDiff implements gen.ServerInterface: one file's diff
+// from where the pull request's ref left its base branch to its head
+// (requests W8 item 7), so multi-Commit pull requests show every change.
+func (a *CommunityAPI) GetPullRequestFileDiff(w http.ResponseWriter, r *http.Request, pType gen.RepoType, ns gen.Ns, name gen.Name, num gen.Num,
+	params gen.GetPullRequestFileDiffParams) {
+	rp, err := a.d.metaLoad(r, pType, ns, name, auth.ActionReadFiles)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	d, ok := a.discussion(w, r, rp, num)
+	if !ok {
+		return
+	}
+	if !d.IsPullRequest() {
+		a.d.metaProblem(w, r, community.ErrNotPullRequest)
+		return
+	}
+	ctx := r.Context()
+	head, err := a.d.Repos.Resolve(ctx, rp.ID, d.PRRef)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	base := d.PRBase
+	if base == "" {
+		base = rp.DefaultBranch
+	}
+	baseTip, err := a.d.Repos.Resolve(ctx, rp.ID, base)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	fork, err := communitydb.MergeBase(ctx, a.d.Repos, rp.ID, baseTip, head)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	fd, err := a.d.Repos.CompareFile(ctx, rp.ID, fork, head, params.Path)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	c := commChange(fd.FileChange)
+	out := gen.FileDiff{Path: c.Path, OldPath: c.OldPath, Status: gen.FileDiffStatus(c.Status), OldOid: c.OldOid, NewOid: c.NewOid,
+		OldSize: c.OldSize, NewSize: c.NewSize, Lfs: c.Lfs, Binary: c.Binary}
+	if fd.Patch != "" {
+		out.Patch = &fd.Patch
+	}
+	httpx.WriteJSON(w, r, http.StatusOK, out)
+}
+
 // UpdateDiscussion implements gen.ServerInterface. The author and anyone
 // who can write to the Repo may rename, close or reopen.
 func (a *CommunityAPI) UpdateDiscussion(w http.ResponseWriter, r *http.Request, pType gen.RepoType, ns gen.Ns, name gen.Name, num gen.Num) {

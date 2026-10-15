@@ -2522,6 +2522,11 @@ type ListDiscussionsParamsKind string
 // ListDiscussionsParamsStatus defines parameters for ListDiscussions.
 type ListDiscussionsParamsStatus string
 
+// GetPullRequestFileDiffParams defines parameters for GetPullRequestFileDiff.
+type GetPullRequestFileDiffParams struct {
+	Path string `form:"path" json:"path"`
+}
+
 // GetRepoMetadataParams defines parameters for GetRepoMetadata.
 type GetRepoMetadataParams struct {
 	// Rev Revision; the default branch when absent.
@@ -3475,6 +3480,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /repos/{type}/{ns}/{name}/discussions/{num}/comments (the `CommentOnDiscussion` operationId).
 	CommentOnDiscussion(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, body CommentOnDiscussionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPullRequestFileDiff Get the diff of one file in a pull request
+	//
+	// The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+	//
+	// Corresponds with GET /repos/{type}/{ns}/{name}/discussions/{num}/diff (the `GetPullRequestFileDiff` operationId).
+	GetPullRequestFileDiff(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, params *GetPullRequestFileDiffParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MergePullRequestWithBody Merge a pull request
 	//
@@ -5543,6 +5555,23 @@ func (c *Client) CommentOnDiscussionWithBody(ctx context.Context, pType RepoType
 // Corresponds with POST /repos/{type}/{ns}/{name}/discussions/{num}/comments (the `CommentOnDiscussion` operationId).
 func (c *Client) CommentOnDiscussion(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, body CommentOnDiscussionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCommentOnDiscussionRequest(c.Server, pType, ns, name, num, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetPullRequestFileDiff Get the diff of one file in a pull request
+//
+// The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+//
+// Corresponds with GET /repos/{type}/{ns}/{name}/discussions/{num}/diff (the `GetPullRequestFileDiff` operationId).
+func (c *Client) GetPullRequestFileDiff(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, params *GetPullRequestFileDiffParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPullRequestFileDiffRequest(c.Server, pType, ns, name, num, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10599,6 +10628,84 @@ func NewCommentOnDiscussionRequestWithBody(server string, pType RepoType, ns Ns,
 	return req, nil
 }
 
+// NewGetPullRequestFileDiffRequest constructs an http.Request for the GetPullRequestFileDiff method
+func NewGetPullRequestFileDiffRequest(server string, pType RepoType, ns Ns, name Name, num Num, params *GetPullRequestFileDiffParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "type", pType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "ns", ns, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam3 string
+
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "num", num, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/repos/%s/%s/%s/discussions/%s/diff", pathParam0, pathParam1, pathParam2, pathParam3)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "path", params.Path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewMergePullRequestRequest calls the generic MergePullRequest builder with application/json body
 func NewMergePullRequestRequest(server string, pType RepoType, ns Ns, name Name, num Num, body MergePullRequestJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -13464,6 +13571,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /repos/{type}/{ns}/{name}/discussions/{num}/comments (the `CommentOnDiscussion` operationId).
 	CommentOnDiscussionWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, body CommentOnDiscussionJSONRequestBody, reqEditors ...RequestEditorFn) (*CommentOnDiscussionResponse, error)
+
+	// GetPullRequestFileDiffWithResponse Get the diff of one file in a pull request
+	//
+	// The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /repos/{type}/{ns}/{name}/discussions/{num}/diff (the `GetPullRequestFileDiff` operationId).
+	GetPullRequestFileDiffWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, params *GetPullRequestFileDiffParams, reqEditors ...RequestEditorFn) (*GetPullRequestFileDiffResponse, error)
 
 	// MergePullRequestWithBodyWithResponse Merge a pull request
 	//
@@ -17637,6 +17753,54 @@ func (r CommentOnDiscussionResponse) ContentType() string {
 	return ""
 }
 
+type GetPullRequestFileDiffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FileDiff
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetPullRequestFileDiffResponse) GetJSON200() *FileDiff {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetPullRequestFileDiffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetPullRequestFileDiffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPullRequestFileDiffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPullRequestFileDiffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetPullRequestFileDiffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type MergePullRequestResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -20734,6 +20898,21 @@ func (c *ClientWithResponses) CommentOnDiscussionWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseCommentOnDiscussionResponse(rsp)
+}
+
+// GetPullRequestFileDiffWithResponse Get the diff of one file in a pull request
+//
+// The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /repos/{type}/{ns}/{name}/discussions/{num}/diff (the `GetPullRequestFileDiff` operationId).
+func (c *ClientWithResponses) GetPullRequestFileDiffWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, num Num, params *GetPullRequestFileDiffParams, reqEditors ...RequestEditorFn) (*GetPullRequestFileDiffResponse, error) {
+	rsp, err := c.GetPullRequestFileDiff(ctx, pType, ns, name, num, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPullRequestFileDiffResponse(rsp)
 }
 
 // MergePullRequestWithBodyWithResponse Merge a pull request
@@ -23983,6 +24162,39 @@ func ParseCommentOnDiscussionResponse(rsp *http.Response) (*CommentOnDiscussionR
 	return response, nil
 }
 
+// ParseGetPullRequestFileDiffResponse parses an HTTP response from a GetPullRequestFileDiffWithResponse call
+func ParseGetPullRequestFileDiffResponse(rsp *http.Response) (*GetPullRequestFileDiffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPullRequestFileDiffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FileDiff
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseMergePullRequestResponse parses an HTTP response from a MergePullRequestWithResponse call
 func ParseMergePullRequestResponse(rsp *http.Response) (*MergePullRequestResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -25362,6 +25574,9 @@ type ServerInterface interface {
 	// CommentOnDiscussion Comment
 	// (POST /repos/{type}/{ns}/{name}/discussions/{num}/comments)
 	CommentOnDiscussion(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, num Num)
+	// GetPullRequestFileDiff Get the diff of one file in a pull request
+	// (GET /repos/{type}/{ns}/{name}/discussions/{num}/diff)
+	GetPullRequestFileDiff(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, num Num, params GetPullRequestFileDiffParams)
 	// MergePullRequest Merge a pull request
 	// (POST /repos/{type}/{ns}/{name}/discussions/{num}/merge)
 	MergePullRequest(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, num Num)
@@ -25959,6 +26174,12 @@ func (_ Unimplemented) UpdateDiscussion(w http.ResponseWriter, r *http.Request, 
 // CommentOnDiscussion Comment
 // (POST /repos/{type}/{ns}/{name}/discussions/{num}/comments)
 func (_ Unimplemented) CommentOnDiscussion(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, num Num) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetPullRequestFileDiff Get the diff of one file in a pull request
+// (GET /repos/{type}/{ns}/{name}/discussions/{num}/diff)
+func (_ Unimplemented) GetPullRequestFileDiff(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, num Num, params GetPullRequestFileDiffParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -29372,6 +29593,75 @@ func (siw *ServerInterfaceWrapper) CommentOnDiscussion(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetPullRequestFileDiff operation middleware
+func (siw *ServerInterfaceWrapper) GetPullRequestFileDiff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "type" -------------
+	var pType RepoType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ns" -------------
+	var ns Ns
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ns", chi.URLParam(r, "ns"), &ns, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ns", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "name" -------------
+	var name Name
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", chi.URLParam(r, "name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "num" -------------
+	var num Num
+
+	err = runtime.BindStyledParameterWithOptions("simple", "num", chi.URLParam(r, "num"), &num, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "num", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPullRequestFileDiffParams
+
+	// ------------- Required query parameter "path" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPullRequestFileDiff(w, r, pType, ns, name, num, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // MergePullRequest operation middleware
 func (siw *ServerInterfaceWrapper) MergePullRequest(w http.ResponseWriter, r *http.Request) {
 
@@ -31393,6 +31683,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/repos/{type}/{ns}/{name}/discussions/{num}", wrapper.UpdateDiscussion)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/repos/{type}/{ns}/{name}/discussions/{num}/diff", wrapper.GetPullRequestFileDiff)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/repos/{type}/{ns}/{name}/discussions/{num}/comments", wrapper.CommentOnDiscussion)
 	})
 	r.Group(func(r chi.Router) {
@@ -31673,43 +31966,45 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

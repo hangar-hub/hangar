@@ -241,7 +241,12 @@ export function DiscussionPage({
                     </Button>
                   ) : null}
                   {x.changes?.length ? (
-                    <ChangeList repo={ref} sha={prHead ?? ""} changes={x.changes} />
+                    <ChangeList
+                      repo={ref}
+                      sha={prHead ?? ""}
+                      pullRequest={x.num}
+                      changes={x.changes}
+                    />
                   ) : (
                     <p className="text-sm text-muted">No files changed yet.</p>
                   )}

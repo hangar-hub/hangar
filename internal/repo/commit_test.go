@@ -252,6 +252,17 @@ func TestCommitReadsAndCaches(t *testing.T) {
 		_, err = e.svc.FileDiff(e.ctx, id, second.SHA, "a/d.txt")
 		require.ErrorIs(t, err, repo.ErrEntryNotFound)
 
+		// CompareFile diffs across Commits, as pull requests need.
+		cf, err := e.svc.CompareFile(e.ctx, id, first.SHA, second.SHA, "z.txt")
+		require.NoError(t, err)
+		require.Equal(t, fd.Patch, cf.Patch, "across one Commit it equals the Commit's diff")
+		_, err = e.svc.CompareFile(e.ctx, id, first.SHA, second.SHA, "a/d.txt")
+		require.ErrorIs(t, err, repo.ErrEntryNotFound)
+		_, err = e.svc.CompareFile(e.ctx, id, model.CommitSHA(strings.Repeat("0", 40)), second.SHA, "z.txt")
+		require.ErrorIs(t, err, repo.ErrRevisionNotFound)
+		_, err = e.svc.CompareFile(e.ctx, model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "nope"}, first.SHA, second.SHA, "z.txt")
+		require.ErrorIs(t, err, repo.ErrNotFound)
+
 		// Index and scan Jobs for every new branch head, and repo.updated events.
 		var kinds []jobs.Kind
 		js, _, err := e.jobs.List(e.ctx, jobs.Filter{})

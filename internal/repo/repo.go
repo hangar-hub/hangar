@@ -431,6 +431,10 @@ type Service interface {
 	Diff(ctx context.Context, id model.RepoID, sha model.CommitSHA) ([]FileChange, error)
 	// FileDiff returns the diff of one file in a Commit.
 	FileDiff(ctx context.Context, id model.RepoID, sha model.CommitSHA, path string) (*FileDiff, error)
+	// CompareFile returns the diff of one file from Commit base to Commit
+	// head, as a pull request with several Commits shows it against the
+	// fork point. ErrEntryNotFound when the file is the same in both.
+	CompareFile(ctx context.Context, id model.RepoID, base, head model.CommitSHA, path string) (*FileDiff, error)
 
 	// Refs lists every ref.
 	Refs(ctx context.Context, id model.RepoID) (*Refs, error)

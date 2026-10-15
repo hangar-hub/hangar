@@ -658,8 +658,13 @@ func (s *Store) diff(ctx context.Context, objs *gitstore.Objects, sha model.Comm
 	if !s.isCommit(ctx, objs, string(sha)) {
 		return nil, fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
 	}
-	parent := s.firstParent(ctx, objs.Dir, sha)
-	out, err := s.git.Git().Run(ctx, objs.Dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--no-commit-id", "--raw", parent, string(sha))
+	return s.diffBetween(ctx, objs, s.firstParent(ctx, objs.Dir, sha), string(sha))
+}
+
+// diffBetween summarises the files that differ from tree-ish from to
+// tree-ish to.
+func (s *Store) diffBetween(ctx context.Context, objs *gitstore.Objects, from, to string) ([]FileChange, error) {
+	out, err := s.git.Git().Run(ctx, objs.Dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--no-commit-id", "--raw", from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -720,7 +725,34 @@ func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitS
 		return nil, err
 	}
 	defer objs.Release()
-	changes, err := s.diff(ctx, objs, sha)
+	if !s.isCommit(ctx, objs, string(sha)) {
+		return nil, fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
+	}
+	return s.fileDiff(ctx, objs, s.firstParent(ctx, objs.Dir, sha), string(sha), p)
+}
+
+// CompareFile implements Service.
+func (s *Store) CompareFile(ctx context.Context, id model.RepoID, base, head model.CommitSHA, p string) (*FileDiff, error) {
+	row, err := s.lookup(ctx, s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	objs, err := s.git.Acquire(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer objs.Release()
+	for _, sha := range []model.CommitSHA{base, head} {
+		if !s.isCommit(ctx, objs, string(sha)) {
+			return nil, fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
+		}
+	}
+	return s.fileDiff(ctx, objs, string(base), string(head), p)
+}
+
+// fileDiff is the diff of path p from tree-ish from to tree-ish to.
+func (s *Store) fileDiff(ctx context.Context, objs *gitstore.Objects, from, to, p string) (*FileDiff, error) {
+	changes, err := s.diffBetween(ctx, objs, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -730,8 +762,7 @@ func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitS
 		}
 		fd := &FileDiff{FileChange: c}
 		if !c.LFS && !c.Binary && c.OldSize < maxTextDiff && c.NewSize < maxTextDiff {
-			parent := s.firstParent(ctx, objs.Dir, sha)
-			args := []string{"--literal-pathspecs", "diff", "-M", parent, string(sha), "--", p}
+			args := []string{"--literal-pathspecs", "diff", "-M", from, to, "--", p}
 			if c.OldPath != "" {
 				args = append(args, c.OldPath)
 			}
@@ -743,7 +774,7 @@ func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitS
 		}
 		return fd, nil
 	}
-	return nil, fmt.Errorf("%w: %s did not change in %s", ErrEntryNotFound, p, sha)
+	return nil, fmt.Errorf("%w: %s did not change in %s", ErrEntryNotFound, p, to)
 }
 
 // Refs implements Service.

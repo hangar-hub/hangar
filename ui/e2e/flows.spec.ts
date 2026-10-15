@@ -209,6 +209,7 @@ test.describe("upload", () => {
     await expect(page.getByRole("heading", { level: 2 })).toContainText("Upload extra.md");
     await page.getByRole("tab", { name: /Files changed/ }).click();
     await expect(page.getByRole("list", { name: "Changed files" })).toContainText("extra.md");
+    await expect(page.getByRole("region", { name: "Diff of extra.md" })).toContainText("# Extra");
   });
 });
 

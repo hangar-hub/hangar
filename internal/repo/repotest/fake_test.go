@@ -291,6 +291,18 @@ func TestLogDiffAndFileDiff(t *testing.T) {
 	_, err = f.FileDiff(ctx, modelID, two.SHA, "README.md")
 	require.ErrorIs(t, err, repo.ErrEntryNotFound)
 
+	// CompareFile spans Commits: from the initial Commit to two, a.txt is
+	// added with both lines.
+	cf, err := f.CompareFile(ctx, modelID, log[2].SHA, two.SHA, "a.txt")
+	require.NoError(t, err)
+	require.Equal(t, repo.ChangeAdded, cf.Status)
+	require.Contains(t, cf.Patch, "+line 1")
+	require.Contains(t, cf.Patch, "+line 2")
+	_, err = f.CompareFile(ctx, modelID, model.CommitSHA(strings.Repeat("0", 40)), two.SHA, "a.txt")
+	require.ErrorIs(t, err, repo.ErrRevisionNotFound)
+	_, err = f.CompareFile(ctx, model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "nope"}, log[2].SHA, two.SHA, "a.txt")
+	require.ErrorIs(t, err, repo.ErrNotFound)
+
 	// The root Commit diffs against the empty tree.
 	initial := log[2].SHA
 	rootChanges, err := f.Diff(ctx, modelID, initial)

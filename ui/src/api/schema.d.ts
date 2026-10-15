@@ -1404,6 +1404,33 @@ export interface paths {
         patch: operations["updateDiscussion"];
         trace?: never;
     };
+    "/repos/{type}/{ns}/{name}/discussions/{num}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                num: components["parameters"]["Num"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get the diff of one file in a pull request
+         * @description The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+         */
+        get: operations["getPullRequestFileDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{type}/{ns}/{name}/discussions/{num}/comments": {
         parameters: {
             query?: never;
@@ -5262,6 +5289,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Discussion"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPullRequestFileDiff: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                num: components["parameters"]["Num"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diff. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileDiff"];
                 };
             };
             default: components["responses"]["Problem"];

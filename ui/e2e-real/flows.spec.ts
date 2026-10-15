@@ -175,3 +175,23 @@ test("creates an Organisation and lists it for admins", async ({ page }) => {
   await expect(page.getByRole("listitem")).toHaveCount(1);
   expect(problems).toEqual([]);
 });
+
+test("opens a pull request from an upload and shows its diff", async ({ page }) => {
+  const problems = watchConsole(page);
+  await signIn(page);
+  await page.goto(`/${modelRepo}/tree/main`);
+  const name = `proposal-${Date.now()}.md`;
+  await page.getByRole("button", { name: "Upload files" }).click();
+  await page.getByLabel("Choose files").setInputFiles({
+    name,
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# Proposal\n"),
+  });
+  await page.getByLabel("Open as pull request").check();
+  await page.getByRole("button", { name: "Upload and open pull request" }).click();
+  await expect(page).toHaveURL(new RegExp(`/${modelRepo}/discussions/\\d+$`));
+  await page.getByRole("tab", { name: /Files changed/ }).click();
+  await expect(page.getByRole("list", { name: "Changed files" })).toContainText(name);
+  await expect(page.getByRole("region", { name: `Diff of ${name}` })).toContainText("# Proposal");
+  expect(problems).toEqual([]);
+});

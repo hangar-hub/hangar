@@ -678,6 +678,41 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       change.binary || change.lfs ? "" : unifiedDiff(path, before?.text ?? "", after?.text ?? "");
     return ok({ ...change, patch });
   }),
+  getPullRequestFileDiff: withRepo((ctx, r) => {
+    const d = discussionOr404(r, ctx.params.num);
+    if (isResult(d)) return d;
+    if (d.kind !== "pull_request") return problem(422, "This discussion is not a pull request.");
+    const prs = r.prCommits ?? [];
+    const head = prs.find((c) => c.sha === r.prHeads?.[d.num]);
+    if (!head) return problem(404, `${d.pr_ref} has no Commits yet.`);
+    // The fork point: the first Commit on the way back that is not the pull request's.
+    let fork: MockCommit | undefined = head;
+    while (fork && prs.includes(fork)) {
+      const parent: string | undefined = fork.parents[0];
+      fork = [...r.commits, ...prs].find((x) => x.sha === parent);
+    }
+    const path = ctx.query.get("path") ?? "";
+    const before = fork?.files.find((f) => f.path === path);
+    const after = head.files.find((f) => f.path === path);
+    if ((before?.text ?? before?.size) === (after?.text ?? after?.size)) {
+      return problem(404, `${path} did not change in this pull request.`);
+    }
+    const f = (after ?? before) as MockFile;
+    const lfs = Boolean(f.lfs);
+    const binary = f.text === undefined;
+    const change: S["FileChange"] = {
+      path,
+      status: !before ? "added" : !after ? "deleted" : "modified",
+      old_oid: before ? fileOid(before) : undefined,
+      new_oid: after ? fileOid(after) : undefined,
+      old_size: before ? fileSize(before) : undefined,
+      new_size: after ? fileSize(after) : undefined,
+      lfs,
+      binary,
+    };
+    const patch = binary || lfs ? "" : unifiedDiff(path, before?.text ?? "", after?.text ?? "");
+    return ok({ ...change, patch });
+  }),
   getTreeRoot: withRepo((ctx, r) => tree(ctx, r, "")),
   getTree: withRepo((ctx, r) => tree(ctx, r, ctx.params.path ?? "")),
   getRepoMetadata: withRepo((ctx, r) => {
