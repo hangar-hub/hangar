@@ -47,9 +47,9 @@ How the integration lead resolved every item in `requests/*.md` in phase 2, on b
 | 3. Python dependencies | Accepted; `uv lock --check` passes on the merged `compat/pyproject.toml`. |
 | 4. `go.yaml.in/yaml/v3` | Applied by `go mod tidy`; the dependencies lines are merged into one. |
 | 5. Repo events from the Repo service | Accepted: `repo.Store` gets `Audit` and `Webhooks`. |
-| 6. Likers, liked-by, comment edit and hide | W7 added the service methods. Serving the Hub endpoints (all MAY items) is deferred to v1.x. |
+| 6. Likers, liked-by, comment edit and hide | Applied in phase 2 round 1: `GET .../likers`, `GET /api/users/{user}/likes` and `POST .../comment/{id}/edit\|hide` over W7's methods (`internal/hfapi/likes.go`), tested in `internal/hfapi`, `cmd/hangar` and `compat/hf`. |
 | 7. Fake workarounds | Accepted; W2 item 9 removed the differences. |
-| 8. Client matrix CI | Applied (W9). The Xet upload cell (`HANGAR_HF_XET_UPLOADS=1`) needs the suite pointed at a running binary with Tokens and is deferred; Xet uploads with real clients are covered by the new `xet` job and by the phase 2 smoke test. |
+| 8. Client matrix CI | Applied (W9). Phase 2 round 1 added the `binary` and `binary-xet` cells: `HANGAR_HF_BACKEND=binary` runs the suite against the wired binary seeded through the native API, and `binary-xet` adds `HANGAR_HF_XET_UPLOADS=1`. |
 | 9. `hangar env` | Applied (W9). |
 | 10. Matrix data file | Applied (W9's `make generate`). |
 | 11. Undo a failed `create_pr` | Applied: `closeFailedPR` now calls `community.Service.Discard`, and closes the pull request with a comment only if it cannot be discarded. |
@@ -109,14 +109,14 @@ How the integration lead resolved every item in `requests/*.md` in phase 2, on b
 | Item | Resolution |
 |---|---|
 | 1. `ui.external_images` for every user | Applied: `ui_external_images` on `AuthProviders` (`GET /auth/providers`), read by `useExternalImages`. |
-| 2. Pickle scan findings per file | Deferred to v1.x: needs a `TreeEntry` field or an operation; the file page shows the status. |
-| 3. List every Organisation | Deferred to v1.x; the admin page searches. |
+| 2. Pickle scan findings per file | Applied in phase 2 round 1: `GET .../files/{rev}/{path}/scan`; the file page lists the imports. |
+| 3. List every Organisation | Applied in phase 2 round 1 as `GET /admin/orgs` (Instance admins); the admin page lists them. |
 | 4. Header JSON shape | Applied: GGUF metadata values in `GET .../header` are plain values, with long arrays as `{"type": "array", "length": N}`. |
-| 5. Repo IDs in Job payloads | Applied for `zip.export` (`repo`); `pull` and `pull.file` already had it. `mirror.sync` and `dataset.convert` carry only the Repo UUID; deferred. |
+| 5. Repo IDs in Job payloads | Applied: the Jobs API adds the Repo's current ID as `payload.repo` to every Repo-scoped Job whose payload does not name it (`mirror.sync`, `dataset.convert`, `index`, `scan` and the rest). |
 | 6. `/filter` without `where` | Already works: an empty `where` matches every row. |
-| 7. Pull request compare | Deferred to v1.x. |
+| 7. Pull request compare | Applied in phase 2 round 1: `repo.Service.CompareFile` and `GET .../discussions/{num}/diff`, from the merge base to the head of the ref; the Files changed tab uses it. |
 | 8. Self-service profile and password | Deferred: a product decision for James. |
-| 9. Resume an upload from the plan | Deferred to v1.x; the UI resumes through Hangar's part URLs. |
+| 9. Resume an upload from the plan | Applied in phase 2 round 1: the plan passes `UploadParams.Resume`, which continues the caller's unexpired upload of the same object, Repo and part size. |
 
 ## W9: CLI, packaging and docs
 
@@ -142,13 +142,13 @@ How the integration lead resolved every item in `requests/*.md` in phase 2, on b
 | 1. Interface changes | Accepted. |
 | 2. Wiring | Applied; the Viewer and pipeline exist only with `viewer.enabled`. |
 | 3. Triggers | Applied: `dataset.convert` after the index of a dataset's default-branch head; user Commits to `refs/convert/*` are refused (`repo.Store`, so the Hub API and native API too; pushes were already refused). |
-| 4. DATA-9 and DATA-11 summaries | Partly: the index gets each Config and its Split count. Storing `meta.Summarise` in the index and filtering listings by it are deferred to v1.x. |
+| 4. DATA-9 and DATA-11 summaries | Applied: the index gets each Config and its Split count, formats, modalities, tasks, languages and pretty name from the files and card, and, once the Parquet export exists, the rows and the size category they give (`indexdb.Options.DatasetRows`, re-indexed by the pipeline's `AfterConvert`). `repo.List` filters on them. |
 | 5. CLI | Applied (W9). |
 | 6. UI | Accepted. |
 | 7. DuckDB note | Applied (W9's `docs/guides/datasets.md`). |
 | 8. Dependencies | Applied by `go mod tidy`. |
 | 9. Fuzz minimisation cap | Applied (merged with W9's file-descriptor fix). |
-| 10. `viewer.max_request_bytes` | Not added: the 300 MB default applies. |
+| 10. `viewer.max_request_bytes` | Applied in phase 2 round 1, default 300 MB. |
 
 ## W11: Xet
 
