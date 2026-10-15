@@ -287,6 +287,71 @@ func (a *MetadataAPI) GetFileHeader(w http.ResponseWriter, r *http.Request, pTyp
 	httpx.WriteJSON(w, r, http.StatusOK, gen.FileHeader{Format: format, Header: header})
 }
 
+// GetFileScan implements gen.ServerInterface: one file's scan result with
+// the imports the pickle scanner found (META-2), for the file page.
+func (a *MetadataAPI) GetFileScan(w http.ResponseWriter, r *http.Request, pType gen.RepoType, ns gen.Ns, name gen.Name, rev gen.Rev, p gen.FilePath) {
+	rp, err := a.d.metaLoad(r, pType, ns, name, auth.ActionReadFiles)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	clean, err := model.CleanRepoPath(p)
+	if err != nil || clean == "" {
+		metaBadRequest(w, r, "path", "The path is not a valid file path.")
+		return
+	}
+	sha, err := a.d.metaResolve(r.Context(), rp, &rev)
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	e, err := a.d.Repos.Entry(r.Context(), rp.ID, sha, clean)
+	if err == nil && e.Type != model.EntryFile {
+		err = repo.ErrEntryNotFound
+	}
+	if err != nil {
+		a.d.metaProblem(w, r, err)
+		return
+	}
+	out := gen.FileScan{Path: clean, Status: gen.FileScanStatus(scan.StatusSafe), Findings: []gen.ScanFinding{}}
+	if a.d.Scanner == nil {
+		out.Status = "pending"
+		httpx.WriteJSON(w, r, http.StatusOK, out)
+		return
+	}
+	res, err := a.d.Scanner.Results(r.Context(), rp.UUID, sha)
+	switch {
+	case errors.Is(err, scan.ErrNotScanned):
+		out.Status = "pending"
+	case err != nil:
+		a.d.metaProblem(w, r, err)
+		return
+	default:
+		for _, f := range res.Files {
+			if f.Path != clean {
+				continue
+			}
+			out.Status = gen.FileScanStatus(f.Status)
+			if f.Error != "" {
+				msg := f.Error
+				out.Error = &msg
+			}
+			for _, fd := range f.Findings {
+				out.Findings = append(out.Findings, gen.ScanFinding{Module: optString(fd.Module), Name: optString(fd.Name),
+					Opcode: optString(fd.Opcode), Status: gen.ScanFindingStatus(fd.Status), Detail: optString(fd.Detail)})
+			}
+		}
+	}
+	httpx.WriteJSON(w, r, http.StatusOK, out)
+}
+
+func optString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // ListQuants implements gen.ServerInterface: GGUF files grouped by
 // quantisation, with whether each group is in the arsenal (PULL-4).
 func (a *MetadataAPI) ListQuants(w http.ResponseWriter, r *http.Request, pType gen.RepoType, ns gen.Ns, name gen.Name, params gen.ListQuantsParams) {

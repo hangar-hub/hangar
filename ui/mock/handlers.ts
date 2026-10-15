@@ -693,6 +693,12 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     if (!f.header) return problem(400, "Only safetensors and GGUF files have a header to show.");
     return ok(f.header);
   }),
+  getFileScan: withRepo((ctx, r) => {
+    const c = resolveRev(r, ctx.params.rev);
+    const f = c?.files.find((x) => x.path === ctx.params.path);
+    if (!f) return problem(404, `${ctx.params.path} does not exist at this Revision.`);
+    return ok({ path: f.path, status: f.scan ?? "safe", findings: f.findings ?? [] });
+  }),
   listQuants: withRepo((ctx, r) => {
     const c = resolveRev(r, ctx.query.get("rev") ?? undefined) as MockCommit;
     return ok({

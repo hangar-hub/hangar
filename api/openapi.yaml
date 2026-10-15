@@ -408,6 +408,18 @@ paths:
       responses:
         "200": {description: The header as JSON., content: {application/json: {schema: {$ref: "#/components/schemas/FileHeader"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/files/{rev}/{path}/scan:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Rev"}, {$ref: "#/components/parameters/FilePath"}]
+    get:
+      tags: [repos]
+      operationId: getFileScan
+      summary: Get a file's security scan result
+      description: >-
+        The imports the pickle scanner found and the integrity problems the scan reported for one file. A file the
+        scan does not check is safe with no findings; a Commit that is not scanned yet is pending.
+      responses:
+        "200": {description: The scan result., content: {application/json: {schema: {$ref: "#/components/schemas/FileScan"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /repos/{type}/{ns}/{name}/quants:
     parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
     get:
@@ -1639,6 +1651,23 @@ components:
       properties:
         format: {type: string, enum: [safetensors, gguf]}
         header: {type: object, additionalProperties: true}
+    FileScan:
+      type: object
+      required: [path, status, findings]
+      properties:
+        path: {type: string}
+        status: {type: string, enum: [safe, suspicious, unsafe, error, pending]}
+        findings: {type: array, items: {$ref: "#/components/schemas/ScanFinding"}}
+        error: {type: string, description: "Why the scan could not read the file, when status is error."}
+    ScanFinding:
+      type: object
+      required: [status]
+      properties:
+        module: {type: string, description: "The imported module, such as os."}
+        name: {type: string, description: "The imported name, such as system."}
+        opcode: {type: string, description: "The pickle opcode that imported it: GLOBAL, STACK_GLOBAL or INST."}
+        status: {type: string, enum: [safe, suspicious, unsafe, error]}
+        detail: {type: string, description: "An integrity problem, for findings that are not imports."}
     QuantGroup:
       type: object
       required: [name, files, size, present]

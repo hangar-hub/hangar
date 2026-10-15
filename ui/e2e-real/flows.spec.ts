@@ -128,6 +128,9 @@ test("blocks an unsafe pickle until the user accepts the risk", async ({ page })
     await expect(page.getByRole("heading", { name: /Pickle scan/ })).toContainText(
       "Unsafe imports",
     );
+    await expect(page.getByRole("list", { name: "Imports the scan found" })).toContainText(
+      "os.system",
+    );
     const plain = await page.request.get(`/${modelRepo}/resolve/main/evil.pkl`);
     expect(plain.status()).toBe(403);
     await page.getByRole("button", { name: "Download", exact: true }).click();

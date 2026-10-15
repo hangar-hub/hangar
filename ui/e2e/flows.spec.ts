@@ -251,6 +251,9 @@ test.describe("browse files", () => {
     await expect(page.getByRole("heading", { name: /Pickle scan/ })).toContainText(
       "Unsafe imports",
     );
+    const imports = page.getByRole("list", { name: "Imports the scan found" });
+    await expect(imports).toContainText("posix.system");
+    await expect(imports).not.toContainText("collections.OrderedDict");
     await page.goto("/ada/bert-tiny-finetune/commits/main");
     await page.getByRole("link", { name: "Add safetensors weights and ONNX export" }).click();
     const readme = page

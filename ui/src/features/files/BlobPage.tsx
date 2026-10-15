@@ -3,6 +3,7 @@ import { useSearch } from "@tanstack/react-router";
 import { Download, FileCode, History, Link2, Pencil, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/api/client";
+import type { ScanFinding } from "@/api/types";
 import { AppLink, useGo } from "@/components/AppLink";
 import { CodeView } from "@/components/content/CodeView";
 import { LazyMarkdown } from "@/components/content/LazyMarkdown";
@@ -57,7 +58,37 @@ const scanExplanations: Record<ScanStatus, string> = {
   pending: "The pickle scan has not finished yet.",
 };
 
-function ScanPanel({ status }: { status: ScanStatus }) {
+function useFileScan(repo: RepoRef, rev: string, path: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["file-scan", repo.kind, repo.ns, repo.name, rev, path],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/repos/{type}/{ns}/{name}/files/{rev}/{path}/scan", {
+          params: { path: { ...repoPathParams(repo), rev, path } },
+        }),
+      ),
+    enabled,
+  });
+}
+
+function findingName(f: ScanFinding): string {
+  if (f.module && f.name) return `${f.module}.${f.name}`;
+  return f.module ?? f.name ?? f.detail ?? "";
+}
+
+function ScanPanel({
+  status,
+  repo,
+  rev,
+  path,
+}: {
+  status: ScanStatus;
+  repo: RepoRef;
+  rev: string;
+  path: string;
+}) {
+  const scan = useFileScan(repo, rev, path, status !== "safe");
+  const findings = (scan.data?.findings ?? []).filter((f) => f.status !== "safe");
   const tone =
     status === "unsafe"
       ? "border-danger/40 bg-danger-soft"
@@ -70,11 +101,22 @@ function ScanPanel({ status }: { status: ScanStatus }) {
       className={`flex gap-3 rounded-lg border px-4 py-3 ${tone}`}
     >
       <ShieldAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
-      <div className="space-y-1 text-sm">
+      <div className="min-w-0 space-y-1 text-sm">
         <h2 id="scan-title" className="flex items-center gap-2 font-semibold">
           Pickle scan <ScanBadge status={status} />
         </h2>
         <p>{scanExplanations[status]}</p>
+        {findings.length ? (
+          <ul aria-label="Imports the scan found" className="space-y-0.5 font-mono text-xs">
+            {findings.map((f) => (
+              <li key={`${findingName(f)}-${f.opcode ?? ""}`} className="flex flex-wrap gap-x-2">
+                <span className="break-all">{findingName(f)}</span>
+                <span className="text-muted">{f.status}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {scan.data?.error ? <p className="text-xs text-muted">{scan.data.error}</p> : null}
       </div>
     </section>
   );
@@ -403,7 +445,9 @@ export function BlobPage({
           ) : null}
         </span>
       </div>
-      {isPickle && e.scan_status ? <ScanPanel status={e.scan_status} /> : null}
+      {isPickle && e.scan_status ? (
+        <ScanPanel status={e.scan_status} repo={ref} rev={commit} path={path} />
+      ) : null}
       {!e.present ? (
         <EmptyState title="This file is not in the arsenal">
           This Mirror holds the file's history but not its content yet. Pull it from the Files tab

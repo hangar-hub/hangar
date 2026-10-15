@@ -565,6 +565,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/{type}/{ns}/{name}/files/{rev}/{path}/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                /** @description Revision */
+                rev: components["parameters"]["Rev"];
+                /** @description Path in the Repo */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a file's security scan result
+         * @description The imports the pickle scanner found and the integrity problems the scan reported for one file. A file the scan does not check is safe with no findings; a Commit that is not scanned yet is pending.
+         */
+        get: operations["getFileScan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{type}/{ns}/{name}/quants": {
         parameters: {
             query?: never;
@@ -2130,6 +2160,26 @@ export interface components {
             header: {
                 [key: string]: unknown;
             };
+        };
+        FileScan: {
+            path: string;
+            /** @enum {string} */
+            status: "safe" | "suspicious" | "unsafe" | "error" | "pending";
+            findings: components["schemas"]["ScanFinding"][];
+            /** @description Why the scan could not read the file, when status is error. */
+            error?: string;
+        };
+        ScanFinding: {
+            /** @description The imported module, such as os. */
+            module?: string;
+            /** @description The imported name, such as system. */
+            name?: string;
+            /** @description The pickle opcode that imported it: GLOBAL, STACK_GLOBAL or INST. */
+            opcode?: string;
+            /** @enum {string} */
+            status: "safe" | "suspicious" | "unsafe" | "error";
+            /** @description An integrity problem, for findings that are not imports. */
+            detail?: string;
         };
         QuantGroup: {
             name: string;
@@ -3766,6 +3816,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileHeader"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getFileScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                /** @description Revision */
+                rev: components["parameters"]["Rev"];
+                /** @description Path in the Repo */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scan result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScan"];
                 };
             };
             default: components["responses"]["Problem"];
