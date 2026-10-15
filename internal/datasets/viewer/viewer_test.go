@@ -16,12 +16,15 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/viewer"
 	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
+	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/repo/repotest"
@@ -308,6 +311,70 @@ func TestReadErrorsAreNotFailures(t *testing.T) {
 	res = get(t, s, "/splits", q("dataset", r.ID.String()), "")
 	require.Equal(t, http.StatusOK, res.status, string(res.raw))
 	require.Len(t, res.body["splits"], 1)
+}
+
+// TestStalledConversionIsQueuedAgain checks that a conversion whose every
+// attempt failed to read the data files leaves the Splits pending, and
+// that the Viewer queues it again, once, when asked for them.
+func TestStalledConversionIsQueuedAgain(t *testing.T) {
+	broken := &unreadableData{}
+	s := viewertest.New(t, viewertest.Options{PipelineRepos: func(f *repotest.Fake) repo.Service {
+		broken.Service = f
+		return broken
+	}})
+	now := time.Now()
+	s.Jobs.SetClock(func() time.Time { return now })
+	r, sha := s.Dataset(t, "stalled", map[string][]byte{"train.csv": []byte(reviewsCSV)})
+	broken.fail.Store(true)
+	ctx := context.Background()
+	_, err := s.Pipeline.EnqueueConvert(ctx, r.UUID, sha)
+	require.NoError(t, err)
+	convertJobs := func() []*jobs.Job {
+		list, _, err := s.Jobs.List(ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindDatasetConvert}})
+		require.NoError(t, err)
+		return list
+	}
+	params := q("dataset", r.ID.String(), "config", "default", "split", "train", "offset", "0", "length", "10")
+	for attempt := 1; attempt <= 3; attempt++ {
+		s.RunJobs(t)
+		now = now.Add(24 * time.Hour)
+		if attempt == 3 {
+			break
+		}
+		// A request while the Job waits to retry does not queue another.
+		res := get(t, s, "/rows", params, "")
+		require.Equal(t, http.StatusInternalServerError, res.status)
+		require.Equal(t, "ResponseNotReady", res.header.Get("X-Error-Code"))
+		require.Len(t, convertJobs(), 1)
+	}
+	list := convertJobs()
+	require.Len(t, list, 1)
+	require.Equal(t, jobs.StatusFailed, list[0].Status)
+	require.Contains(t, list[0].Error, "read the data files of config default")
+
+	// Every attempt failed; the Splits are still pending, not failed, so
+	// the next request queues the conversion again.
+	broken.fail.Store(false)
+	res := get(t, s, "/rows", params, "")
+	require.Equal(t, "ResponseNotReady", res.header.Get("X-Error-Code"))
+	require.Len(t, convertJobs(), 2)
+	s.RunJobs(t)
+	res = get(t, s, "/rows", params, "")
+	require.Equal(t, http.StatusOK, res.status, string(res.raw))
+	require.Len(t, res.body["rows"], 4)
+}
+
+// unreadableData fails to read train.csv while fail is set.
+type unreadableData struct {
+	repo.Service
+	fail atomic.Bool
+}
+
+func (u *unreadableData) OpenFile(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, rng *blob.Range) (io.ReadCloser, model.Entry, error) {
+	if u.fail.Load() && p == "train.csv" {
+		return nil, model.Entry{}, errors.New("blob: dial tcp 10.0.0.7:9000: connect: connection refused")
+	}
+	return u.Service.OpenFile(ctx, id, commit, p, rng)
 }
 
 // flakyRepos fails to list files while fail is set.

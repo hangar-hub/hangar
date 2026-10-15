@@ -163,7 +163,10 @@ func (p *Pipeline) report(ctx context.Context, progress jobs.Progress, done, tot
 
 // convert converts every Config of a Commit and commits the export.
 func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.CommitSHA, progress jobs.Progress) error {
-	files, err := SourceFiles(ctx, p.d.Repos, r.ID, commit)
+	// Data files are read through watch, so an error reading them fails
+	// the Job, which retries, instead of failing the dataset.
+	watch := newReadWatch(p.d.Repos)
+	files, err := SourceFiles(ctx, watch, r.ID, commit)
 	if errors.Is(err, repo.ErrRevisionNotFound) || errors.Is(err, repo.ErrNotFound) {
 		return jobs.Permanent(err)
 	}
@@ -191,7 +194,7 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 	}
 	if cerr != nil {
 		code, ok := LayoutFailure(cerr)
-		if !ok {
+		if !ok || watch.failure() != nil {
 			// Reading the files or the card failed; the Job retries.
 			return cerr
 		}
@@ -209,7 +212,7 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 		return err
 	}
 	if r.Mirror {
-		adopted, err := p.adoptExport(ctx, r, commit, res)
+		adopted, err := p.adoptExport(ctx, watch, r, commit, res)
 		if err != nil || adopted {
 			return err
 		}
@@ -229,13 +232,24 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 			return f, nil
 		}}
 	var results []*convert.ConfigResult
+	defer func() {
+		for _, cr := range results {
+			cr.Cleanup()
+		}
+	}()
 	var rows []SplitRow
 	for i, c := range res.Configs {
 		p.report(ctx, progress, i, len(res.Configs), "Converting config "+c.Name)
+		watch.reset()
 		cr, err := convert.Convert(ctx, c, files, opts)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+			if rerr := watch.failure(); rerr != nil {
+				// The Splits stay pending and the Job retries; the Viewer
+				// queues the conversion again if every try fails.
+				return fmt.Errorf("read the data files of config %s: %w", c.Name, rerr)
 			}
 			p.d.Log.WarnContext(ctx, "dataset conversion failed", "repo", r.ID.Path(), "config", c.Name, "error", err.Error())
 			for _, s := range c.Splits() {
@@ -245,11 +259,6 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 		}
 		results = append(results, cr)
 	}
-	defer func() {
-		for _, cr := range results {
-			cr.Cleanup()
-		}
-	}()
 	export, err := p.commitExport(ctx, r, commit, results)
 	if err != nil {
 		return err
@@ -390,7 +399,7 @@ func (p *Pipeline) ingest(ctx context.Context, sh convert.Shard) error {
 // adoptExport uses a Mirror's own refs/convert/parquet, which Pulls fetch
 // from the Upstream, instead of converting. It returns false when the
 // Mirror has no export.
-func (p *Pipeline) adoptExport(ctx context.Context, r *repo.Repo, commit model.CommitSHA, res *datasets.Resolved) (bool, error) {
+func (p *Pipeline) adoptExport(ctx context.Context, watch *readWatch, r *repo.Repo, commit model.CommitSHA, res *datasets.Resolved) (bool, error) {
 	tip, err := p.d.Repos.Resolve(ctx, r.ID, ExportRef)
 	if errors.Is(err, repo.ErrRevisionNotFound) {
 		return false, nil
@@ -439,12 +448,13 @@ func (p *Pipeline) adoptExport(ctx context.Context, r *repo.Repo, commit model.C
 			}
 			si := SplitInfo{Name: s}
 			var ferr error
+			watch.reset()
 			for _, f := range files {
 				if !f.Present {
 					ferr = errNotPulled
 					break
 				}
-				pf, err := pq.Open(OpenRepoFile(ctx, p.d.Repos, r.ID, tip, f.Path, f.Size), f.Size)
+				pf, err := pq.Open(OpenRepoFile(ctx, watch, r.ID, tip, f.Path, f.Size), f.Size)
 				if err != nil {
 					ferr = err
 					break
@@ -462,6 +472,12 @@ func (p *Pipeline) adoptExport(ctx context.Context, r *repo.Repo, commit model.C
 				row.NumBytesParquet += f.Size
 			}
 			if ferr != nil {
+				if ctx.Err() != nil {
+					return false, ctx.Err()
+				}
+				if rerr := watch.failure(); rerr != nil {
+					return false, fmt.Errorf("read the Upstream's Parquet export of %s/%s: %w", c.Name, s, rerr)
+				}
 				row.Status, row.Error = StatusFailed, FailureNotPulled
 				if !errors.Is(ferr, errNotPulled) {
 					p.d.Log.WarnContext(ctx, "could not read the Upstream's Parquet export", "repo", r.ID.Path(), "config", c.Name, "split", s,

@@ -38,6 +38,9 @@ type Options struct {
 	// pipeline keeps the fake). Load tests use it to give the Viewer a Repo
 	// service whose reads cost what the real one's do.
 	ViewerRepos func(*repotest.Fake) repo.Service
+	// PipelineRepos, when set, wraps the Repo service the pipeline uses.
+	// Tests use it to make the Jobs' reads fail.
+	PipelineRepos func(*repotest.Fake) repo.Service
 }
 
 // Stack is a running pipeline and Viewer.
@@ -69,7 +72,11 @@ func New(t testing.TB, o Options) *Stack {
 	q := jobstest.NewFake(reg)
 	repos := repotest.NewFake(t)
 	blobs := blobtest.NewFake()
-	p, err := pipeline.New(pipeline.Deps{DB: d, Blobs: blobs, Repos: repos, LFS: repos.LFS, Jobs: q, MaxConvertBytes: o.MaxConvertBytes, TempDir: t.TempDir()})
+	var pipelineRepos repo.Service = repos
+	if o.PipelineRepos != nil {
+		pipelineRepos = o.PipelineRepos(repos)
+	}
+	p, err := pipeline.New(pipeline.Deps{DB: d, Blobs: blobs, Repos: pipelineRepos, LFS: repos.LFS, Jobs: q, MaxConvertBytes: o.MaxConvertBytes, TempDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
