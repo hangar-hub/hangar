@@ -17,7 +17,7 @@ test.describe("sign-in", () => {
     await page.getByLabel("Username").fill("ada");
     await page.getByLabel("Password").fill("wrong-password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page.getByRole("alert")).toHaveText("The username or password is wrong.");
+    await expect(page.getByRole("alert")).toHaveText("Wrong username or password.");
     await page.getByLabel("Password").fill("correct-horse-battery");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();

@@ -322,7 +322,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   login: ({ state, body }) => {
     const { username, password } = body as { username: string; password: string };
     if (password === "wrong-password" || !password) {
-      return problem(401, "The username or password is wrong.");
+      return problem(401, "Wrong username or password.");
     }
     state.signedIn = true;
     state.me = { ...state.me, username: username || state.me.username };
