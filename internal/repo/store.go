@@ -58,9 +58,11 @@ type Options struct {
 	// facets and the downloads, likes and parameters sorts.
 	Index     index.Indexer
 	Community community.Service
-	// AnonymousRead lets anonymous users list public Repos
-	// (security.anonymous_read).
-	AnonymousRead bool
+	// AnonymousRead reports whether anonymous users may list public Repos
+	// (security.anonymous_read). It is asked on every anonymous List, so
+	// the Instance setting an admin changes at run time takes effect
+	// without a restart. Nil means anonymous users list nothing.
+	AnonymousRead func(context.Context) (bool, error)
 	// RestoreWindow is how long a deleted Repo can be restored
 	// (repos.restore_window). Zero means 7 days.
 	RestoreWindow time.Duration

@@ -193,7 +193,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	idx, comm := &boundIndexer{}, &boundCommunity{}
 	in.repos, err = repo.NewStore(repo.Options{DB: d, Git: in.git, LFS: in.lfs, Namespaces: in.orgs, Jobs: in.queue,
 		Webhooks: in.webhooks, Audit: in.audit, Quota: repoQuota{in.accounting}, Index: idx, Community: comm,
-		AnonymousRead: cfg.Security.AnonymousRead, RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
+		AnonymousRead: anonymousRead(in.auth), RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
 		MaxPackSize: cfg.Git.MaxPackSize.Int64(), AllowForcePush: cfg.Git.AllowForcePush, CompactThreshold: cfg.Git.CompactThreshold,
 		VerifyWait: cfg.LFS.VerifyWait, Log: in.log})
 	if err != nil {
@@ -446,6 +446,16 @@ func pullSettings(a *auth.Service) upstream.SettingsFunc {
 		s, err := a.Settings.Get(ctx)
 		return upstream.Settings{Windows: s.PullWindows, AllowOverrideWindows: s.PullAllowOverrideWindows,
 			PullThroughEnabled: s.PullThroughEnabled, PullThroughAllow: s.PullThroughAllow, PullThroughMinRole: s.PullThroughMinRole}, err
+	}
+}
+
+// anonymousRead reads security.anonymous_read from the Instance settings,
+// so the value an admin stores applies to Repo listing as it does to every
+// other read check.
+func anonymousRead(a *auth.Service) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		s, err := a.Settings.Get(ctx)
+		return s.AnonymousRead, err
 	}
 }
 
