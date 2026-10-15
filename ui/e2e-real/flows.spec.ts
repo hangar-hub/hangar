@@ -8,13 +8,16 @@ import {
   watchConsole,
 } from "../e2e/helpers";
 import {
+  api,
   env,
   session,
   signIn,
+  signInLock,
   upstreamGgufRepo,
   upstreamName,
   user,
   waitForPulledFile,
+  waitOutLock,
 } from "./helpers";
 import { datasetRepo, modelRepo } from "./seed";
 
@@ -40,15 +43,38 @@ async function setBlockUnsafe(page: Page, on: boolean) {
   });
 }
 
+/**
+ * Clicks Sign in on the form. While the Instance locks sign-in after
+ * earlier failures from this host (each width of each run makes one), the
+ * form must say how long to wait; the flow waits that long and submits
+ * again, as a person would.
+ */
+async function submitSignIn(page: Page) {
+  for (let tries = 1; ; tries++) {
+    const [res] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "POST" && new URL(r.url()).pathname === `${api}/auth/login`,
+      ),
+      page.getByRole("button", { name: "Sign in", exact: true }).click(),
+    ]);
+    const lock = signInLock(res);
+    if (lock === undefined || tries === 3) return;
+    await expect(page.getByRole("alert")).toHaveText(
+      /^Too many failed sign-in attempts\. Try again in [\dhms.]+\.$/,
+    );
+    await waitOutLock(lock);
+  }
+}
+
 test("signs in with a password, shows errors, and signs out", async ({ page }) => {
   const problems = watchConsole(page);
   await page.goto("/auth/login");
   await page.getByLabel("Username").fill(user.username);
   await page.getByLabel("Password").fill("wrong-password");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await submitSignIn(page);
   await expect(page.getByRole("alert")).toHaveText("Wrong username or password.");
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await submitSignIn(page);
   await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();
   await expect(page.getByRole("link", { name: modelRepo })).toBeVisible();
   await page.getByRole("button", { name: `Account menu for ${user.username}` }).click();
