@@ -165,8 +165,9 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 	dispatch := httpx.Dispatch(protocols, cfg.Server.PublicURL)
 	// The Ollama token endpoint takes an Ollama key signature, which the
 	// Ollama handler verifies; WriteAuthError classifies the protocol first,
-	// so bad credentials get each client's own challenge.
-	authed := httpx.Authenticate(ollama.ExemptTokenEndpoint(in.auth), auth.WriteAuthError(cfg.Server.PublicURL))(dispatch)
+	// so bad credentials get each client's own challenge. A stale session
+	// cookie makes the request anonymous, and Middleware clears it.
+	authed := in.auth.Middleware(ollama.ExemptTokenEndpoint(in.auth), auth.WriteAuthError(cfg.Server.PublicURL))(dispatch)
 
 	exports := api.ExportHandler(in.blobs, in.signer)
 	pullThrough := in.pulls.PullThrough().Handler()

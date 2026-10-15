@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -26,11 +27,11 @@ var ErrCSRF = fmt.Errorf("%w: missing or wrong %s header", ErrInvalidCredentials
 //   - `Authorization: Basic` with a Token as the password (any username): git.
 //   - the `hangar_session` cookie: a UI session. Requests with a method
 //     other than GET, HEAD or OPTIONS must also send the session's CSRF
-//     token in X-CSRF-Token.
+//     token in X-CSRF-Token, except the calls that start a new session.
 //
-// With no credentials it returns an anonymous Principal and no error. A
-// bad credential returns an error wrapping ErrInvalidCredentials, and also
-// httpx.ErrInvalidCredentials.
+// With no credentials, or only a stale session cookie, it returns an
+// anonymous Principal and no error. A bad Authorization header returns an
+// error wrapping ErrInvalidCredentials, and also httpx.ErrInvalidCredentials.
 func (s *Service) Authenticate(r *http.Request) (model.Principal, error) {
 	p, err := s.authenticate(r)
 	if err != nil {
@@ -73,23 +74,92 @@ func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
 	if c == nil || c.Value == "" {
 		return model.Anonymous(), nil
 	}
+	// The browser sends the session cookie on every request, so a stale one
+	// (unknown, expired, revoked, or for a missing or disabled User) makes
+	// the request anonymous instead of failing it. Otherwise the browser
+	// could not even load the sign-in page until the user cleared cookies.
 	sess, err := s.Sessions.lookup(ctx, c.Value)
+	if errors.Is(err, ErrInvalidCredentials) {
+		return staleSession(ctx), nil
+	}
 	if err != nil {
 		return model.Principal{}, err
 	}
 	u, err := s.Users.Get(ctx, sess.UserID)
+	if errors.Is(err, ErrNotFound) {
+		return staleSession(ctx), nil
+	}
 	if err != nil {
-		return model.Principal{}, fmt.Errorf("%w: unknown user", ErrInvalidCredentials)
+		return model.Principal{}, err
 	}
 	if u.Disabled() {
-		return model.Principal{}, fmt.Errorf("%w: %w", ErrInvalidCredentials, ErrDisabled)
+		return staleSession(ctx), nil
 	}
 	if !safeMethod(r.Method) && !checkCSRF(r, sess) {
+		if isSignInCall(r) {
+			// Signing in again replaces the session, so it needs nothing
+			// from the current one.
+			return model.Anonymous(), nil
+		}
 		return model.Principal{}, ErrCSRF
 	}
 	p := u.Principal(model.AuthSession)
 	p.SessionID = sess.ID
 	return p, nil
+}
+
+// isSignInCall reports whether r is one of the calls that start a new
+// session: password sign-in, registration, accepting an invite and
+// resetting a password. They run as anonymous when the request's session
+// cookie comes without the CSRF header, so a signed-in browser can sign in
+// again. SameSite=Lax keeps other sites from posting them with the cookie.
+func isSignInCall(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	p := r.URL.Path
+	switch {
+	case p == "/api/hangar/v1/auth/login", p == "/auth/register":
+		return true
+	case strings.HasPrefix(p, "/auth/invite/"):
+		return !strings.Contains(strings.TrimPrefix(p, "/auth/invite/"), "/")
+	case strings.HasPrefix(p, "/auth/reset/"):
+		return !strings.Contains(strings.TrimPrefix(p, "/auth/reset/"), "/")
+	}
+	return false
+}
+
+// staleKey holds a *staleFlag in a request context set up by Middleware.
+type staleKey struct{}
+
+// staleFlag records that a request carried a stale session cookie.
+type staleFlag struct{ set atomic.Bool }
+
+// staleSession marks the request's session cookie as stale, so Middleware
+// clears it, and returns the anonymous Principal.
+func staleSession(ctx context.Context) model.Principal {
+	if f, ok := ctx.Value(staleKey{}).(*staleFlag); ok {
+		f.set.Store(true)
+	}
+	return model.Anonymous()
+}
+
+// Middleware is httpx.Authenticate with one addition: when the request's
+// session cookie is stale, the response clears the session and CSRF
+// cookies, so the browser stops sending them. authn is usually s, perhaps
+// wrapped; onError is as for httpx.Authenticate.
+func (s *Service) Middleware(authn httpx.Authenticator, onError func(w http.ResponseWriter, r *http.Request, err error)) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		authed := httpx.Authenticate(authn, onError)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if f, ok := r.Context().Value(staleKey{}).(*staleFlag); ok && f.set.Load() {
+				s.ClearCookies(w)
+			}
+			next.ServeHTTP(w, r)
+		}))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authed.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), staleKey{}, &staleFlag{})))
+		})
+	}
 }
 
 func safeMethod(m string) bool {

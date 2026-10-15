@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -175,6 +176,20 @@ func (s *Service) ClearCookies(w http.ResponseWriter) {
 }
 
 func (s *Service) setCookie(w http.ResponseWriter, name, value string, maxAge int, expires time.Time, httpOnly bool) {
+	// A response sets each cookie once (RFC 6265, section 4.1.1): signing
+	// in on a request whose stale cookie Middleware cleared replaces the
+	// clearing header.
+	h := w.Header()
+	var kept []string
+	for _, v := range h.Values("Set-Cookie") {
+		if !strings.HasPrefix(v, name+"=") {
+			kept = append(kept, v)
+		}
+	}
+	h.Del("Set-Cookie")
+	for _, v := range kept {
+		h.Add("Set-Cookie", v)
+	}
 	c := &http.Cookie{Name: name, Value: value, Path: "/", MaxAge: maxAge, Expires: expires, SameSite: http.SameSiteLaxMode} //nolint:gosec // Secure and HttpOnly are set below.
 	c.Secure = s.secureCookies()
 	c.HttpOnly = httpOnly
@@ -182,12 +197,15 @@ func (s *Service) setCookie(w http.ResponseWriter, name, value string, maxAge in
 }
 
 // StartSession creates a session for u, sets the cookies and returns the
-// session. Handlers call it after a successful sign-in.
+// session. Handlers call it after a successful sign-in. The session the
+// request's cookie names, if any, ends: the browser's cookie is replaced,
+// so nothing could use it again.
 func (s *Service) StartSession(ctx context.Context, w http.ResponseWriter, r *http.Request, u *User) (*Session, error) {
 	sess, secret, err := s.Sessions.Create(ctx, u.ID, r.UserAgent(), httpx.ClientIP(r))
 	if err != nil {
 		return nil, err
 	}
+	s.deleteRequestSession(ctx, r)
 	s.SetCookies(w, sess, secret)
 	s.Users.touchLogin(ctx, u.ID)
 	return sess, nil
@@ -195,12 +213,19 @@ func (s *Service) StartSession(ctx context.Context, w http.ResponseWriter, r *ht
 
 // EndSession deletes the request's session, if any, and clears the cookies.
 func (s *Service) EndSession(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
-		if _, err := s.db.NewDelete().Model((*db.Session)(nil)).Where("id_hash = ?", hashSecret(c.Value)).Exec(ctx); err != nil {
-			s.log.WarnContext(ctx, "delete session", "error", err)
-		}
-	}
+	s.deleteRequestSession(ctx, r)
 	s.ClearCookies(w)
+}
+
+// deleteRequestSession deletes the session the request's cookie names.
+func (s *Service) deleteRequestSession(ctx context.Context, r *http.Request) {
+	c, err := r.Cookie(SessionCookie)
+	if err != nil || c.Value == "" {
+		return
+	}
+	if _, err := s.db.NewDelete().Model((*db.Session)(nil)).Where("id_hash = ?", hashSecret(c.Value)).Exec(ctx); err != nil {
+		s.log.WarnContext(ctx, "delete session", "error", err)
+	}
 }
 
 // CurrentSession returns the session behind a session-authenticated

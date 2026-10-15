@@ -121,6 +121,49 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 	require.Equal(t, http.StatusOK, sys.StatusCode, string(b))
 	require.Contains(t, string(b), `"blob_store":{"backend":"fs"}`)
 
+	// Signing in again with the session cookie needs no CSRF header. The
+	// old cookie is then stale: every route answers it as anonymous and
+	// clears it, so the browser can reach the sign-in page.
+	signIn := func(cookies []*http.Cookie) *http.Response {
+		req, _ := http.NewRequest(http.MethodPost, base+"/api/hangar/v1/auth/login",
+			strings.NewReader(`{"username":"hangar-admin","password":"`+password+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return resp
+	}
+	again := signIn(login.Cookies())
+	require.Equal(t, http.StatusOK, again.StatusCode, "a signed-in browser can sign in again")
+	stale := login.Cookies()
+	for _, path := range []string{"/auth/login", "/", "/assets/x.js", "/api/hangar/v1/auth/providers"} {
+		req, _ := http.NewRequest(http.MethodGet, base+path, nil)
+		for _, c := range stale {
+			req.AddCookie(c)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.NotEqual(t, http.StatusUnauthorized, resp.StatusCode, path)
+		cleared := 0
+		for _, c := range resp.Cookies() {
+			if c.Name == "hangar_session" || c.Name == "hangar_csrf" {
+				require.Equal(t, -1, c.MaxAge, path)
+				cleared++
+			}
+		}
+		require.Equal(t, 2, cleared, "%s clears the stale cookies", path)
+	}
+	fresh := signIn(stale)
+	require.Equal(t, http.StatusOK, fresh.StatusCode, "a stale cookie does not block sign-in")
+	for _, c := range fresh.Cookies() {
+		require.Positive(t, c.MaxAge, "%s is set, not cleared", c.Name)
+	}
+	require.Len(t, fresh.Cookies(), 2)
+
 	require.NoError(t, checkReady(context.Background(), addr), "hangar healthcheck succeeds against a ready server")
 
 	// First start generated and printed the secrets once.
