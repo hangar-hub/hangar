@@ -401,6 +401,18 @@ func (pt *PullThrough) Handler() http.Handler {
 			httpx.WriteError(w, r, http.StatusNotFound, "not_found", "No branch of the Repo references this object.")
 			return
 		}
+		// A link issued before an admin turned on blocking is checked
+		// again, as git-lfs signed links are.
+		blocked, err := pt.s.opts.Downloads.CheckObjects(ctx, rp.UUID, rp.ID, []string{oid})
+		if err != nil {
+			pt.s.log.WarnContext(ctx, "pull-through download check", "repo", rp.ID.Path(), "error", err.Error())
+			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "The download could not be checked. Try again.")
+			return
+		}
+		if err := blocked[oid]; err != nil {
+			httpx.WriteError(w, r, http.StatusForbidden, "forbidden", err.Error())
+			return
+		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		if r.Method == http.MethodHead {

@@ -23,6 +23,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/org"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/upstream/deps"
 	"github.com/jamesagarside/hangar/internal/webhook"
@@ -90,7 +91,11 @@ type Options struct {
 	Snooze       SnoozeFunc
 	MirrorState  MirrorStateSetter
 	// Signer signs Pull-through URLs for git-lfs downloads.
-	Signer    *httpx.Signer
+	Signer *httpx.Signer
+	// Downloads enforces scan.block_unsafe_downloads on signed
+	// Pull-through downloads, as git-lfs signed links are checked again
+	// when they are used. Nil never blocks.
+	Downloads *scan.Gate
 	PublicURL string
 	// Dependencies are pull.dependencies.
 	Dependencies config.DependencyConfig

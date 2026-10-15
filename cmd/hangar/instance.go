@@ -193,7 +193,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	idx, comm := &boundIndexer{}, &boundCommunity{}
 	in.repos, err = repo.NewStore(repo.Options{DB: d, Git: in.git, LFS: in.lfs, Namespaces: in.orgs, Jobs: in.queue,
 		Webhooks: in.webhooks, Audit: in.audit, Quota: repoQuota{in.accounting}, Index: idx, Community: comm,
-		AnonymousRead: cfg.Security.AnonymousRead, RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
+		AnonymousRead: anonymousRead(in.auth), RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
 		MaxPackSize: cfg.Git.MaxPackSize.Int64(), AllowForcePush: cfg.Git.AllowForcePush, CompactThreshold: cfg.Git.CompactThreshold,
 		VerifyWait: cfg.LFS.VerifyWait, Log: in.log})
 	if err != nil {
@@ -206,6 +206,14 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	in.layout = &layout.Service{Repos: in.repos}
 	in.datasets = &pipeline.Store{DB: d, Blobs: in.blobs}
 
+	// The security scan (W7). One gate enforces scan.block_unsafe_downloads
+	// for every protocol that serves file bytes, Pull-through included.
+	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
+	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
+		s, err := in.auth.Settings.Get(ctx)
+		return s.ScanBlockUnsafeDownloads, err
+	})
+
 	// Upstreams and Pulls (W6).
 	in.client = upstream.NewHTTPClient(upstream.HTTPOptions{Version: version, Tracer: tel.Tracer()})
 	in.pulls, err = upstream.New(upstream.Options{
@@ -216,7 +224,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 			return jobs.ParseWindows(specs, in.loc)
 		},
 		Snooze: jobs.Snooze, MirrorState: in.repos, UserTokens: in.auth.UpstreamTokens, Signer: in.signer,
-		PublicURL: cfg.Server.PublicURL, Dependencies: cfg.Pull.Dependencies, Quota: pullQuota{in.accounting},
+		Downloads: in.unsafeGate, PublicURL: cfg.Server.PublicURL, Dependencies: cfg.Pull.Dependencies, Quota: pullQuota{in.accounting},
 		SpoolDir: filepath.Join(cfg.Server.DataDir, "pull-through"), Instruments: inst, Log: in.log,
 	})
 	if err != nil {
@@ -226,13 +234,6 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	// Metadata, community and Collections (W7).
 	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
 		Layout: datasetLayout(in.layout), DatasetSplits: datasetSplits(in.datasets), AfterIndex: in.afterIndex})
-	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
-	// One gate enforces scan.block_unsafe_downloads for every protocol
-	// that serves file bytes.
-	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
-		s, err := in.auth.Settings.Get(ctx)
-		return s.ScanBlockUnsafeDownloads, err
-	})
 	in.community = communitydb.New(communitydb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Log: in.log})
 	in.collections = collections.New(collections.Options{DB: d, Orgs: in.orgs, Repos: in.repos, Authz: in.auth.Authz()})
 	idx.Indexer, comm.Service = in.indexer, in.community
@@ -446,6 +447,16 @@ func pullSettings(a *auth.Service) upstream.SettingsFunc {
 		s, err := a.Settings.Get(ctx)
 		return upstream.Settings{Windows: s.PullWindows, AllowOverrideWindows: s.PullAllowOverrideWindows,
 			PullThroughEnabled: s.PullThroughEnabled, PullThroughAllow: s.PullThroughAllow, PullThroughMinRole: s.PullThroughMinRole}, err
+	}
+}
+
+// anonymousRead reads security.anonymous_read from the Instance settings,
+// so the value an admin stores applies to Repo listing as it does to every
+// other read check.
+func anonymousRead(a *auth.Service) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		s, err := a.Settings.Get(ctx)
+		return s.AnonymousRead, err
 	}
 }
 

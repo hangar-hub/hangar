@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/jamesagarside/hangar/internal/api"
@@ -22,7 +23,9 @@ import (
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/ollama"
+	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/upstream"
 	"github.com/jamesagarside/hangar/internal/web"
@@ -185,24 +188,80 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 	// cookie makes the request anonymous, and Middleware clears it.
 	authed := in.auth.Middleware(ollama.ExemptTokenEndpoint(in.auth), auth.WriteAuthError(cfg.Server.PublicURL))(dispatch)
 
-	exports := api.ExportHandler(in.blobs, in.signer)
-	pullThrough := in.pulls.PullThrough().Handler()
+	direct := directRoutes(in)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := r.URL.EscapedPath()
-		switch {
-		case casHost != "" && strings.EqualFold(r.Host, casHost):
+		if casHost != "" && strings.EqualFold(r.Host, casHost) {
 			httpx.SetProtocol(r.Context(), telemetry.ProtocolXet)
 			cas.ServeHTTP(w, r)
-		case strings.HasPrefix(p, api.ExportPath):
-			httpx.SetProtocol(r.Context(), telemetry.ProtocolNative)
-			exports.ServeHTTP(w, r)
-		case strings.HasPrefix(p, upstream.PullThroughPath):
-			httpx.SetProtocol(r.Context(), telemetry.ProtocolLFS)
-			pullThrough.ServeHTTP(w, r)
-		case httpx.Classify(r, viewerHost) == httpx.TargetXet:
-			dispatch.ServeHTTP(w, r)
-		default:
-			authed.ServeHTTP(w, r)
+			return
 		}
+		p := r.URL.EscapedPath()
+		for _, d := range direct {
+			if strings.HasPrefix(p, d.Prefix) {
+				httpx.SetProtocol(r.Context(), d.Protocol)
+				d.Handler.ServeHTTP(w, r)
+				return
+			}
+		}
+		if httpx.Classify(r, viewerHost) == httpx.TargetXet {
+			dispatch.ServeHTTP(w, r)
+			return
+		}
+		authed.ServeHTTP(w, r)
 	}), nil
+}
+
+// directRoute is a path prefix served before authentication and protocol
+// dispatch, because its URLs carry their own credential: a signature.
+type directRoute struct {
+	Prefix   string
+	Protocol telemetry.Protocol
+	Handler  http.Handler
+}
+
+// directRoutes returns the signed-link routes: zip exports and git-lfs
+// Pull-through downloads. Both serve file bytes, so both check
+// scan.block_unsafe_downloads when the link is used.
+func directRoutes(in *instance) []directRoute {
+	return []directRoute{
+		{Prefix: api.ExportPath, Protocol: telemetry.ProtocolNative, Handler: api.ExportHandler(in.blobs, in.signer, exportCheck(in))},
+		{Prefix: upstream.PullThroughPath, Protocol: telemetry.ProtocolLFS, Handler: in.pulls.PullThrough().Handler()},
+	}
+}
+
+// exportCheck runs the unsafe-download gate again when a signed zip export
+// link is used, because a link issued before an admin turned blocking on,
+// or before the scan finished, must not serve a refused file. It finds the
+// zip.export Job from the export's key and checks the folder of the Commit
+// it exported, as StartZipExport did.
+func exportCheck(in *instance) api.ExportCheck {
+	return func(ctx context.Context, key string) error {
+		if on, err := in.unsafeGate.Block(ctx); err != nil || !on {
+			return err
+		}
+		name, ok := strings.CutPrefix(key, blob.PrefixExports)
+		if !ok {
+			return fmt.Errorf("export key %q is outside %s", key, blob.PrefixExports)
+		}
+		jobID, err := uuid.Parse(strings.TrimSuffix(name, ".zip"))
+		if err != nil || repo.ExportKey(jobID) != key {
+			return fmt.Errorf("export key %q does not name a zip.export Job", key)
+		}
+		j, err := in.queue.Get(ctx, jobID)
+		if err != nil {
+			return fmt.Errorf("zip.export Job of %s: %w", key, err)
+		}
+		var pl repo.ZipJob
+		if j.Kind != jobs.KindZipExport {
+			return fmt.Errorf("job %s is %s, not %s", jobID, j.Kind, jobs.KindZipExport)
+		}
+		if err := j.DecodePayload(&pl); err != nil {
+			return err
+		}
+		r, err := in.repos.GetByUUID(ctx, pl.RepoUUID)
+		if err != nil {
+			return err
+		}
+		return in.unsafeGate.CheckTree(ctx, r.UUID, r.ID, pl.Commit, pl.Path)
+	}
 }

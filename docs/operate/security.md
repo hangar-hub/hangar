@@ -21,6 +21,8 @@ With **Block downloads of unsafe files** on (`scan_block_unsafe_downloads` in th
 
 The setting applies to every way a file leaves Hangar: `huggingface_hub` and other Hub API clients, the web UI, git-lfs, the Ollama registry and zip exports. Hub API and web UI downloads can go ahead with `accept_risk=1` in the URL; git-lfs and Ollama answer with a 403 and the reason, and a zip export of a folder with such a file is refused. A `git clone` without LFS is not checked, because git transfers whole Commits; the Hub's default `.gitattributes`, which Hangar applies to new Repos, stores every pickle format in LFS.
 
+Links that Hangar signs, for git-lfs, Pull-through and zip export downloads, are checked again when they are used, so a link issued before you turned the setting on, or before the scan finished, stops working. In `redirect` storage mode, presigned links go straight to the Blob store, so Hangar checks them only when it issues them, and they work until they expire.
+
 ## Verify the image
 
 Images are signed with cosign keyless signing from the release workflow, with an SPDX SBOM attestation and SLSA build provenance:

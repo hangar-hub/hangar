@@ -58,8 +58,9 @@ func IsBlocked(err error) bool {
 
 // Gate enforces the Instance setting scan.block_unsafe_downloads
 // (07-indexing-and-scanning.md "Where results show") for every protocol
-// that serves file bytes: the Hub API, git-lfs, the Ollama registry and zip
-// exports, so the setting has no way around it. With the setting on it
+// that serves file bytes: the Hub API, git-lfs, the Ollama registry, zip
+// exports and signed Pull-through links, so the setting has no way around
+// it. Signed links are checked again when they are used. With the setting on it
 // refuses files the scan marked unsafe, and fails closed for files that can
 // run code when loaded (pickle, joblib and NumPy files) that have no result,
 // because their scan is pending or its Job failed. A file the scan read but

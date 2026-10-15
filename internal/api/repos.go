@@ -929,10 +929,17 @@ func ExportURL(publicURL string, blobs blob.Store, signer *httpx.Signer) func(ct
 	}
 }
 
+// ExportCheck is called with an export's Blob store key before
+// ExportHandler serves it. It returns a *scan.BlockedError when
+// scan.block_unsafe_downloads refuses a file in the export, so a link
+// issued before an admin turned blocking on, or before the scan finished,
+// is checked again, as git-lfs signed links are.
+type ExportCheck func(ctx context.Context, key string) error
+
 // ExportHandler serves zip exports at ExportPath from signed URLs made by
 // ExportURL. Mount it outside the generated router, because the URL
-// authorises itself.
-func ExportHandler(blobs blob.Store, signer *httpx.Signer) http.Handler {
+// authorises itself. check, when set, runs once the signature is verified.
+func ExportHandler(blobs blob.Store, signer *httpx.Signer, check ExportCheck) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpx.SetRoute(r.Context(), ExportPath+"{file}")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -945,6 +952,16 @@ func ExportHandler(blobs blob.Store, signer *httpx.Signer) http.Handler {
 		if err != nil || scope != "export:"+key || blob.ValidateKey(key) != nil || strings.Contains(file, "/") {
 			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden, Detail: "The download link is invalid or has expired. Start the download again."})
 			return
+		}
+		if check != nil {
+			if err := check(r.Context(), key); scan.IsBlocked(err) {
+				httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden, Detail: err.Error() +
+					" A zip export cannot include it. Download the other files one by one, or choose a folder without it."})
+				return
+			} else if err != nil {
+				httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusInternalServerError})
+				return
+			}
 		}
 		rc, info, err := blobs.Get(r.Context(), key, nil)
 		if err != nil {

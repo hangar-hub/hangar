@@ -11,7 +11,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | Wiring, readiness and adapters | `go test -race -tags integration ./cmd/hangar/` | ok; statement coverage 83.9% (floor 75%) |
 | Readiness during start-up | `HANGAR_BINARY=... go test -count=10 -tags compat -run TestStartServesHealthAndStops ./compat/harness/` | 10 of 10 passed |
 | S3 proxy modes against MinIO | `HANGAR_TEST_MINIO=1 go test -run 'TestS3ProxyModes\|TestOpenS3' ./cmd/hangar/ ./internal/blob/...` | ok |
-| Unsafe-download gate on every route | `go test -run TestUnsafeDownloadGateCoversEveryRoute ./cmd/hangar/` and the gate tests in `internal/scan`, `internal/hfapi`, `internal/gitserver`, `internal/ollama`, `internal/api` | ok |
+| Unsafe-download gate on every route | `go test -run 'TestUnsafeDownloadGateCoversEveryRoute\|TestServingSurfaceIsClassified\|TestFileByteReadersAreClassified' ./cmd/hangar/` and the gate tests in `internal/scan`, `internal/hfapi`, `internal/gitserver`, `internal/ollama`, `internal/api` | ok |
 | Ollama client against the binary | `HANGAR_BINARY=... go test -tags compat ./compat/ollama/` with Ollama 0.31.1 | 7 of 7 subtests passed |
 | Hub clients against the binary | `HANGAR_HF_INSTANCE=binary uv run --project compat pytest compat/hf`, also with `HANGAR_HF_XET_UPLOADS=1` | 41 passed (the library tests on Python 3.11, see the README note on SciPy and macOS) |
 | Hub clients against the fakes, with the matrix written | `HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf` | 41 passed |
@@ -71,7 +71,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | AUTH-6 | Done | `internal/auth/bootstrap`; `cmd/hangar` admin command tests |
 | AUTH-7 | Done | `internal/auth` Ollama key tests; `compat/ollama` private Repo with a registered key against the binary |
 | META-1 | Done | `internal/index` extract and fuzz tests |
-| META-2 | Done | `internal/scan`; `internal/scan/gate_test.go`; route enumeration in `cmd/hangar/unsafe_test.go` |
+| META-2 | Done | `internal/scan`; `internal/scan/gate_test.go`; route checks in `cmd/hangar/unsafe_test.go`, enumeration of protocols, signed-link routes and file byte readers in `cmd/hangar/unsafe_surface_test.go` |
 | META-3 | Done | `internal/scan` integrity tests |
 | DATA-1 | Done | as REPO-1 to REPO-9 for dataset Repos |
 | DATA-2 | Done | `internal/datasets/layout` (70 layouts against `datasets` 5.1.0) |
@@ -115,5 +115,5 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 - **git-upload-pack and unsafe files.** `scan.Gate` does not gate `git clone` without LFS, because git sends whole Commits. The Hub's default `.gitattributes` keeps every pickle format in LFS, and [Security](../operate/security.md) says so.
 - **Scan errors are not blocked.** A file the scanner read but could not parse (status `error`) downloads with blocking on, because many `.bin` files are not pickles. The phase 3 review should confirm the trade-off.
 - **A flaky Upstreams test.** `internal/api` `TestUpstreamsAPI/sqlite` failed once (`update_available` was true) in a full `-race` run on a heavily loaded machine and passed three times in a row afterwards. W6 should find the cause.
-- **Not rerun in this round.** Helm on kind and the `quickstart` and `oidc-keycloak` Compose examples were not rerun after these fixes, and the new `hub-binary` Hub cells and real-Instance Playwright step ran locally only, as there is no remote yet.
+- **Compose and Helm smoke, rerun at `fix/r2-lead`.** With an image built from that branch, `scripts/compose-smoke.sh` passed on all four examples (`quickstart`, `postgres-minio`, `scale` and `oidc-keycloak`), and on kind the chart installed with `ci/default-values.yaml`, `helm test` passed and `scripts/smoke.sh` passed through a port-forward, each including the `pull` step. The `hub-binary` Hub cells and real-Instance Playwright step still run locally only, as there is no remote yet.
 - **`/admin/system` does not report `upload_mode`.** It reports `download_mode`; adding `upload_mode` changes the OpenAPI file and is left to the owners.

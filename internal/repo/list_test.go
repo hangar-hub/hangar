@@ -1,6 +1,9 @@
 package repo_test
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,7 +105,73 @@ func TestListVisibilityFiltersAndPages(t *testing.T) {
 		n, err := e.svc.CountByNamespace(e.ctx, alice.NamespaceID, bob)
 		require.NoError(t, err)
 		require.Equal(t, 2, n)
-	}, func(o *repo.Options) { o.AnonymousRead = false })
+	}, func(o *repo.Options) { o.AnonymousRead = func(context.Context) (bool, error) { return false, nil } })
+}
+
+func TestListAnonymousReadIsAskedOnEveryList(t *testing.T) {
+	var mu sync.Mutex
+	allowed, fail := false, false
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		for name, vis := range map[string]model.Visibility{"pub": model.VisibilityPublic, "internal": model.VisibilityInternal, "secret": model.VisibilityPrivate} {
+			e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: name}, Visibility: vis, Actor: alice})
+		}
+		list := func() ([]string, error) {
+			res, err := e.svc.List(e.ctx, repo.ListOptions{Viewer: model.Anonymous(), Search: "alice"})
+			if err != nil {
+				return nil, err
+			}
+			return ids(res), nil
+		}
+		set := func(a, f bool) {
+			mu.Lock()
+			defer mu.Unlock()
+			allowed, fail = a, f
+		}
+
+		set(false, false) // Each driver's subtest starts from the default.
+		got, err := list()
+		require.NoError(t, err)
+		require.Empty(t, got)
+
+		// The setting changes while the Store runs, as PATCH
+		// /admin/settings does; the next List follows it.
+		set(true, false)
+		got, err = list()
+		require.NoError(t, err)
+		require.Equal(t, []string{"model:alice/pub"}, got)
+
+		set(false, false)
+		got, err = list()
+		require.NoError(t, err)
+		require.Empty(t, got)
+
+		set(true, true)
+		_, err = list()
+		require.ErrorContains(t, err, "settings unavailable")
+	}, func(o *repo.Options) {
+		o.AnonymousRead = func(context.Context) (bool, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			if fail {
+				return false, errors.New("settings unavailable")
+			}
+			return allowed, nil
+		}
+	})
+}
+
+func TestListAnonymousReadNilListsNothing(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "pub"}, Visibility: model.VisibilityPublic, Actor: alice})
+		res, err := e.svc.List(e.ctx, repo.ListOptions{Viewer: model.Anonymous()})
+		require.NoError(t, err)
+		require.Empty(t, ids(res))
+		res, err = e.svc.List(e.ctx, repo.ListOptions{Viewer: alice})
+		require.NoError(t, err)
+		require.Equal(t, []string{"model:alice/pub"}, ids(res))
+	})
 }
 
 func TestListMetadataFiltersAndFacets(t *testing.T) {

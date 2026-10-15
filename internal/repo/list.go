@@ -184,6 +184,13 @@ func (s *Store) listQuery(ctx context.Context, opts ListOptions) (*bun.SelectQue
 	q := s.selectRepo(s.db).Where("repo.deleted_at IS NULL")
 	p := opts.Viewer
 	if !p.IsAdmin || p.IsAnonymous() {
+		anonRead := false
+		if p.IsAnonymous() && s.opts.AnonymousRead != nil {
+			var err error
+			if anonRead, err = s.opts.AnonymousRead(ctx); err != nil {
+				return nil, fmt.Errorf("repo: list anonymous read setting: %w", err)
+			}
+		}
 		var nsIDs []uuid.UUID
 		if p.IsUser() && p.UserID != uuid.Nil {
 			if p.NamespaceID != uuid.Nil {
@@ -198,7 +205,7 @@ func (s *Store) listQuery(ctx context.Context, opts ListOptions) (*bun.SelectQue
 			}
 		}
 		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-			if !p.IsAnonymous() || s.opts.AnonymousRead {
+			if !p.IsAnonymous() || anonRead {
 				q = q.WhereOr("repo.visibility = ?", string(model.VisibilityPublic))
 			}
 			if !p.IsAnonymous() {
