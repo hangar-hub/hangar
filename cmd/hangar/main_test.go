@@ -366,12 +366,18 @@ func TestFirstReadyAnswerServesEveryRoute(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- serve(ctx, cfg, io.Discard, nil) }()
+	client := &http.Client{Timeout: 5 * time.Second}
 	t.Cleanup(func() {
+		// The Transport can dial a connection for one poll and then hand
+		// that poll a connection freed meanwhile, which leaves the new one
+		// pooled with no request on it. The server counts such a
+		// connection as new, not idle, so Shutdown would wait for it until
+		// the shutdown timeout ends: close the pool first.
+		client.CloseIdleConnections()
 		cancel()
 		require.NoError(t, <-done)
 	})
 
-	client := &http.Client{Timeout: 5 * time.Second}
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		require.True(t, time.Now().Before(deadline), "/readyz did not answer 200 within 60 seconds")
