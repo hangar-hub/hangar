@@ -66,6 +66,8 @@ func IsBlocked(err error) bool {
 // because their scan is pending or its Job failed. A file the scan read but
 // could not parse (status error) is not refused: the scanner records the
 // imports it saw before the error, and many .bin files are not pickles.
+// While a Commit's scan is pending, a path whose file is unchanged since
+// the nearest scanned ancestor keeps that ancestor's result (Current).
 // Downloads that name an object instead of a
 // path (git-lfs, Ollama blobs) are refused when any scanned path of the
 // Repo with that object is refused.
@@ -146,6 +148,19 @@ func (g *Gate) results(ctx context.Context, repoUUID uuid.UUID, commit model.Com
 	return res, err
 }
 
+// current returns a Commit's results for CheckFile and CheckTree: its
+// stored results or, while its scan is pending, the results carried from
+// the nearest scanned ancestor for unchanged files (Current). A file that
+// changed has no result, so a file that can run code still fails closed.
+// It is nil when nothing is stored for the Commit or an ancestor.
+func (g *Gate) current(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, paths []string) (*CommitResult, error) {
+	v, err := Current(ctx, g.Results, g.Repos, repoUUID, id, commit, paths)
+	if err != nil {
+		return nil, err
+	}
+	return v.result(), nil
+}
+
 // CheckFile returns a *BlockedError when the file at p of commit must not
 // download, nil when it may, and other errors when the check failed.
 func (g *Gate) CheckFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, p string) error {
@@ -153,7 +168,7 @@ func (g *Gate) CheckFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoI
 	if err != nil || !on {
 		return err
 	}
-	res, err := g.results(ctx, repoUUID, commit)
+	res, err := g.current(ctx, repoUUID, id, commit, []string{p})
 	if err != nil {
 		return err
 	}
@@ -171,7 +186,7 @@ func (g *Gate) CheckTree(ctx context.Context, repoUUID uuid.UUID, id model.RepoI
 	if err != nil || !on {
 		return err
 	}
-	res, err := g.results(ctx, repoUUID, commit)
+	res, err := g.current(ctx, repoUUID, id, commit, nil)
 	if err != nil {
 		return err
 	}

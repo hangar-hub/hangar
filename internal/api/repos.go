@@ -793,7 +793,7 @@ func (a *ReposAPI) tree(w http.ResponseWriter, r *http.Request, pType gen.RepoTy
 		a.d.problem(w, r, err)
 		return
 	}
-	scans := a.d.scanStatuses(r.Context(), rp, sha)
+	scans := a.d.scanStatuses(r.Context(), rp, sha, entries)
 	for _, e := range entries {
 		te := gen.TreeEntry{Path: e.Path, Type: gen.TreeEntryType(e.Type), Size: e.Size, Oid: e.OID, Present: e.Present}
 		if e.LFS != nil {
@@ -815,19 +815,42 @@ func (a *ReposAPI) tree(w http.ResponseWriter, r *http.Request, pType gen.RepoTy
 	httpx.WriteJSON(w, r, http.StatusOK, out)
 }
 
-// scanStatuses returns each scanned file's status, or nothing when no
-// scanner is wired or the Commit is not scanned yet.
-func (d *RepoDeps) scanStatuses(ctx context.Context, rp *repo.Repo, sha model.CommitSHA) map[string]gen.TreeEntryScanStatus {
+// scanStatuses returns the scan status of each listed file. While the
+// Commit's scan Job is pending, a file unchanged since the nearest scanned
+// ancestor keeps that result, and a changed file the scan reads is
+// pending, so the file page never offers a plain download that the
+// download gate would refuse. It returns nothing when no scanner is wired.
+func (d *RepoDeps) scanStatuses(ctx context.Context, rp *repo.Repo, sha model.CommitSHA, entries []model.Entry) map[string]gen.TreeEntryScanStatus {
 	out := map[string]gen.TreeEntryScanStatus{}
 	if d.Scanner == nil {
 		return out
 	}
-	res, err := d.Scanner.Results(ctx, rp.UUID, sha)
-	if err != nil {
+	var paths []string
+	for _, e := range entries {
+		if e.Type == model.EntryFile {
+			paths = append(paths, e.Path)
+		}
+	}
+	if len(paths) == 0 {
 		return out
 	}
-	for _, f := range res.Files {
+	v, err := scan.Current(ctx, d.Scanner.Results, d.Repos, rp.UUID, rp.ID, sha, paths)
+	if err != nil {
+		if ctx.Err() == nil {
+			d.Log.WarnContext(ctx, "could not read scan results", "repo.id", rp.ID.String(), "error", err.Error())
+		}
+		return out
+	}
+	for _, f := range v.Files {
 		out[f.Path] = gen.TreeEntryScanStatus(f.Status)
+	}
+	for _, e := range entries {
+		if _, ok := out[e.Path]; ok || e.Type != model.EntryFile {
+			continue
+		}
+		if e.Present && v.Pending(e.Path) {
+			out[e.Path] = gen.TreeEntryScanStatusPending
+		}
 	}
 	return out
 }
