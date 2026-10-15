@@ -82,6 +82,7 @@ type instance struct {
 	repos       *repo.Store
 	indexer     *indexdb.Service
 	scanner     *scan.Service
+	unsafeGate  *scan.Gate
 	community   *communitydb.DB
 	collections *collections.DB
 	layout      *layout.Service
@@ -224,6 +225,12 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
 		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex})
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
+	// One gate enforces scan.block_unsafe_downloads for every protocol
+	// that serves file bytes.
+	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
+		s, err := in.auth.Settings.Get(ctx)
+		return s.ScanBlockUnsafeDownloads, err
+	})
 	in.community = communitydb.New(communitydb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Log: in.log})
 	in.collections = collections.New(collections.Options{DB: d, Orgs: in.orgs, Repos: in.repos, Authz: in.auth.Authz()})
 	idx.Indexer, comm.Service = in.indexer, in.community
@@ -262,17 +269,15 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	gcfg := gitserver.ConfigFrom(cfg)
 	gcfg.TempDir = filepath.Join(cfg.Git.CacheDir, "tmp")
 	in.gitServer, err = gitserver.New(gcfg, gitserver.Deps{Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), Signer: in.signer,
-		Quota: repoQuota{in.accounting}, PullThrough: in.pulls.PullThrough(), Log: in.log, Tracer: tel.Tracer(), Instruments: inst})
+		Quota: repoQuota{in.accounting}, PullThrough: in.pulls.PullThrough(), Downloads: in.unsafeGate, Log: in.log, Tracer: tel.Tracer(),
+		Instruments: inst})
 	if err != nil {
 		return nil, err
 	}
 	hubDeps := hfapi.Deps{Settings: hfapi.FromConfig(cfg), Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), Orgs: in.orgs,
 		Community: in.community, Collections: in.collections, Index: in.indexer, Scan: in.scanner, Xet: in.xet,
 		Devices: in.auth.DeviceFlow(), PullThrough: hubPullThrough{in.pulls.PullThrough()}, Instruments: inst, Log: in.log,
-		BlockUnsafe: func(ctx context.Context) (bool, error) {
-			s, err := in.auth.Settings.Get(ctx)
-			return s.ScanBlockUnsafeDownloads, err
-		}}
+		Downloads: in.unsafeGate}
 	if in.viewer != nil {
 		hubDeps.Viewer = in.viewer
 	} else {
@@ -282,8 +287,8 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 		return nil, err
 	}
 	in.ollama, err = ollama.New(ollama.Options{DB: d, Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), OllamaAuth: in.auth.OllamaAuth(),
-		Signer: in.signer, PublicURL: cfg.Server.PublicURL, PullThrough: in.pulls.PullThrough(), Community: in.community,
-		Instruments: inst, Log: in.log})
+		Signer: in.signer, PublicURL: cfg.Server.PublicURL, PullThrough: in.pulls.PullThrough(), Downloads: in.unsafeGate,
+		Community: in.community, Instruments: inst, Log: in.log})
 	if err != nil {
 		return nil, err
 	}

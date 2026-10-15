@@ -37,6 +37,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -126,6 +127,9 @@ type Deps struct {
 	// PullThrough is optional; without it objects that are not in the
 	// Arsenal get a 404 with instructions.
 	PullThrough PullThrough
+	// Downloads enforces scan.block_unsafe_downloads on LFS downloads. It
+	// is optional; without it every object downloads.
+	Downloads *scan.Gate
 	// Log defaults to slog.Default().
 	Log *slog.Logger
 	// Tracer defaults to the global tracer provider.

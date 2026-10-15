@@ -39,6 +39,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/index/rangeio"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -92,6 +93,9 @@ type Options struct {
 	PublicURL string
 	// PullThrough is optional.
 	PullThrough PullThrough
+	// Downloads enforces scan.block_unsafe_downloads on layers that are
+	// files of the Repo; optional.
+	Downloads *scan.Gate
 	// Community counts a download per manifest fetch; optional.
 	Community   community.Service
 	Instruments *telemetry.Instruments
@@ -698,6 +702,15 @@ func (h *Handler) blob(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 	ref, ok := refs[oid]
 	if !ok {
 		registryError(w, r, http.StatusNotFound, "BLOB_UNKNOWN", "The Repo has no layer with this digest.")
+		return
+	}
+	blocked, err := h.o.Downloads.CheckObjects(ctx, rp.UUID, rp.ID, []string{oid})
+	if err != nil {
+		h.internal(w, r, err)
+		return
+	}
+	if err := blocked[oid]; err != nil {
+		registryError(w, r, http.StatusForbidden, "DENIED", err.Error())
 		return
 	}
 	if !ref.Present {

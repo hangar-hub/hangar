@@ -330,6 +330,10 @@ func (s *Server) batchDownload(ctx context.Context, rec *repo.Repo, req *batchRe
 	if err != nil {
 		return nil, fmt.Errorf("stat lfs objects: %w", err)
 	}
+	blocked, err := s.deps.Downloads.CheckObjects(ctx, rec.UUID, rec.ID, oids)
+	if err != nil {
+		return nil, fmt.Errorf("check unsafe downloads: %w", err)
+	}
 	resp := &batchResponse{Transfer: transferBasic, HashAlgo: "sha256", Objects: make([]objectResponse, 0, len(req.Objects))}
 	for _, o := range req.Objects {
 		if !validObject(o) {
@@ -339,6 +343,10 @@ func (s *Server) batchDownload(ctx context.Context, rec *repo.Repo, req *batchRe
 		ref, ok := refs[o.OID]
 		if !ok {
 			resp.Objects = append(resp.Objects, objErr(o, http.StatusNotFound, "Object does not exist in this Repo."))
+			continue
+		}
+		if err := blocked[o.OID]; err != nil {
+			resp.Objects = append(resp.Objects, objErr(o, http.StatusForbidden, err.Error()))
 			continue
 		}
 		obj, have := stored[o.OID]
@@ -552,6 +560,17 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request, rp repoPath, o
 	}
 	rec, ok := s.signedRepo(w, r, rp, func(rec *repo.Repo) string { return scopeDownload(rec, oid) })
 	if !ok {
+		return
+	}
+	// A link issued before an admin turned on blocking, or before the scan
+	// finished, is checked again.
+	blocked, err := s.deps.Downloads.CheckObjects(r.Context(), rec.UUID, rec.ID, []string{oid})
+	if err != nil {
+		s.lfsFailure(w, r, err)
+		return
+	}
+	if err := blocked[oid]; err != nil {
+		lfsError(w, r, http.StatusForbidden, err.Error())
 		return
 	}
 	obj, err := s.deps.LFS.Stat(r.Context(), oid)

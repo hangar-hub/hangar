@@ -30,6 +30,7 @@ import { NotPresentBadge, ScanBadge, type ScanStatus } from "../repos/badges";
 import { fetchText, type RepoRef, repoKey, repoPathParams, useRefs, useRepo } from "../repos/hooks";
 import { useExternalImages } from "../repos/useInstance";
 import { Breadcrumbs, RefPicker } from "./common";
+import { RiskyDownload } from "./RiskyDownload";
 import { GgufView, JsonTree, SafetensorsView } from "./viewers";
 
 /** Text files up to this size open in the browser; larger ones are download-only. */
@@ -368,12 +369,20 @@ export function BlobPage({
           <Button asChild size="sm" variant="ghost">
             <a href={raw}>Raw</a>
           </Button>
-          <Button asChild size="sm" variant="ghost">
-            <a href={resolveUrl(kind, ns, name, rev, path, true)} download={baseName(path)}>
-              <Download aria-hidden="true" />
-              Download
-            </a>
-          </Button>
+          {isPickle && (e.scan_status === "unsafe" || e.scan_status === "pending") ? (
+            <RiskyDownload
+              href={resolveUrl(kind, ns, name, rev, path, true)}
+              path={path}
+              status={e.scan_status}
+            />
+          ) : (
+            <Button asChild size="sm" variant="ghost">
+              <a href={resolveUrl(kind, ns, name, rev, path, true)} download={baseName(path)}>
+                <Download aria-hidden="true" />
+                Download
+              </a>
+            </Button>
+          )}
           <span className="inline-flex items-center">
             <Link2 className="sr-only" aria-hidden="true" />
             <CopyButton value={permalink} label="Copy permalink" showLabel />

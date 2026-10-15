@@ -123,6 +123,9 @@ type Deps struct {
 	// scan marked unsafe answers 403 unless the request has accept_risk=1.
 	// Nil never blocks.
 	BlockUnsafe func(ctx context.Context) (bool, error)
+	// Downloads is the shared gate for that setting, so every protocol
+	// decides alike. Nil builds one from BlockUnsafe and Scan.
+	Downloads   *scan.Gate
 	Instruments *telemetry.Instruments
 	Log         *slog.Logger
 	// Now returns the current time; nil means time.Now.
@@ -179,6 +182,9 @@ func New(d Deps) (*Handler, error) {
 	}
 	if d.Settings.VerifyWait <= 0 {
 		d.Settings.VerifyWait = defaultVerifyWait
+	}
+	if d.Downloads == nil {
+		d.Downloads = &scan.Gate{Block: d.BlockUnsafe, Results: d.Scan.Results, Repos: d.Repos}
 	}
 	h := &Handler{d: d, log: d.Log, now: d.Now}
 	if h.log == nil {
