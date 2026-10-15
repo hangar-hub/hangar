@@ -191,7 +191,13 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 	logged := false
 	for {
-		st, err := d.Schema(ctx)
+		// Schema reads an unreachable database as one with no migrations
+		// table, so ping first to log the real reason.
+		var st db.SchemaStatus
+		err := d.PingContext(ctx)
+		if err == nil {
+			st, err = d.Schema(ctx)
+		}
 		if err == nil && st.UpToDate() {
 			return nil
 		}

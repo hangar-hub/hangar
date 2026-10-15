@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -99,4 +101,47 @@ func TestStartupCheckFailsUntilStarted(t *testing.T) {
 	require.Equal(t, []httpx.CheckResult{{Name: "startup", Error: "the server is still starting"}}, h.Failures(context.Background()))
 	started.Store(true)
 	require.Empty(t, h.Failures(context.Background()))
+}
+
+// TestWaitForSchemaWaitsForMigrate checks that a web or worker process
+// waits for hangar admin migrate, logging why once, and starts as soon as
+// the schema is current.
+func TestWaitForSchemaWaitsForMigrate(t *testing.T) {
+	cfg := testConfig(t)
+	d, err := openDatabase(context.Background(), cfg, false)
+	require.NoError(t, err)
+	defer d.Close()
+	var logs strings.Builder
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, waitForSchema(ctx, d, log), context.DeadlineExceeded)
+	require.Equal(t, 1, strings.Count(logs.String(), "waiting for hangar admin migrate"), logs.String())
+
+	done := make(chan error, 1)
+	go func() { done <- waitForSchema(context.Background(), d, log) }()
+	require.NoError(t, d.Migrate(context.Background()))
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("waitForSchema did not notice the migration")
+	}
+
+	// A database that cannot answer is logged as such.
+	require.NoError(t, d.Close())
+	logs.Reset()
+	ctx, cancel2 := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel2()
+	require.Error(t, waitForSchema(ctx, d, log))
+	require.Contains(t, logs.String(), "waiting for the database")
+}
+
+func TestServerCommandRefusesInvalidConfig(t *testing.T) {
+	for _, use := range []string{"server", "worker"} {
+		out, code := execute(t, use, "--set", "storage.backend=tape", "--set", "server.data_dir="+t.TempDir())
+		require.Equal(t, 1, code, use)
+		require.Contains(t, out, "storage.backend", use)
+	}
 }
