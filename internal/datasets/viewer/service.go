@@ -224,7 +224,8 @@ func (st *state) hasConfig(config string) bool {
 }
 
 // head loads the state of a dataset's default-branch head, starting its
-// conversion when nothing is known about it yet.
+// conversion when nothing is known about it yet or its Splits are still
+// pending.
 func (s *Service) head(ctx context.Context, p model.Principal, id model.RepoID, action auth.Action) (*state, error) {
 	r, err := s.load(ctx, p, id, action)
 	if err != nil {
@@ -242,7 +243,8 @@ func (s *Service) head(ctx context.Context, p model.Principal, id model.RepoID, 
 	if err != nil {
 		return nil, err
 	}
-	if len(rows) == 0 {
+	stored := len(rows) > 0
+	if !stored {
 		if _, err := pipeline.EnqueueConvert(ctx, s.d.Jobs, r.UUID, commit); err != nil {
 			s.d.Log.WarnContext(ctx, "could not queue the dataset conversion", "repo", r.ID.Path(), "error", err.Error())
 		}
@@ -271,6 +273,14 @@ func (s *Service) head(ctx context.Context, p model.Principal, id model.RepoID, 
 			st.pending = true
 		}
 		st.rows = append(st.rows, row)
+	}
+	if st.pending && stored {
+		// A conversion that stopped on errors reading the Repo leaves its
+		// Splits pending. Queue it again; while it is queued or running,
+		// this returns that Job.
+		if _, err := pipeline.EnqueueConvert(ctx, s.d.Jobs, r.UUID, commit); err != nil {
+			s.d.Log.WarnContext(ctx, "could not queue the dataset conversion", "repo", r.ID.Path(), "error", err.Error())
+		}
 	}
 	return st, nil
 }

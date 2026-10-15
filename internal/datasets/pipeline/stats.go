@@ -32,6 +32,10 @@ func (p *Pipeline) HandleStats(ctx context.Context, j *jobs.Job, progress jobs.P
 	if err != nil {
 		return err
 	}
+	// The export is read through watch, so an error reading it fails the
+	// Job, which retries, instead of failing the Split's statistics.
+	watch := newReadWatch(p.d.Repos)
+	var retry error
 	for i, row := range rows {
 		if !row.Ready() {
 			continue
@@ -44,10 +48,19 @@ func (p *Pipeline) HandleStats(ctx context.Context, j *jobs.Job, progress jobs.P
 		if err != nil {
 			return err
 		}
-		doc, err := p.ComputeStats(ctx, r.ID, info, row.Split)
+		watch.reset()
+		doc, err := p.computeStats(ctx, watch, r.ID, info, row.Split)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+			if rerr := watch.failure(); rerr != nil {
+				// Nothing is stored, so the Viewer queues the statistics
+				// again if every try fails. The other Splits go on.
+				p.d.Log.WarnContext(ctx, "could not read the Parquet export for statistics", "repo", r.ID.Path(), "config", row.Config,
+					"split", row.Split, "error", rerr.Error())
+				retry = errors.Join(retry, fmt.Errorf("read the Parquet export of %s/%s: %w", row.Config, row.Split, rerr))
+				continue
 			}
 			p.d.Log.WarnContext(ctx, "dataset statistics failed", "repo", r.ID.Path(), "config", row.Config, "split", row.Split, "error", err.Error())
 			doc = &StatsDoc{Error: FailureStatistics, Statistics: []json.RawMessage{}}
@@ -56,13 +69,18 @@ func (p *Pipeline) HandleStats(ctx context.Context, j *jobs.Job, progress jobs.P
 			return err
 		}
 	}
-	return nil
+	return retry
 }
 
 // ComputeStats computes a Split's statistics from its Parquet export,
 // reading at most MaxStatsBytes of uncompressed Parquet data as the Hub
 // does (always at least the first file).
 func (p *Pipeline) ComputeStats(ctx context.Context, id model.RepoID, info *ConfigInfo, split string) (*StatsDoc, error) {
+	return p.computeStats(ctx, p.d.Repos, id, info, split)
+}
+
+// computeStats is ComputeStats reading through repos.
+func (p *Pipeline) computeStats(ctx context.Context, repos repo.Service, id model.RepoID, info *ConfigInfo, split string) (*StatsDoc, error) {
 	var si *SplitInfo
 	for i := range info.Splits {
 		if info.Splits[i].Name == split {
@@ -76,7 +94,7 @@ func (p *Pipeline) ComputeStats(ctx context.Context, id model.RepoID, info *Conf
 	var budget int64
 	partial := info.Partial
 	for i, sh := range si.Shards {
-		pf, err := pq.Open(OpenRepoFile(ctx, p.d.Repos, id, info.ExportCommit, sh.Path, sh.Size), sh.Size)
+		pf, err := pq.Open(OpenRepoFile(ctx, repos, id, info.ExportCommit, sh.Path, sh.Size), sh.Size)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", sh.Path, err)
 		}

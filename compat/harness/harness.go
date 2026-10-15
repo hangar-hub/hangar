@@ -139,7 +139,6 @@ func Start(t testing.TB, opts Options) *Instance {
 		"--set", "database.dsn=" + filepath.Join(dir, "hangar.db"),
 		"--set", "storage.fs.path=" + filepath.Join(dir, "blobs"),
 		"--set", "git.cache_dir=" + filepath.Join(dir, "git-cache"),
-		"--set", "security.bootstrap_admin.password=" + adminPassword,
 	}
 	for _, s := range opts.Set {
 		args = append(args, "--set", s)

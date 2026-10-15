@@ -55,11 +55,9 @@ func startBinary(t *testing.T, listen string, set ...string) target {
 	_, err := rand.Read(secret)
 	require.NoError(t, err)
 	password := hex.EncodeToString(secret)
-	// The password is a flag override, because harness.Start sets its own
-	// and flags take precedence over the environment.
 	inst := harness.Start(t, harness.Options{
-		Set: append([]string{"security.anonymous_read=true", "security.bootstrap_admin.username=" + owner,
-			"security.bootstrap_admin.password=" + password}, set...),
+		Set: append([]string{"security.anonymous_read=true", "security.bootstrap_admin.username=" + owner}, set...),
+		Env: []string{"HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD=" + password},
 	})
 	b := &binary{recorder: &recorder{}, inst: inst}
 	b.token = b.createToken(t, password)

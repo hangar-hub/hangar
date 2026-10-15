@@ -18,8 +18,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
 )
 
 // snapshot is a file written by snapshot.py.
@@ -241,98 +239,105 @@ func normaliseInfo(hub, got map[string]any, ds, hubDS string) {
 	}
 }
 
+// TestViewerMatchesHub converts every compat/viewer dataset on each
+// backend and compares the Dataset Viewer's responses with the Hub's.
 func TestViewerMatchesHub(t *testing.T) {
-	for _, entry := range fixtures(t) {
-		t.Run(entry.Repo, func(t *testing.T) {
-			snap := loadSnapshot(t, entry.Repo)
-			s := viewertest.New(t, viewertest.Options{})
-			_, name, _ := strings.Cut(entry.Repo, "/")
-			r, sha := s.Dataset(t, name, sourceFiles(t, entry.Repo))
-			s.Convert(t, r, sha)
-			ds := r.ID.String()
-			copied := entry.Format == "parquet"
-			var report []string
-			for key, raw := range snap.Responses {
-				var hub any
-				require.NoError(t, json.Unmarshal(raw, &hub))
-				parts := strings.Fields(key)
-				endpoint := parts[0]
-				params := url.Values{"dataset": {ds}}
-				if len(parts) > 1 {
-					c, sp, _ := strings.Cut(parts[1], "/")
-					params.Set("config", c)
-					params.Set("split", sp)
-				}
-				if endpoint == "rows" {
-					params.Set("offset", parts[2])
-					params.Set("length", "100")
-					if parts[2] != "0" {
-						params.Set("length", "7")
-					}
-				}
-				status, got := fetch(t, s.URL, endpoint, params)
-				if status != http.StatusOK {
-					report = append(report, fmt.Sprintf("%s: status %d: %v", key, status, got))
-					continue
-				}
-				d := &differ{}
-				h, g := obj(hub), obj(got)
-				switch endpoint {
-				case "first-rows", "rows":
-					h["dataset"], g["dataset"] = nil, nil
-					hub, got = dropSrc(h), dropSrc(g)
-				case "info":
-					normaliseInfo(h, g, ds, snap.Dataset)
-				case "size":
-					for _, level := range []string{"dataset", "configs", "splits"} {
-						for _, item := range sizeItems(obj(h["size"])[level]) {
-							if item["num_bytes_original_files"] == nil {
-								for _, gi := range sizeItems(obj(g["size"])[level]) {
-									delete(gi, "num_bytes_original_files")
-								}
-								delete(item, "num_bytes_original_files")
-							}
-							if !copied {
-								delete(item, "num_bytes_parquet_files")
-							}
-						}
-						if !copied {
-							for _, gi := range sizeItems(obj(g["size"])[level]) {
-								delete(gi, "num_bytes_parquet_files")
-							}
-						}
-					}
-				case "parquet":
-					for _, m := range []map[string]any{h, g} {
-						for _, f := range m["parquet_files"].([]any) {
-							fm := obj(f)
-							u := fm["url"].(string)
-							fm["url"] = u[strings.Index(u, "/resolve/"):]
-							fm["dataset"] = nil
-							if !copied {
-								delete(fm, "size")
-							}
-						}
-					}
-				case "statistics":
-					d.floatTolerance = 0.01
-				}
-				if m := obj(got); m != nil {
-					renameDataset(m, ds, snap.Dataset)
-				}
-				d.compare(key, hub, got)
-				for _, e := range d.errs {
-					if reason, ok := known(entry.Repo, e); ok {
-						t.Logf("known difference (%s): %s", reason, e)
-						continue
-					}
-					report = append(report, e)
-				}
+	entries := fixtures(t)
+	for _, kind := range backends(t) {
+		t.Run(kind.name, func(t *testing.T) {
+			b := kind.start(t)
+			for _, entry := range entries {
+				t.Run(entry.Repo, func(t *testing.T) { matchHub(t, b, entry) })
 			}
-			sort.Strings(report)
-			require.Empty(t, report, "differences from the Hub at %s:\n%s", snap.Revision, strings.Join(report, "\n"))
 		})
 	}
+}
+
+func matchHub(t *testing.T, b backend, entry manifestEntry) {
+	snap := loadSnapshot(t, entry.Repo)
+	_, name, _ := strings.Cut(entry.Repo, "/")
+	ds := b.Dataset(t, name, sourceFiles(t, entry.Repo))
+	copied := entry.Format == "parquet"
+	var report []string
+	for key, raw := range snap.Responses {
+		var hub any
+		require.NoError(t, json.Unmarshal(raw, &hub))
+		parts := strings.Fields(key)
+		endpoint := parts[0]
+		params := url.Values{"dataset": {ds}}
+		if len(parts) > 1 {
+			c, sp, _ := strings.Cut(parts[1], "/")
+			params.Set("config", c)
+			params.Set("split", sp)
+		}
+		if endpoint == "rows" {
+			params.Set("offset", parts[2])
+			params.Set("length", "100")
+			if parts[2] != "0" {
+				params.Set("length", "7")
+			}
+		}
+		status, got := fetch(t, b.ViewerURL(), endpoint, params)
+		if status != http.StatusOK {
+			report = append(report, fmt.Sprintf("%s: status %d: %v", key, status, got))
+			continue
+		}
+		d := &differ{}
+		h, g := obj(hub), obj(got)
+		switch endpoint {
+		case "first-rows", "rows":
+			h["dataset"], g["dataset"] = nil, nil
+			hub, got = dropSrc(h), dropSrc(g)
+		case "info":
+			normaliseInfo(h, g, ds, snap.Dataset)
+		case "size":
+			for _, level := range []string{"dataset", "configs", "splits"} {
+				for _, item := range sizeItems(obj(h["size"])[level]) {
+					if item["num_bytes_original_files"] == nil {
+						for _, gi := range sizeItems(obj(g["size"])[level]) {
+							delete(gi, "num_bytes_original_files")
+						}
+						delete(item, "num_bytes_original_files")
+					}
+					if !copied {
+						delete(item, "num_bytes_parquet_files")
+					}
+				}
+				if !copied {
+					for _, gi := range sizeItems(obj(g["size"])[level]) {
+						delete(gi, "num_bytes_parquet_files")
+					}
+				}
+			}
+		case "parquet":
+			for _, m := range []map[string]any{h, g} {
+				for _, f := range m["parquet_files"].([]any) {
+					fm := obj(f)
+					u := fm["url"].(string)
+					fm["url"] = u[strings.Index(u, "/resolve/"):]
+					fm["dataset"] = nil
+					if !copied {
+						delete(fm, "size")
+					}
+				}
+			}
+		case "statistics":
+			d.floatTolerance = 0.01
+		}
+		if m := obj(got); m != nil {
+			renameDataset(m, ds, snap.Dataset)
+		}
+		d.compare(key, hub, got)
+		for _, e := range d.errs {
+			if reason, ok := known(entry.Repo, e); ok {
+				t.Logf("known difference (%s): %s", reason, e)
+				continue
+			}
+			report = append(report, e)
+		}
+	}
+	sort.Strings(report)
+	require.Empty(t, report, "differences from the Hub at %s:\n%s", snap.Revision, strings.Join(report, "\n"))
 }
 
 func sizeItems(v any) []map[string]any {
