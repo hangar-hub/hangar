@@ -302,7 +302,7 @@ export function DiscoverDetailPanel({
             value: "card",
             label: d.type === "dataset" ? "Dataset card" : "Model card",
             content: card ? (
-              <LazyMarkdown>{card}</LazyMarkdown>
+              <LazyMarkdown headingLevel={3}>{card}</LazyMarkdown>
             ) : (
               <EmptyState title="No card on the Upstream" />
             ),

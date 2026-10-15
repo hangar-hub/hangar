@@ -98,6 +98,9 @@ for (const path of signedIn) {
     await page.goto(path);
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
+    // Again once lazy content such as a Markdown card has loaded: its
+    // headings must not add a second h1.
+    await expect(page.locator("h1")).toHaveCount(1);
     await expectNoHorizontalOverflow(page);
     await expectAccessible(page);
     await expectGlossaryTerms(page);
@@ -111,6 +114,9 @@ for (const path of signedOut) {
     await page.goto(path);
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
+    // Again once lazy content such as a Markdown card has loaded: its
+    // headings must not add a second h1.
+    await expect(page.locator("h1")).toHaveCount(1);
     await expectNoHorizontalOverflow(page);
     await expectAccessible(page);
     await expectGlossaryTerms(page);
@@ -179,6 +185,7 @@ for (const path of darkPages) {
     // check an empty document.
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
+    await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expectAccessible(page);
   });
@@ -210,12 +217,38 @@ test("the Use this model dialog passes axe", async ({ page }) => {
   await expectAccessible(page);
 });
 
-test("the search palette passes axe", async ({ page }) => {
+test("the search palette passes axe while results load and once they arrive", async ({ page }) => {
   await signIn(page);
   await page.goto("/arsenal");
   await settled(page);
-  const dialog = await searchWithKeyboard(page, "imdb");
-  await expect(dialog.getByRole("option").first()).toBeVisible();
+  const dialog = await searchWithKeyboard(page, "imd");
+  const status = dialog.getByRole("status");
+  const imdb = dialog.getByRole("option", { name: /datasets\/ada\/imdb-mini/ });
+  // The results for "imd", once the debounced query has run.
+  await expect(imdb).toBeVisible();
+  await expect(status).toHaveText("");
+  // Hold the next query's results, so axe sees the palette while they load:
+  // the listbox must still hold only groups of options.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(
+    (url) => url.pathname === "/api/hangar/v1/search" && url.searchParams.get("q") === "imdb",
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+  );
+  await page.keyboard.type("b");
+  await expect(status).toHaveText("Searching");
+  // The last results stay while the next ones load.
+  await expect(imdb).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectAccessible(page);
+  release();
+  await expect(status).toHaveText("");
+  await expect(imdb).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectAccessible(page);
 });

@@ -19,6 +19,33 @@ describe("Markdown cards", () => {
     expect(screen.getByRole("heading", { name: "Card" })).toBeInTheDocument();
   });
 
+  it("nests a card's headings under the page's h1", () => {
+    const { container } = render(
+      <Markdown>{"# bert-tiny-finetune\n\n## Usage\n\n### Notes\n\n<h1>Raw</h1>"}</Markdown>,
+    );
+    // 09-web-ui.md: one h1 per page, the page title. The card's own "# "
+    // heading must not become a second one.
+    expect(container.querySelector("h1")).toBeNull();
+    expect(screen.getByRole("heading", { level: 2, name: "bert-tiny-finetune" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 3, name: "Usage" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 4, name: "Notes" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 2, name: "Raw" })).toBeVisible();
+  });
+
+  it("starts headings at the level it is given and keeps their distances", () => {
+    const { container, rerender } = render(
+      <Markdown headingLevel={3}>{"# Title\n\n###### Deep"}</Markdown>,
+    );
+    expect(screen.getByRole("heading", { level: 3, name: "Title" })).toBeVisible();
+    // Below h6 there is nothing, so the deepest headings stay h6.
+    expect(screen.getByRole("heading", { level: 6, name: "Deep" })).toBeVisible();
+    // A card that starts at "###" moves up, so the outline has no gap.
+    rerender(<Markdown>{"### Only\n\n#### Under"}</Markdown>);
+    expect(screen.getByRole("heading", { level: 2, name: "Only" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 3, name: "Under" })).toBeVisible();
+    expect(container.querySelector("h1")).toBeNull();
+  });
+
   it("renders GitHub tables and links external sites safely", () => {
     render(
       <Markdown>

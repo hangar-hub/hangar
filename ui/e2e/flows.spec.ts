@@ -1,6 +1,7 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
 import {
   callApi,
+  commitResponse,
   expectAccessible,
   parseBytes,
   searchWithKeyboard,
@@ -15,10 +16,11 @@ import {
 // upload, browsing files and the GGUF viewer, Token creation and admin
 // settings; plus the dataset Viewer, card editor, search and Collections.
 //
-// They run against the mock or, with HANGAR_URL, a real Instance seeded with
-// the same Repos and users. Anything a flow needs beyond that seed (invites,
-// Tokens, 260 Repos) it makes through the API first, and names it creates
-// are unique, so the flows can run again, and at three widths at once.
+// They run against the mock, where each browser session has its own copy of
+// the fixture data, so flows that change it cannot affect each other or the
+// other widths. Anything a flow needs beyond the fixture data (invites,
+// Tokens, 260 Repos) it makes through the API first. e2e-real/ runs these
+// flows against a real Instance, with data it seeds itself.
 
 test.describe("sign-in", () => {
   test("signs in with a password, shows errors, and signs out", async ({ page }) => {
@@ -243,7 +245,9 @@ test.describe("upload", () => {
       buffer: Buffer.from("# Extra\n"),
     });
     await page.getByLabel("Open as pull request").check();
+    const committed = commitResponse(page, "models/ada/bert-tiny-finetune");
     await page.getByRole("button", { name: "Upload and open pull request" }).click();
+    expect((await committed).status()).toBe(201);
     // The number is the next free one in the Repo.
     await expect(page).toHaveURL(/\/ada\/bert-tiny-finetune\/discussions\/\d+$/);
     await expect(page.getByRole("heading", { level: 2 })).toContainText("Upload extra.md");
@@ -317,7 +321,9 @@ test.describe("browse files", () => {
     await page.goto("/ada/bert-tiny-finetune/blob/main/tokenizer_config.json");
     await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.getByLabel("Edit tokenizer_config.json").fill('{\n  "do_lower_case": false\n}\n');
+    const committed = commitResponse(page, "models/ada/bert-tiny-finetune");
     await page.getByRole("button", { name: "Commit to main" }).click();
+    expect((await committed).status()).toBe(201);
     await expect(
       page.getByRole("status").filter({ hasText: "Saved tokenizer_config.json." }),
     ).toBeVisible();
@@ -388,12 +394,17 @@ test.describe("admin settings", () => {
   });
 
   test("lists every Organisation and filters them", async ({ page }) => {
-    await signIn(page);
+    const csrf = await signIn(page);
+    // Every Organisation the API lists, rather than a fixed number: other
+    // flows can make more.
+    const orgs = await callApi(page, csrf, "GET", "/admin/orgs?limit=100");
+    expect(orgs.ok(), await orgs.text()).toBe(true);
+    const { items } = (await orgs.json()) as { items: unknown[] };
     await page.goto("/admin/organisations");
     const list = page.getByRole("listitem");
     await expect(list.filter({ hasText: "ML team" })).toContainText("2 members");
     await expect(list.filter({ hasText: "TinyLlama" })).toContainText("Created by a Pull");
-    await expect(list).toHaveCount(3);
+    await expect(list).toHaveCount(items.length);
     await page.getByLabel("Find an Organisation").fill("tiny");
     await page.getByLabel("Find an Organisation").press("Enter");
     await expect(list).toHaveCount(1);
@@ -524,7 +535,11 @@ test.describe("datasets", () => {
       "French is not a language code",
     );
     await page.getByLabel("Languages").fill("en, fr");
+    // A Commit runs git on the server, which can take seconds on a loaded
+    // host, so wait for the Commit itself rather than a fixed time.
+    const committed = commitResponse(page, "datasets/ada/imdb-mini");
     await page.getByRole("button", { name: "Commit changes" }).click();
+    expect((await committed).status()).toBe(201);
     await expect(page.getByRole("status").filter({ hasText: "Dataset card saved." })).toBeVisible();
     await expect(page.getByRole("complementary", { name: "About this Repo" })).toContainText(
       "IMDb reviews (mini)",
@@ -593,8 +608,7 @@ test("creates a Repo and a Collection in an Organisation's Namespace", async ({ 
 });
 
 test("shows the empty arsenal and virtualises long lists", async ({ page }) => {
-  // The seed project made the Repos on a real Instance; the mock makes them
-  // for this session, which takes a few seconds.
+  // The mock makes the 260 Repos for this session, which takes a few seconds.
   test.setTimeout(60_000);
   const csrf = await signIn(page);
   // An Instance with Repos in it cannot have an empty arsenal, so answer the

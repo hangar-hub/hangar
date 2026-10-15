@@ -54,6 +54,32 @@ export function tableLabel(table: HastNode | undefined): string {
   return label.length > 80 ? `${label.slice(0, 79).trimEnd()}…` : label;
 }
 
+const headingTag = /^h([1-6])$/;
+
+/**
+ * A rehype plugin that moves the content's headings down the page outline:
+ * its top heading level becomes `top`, and the others keep their distance
+ * from it (up to h6). Markdown always sits under the page's own h1, so a
+ * card's "# Title" must not become a second h1 (09-web-ui.md: one h1 per
+ * page).
+ */
+export function nestHeadings(top: number) {
+  return () => (tree: HastNode) => {
+    const headings: HastNode[] = [];
+    const walk = (n: HastNode) => {
+      if (n.tagName && headingTag.test(n.tagName)) headings.push(n);
+      for (const c of n.children ?? []) walk(c);
+    };
+    walk(tree);
+    const levels = headings.map((h) => Number(h.tagName?.slice(1)));
+    if (!levels.length) return;
+    const shift = top - Math.min(...levels);
+    for (const [i, h] of headings.entries()) {
+      h.tagName = `h${Math.min(6, Math.max(1, (levels[i] ?? top) + shift))}`;
+    }
+  };
+}
+
 /**
  * Renders user Markdown (cards, discussions) safely. External images load
  * only when the Instance allows them (`ui.external_images`).
@@ -62,9 +88,15 @@ export default function Markdown({
   children,
   externalImages = true,
   resolveRelative,
+  headingLevel = 2,
 }: {
   children: string;
   externalImages?: boolean;
+  /**
+   * The level the content's top heading takes: 2 under a page's h1, 3 under
+   * an h2 such as a discussion's title or a dialog's.
+   */
+  headingLevel?: number;
   /** Turns a relative link or image path into a URL in the Repo. */
   resolveRelative?: (path: string, kind: "link" | "image") => string;
 }) {
@@ -136,7 +168,7 @@ export default function Markdown({
     <div className="prose-hangar">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, cardSchema]]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, cardSchema], nestHeadings(headingLevel)]}
         components={components}
       >
         {children}

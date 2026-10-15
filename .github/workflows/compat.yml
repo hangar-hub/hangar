@@ -278,21 +278,34 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - run: corepack enable
       - run: make build PNPM=pnpm
-      - name: Start hangar
+      - name: Start hangar, and a second Instance as its Upstream
         run: |
+          # start <data directory> <port> <bootstrap admin password>
+          start() {
+            ./bin/hangar server --public-url "http://localhost:$2" --listen ":$2" --set server.data_dir="$1" \
+              --set database.dsn="$1/hangar.db" --set storage.fs.path="$1/blobs" \
+              --set git.cache_dir="$1/git" --set security.bootstrap_admin.password="$3" &
+          }
           password="$(openssl rand -hex 16)"
+          upstream_password="$(openssl rand -hex 16)"
           echo "::add-mask::$password"
-          echo "HANGAR_E2E_ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
-          ./bin/hangar server --public-url http://localhost:8080 --set server.data_dir="$RUNNER_TEMP/hangar" \
-            --set database.dsn="$RUNNER_TEMP/hangar/hangar.db" --set storage.fs.path="$RUNNER_TEMP/hangar/blobs" \
-            --set git.cache_dir="$RUNNER_TEMP/hangar/git" --set security.bootstrap_admin.password="$password" &
-          for _ in $(seq 1 30); do ./bin/hangar healthcheck && break; sleep 1; done
+          echo "::add-mask::$upstream_password"
+          {
+            echo "HANGAR_E2E_ADMIN_PASSWORD=$password"
+            echo "HANGAR_E2E_UPSTREAM_URL=http://localhost:8081"
+            echo "HANGAR_E2E_UPSTREAM_ADMIN_PASSWORD=$upstream_password"
+          } >> "$GITHUB_ENV"
+          start "$RUNNER_TEMP/hangar" 8080 "$password"
+          start "$RUNNER_TEMP/upstream" 8081 "$upstream_password"
+          for port in 8080 8081; do
+            for _ in $(seq 1 30); do ./bin/hangar healthcheck --listen ":$port" && break; sleep 1; done
+          done
       - working-directory: ui
         run: pnpm exec playwright install --with-deps chromium
       - name: Flows against the mock server
         working-directory: ui
         run: pnpm exec playwright test
-      - name: Flows against the real Instance, seeded through its API
+      - name: Flows and pages against the real Instance, seeded through its API
         working-directory: ui
         env:
           HANGAR_URL: http://localhost:8080

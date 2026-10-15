@@ -1,22 +1,31 @@
 import { expect, type Page, test } from "@playwright/test";
-import { expectAccessible, settled, watchConsole } from "../e2e/helpers";
-import { datasetRepo, modelRepo, user } from "./seed";
+import {
+  commitResponse,
+  expectAccessible,
+  parseBytes,
+  settled,
+  unique,
+  watchConsole,
+} from "../e2e/helpers";
+import {
+  env,
+  session,
+  signIn,
+  upstreamGgufRepo,
+  upstreamName,
+  user,
+  waitForPulledFile,
+} from "./helpers";
+import { datasetRepo, modelRepo } from "./seed";
 
 // Flows against a real Hangar seeded by seed.ts, so the UI is checked
 // against the real backends as well as the mock's contract. They change
-// state, so they run one at a time.
+// state, so they run one at a time, and each width runs them again against
+// the same Instances: a flow makes the Repos it changes, with names unique
+// to the run, or puts back what it changes.
 test.describe.configure({ mode: "serial" });
 
 const adminPassword = process.env.HANGAR_E2E_ADMIN_PASSWORD ?? "";
-
-async function signIn(page: Page, username = user.username, password = user.password) {
-  // Start a new session: sign-in with a session cookie needs its CSRF token.
-  await page.context().clearCookies();
-  const res = await page.request.post("/api/hangar/v1/auth/login", {
-    data: { username, password },
-  });
-  expect(res.ok(), await res.text()).toBe(true);
-}
 
 async function setBlockUnsafe(page: Page, on: boolean) {
   await signIn(page, "hangar-admin", adminPassword);
@@ -110,10 +119,10 @@ test("uploads a file in the browser and commits it", async ({ page }) => {
       { name, mimeType: "text/plain", buffer: Buffer.from("hello from the browser") },
     ]);
   await page.getByLabel("Commit message").fill(`Add ${name}`);
+  const committed = commitResponse(page, `models/${modelRepo}`);
   await page.getByRole("button", { name: "Upload and commit" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Files committed." })).toBeVisible({
-    timeout: 20_000,
-  });
+  expect((await committed).status()).toBe(201);
+  await expect(page.getByRole("status").filter({ hasText: "Files committed." })).toBeVisible();
   const files = page.getByRole("table", { name: "Files in the Repo root" });
   await files.getByRole("link", { name }).first().click();
   await expect(page.getByRole("region", { name: "Code" })).toContainText("hello from the browser");
@@ -188,10 +197,311 @@ test("opens a pull request from an upload and shows its diff", async ({ page }) 
     buffer: Buffer.from("# Proposal\n"),
   });
   await page.getByLabel("Open as pull request").check();
+  const committed = commitResponse(page, `models/${modelRepo}`);
   await page.getByRole("button", { name: "Upload and open pull request" }).click();
+  expect((await committed).status()).toBe(201);
   await expect(page).toHaveURL(new RegExp(`/${modelRepo}/discussions/\\d+$`));
   await page.getByRole("tab", { name: /Files changed/ }).click();
   await expect(page.getByRole("list", { name: "Changed files" })).toContainText(name);
   await expect(page.getByRole("region", { name: `Diff of ${name}` })).toContainText("# Proposal");
+  expect(problems).toEqual([]);
+});
+
+test("Discover a model on the Upstream, pull one quant and open it in the GGUF viewer", async ({
+  page,
+}) => {
+  // The Pull is a Job that copies from the second Instance.
+  test.setTimeout(120_000);
+  const problems = watchConsole(page);
+  // A Repo new to this run, so nothing of it is in the arsenal yet.
+  const repo = await upstreamGgufRepo();
+  await signIn(page);
+  await page.goto("/discover");
+  await page.getByRole("combobox", { name: "Upstream" }).selectOption(upstreamName);
+  const search = page.getByLabel("Search", { exact: true });
+  await search.fill(repo.name);
+  await search.press("Enter");
+  await page
+    .getByRole("list", { name: "Results" })
+    .getByRole("listitem")
+    .filter({ hasText: repo.id })
+    .getByRole("button", { name: repo.id })
+    .click();
+  const panel = page.getByRole("dialog");
+  const q4 = panel.getByRole("checkbox", { name: /Q4_K_M/ });
+  const q8 = panel.getByRole("checkbox", { name: /Q8_0/ });
+  // Q4_K_M is the recommended quant, so it starts chosen.
+  await expect(q4).toBeChecked();
+  await expect(q8).not.toBeChecked();
+  const toDownload = panel.getByText(/To download:/);
+  const q4Only = parseBytes(await toDownload.innerText());
+  await q8.check();
+  await expect.poll(async () => parseBytes(await toDownload.innerText())).toBeGreaterThan(q4Only);
+  const both = parseBytes(await toDownload.innerText());
+  await q4.uncheck();
+  await expect.poll(async () => parseBytes(await toDownload.innerText())).toBeLessThan(both);
+  // The card's "# " heading sits under the dialog's title: still one h1.
+  await panel.getByRole("tab", { name: "Model card" }).click();
+  await expect(panel.getByRole("heading", { level: 3, name: repo.name })).toBeVisible();
+  await expect(page.locator("h1")).toHaveCount(1);
+  await settled(page);
+  await expectAccessible(page);
+  await panel.getByRole("button", { name: "Pull into arsenal" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: `Pull of ${repo.id} started` }),
+  ).toBeVisible();
+
+  const ada = await session(env("HANGAR_URL"), user.username, user.password);
+  try {
+    await waitForPulledFile(ada, repo.id, repo.file.Q8_0);
+  } finally {
+    await ada.dispose();
+  }
+  await page.goto(`/${repo.id}`);
+  await settled(page);
+  // The Mirror's card has its own "# " heading too.
+  await expect(page.locator("h1")).toHaveCount(1);
+  await page.getByRole("navigation", { name: "Repo" }).getByRole("link", { name: "Files" }).click();
+  const files = page.getByRole("table", { name: "Files in the Repo root" });
+  await expect(files.getByRole("row").filter({ hasText: repo.file.Q4_K_M })).toContainText(
+    "Not in arsenal",
+  );
+  const pulled = files.getByRole("row").filter({ hasText: repo.file.Q8_0 });
+  await expect(pulled).toContainText("LFS");
+  await expect(pulled).not.toContainText("Not in arsenal");
+  await files.getByRole("link", { name: repo.file.Q8_0 }).click();
+  await expect(page.getByText("Quantisation", { exact: true }).locator("..")).toContainText("Q8_0");
+  await expect(page.getByRole("heading", { name: "Chat template" })).toBeVisible();
+  await expect(page.getByText("Vocabulary", { exact: true }).locator("..")).toContainText("6");
+  const tensors = page.getByRole("table", { name: "Tensors in this file" });
+  await expect(tensors).toContainText("token_embd.weight");
+  await page.getByLabel("Filter tensors by name").fill("attn");
+  // The header row and the two attention tensors.
+  await expect(tensors.getByRole("row")).toHaveCount(3);
+  await settled(page);
+  await expectAccessible(page);
+  await page.goto(`/${repo.id}/blob/main/${repo.file.Q4_K_M}`);
+  await expect(page.getByText("This file is not in the arsenal")).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test("edits a dataset card with the form", async ({ page }) => {
+  const problems = watchConsole(page);
+  // A dataset of its own, so no other flow or width commits to it meanwhile.
+  const id = `${user.username}/card-${unique()}`;
+  const ada = await session(env("HANGAR_URL"), user.username, user.password);
+  try {
+    const created = await ada.call("POST", "/repos", {
+      type: "dataset",
+      namespace: user.username,
+      name: id.split("/")[1],
+      visibility: "public",
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const card =
+      "---\nlicense: cc-by-4.0\nsize_categories:\n- n<1K\n---\n# Animals\n\nLegs per animal.\n";
+    const commit = await ada.call("POST", `/repos/datasets/${id}/commits`, {
+      summary: "Add the card",
+      operations: [
+        { op: "add", path: "README.md", content_base64: Buffer.from(card).toString("base64") },
+      ],
+    });
+    expect(commit.status(), await commit.text()).toBe(201);
+
+    await signIn(page);
+    await page.goto(`/datasets/${id}`);
+    await page.getByRole("button", { name: "Edit card" }).click();
+    await page.getByLabel("Pretty name").fill("Animals (mini)");
+    await page.getByLabel("Languages").fill("en, French");
+    await expect(page.getByRole("list", { name: "Problems to fix" })).toContainText(
+      "French is not a language code",
+    );
+    await page.getByLabel("Languages").fill("en, fr");
+    await expect(page.getByRole("region", { name: "Code" })).toContainText(
+      "pretty_name: Animals (mini)",
+    );
+    await settled(page);
+    await expectAccessible(page);
+    const committed = commitResponse(page, `datasets/${id}`);
+    await page.getByRole("button", { name: "Commit changes" }).click();
+    expect((await committed).status()).toBe(201);
+    await expect(page.getByRole("status").filter({ hasText: "Dataset card saved." })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "About this Repo" })).toContainText(
+      "Animals (mini)",
+    );
+    // The card keeps the keys the form does not edit.
+    const raw = await page.request.get(`/datasets/${id}/resolve/main/README.md`);
+    expect(raw.ok()).toBe(true);
+    const text = await raw.text();
+    expect(text).toContain("pretty_name: Animals (mini)");
+    expect(text).toContain("license: cc-by-4.0");
+    expect(text).toContain("n<1K");
+    expect(text).toContain("Legs per animal.");
+  } finally {
+    await ada.dispose();
+  }
+  expect(problems).toEqual([]);
+});
+
+test("edits a text file in the browser", async ({ page }) => {
+  // A Repo of its own: editing sends the Commit the page opened as
+  // parent_commit, so a Commit to the same branch by another flow would
+  // rightly be refused with 412.
+  const name = `edit-${unique()}`;
+  const id = `${user.username}/${name}`;
+  const ada = await session(env("HANGAR_URL"), user.username, user.password);
+  try {
+    const created = await ada.call("POST", "/repos", {
+      type: "model",
+      namespace: user.username,
+      name,
+      visibility: "public",
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const commit = await ada.call("POST", `/repos/models/${id}/commits`, {
+      summary: "Add the tokenizer config",
+      operations: [
+        {
+          op: "add",
+          path: "tokenizer_config.json",
+          content_base64: Buffer.from('{\n  "do_lower_case": true\n}\n').toString("base64"),
+        },
+      ],
+    });
+    expect(commit.status(), await commit.text()).toBe(201);
+  } finally {
+    await ada.dispose();
+  }
+  await signIn(page);
+  await page.goto(`/${id}/blob/main/tokenizer_config.json`);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Edit tokenizer_config.json").fill('{\n  "do_lower_case": false\n}\n');
+  const committed = commitResponse(page, `models/${id}`);
+  await page.getByRole("button", { name: "Commit to main" }).click();
+  expect((await committed).status()).toBe(201);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved tokenizer_config.json." }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Source" }).click();
+  await expect(page.getByRole("region", { name: "Code" })).toContainText('"do_lower_case": false');
+});
+
+test("reorders a Collection with the keyboard", async ({ page }) => {
+  // A Collection of its own, so the order it starts with is known.
+  const title = `Reorder ${unique()}`;
+  const ada = await session(env("HANGAR_URL"), user.username, user.password);
+  let slug = "";
+  try {
+    const made = await ada.call("POST", "/collections", {
+      namespace: user.username,
+      title,
+      visibility: "public",
+    });
+    expect(made.status(), await made.text()).toBe(201);
+    slug = (await made.json()).slug as string;
+    for (const [type, item_id] of [
+      ["model", modelRepo],
+      ["dataset", datasetRepo],
+    ]) {
+      const added = await ada.call("POST", `/collections/${user.username}/${slug}/items`, {
+        type,
+        item_id,
+      });
+      expect(added.ok(), await added.text()).toBe(true);
+    }
+  } finally {
+    await ada.dispose();
+  }
+  await signIn(page);
+  await page.goto(`/collections/${user.username}/${slug}`);
+  await page.getByRole("button", { name: "Edit" }).click();
+  const items = page.getByRole("list", { name: "Items" }).getByRole("listitem");
+  await expect(items.first()).toContainText(modelRepo);
+  await page.getByRole("button", { name: `Move ${modelRepo}`, exact: true }).focus();
+  // dnd-kit measures between key presses, so give each step a frame or two.
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("Space");
+  await expect(items.first()).toContainText(datasetRepo);
+  await page.reload();
+  await expect(
+    page.getByRole("list", { name: "Items" }).getByRole("listitem").first(),
+  ).toContainText(datasetRepo);
+});
+
+test("changes Instance settings and puts them back", async ({ page }) => {
+  await signIn(page, "hangar-admin", adminPassword);
+  await page.goto("/admin/settings");
+  const anon = page.getByRole("switch", { name: "Anonymous read" });
+  await expect(anon).toBeVisible();
+  const before = await anon.isChecked();
+  const save = async (on: boolean) => {
+    const s = page.getByRole("switch", { name: "Anonymous read" });
+    if ((await s.isChecked()) !== on) await s.click();
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Settings saved." })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("switch", { name: "Anonymous read" })).toBeChecked({
+      checked: on,
+    });
+  };
+  try {
+    await save(!before);
+  } finally {
+    await save(before);
+  }
+});
+
+test("manages users, Upstreams, storage and the audit log", async ({ page }) => {
+  const problems = watchConsole(page);
+  const admin = await session(env("HANGAR_URL"), "hangar-admin", adminPassword);
+  // A user of its own, whose name no other user's contains.
+  const name = `grace${unique()}`;
+  let tokenId = "";
+  try {
+    const made = await admin.call("POST", "/admin/users", {
+      username: name,
+      password: "a-long-enough-password",
+      email: `${name}@example.com`,
+    });
+    expect(made.status(), await made.text()).toBe(201);
+    // A token.created event to find in the audit log.
+    const token = await admin.call("POST", "/me/tokens", {
+      name: `audit-${unique()}`,
+      scope: "read",
+    });
+    expect(token.status(), await token.text()).toBe(201);
+    tokenId = (await token.json()).id as string;
+
+    await signIn(page, "hangar-admin", adminPassword);
+    await page.goto("/admin/users");
+    await page
+      .getByRole("row")
+      .filter({ hasText: name })
+      .getByRole("button", { name: "Reset link" })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: `Password reset link for ${name}` }),
+    ).toContainText("/auth/reset/");
+    await page.getByRole("button", { name: "Done" }).click();
+    await page.goto("/admin/upstreams");
+    await page
+      .getByRole("listitem")
+      .filter({ hasText: "Second Instance" })
+      .getByRole("button", { name: "Test connection" })
+      .click();
+    await expect(page.getByRole("status").filter({ hasText: "Connected." })).toBeVisible();
+    await page.goto("/admin/storage");
+    await expect(page.getByRole("row").filter({ hasText: user.username }).first()).toBeVisible();
+    await page.goto("/admin/audit?action=token.created");
+    await expect(page.getByRole("table", { name: "Audit events" })).toContainText("token.created");
+    await settled(page);
+    await expectAccessible(page);
+  } finally {
+    if (tokenId) expect((await admin.call("DELETE", `/me/tokens/${tokenId}`)).ok()).toBe(true);
+    await admin.dispose();
+  }
   expect(problems).toEqual([]);
 });

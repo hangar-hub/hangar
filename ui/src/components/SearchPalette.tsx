@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import {
   Boxes,
@@ -71,7 +71,15 @@ export function SearchPalette() {
     enabled: open && query.length > 0,
     queryFn: async () =>
       unwrap(await api.GET("/search", { params: { query: { q: query, limit: 8 } } })),
+    // Keep the last results on screen while the next query loads, so the
+    // list does not empty and refill on every key press.
+    placeholderData: keepPreviousData,
   });
+  // An empty query shows only the actions, not the last query's results.
+  const data = query ? results.data : undefined;
+  const found = data
+    ? data.repos.length + data.namespaces.length + data.collections.length
+    : undefined;
 
   const go = (to: string) => {
     setOpen(false);
@@ -79,7 +87,7 @@ export function SearchPalette() {
     navigateTo(to);
   };
 
-  const actions = [
+  const allActions = [
     { label: "New model", to: "/new", icon: <FolderPlus /> },
     { label: "New dataset", to: "/new-dataset", icon: <Database /> },
     { label: "Discover models on an Upstream", to: "/discover", icon: <Telescope /> },
@@ -87,6 +95,11 @@ export function SearchPalette() {
     { label: "Collections", to: "/collections", icon: <Library /> },
     { label: "Create a Token", to: "/settings/tokens", icon: <KeyRound /> },
   ];
+  const actions = allActions.filter(
+    (a) => !query || a.label.toLowerCase().includes(query.toLowerCase()),
+  );
+  const status =
+    query && results.isFetching ? "Searching" : found === 0 ? `No matches for ${query}.` : "";
 
   return (
     <>
@@ -117,26 +130,19 @@ export function SearchPalette() {
             aria-label="Search"
             className="mb-2 h-9 w-full rounded-md border border-line-strong bg-surface px-3 text-sm"
           />
+          {/* Outside the list: a listbox may only contain options and groups
+              of options (axe aria-required-children), so the loading and
+              empty messages are a status beside it. */}
+          <p role="status" className="px-2 text-sm text-muted">
+            {status}
+          </p>
           <Command.List className="max-h-[50vh] overflow-y-auto">
-            {query && results.isFetching && !results.data ? (
-              <Command.Loading>
-                <p className="px-2 py-1.5 text-sm text-muted">Searching</p>
-              </Command.Loading>
-            ) : null}
-            {query &&
-            results.data &&
-            results.data.repos.length +
-              results.data.namespaces.length +
-              results.data.collections.length ===
-              0 ? (
-              <p className="px-2 py-1.5 text-sm text-muted">No matches for {query}.</p>
-            ) : null}
-            {results.data && results.data.repos.length > 0 ? (
+            {data && data.repos.length > 0 ? (
               <Command.Group
                 heading="Repos"
                 className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
-                {results.data.repos.map((r) => (
+                {data.repos.map((r) => (
                   <Command.Item
                     key={`${r.type}/${r.id}`}
                     value={`repo:${r.type}:${r.id}`}
@@ -151,12 +157,12 @@ export function SearchPalette() {
                 ))}
               </Command.Group>
             ) : null}
-            {results.data && results.data.namespaces.length > 0 ? (
+            {data && data.namespaces.length > 0 ? (
               <Command.Group
                 heading="Namespaces"
                 className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
-                {results.data.namespaces.map((n) => (
+                {data.namespaces.map((n) => (
                   <Command.Item
                     key={n.name}
                     value={`ns:${n.name}`}
@@ -170,12 +176,12 @@ export function SearchPalette() {
                 ))}
               </Command.Group>
             ) : null}
-            {results.data && results.data.collections.length > 0 ? (
+            {data && data.collections.length > 0 ? (
               <Command.Group
                 heading="Collections"
                 className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
-                {results.data.collections.map((c) => (
+                {data.collections.map((c) => (
                   <Command.Item
                     key={`${c.namespace}/${c.slug}`}
                     value={`col:${c.namespace}/${c.slug}`}
@@ -189,13 +195,12 @@ export function SearchPalette() {
                 ))}
               </Command.Group>
             ) : null}
-            <Command.Group
-              heading="Actions"
-              className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
-            >
-              {actions
-                .filter((a) => !query || a.label.toLowerCase().includes(query.toLowerCase()))
-                .map((a) => (
+            {actions.length > 0 ? (
+              <Command.Group
+                heading="Actions"
+                className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+              >
+                {actions.map((a) => (
                   <Command.Item
                     key={a.to}
                     value={`action:${a.to}`}
@@ -206,7 +211,8 @@ export function SearchPalette() {
                     <span className="text-ink">{a.label}</span>
                   </Command.Item>
                 ))}
-            </Command.Group>
+              </Command.Group>
+            ) : null}
           </Command.List>
         </Command>
       </Dialog>
