@@ -273,10 +273,12 @@ func TestPullThroughRepoAndFile(t *testing.T) {
 		_, err = pt.Repo(e.Ctx, alice, other)
 		require.ErrorIs(t, err, repo.ErrNotFound, "not in the allowlist")
 
-		// The worker runs in the background, as in a real Instance.
+		// The worker runs in the background, as in a real Instance. It
+		// stops before the test's servers close, even when the test fails.
 		ctx, cancel := context.WithCancel(e.Ctx)
-		defer cancel()
 		var wg sync.WaitGroup
+		defer wg.Wait()
+		defer cancel()
 		wg.Go(func() {
 			for ctx.Err() == nil {
 				e.Queue.RunPending(ctx)
@@ -333,6 +335,40 @@ func TestPullThroughRepoAndFile(t *testing.T) {
 		m, _, err := e.Service.Mirror(e.Ctx, r)
 		require.NoError(t, err)
 		require.Contains(t, m.Selection.Paths, "model.safetensors", "the Mirror now tracks the file it holds")
+	})
+}
+
+// TestPullThroughPendingWhilePlanning: a Pull-through that has not
+// finished planning within PullThroughWait answers ErrPullPending (the Hub
+// API's 503 with Retry-After); a retry joins the same Pull, and once it has
+// run the Repo is there.
+func TestPullThroughPendingWhilePlanning(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{PullThroughWait: 100 * time.Millisecond})
+		alice := e.User("alice")
+		e.Seed(tiny, map[string][]byte{"config.json": []byte(`{}`)}, nil)
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"acme/*"}, PullThroughMinRole: "user"})
+		pt := e.Service.PullThrough()
+		pulls := func() []*jobs.Job {
+			js, _, err := e.Queue.List(e.Ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPull}})
+			require.NoError(t, err)
+			return js
+		}
+
+		// No worker runs, so planning cannot finish within the wait.
+		_, err := pt.Repo(e.Ctx, alice, tiny)
+		require.ErrorIs(t, err, upstream.ErrPullPending)
+		_, err = pt.Repo(e.Ctx, alice, tiny)
+		require.ErrorIs(t, err, upstream.ErrPullPending)
+		js := pulls()
+		require.Len(t, js, 1, "the retry joins the Pull in progress")
+		require.Equal(t, jobs.StatusPending, js[0].Status)
+
+		e.Run(10)
+		require.Equal(t, jobs.StatusSucceeded, e.Job(js[0].ID).Status, e.Job(js[0].ID).Error)
+		r, err := e.Repos.Get(e.Ctx, tiny)
+		require.NoError(t, err)
+		require.True(t, r.Mirror)
 	})
 }
 
