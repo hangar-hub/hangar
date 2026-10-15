@@ -77,6 +77,13 @@ func (i *Instance) Token(t testing.TB, username, password string) string {
 	return i.token(t, username, password, "write")
 }
 
+// ScopedToken signs in with a password and creates a Token of the scope
+// (read, write or admin) for the user.
+func (i *Instance) ScopedToken(t testing.TB, username, password, scope string) string {
+	t.Helper()
+	return i.token(t, username, password, scope)
+}
+
 func (i *Instance) token(t testing.TB, username, password, scope string) string {
 	t.Helper()
 	jar, _ := cookiejar.New(nil)
@@ -114,10 +121,17 @@ func (i *Instance) AdminToken(t testing.TB) string {
 // Token of the new user.
 func (i *Instance) CreateUser(t testing.TB, adminToken, username string) string {
 	t.Helper()
+	return i.Token(t, username, i.AddUser(t, adminToken, username))
+}
+
+// AddUser creates a local user with the admin Token and returns the
+// user's password.
+func (i *Instance) AddUser(t testing.TB, adminToken, username string) string {
+	t.Helper()
 	password := "compat-password-for-" + username
 	i.MustAPI(t, http.StatusCreated, http.MethodPost, "/admin/users", adminToken,
 		map[string]any{"username": username, "password": password, "email": username + "@example.com"})
-	return i.Token(t, username, password)
+	return password
 }
 
 // CommitFiles creates a Repo of the token's user, or of another Namespace

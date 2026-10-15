@@ -59,8 +59,11 @@ def _multipart_file_size(hub) -> int:
     13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file
     nightly; HANGAR_HF_MULTIPART_FILE_SIZE sets it. The default, two parts
     and one byte, keeps local runs small and still ends on a short part.
+    Hangar's git-lfs server makes parts of at least 16 MiB, whatever the
+    threshold, so the default is at least two of those.
     """
-    return int(os.environ.get("HANGAR_HF_MULTIPART_FILE_SIZE", 2 * hub.multipart_threshold + 1))
+    part = max(hub.multipart_threshold, 16 << 20)
+    return int(os.environ.get("HANGAR_HF_MULTIPART_FILE_SIZE", 2 * part + 1))
 
 
 @pytest.mark.endpoint(
@@ -69,7 +72,12 @@ def _multipart_file_size(hub) -> int:
     "POST /{repo}.git/info/lfs/objects/batch (stand-in, multipart)",
 )
 def test_upload_over_multipart_threshold(api, hub, repo_name, tmp_path, monkeypatch):
-    from huggingface_hub import lfs
+    from huggingface_hub import constants, lfs
+
+    # This test is about the LFS multipart transfer, so it uploads through
+    # LFS also in the Xet uploads cell; test_upload_large_file_round_trip
+    # covers large files through hf_xet there.
+    monkeypatch.setattr(constants, "HF_HUB_DISABLE_XET", True)
 
     size = _multipart_file_size(hub)
     assert size > hub.multipart_threshold, "HANGAR_HF_MULTIPART_FILE_SIZE must be over lfs.multipart_threshold"
@@ -113,6 +121,34 @@ def test_upload_over_multipart_threshold(api, hub, repo_name, tmp_path, monkeypa
 
     downloaded = hashlib.sha256()
     with open(api.hf_hub_download(repo, "copy/big.bin"), "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            downloaded.update(block)
+    assert downloaded.hexdigest() == digest.hexdigest()
+
+
+@pytest.mark.endpoint(
+    "GET /api/{type}s/{repo}/xet-write-token/{rev}",
+    "POST /api/{type}s/{repo}/commit/{rev}",
+)
+def test_upload_large_file_round_trip(api, hub, repo_name, tmp_path):
+    """A file over the multipart threshold, through hf_xet in the Xet uploads cell and LFS otherwise."""
+    size = _multipart_file_size(hub)
+    path = tmp_path / "big.bin"
+    digest = hashlib.sha256()
+    with path.open("wb") as f:
+        left = size
+        while left:
+            block = os.urandom(min(left, 1 << 20))
+            f.write(block)
+            digest.update(block)
+            left -= len(block)
+    repo = api.create_repo(repo_name).repo_id
+    api.upload_file(path_or_fileobj=str(path), path_in_repo="big.bin", repo_id=repo)
+    meta = {s.rfilename: s for s in api.model_info(repo, files_metadata=True).siblings}
+    assert meta["big.bin"].lfs is not None
+    assert meta["big.bin"].lfs.sha256 == digest.hexdigest(), "Hangar stores the whole file, addressed by SHA-256"
+    downloaded = hashlib.sha256()
+    with open(api.hf_hub_download(repo, "big.bin"), "rb") as f:
         for block in iter(lambda: f.read(1 << 20), b""):
             downloaded.update(block)
     assert downloaded.hexdigest() == digest.hexdigest()

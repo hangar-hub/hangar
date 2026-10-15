@@ -31,7 +31,7 @@ Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
 | `GET /api/whoami-v2 (hf auth)` | Supported | `test_hf_auth_login_and_whoami` |  |
 | `DELETE /api/{type}s/{repo}/branch/{branch}` | Supported | `test_branches_and_tags` |  |
 | `POST /api/{type}s/{repo}/branch/{branch}` | Supported | `test_branches_and_tags` |  |
-| `POST /api/{type}s/{repo}/commit/{rev}` | Supported | `test_create_commit_adds_deletes_copies`, `test_upload_file_and_folder`, `test_upload_many_files`, `test_upload_over_multipart_threshold` |  |
+| `POST /api/{type}s/{repo}/commit/{rev}` | Supported | `test_create_commit_adds_deletes_copies`, `test_upload_file_and_folder`, `test_upload_large_file_round_trip`, `test_upload_many_files`, `test_upload_over_multipart_threshold` |  |
 | `POST /api/{type}s/{repo}/commit/{rev}?create_pr=1` | Supported | `test_failed_create_pr_commit_opens_no_pull_request`, `test_hf_upload_to_new_branch_and_pr` |  |
 | `GET /api/{type}s/{repo}/commits/{rev}` | Supported | `test_list_repo_commits` |  |
 | `GET /api/{type}s/{repo}/discussions` | Supported | `test_discussions_and_pull_requests`, `test_failed_create_pr_commit_opens_no_pull_request` |  |
@@ -56,7 +56,7 @@ Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
 | `DELETE /api/{type}s/{repo}/tag/{tag}` | Supported | `test_branches_and_tags` |  |
 | `GET /api/{type}s/{repo}/tree/{rev}/{path}` | Supported | `test_snapshot_download_and_offline`, `test_tree_and_paths_info` |  |
 | `GET /api/{type}s/{repo}/xet-read-token/{rev}` | Not supported | - | Hangar never offers Xet downloads; downloads use plain HTTP. |
-| `GET /api/{type}s/{repo}/xet-write-token/{rev}` | Supported | `test_xet_write_token` |  |
+| `GET /api/{type}s/{repo}/xet-write-token/{rev}` | Supported | `test_upload_large_file_round_trip`, `test_xet_write_token` |  |
 | `POST /{repo}.git/info/lfs/objects/batch (stand-in)` | Supported | `test_upload_file_and_folder` |  |
 | `POST /{repo}.git/info/lfs/objects/batch (stand-in, multipart)` | Supported | `test_upload_over_multipart_threshold` |  |
 | `GET /{repo}/resolve/{rev}/{path}` | Supported | `test_hf_hub_download_by_revision` |  |
