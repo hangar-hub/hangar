@@ -669,3 +669,20 @@ func TestMapNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, other, r.NamespaceID)
 }
+
+func TestFakeLFSResumeUpload(t *testing.T) {
+	ctx := context.Background()
+	f := repotest.NewFake(t)
+	oid := strings.Repeat("c", 64)
+	user, r1, r2 := uuid.New(), uuid.New(), uuid.New()
+	params := repo.UploadParams{OID: oid, Size: 24, Multipart: true, PartSize: 10, UserID: user, RepoUUID: r1, Resume: true}
+	up, err := f.LFS.CreateUpload(ctx, params)
+	require.NoError(t, err)
+	again, err := f.LFS.CreateUpload(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, up.ID, again.ID, "the user's upload in this Repo continues")
+	params.RepoUUID = r2
+	other, err := f.LFS.CreateUpload(ctx, params)
+	require.NoError(t, err)
+	require.NotEqual(t, up.ID, other.ID, "another Repo gets its own upload")
+}

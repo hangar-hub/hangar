@@ -496,6 +496,12 @@ type UploadParams struct {
 	Multipart bool
 	PartSize  int64
 	TTL       time.Duration
+	// Resume returns the user's unexpired multipart upload of the same
+	// object, Repo and part size, if there is one, with its expiry moved to
+	// TTL from now, instead of starting another. The native API's upload
+	// plan sets it, so a client that plans again after a reload continues
+	// the upload that holds its parts.
+	Resume bool
 }
 
 // Upload is an in-progress upload.

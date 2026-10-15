@@ -35,6 +35,7 @@ type fakeUpload struct {
 	key      string
 	uploadID string
 	repoUUID uuid.UUID
+	userID   uuid.UUID
 }
 
 var _ repo.LFSStore = (*FakeLFS)(nil)
@@ -117,7 +118,25 @@ func (f *FakeLFS) CreateUpload(ctx context.Context, p repo.UploadParams) (*repo.
 	if ttl == 0 {
 		ttl = 24 * time.Hour
 	}
-	u := &fakeUpload{Upload: repo.Upload{ID: uuid.New(), OID: p.OID, Size: p.Size, ExpiresAt: f.now().Add(ttl)}, key: model.LFSObjectKey(p.OID), repoUUID: p.RepoUUID}
+	if p.Resume && p.Multipart && p.UserID != uuid.Nil && p.RepoUUID != uuid.Nil {
+		f.mu.Lock()
+		var found *fakeUpload
+		for _, u := range f.uploads {
+			if u.OID == p.OID && u.Size == p.Size && u.PartSize == p.PartSize && u.uploadID != "" && u.userID == p.UserID &&
+				u.repoUUID == p.RepoUUID && f.now().Before(u.ExpiresAt) && (found == nil || u.ExpiresAt.After(found.ExpiresAt)) {
+				found = u
+			}
+		}
+		if found != nil {
+			found.ExpiresAt = f.now().Add(ttl)
+			out := found.Upload
+			f.mu.Unlock()
+			return &out, nil
+		}
+		f.mu.Unlock()
+	}
+	u := &fakeUpload{Upload: repo.Upload{ID: uuid.New(), OID: p.OID, Size: p.Size, ExpiresAt: f.now().Add(ttl)}, key: model.LFSObjectKey(p.OID),
+		repoUUID: p.RepoUUID, userID: p.UserID}
 	if p.Multipart {
 		if p.PartSize <= 0 {
 			return nil, fmt.Errorf("%w: multipart uploads need a part size", repo.ErrInvalid)

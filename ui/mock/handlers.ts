@@ -768,20 +768,30 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       if (!lfsExt.test(f.path) && f.size <= 10 * 1024 * 1024)
         return { path: f.path, action: "inline" };
       if (ctx.state.lfsObjects.has(f.sha256)) return { path: f.path, action: "exists" };
-      // Like W2's PlanUploads, every plan starts a new upload, even when an
-      // upload of the same object is in progress, and part URLs are
-      // absolute (built from server.public_url).
-      const id = randomUUID();
+      // Like W2's PlanUploads, a plan continues an upload of the same
+      // object in this Repo that is still in progress, so its parts are
+      // kept, and part URLs are absolute (built from server.public_url).
       const partSize = 5 * 1024 * 1024;
       const count = Math.max(1, Math.ceil(f.size / partSize));
-      ctx.state.uploads[id] = {
-        sha256: f.sha256,
-        size: f.size,
-        partSize,
-        parts: [],
-        state: "uploading",
-        repo: r.repo.id,
-      };
+      const inProgress = Object.entries(ctx.state.uploads).find(
+        ([, u]) =>
+          u.sha256 === f.sha256 &&
+          u.size === f.size &&
+          u.partSize === partSize &&
+          u.repo === r.repo.id &&
+          u.state === "uploading",
+      );
+      const id = inProgress?.[0] ?? randomUUID();
+      if (!inProgress) {
+        ctx.state.uploads[id] = {
+          sha256: f.sha256,
+          size: f.size,
+          partSize,
+          parts: [],
+          state: "uploading",
+          repo: r.repo.id,
+        };
+      }
       const base = `${ctx.origin}/api/hangar/v1/repos/${ctx.params.type}/${r.repo.namespace}/${r.repo.name}/uploads/${id}/parts`;
       return {
         path: f.path,

@@ -211,3 +211,56 @@ func TestLFSRules(t *testing.T) {
 	var nilRules *repo.LFSRules
 	require.False(t, nilRules.IsLFS("x.bin"))
 }
+
+// TestLFSResumeUpload checks UploadParams.Resume: planning the same object
+// again continues the user's upload in the Repo, with its parts, while
+// other users, Repos, part sizes and callers that do not ask get a new one.
+func TestLFSResumeUpload(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice, bob := e.addUser("alice"), e.addUser("bob")
+		r := e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "resume"}, Actor: alice})
+		other := e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "other"}, Actor: alice})
+		content := bytes.Repeat([]byte("0123456789"), 25)
+		oid := sha256Hex(content)
+		params := repo.UploadParams{OID: oid, Size: int64(len(content)), RepoUUID: r.UUID, UserID: alice.UserID, Multipart: true,
+			PartSize: 100, TTL: time.Hour, Resume: true}
+		u, err := e.lfs.CreateUpload(e.ctx, params)
+		require.NoError(t, err)
+		etag, err := e.lfs.PutPart(e.ctx, u.ID, 1, bytes.NewReader(content[:100]), 100)
+		require.NoError(t, err)
+
+		again, err := e.lfs.CreateUpload(e.ctx, params)
+		require.NoError(t, err)
+		require.Equal(t, u.ID, again.ID, "the plan continues the upload in progress")
+		got, err := e.lfs.GetUpload(e.ctx, again.ID)
+		require.NoError(t, err)
+		require.Len(t, got.Done, 1, "with the part already sent")
+		require.Equal(t, etag, got.Done[0].ETag)
+
+		for name, p := range map[string]repo.UploadParams{
+			"another user":      func() repo.UploadParams { q := params; q.UserID = bob.UserID; return q }(),
+			"another Repo":      func() repo.UploadParams { q := params; q.RepoUUID = other.UUID; return q }(),
+			"another part size": func() repo.UploadParams { q := params; q.PartSize = 125; return q }(),
+			"no resume":         func() repo.UploadParams { q := params; q.Resume = false; return q }(),
+		} {
+			fresh, err := e.lfs.CreateUpload(e.ctx, p)
+			require.NoError(t, err, name)
+			require.NotEqual(t, u.ID, fresh.ID, name)
+		}
+
+		// A completed upload is gone, so the next plan starts a new one.
+		var parts []blob.Part
+		parts = append(parts, blob.Part{Number: 1, ETag: etag})
+		for i := 1; i < 3; i++ {
+			chunk := content[i*100 : min((i+1)*100, len(content))]
+			etag, err := e.lfs.PutPart(e.ctx, u.ID, i+1, bytes.NewReader(chunk), int64(len(chunk)))
+			require.NoError(t, err)
+			parts = append(parts, blob.Part{Number: i + 1, ETag: etag})
+		}
+		_, err = e.lfs.CompleteUpload(e.ctx, u.ID, parts)
+		require.NoError(t, err)
+		next, err := e.lfs.CreateUpload(e.ctx, params)
+		require.NoError(t, err)
+		require.NotEqual(t, u.ID, next.ID)
+	})
+}

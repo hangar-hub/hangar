@@ -173,7 +173,7 @@ test.describe("upload", () => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     expect(dialogs).toEqual(["beforeunload"]);
 
-    // The plan starts a new upload, as W2's does; the browser resumes the first.
+    // The plan continues the first upload, as W2's does, and the browser sends only the missing part.
     const puts: string[] = [];
     page.on("request", (r) => {
       if (r.method() === "PUT") puts.push(new URL(r.url()).pathname);
