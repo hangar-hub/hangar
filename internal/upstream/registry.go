@@ -444,12 +444,25 @@ func (r *Registry) Delete(ctx context.Context, id uuid.UUID, actor model.Princip
 	return nil
 }
 
+// testTimeout bounds a connection test, so the admin UI gets an answer
+// while the person who asked is still waiting for it.
+var testTimeout = 4 * time.Second
+
 // Test checks that the Upstream answers: it lists one model with the
-// Instance token. It returns the round-trip time.
+// Instance token. It returns the round-trip time. A connection test makes
+// one attempt, with no retries or backoff, and gives up after a few
+// seconds: it reports how the Upstream answers now, not whether it
+// recovers later.
 func Test(ctx context.Context, c Client, u Upstream, cred Credentials) (time.Duration, error) {
+	tctx, cancel := context.WithTimeout(WithoutRetries(ctx), testTimeout)
+	defer cancel()
 	start := time.Now()
-	_, err := c.Search(ctx, u, cred, SearchQuery{Type: model.RepoTypeModel, Limit: 1})
-	return time.Since(start), err
+	_, err := c.Search(tctx, u, cred, SearchQuery{Type: model.RepoTypeModel, Limit: 1})
+	lat := time.Since(start)
+	if err != nil && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+		err = fmt.Errorf("%w: no answer within %s", ErrUnavailable, testTimeout)
+	}
+	return lat, err
 }
 
 // forUpdate locks the selected rows on Postgres. SQLite has one writer, so
