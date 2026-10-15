@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -558,4 +559,42 @@ func TestRepoMirrorStatus(t *testing.T) {
 	require.NotNil(t, got.MirrorStatus)
 	require.Equal(t, "huggingface", got.MirrorStatus.Upstream)
 	require.Equal(t, []string{"alice/mirrored"}, asked)
+}
+
+// TestClientClosedRequestIsNotAServerError checks that a request the
+// client closed, whose git or database work then stops with
+// context.Canceled, is answered with 499 and not logged as an error. Under
+// load, e2e clients gave up on slow requests and the server logged each one
+// as a failed request with status 500.
+func TestClientClosedRequestIsNotAServerError(t *testing.T) {
+	var logs bytes.Buffer
+	var deps api.RepoDeps
+	f := newFixture(t, func(d *api.RepoDeps) {
+		d.Log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		deps = *d
+	})
+	alice := f.user("alice")
+	f.createRepo("alice", gen.RepoCreate{Type: "model", Namespace: "alice", Name: "tiny"})
+	h, err := api.NewReposAPI(deps)
+	require.NoError(t, err)
+	asAlice := func(id string) context.Context {
+		ctx := httpx.WithInfo(context.Background(), id)
+		httpx.SetPrincipal(ctx, alice)
+		return ctx
+	}
+
+	ctx, cancel := context.WithCancel(asAlice("req-1"))
+	cancel()
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/hangar/v1/repos/model/alice/tiny", nil)
+	rec := httptest.NewRecorder()
+	h.GetRepo(rec, req, gen.Models, "alice", "tiny")
+	require.Equal(t, 499, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "The client closed the request.")
+	require.NotContains(t, logs.String(), "level=ERROR")
+
+	// A failure while the client is still there is still a server error.
+	req = httptest.NewRequestWithContext(asAlice("req-2"), http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	h.GetRepo(rec, req, gen.Models, "alice", "tiny")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }

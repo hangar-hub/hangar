@@ -87,6 +87,10 @@ func NewMetadataAPI(d MetaDeps) (*MetadataAPI, error) {
 // metaProblem answers an error as RFC 9457 problem details. Missing or
 // unreadable Repos look the same, and anonymous callers get 401 for them.
 func (d *MetaDeps) metaProblem(w http.ResponseWriter, r *http.Request, err error) {
+	if clientGone(r, err) {
+		writeClientGone(w, r, d.Log, err)
+		return
+	}
 	status := http.StatusInternalServerError
 	detail := err.Error()
 	switch {

@@ -105,6 +105,11 @@ func (s *Store) ensureTree(ctx context.Context, repoID uuid.UUID, commit model.C
 	return err
 }
 
+// fillTree builds the tree_entries cache of a Commit. It reads the Commit
+// header from the commits cache and, when the first parent is in the tree
+// cache, takes the parent's paths, LFS pointers and last Commits from
+// there, so after a Commit it only lists the new tree and reads the small
+// blobs that changed.
 func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.CommitSHA) error {
 	if ok, err := s.treeCached(ctx, s.db, repoID, commit); err != nil || ok {
 		return err
@@ -115,10 +120,7 @@ func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.Com
 	}
 	defer objs.Release()
 	g := s.git.Git()
-	if !s.isCommit(ctx, objs, string(commit)) {
-		return fmt.Errorf("%w: %s", ErrRevisionNotFound, commit)
-	}
-	rootTree, err := g.Output(ctx, objs.Dir, "rev-parse", string(commit)+"^{tree}")
+	rootTree, parents, err := s.commitHeader(ctx, repoID, objs, commit)
 	if err != nil {
 		return err
 	}
@@ -126,36 +128,59 @@ func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.Com
 	if err != nil {
 		return err
 	}
-	pointers, err := readPointers(ctx, g, objs.Dir, entries)
-	if err != nil {
-		return err
-	}
 	// Last Commits: inherit from the first parent where nothing changed.
-	parent, _ := g.Output(ctx, objs.Dir, "rev-parse", "--verify", "--quiet", string(commit)+"^1")
-	var parentOIDs map[string]string
-	var parentLast map[string]string
-	if parent != "" {
-		pe, err := lsTree(ctx, g, objs.Dir, "-r", "-t", parent)
+	var (
+		parent     string
+		parentOIDs map[string]string
+		parentLast map[string]string
+		known      map[string]*db.TreeEntry
+	)
+	if len(parents) > 0 {
+		parent = parents[0]
+		cached, err := s.treeCached(ctx, s.db, repoID, model.CommitSHA(parent))
 		if err != nil {
 			return err
 		}
-		parentOIDs = make(map[string]string, len(pe))
-		for _, e := range pe {
-			parentOIDs[e.path] = e.oid
-		}
-		if ok, _ := s.treeCached(ctx, s.db, repoID, model.CommitSHA(parent)); ok {
+		if cached {
 			var rows []db.TreeEntry
-			if err := s.db.NewSelect().Model(&rows).Column("path", "last_commit").Where("repo_id = ?", repoID).
-				Where("commit_sha = ?", parent).Scan(ctx); err != nil {
+			if err := s.db.NewSelect().Model(&rows).Column("path", "type", "git_oid", "lfs_oid", "lfs_size", "pointer_size", "last_commit").
+				Where("repo_id = ?", repoID).Where("commit_sha = ?", parent).Where("path <> ?", rootPath).Scan(ctx); err != nil {
 				return err
 			}
+			parentOIDs = make(map[string]string, len(rows))
 			parentLast = make(map[string]string, len(rows))
-			for _, r := range rows {
+			known = make(map[string]*db.TreeEntry, len(rows))
+			for i := range rows {
+				r := &rows[i]
+				parentOIDs[r.Path] = r.GitOID
 				if r.LastCommit != nil {
 					parentLast[r.Path] = *r.LastCommit
 				}
+				if r.Type == string(model.EntryFile) {
+					known[r.GitOID] = r
+				}
+			}
+		} else {
+			pe, err := lsTree(ctx, g, objs.Dir, "-r", "-t", parent)
+			if err != nil {
+				return err
+			}
+			parentOIDs = make(map[string]string, len(pe))
+			for _, e := range pe {
+				parentOIDs[e.path] = e.oid
 			}
 		}
+	}
+	// Blobs the parent already has are known to be pointers or not.
+	var unknown []lsEntry
+	for _, e := range entries {
+		if _, ok := known[e.oid]; !ok {
+			unknown = append(unknown, e)
+		}
+	}
+	pointers, err := s.readPointers(ctx, objs.Dir, unknown)
+	if err != nil {
+		return err
 	}
 	now := db.Now()
 	rows := make([]db.TreeEntry, 0, len(entries)+1)
@@ -167,7 +192,14 @@ func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.Com
 		} else {
 			row.Type = string(model.EntryFile)
 			row.Size = e.size
-			if p, ok := pointers[e.oid]; ok {
+			if k, ok := known[e.oid]; ok {
+				if k.LFSOID != nil {
+					row.LFSOID, row.LFSSize, row.PointerSize = k.LFSOID, k.LFSSize, k.PointerSize
+					if k.LFSSize != nil {
+						row.Size = *k.LFSSize
+					}
+				}
+			} else if p, ok := pointers[e.oid]; ok {
 				oid, lsize, psize := p.OID, p.Size, p.PointerSize()
 				row.LFSOID, row.LFSSize, row.PointerSize = &oid, &lsize, &psize
 				row.Size = p.Size
@@ -201,22 +233,83 @@ func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.Com
 	})
 }
 
-// readPointers reads every blob small enough to be an LFS pointer and
-// returns the pointers by blob OID.
-func readPointers(ctx context.Context, g gitstore.Git, dir string, entries []lsEntry) (map[string]model.LFSPointer, error) {
+// commitHeader returns the tree and parents of a Commit of the Repo, from
+// the commits cache or with one git process, and ErrRevisionNotFound when
+// sha is not a Commit of the Repo.
+func (s *Store) commitHeader(ctx context.Context, repoID uuid.UUID, objs *gitstore.Objects, sha model.CommitSHA) (string, []string, error) {
+	if !model.IsFullSHA(string(sha)) {
+		return "", nil, fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
+	}
+	c := new(db.Commit)
+	err := s.db.NewSelect().Model(c).Column("tree", "parents").Where("repo_id = ?", repoID).Where("sha = ?", string(sha)).Scan(ctx)
+	if err == nil && c.Tree != "" {
+		return c.Tree, c.Parents, nil
+	}
+	if err != nil && !db.IsNotFound(err) {
+		return "", nil, fmt.Errorf("repo: read commit cache: %w", err)
+	}
+	var (
+		tree    string
+		parents []string
+		found   bool
+	)
+	err = s.git.Git().BatchRead(ctx, objs.Dir, []string{string(sha)}, func(info gitstore.ObjectInfo, content []byte) error {
+		if info.Missing || info.Type != "commit" {
+			return nil
+		}
+		found = true
+		tree, parents = parseCommitHeader(content)
+		return nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	if !found || tree == "" {
+		return "", nil, fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
+	}
+	return tree, parents, nil
+}
+
+// parseCommitHeader reads the tree and parent lines of a raw commit object.
+func parseCommitHeader(b []byte) (tree string, parents []string) {
+	for _, line := range strings.Split(string(b), "\n") {
+		if line == "" {
+			break
+		}
+		if v, ok := strings.CutPrefix(line, "tree "); ok {
+			tree = v
+		} else if v, ok := strings.CutPrefix(line, "parent "); ok {
+			parents = append(parents, v)
+		}
+	}
+	return tree, parents
+}
+
+// readPointers reads every blob small enough to be an LFS pointer, from
+// the blob cache or with one git process, and returns the pointers by blob
+// OID.
+func (s *Store) readPointers(ctx context.Context, dir string, entries []lsEntry) (map[string]model.LFSPointer, error) {
+	out := map[string]model.LFSPointer{}
 	seen := map[string]bool{}
 	var small []string
 	for _, e := range entries {
-		if e.typ == "blob" && e.size > 0 && e.size <= model.MaxLFSPointerSize && !seen[e.oid] {
-			seen[e.oid] = true
-			small = append(small, e.oid)
+		if e.typ != "blob" || e.size <= 0 || e.size > model.MaxLFSPointerSize || seen[e.oid] {
+			continue
 		}
+		seen[e.oid] = true
+		if data, ok := s.blobs.get(e.oid); ok {
+			if p, err := model.ParseLFSPointer(data); err == nil {
+				out[e.oid] = p
+			}
+			continue
+		}
+		small = append(small, e.oid)
 	}
-	out := map[string]model.LFSPointer{}
-	err := g.BatchRead(ctx, dir, small, func(info gitstore.ObjectInfo, content []byte) error {
+	err := s.git.Git().BatchRead(ctx, dir, small, func(info gitstore.ObjectInfo, content []byte) error {
 		if info.Missing {
 			return nil
 		}
+		s.blobs.add(info.OID, content)
 		if p, err := model.ParseLFSPointer(content); err == nil {
 			out[info.OID] = p
 		}

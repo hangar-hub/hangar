@@ -497,6 +497,16 @@ func (s *Store) openFile(ctx context.Context, repoID uuid.UUID, commit model.Com
 		}
 		start, length = a, b-a+1
 	}
+	if e.Size <= maxCachedBlob {
+		data, err := s.smallBlob(ctx, repoID, e.OID)
+		if err != nil {
+			return nil, model.Entry{}, err
+		}
+		if int64(len(data)) < start+length {
+			return nil, model.Entry{}, fmt.Errorf("repo: git blob %s is %d bytes, not %d", e.OID, len(data), e.Size)
+		}
+		return io.NopCloser(bytes.NewReader(data[start : start+length])), e, nil
+	}
 	objs, err := s.git.Acquire(ctx, repoID)
 	if err != nil {
 		return nil, model.Entry{}, err
@@ -607,37 +617,80 @@ func (s *Store) getCommit(ctx context.Context, repoID uuid.UUID, sha model.Commi
 	return &commits[0], nil
 }
 
-func (s *Store) firstParent(ctx context.Context, dir string, sha model.CommitSHA) string {
-	if p, err := s.git.Git().Output(ctx, dir, "rev-parse", "--verify", "--quiet", string(sha)+"^1"); err == nil && p != "" {
-		return p
-	}
-	return emptyTree
+// binaryProbe is how much of a blob is checked for a NUL byte, as git does.
+const binaryProbe = 8000
+
+// blobMeta is what a diff shows about one side of a changed file.
+type blobMeta struct {
+	size        int64
+	lfs, binary bool
 }
 
-func (s *Store) blobInfo(ctx context.Context, dir, oid string) (size int64, lfs, binary bool) {
-	if oid == "" || strings.Trim(oid, "0") == "" {
-		return 0, false, false
+// blobMetas returns the size, and whether it is an LFS pointer or binary,
+// of each blob, with two git processes however many blobs there are: one
+// for sizes and one that reads the start of every blob up to maxTextDiff
+// bytes. Larger blobs, which only exist outside LFS, are probed one at a
+// time. Missing objects are left out.
+func (s *Store) blobMetas(ctx context.Context, dir string, oids []string) (map[string]blobMeta, error) {
+	out := map[string]blobMeta{}
+	seen := map[string]bool{}
+	var list []string
+	for _, o := range oids {
+		if o == "" || strings.Trim(o, "0") == "" || seen[o] {
+			continue
+		}
+		seen[o] = true
+		list = append(list, o)
 	}
-	info, err := s.git.Git().BatchCheck(ctx, dir, []string{oid})
-	if err != nil || len(info) != 1 || info[0].Missing {
-		return 0, false, false
+	if len(list) == 0 {
+		return out, nil
 	}
-	size = info[0].Size
-	probe := min(size, 8000)
-	rc, err := s.git.Git().OpenBlob(ctx, dir, oid)
+	g := s.git.Git()
+	infos, err := g.BatchCheck(ctx, dir, list)
 	if err != nil {
-		return size, false, false
+		return nil, err
 	}
-	defer rc.Close()
-	head := make([]byte, probe)
-	n, _ := io.ReadFull(rc, head)
-	head = head[:n]
-	if size <= model.MaxLFSPointerSize {
-		if p, err := model.ParseLFSPointer(head); err == nil {
-			return p.Size, true, false
+	probe := func(oid string, size int64, head []byte) {
+		if size <= model.MaxLFSPointerSize {
+			if p, err := model.ParseLFSPointer(head); err == nil {
+				out[oid] = blobMeta{size: p.Size, lfs: true}
+				return
+			}
+		}
+		out[oid] = blobMeta{size: size, binary: bytes.IndexByte(head, 0) >= 0}
+	}
+	var small []string
+	var large []gitstore.ObjectInfo
+	for _, i := range infos {
+		switch {
+		case i.Missing:
+		case i.Size <= maxTextDiff:
+			small = append(small, i.OID)
+		default:
+			large = append(large, i)
 		}
 	}
-	return size, false, bytes.IndexByte(head, 0) >= 0
+	err = g.BatchReadHead(ctx, dir, small, binaryProbe, func(info gitstore.ObjectInfo, head []byte) error {
+		if !info.Missing {
+			probe(info.OID, info.Size, head)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range large {
+		out[i.OID] = blobMeta{size: i.Size}
+		rc, err := g.OpenBlob(ctx, dir, i.OID)
+		if err != nil {
+			continue
+		}
+		head := make([]byte, binaryProbe)
+		n, _ := io.ReadFull(rc, head)
+		_ = rc.Close()
+		probe(i.OID, i.Size, head[:n])
+	}
+	return out, nil
 }
 
 // Diff implements Service.
@@ -651,17 +704,25 @@ func (s *Store) Diff(ctx context.Context, id model.RepoID, sha model.CommitSHA) 
 		return nil, err
 	}
 	defer objs.Release()
-	return s.diff(ctx, objs, sha)
+	changes, _, err := s.diff(ctx, row.ID, objs, sha)
+	return changes, err
 }
 
-func (s *Store) diff(ctx context.Context, objs *gitstore.Objects, sha model.CommitSHA) ([]FileChange, error) {
-	if !s.isCommit(ctx, objs, string(sha)) {
-		return nil, fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
+// diff lists the files a Commit changed against its first parent, and
+// returns that parent (the empty tree for a root Commit). It starts the
+// same number of git processes however many files changed.
+func (s *Store) diff(ctx context.Context, repoID uuid.UUID, objs *gitstore.Objects, sha model.CommitSHA) ([]FileChange, string, error) {
+	_, parents, err := s.commitHeader(ctx, repoID, objs, sha)
+	if err != nil {
+		return nil, "", err
 	}
-	parent := s.firstParent(ctx, objs.Dir, sha)
+	parent := emptyTree
+	if len(parents) > 0 {
+		parent = parents[0]
+	}
 	out, err := s.git.Git().Run(ctx, objs.Dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--no-commit-id", "--raw", parent, string(sha))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	fields := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
 	changes := []FileChange{}
@@ -693,11 +754,6 @@ func (s *Store) diff(ctx context.Context, objs *gitstore.Objects, sha model.Comm
 		default:
 			c.Status = ChangeModified
 		}
-		var oldLFS, newLFS, oldBin, newBin bool
-		c.OldSize, oldLFS, oldBin = s.blobInfo(ctx, objs.Dir, c.OldOID)
-		c.NewSize, newLFS, newBin = s.blobInfo(ctx, objs.Dir, c.NewOID)
-		c.LFS = oldLFS || newLFS
-		c.Binary = oldBin || newBin
 		if strings.Trim(c.OldOID, "0") == "" {
 			c.OldOID = ""
 		}
@@ -706,7 +762,22 @@ func (s *Store) diff(ctx context.Context, objs *gitstore.Objects, sha model.Comm
 		}
 		changes = append(changes, c)
 	}
-	return changes, nil
+	oids := make([]string, 0, 2*len(changes))
+	for _, c := range changes {
+		oids = append(oids, c.OldOID, c.NewOID)
+	}
+	metas, err := s.blobMetas(ctx, objs.Dir, oids)
+	if err != nil {
+		return nil, "", err
+	}
+	for i := range changes {
+		c := &changes[i]
+		o, n := metas[c.OldOID], metas[c.NewOID]
+		c.OldSize, c.NewSize = o.size, n.size
+		c.LFS = o.lfs || n.lfs
+		c.Binary = o.binary || n.binary
+	}
+	return changes, parent, nil
 }
 
 // FileDiff implements Service.
@@ -720,7 +791,7 @@ func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitS
 		return nil, err
 	}
 	defer objs.Release()
-	changes, err := s.diff(ctx, objs, sha)
+	changes, parent, err := s.diff(ctx, row.ID, objs, sha)
 	if err != nil {
 		return nil, err
 	}
@@ -730,7 +801,6 @@ func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitS
 		}
 		fd := &FileDiff{FileChange: c}
 		if !c.LFS && !c.Binary && c.OldSize < maxTextDiff && c.NewSize < maxTextDiff {
-			parent := s.firstParent(ctx, objs.Dir, sha)
 			args := []string{"--literal-pathspecs", "diff", "-M", parent, string(sha), "--", p}
 			if c.OldPath != "" {
 				args = append(args, c.OldPath)

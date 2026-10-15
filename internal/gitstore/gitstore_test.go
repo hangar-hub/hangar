@@ -3,6 +3,7 @@ package gitstore_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -277,6 +278,24 @@ func TestGitRunner(t *testing.T) {
 	require.ErrorIs(t, g.BatchRead(ctx, dir, []string{hello, hello}, func(gitstore.ObjectInfo, []byte) error { return stop }), stop)
 	require.NoError(t, g.BatchRead(ctx, dir, nil, nil))
 
+	// BatchReadHead keeps a prefix of each object and stays in step with
+	// the stream, so objects after a long one are read correctly.
+	out, err = g.Run(ctx, dir, strings.NewReader(strings.Repeat("x", 100000)), nil, "hash-object", "-w", "--stdin")
+	require.NoError(t, err)
+	long := strings.TrimSpace(string(out))
+	var heads []string
+	require.NoError(t, g.BatchReadHead(ctx, dir, []string{long, hello, strings.Repeat("f", 40), long}, 3, func(i gitstore.ObjectInfo, c []byte) error {
+		heads = append(heads, fmt.Sprintf("%s/%d/%t", c, i.Size, i.Missing))
+		return nil
+	}))
+	require.Equal(t, []string{"xxx/100000/false", "hel/5/false", "/0/true", "xxx/100000/false"}, heads)
+	heads = nil
+	require.NoError(t, g.BatchReadHead(ctx, dir, []string{hello}, 0, func(i gitstore.ObjectInfo, c []byte) error {
+		heads = append(heads, fmt.Sprintf("%q/%d", c, i.Size))
+		return nil
+	}))
+	require.Equal(t, []string{`""/5`}, heads)
+
 	rc, err := g.OpenBlob(ctx, dir, hello)
 	require.NoError(t, err)
 	b, err := io.ReadAll(rc)
@@ -335,6 +354,26 @@ func TestIndexPackAndCompact(t *testing.T) {
 		objs, err := st.PackObjects(f.ctx, sha)
 		require.NoError(t, err)
 		require.Contains(t, objs, string(three))
+		// The index is read without git; the list matches git show-index.
+		idx, err := os.Open(filepath.Join(st.PackDir(), "pack-"+sha+".idx"))
+		require.NoError(t, err)
+		shown, err := st.Run(f.ctx, idx, nil, "show-index")
+		require.NoError(t, idx.Close())
+		require.NoError(t, err)
+		var want []string
+		for _, line := range strings.Split(strings.TrimSpace(string(shown)), "\n") {
+			want = append(want, strings.Fields(line)[1])
+		}
+		require.Equal(t, want, objs)
+		// A truncated index is an error, not a short list.
+		idxPath := filepath.Join(st.PackDir(), "pack-"+sha+".idx")
+		full, err := os.ReadFile(idxPath)
+		require.NoError(t, err)
+		require.NoError(t, os.Chmod(idxPath, 0o600))
+		require.NoError(t, os.WriteFile(idxPath, full[:len(full)-50], 0o600))
+		_, err = st.PackObjects(f.ctx, sha)
+		require.ErrorContains(t, err, "truncated pack index")
+		require.NoError(t, os.WriteFile(idxPath, full, 0o600))
 		_, err = st.IndexPack(f.ctx, strings.NewReader("garbage"), false)
 		require.Error(t, err)
 		require.NoError(t, st.Close())

@@ -432,3 +432,74 @@ func TestOnlyHangarCommitsToConvertRefs(t *testing.T) {
 		require.False(t, res.NoOp)
 	})
 }
+
+// TestCommitBatchesOperationsInOrder checks the batched index updates of a
+// Commit: operations still apply in order, a refused file is still named,
+// and paths that need quoting for git are deleted correctly. It also checks
+// the batched blob probes behind Diff.
+func TestCommitBatchesOperationsInOrder(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "batch"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		quoted, newline := `"quoted".txt`, "line\nbreak.txt"
+		e.commit(id, alice, add(quoted, "q"), add(newline, "n"), add("dir/keep.txt", "k"), add("gone.txt", "g"))
+
+		// An add, a delete of the same path, and an add after a delete.
+		res := e.commit(id, alice, add("temp.txt", "t"), repo.Operation{Kind: repo.OpDelete, Path: "temp.txt"},
+			repo.Operation{Kind: repo.OpDelete, Path: quoted}, repo.Operation{Kind: repo.OpDelete, Path: newline},
+			repo.Operation{Kind: repo.OpDelete, Path: "gone.txt"}, add("gone.txt", "back"))
+		root, err := e.svc.Tree(e.ctx, id, res.SHA, "", repo.TreeOpts{})
+		require.NoError(t, err)
+		require.Equal(t, []string{"dir", ".gitattributes", "gone.txt"}, paths(root))
+		require.Equal(t, "back", e.read(id, "main", "gone.txt"))
+		gitCmd(t, e.export(id), "fsck", "--strict", "--no-dangling")
+
+		// A file that would replace a folder fails in the middle of a batch
+		// and is named, and nothing is committed.
+		_, err = e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Summary: "s", Actor: alice,
+			Operations: []repo.Operation{add("a.txt", "a"), add("dir", "x"), add("b.txt", "b")}})
+		require.ErrorIs(t, err, repo.ErrInvalid)
+		require.ErrorContains(t, err, "cannot add dir")
+		head, err := e.svc.Resolve(e.ctx, id, "main")
+		require.NoError(t, err)
+		require.Equal(t, res.SHA, head)
+		_, err = e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Summary: "s", Actor: alice,
+			Operations: []repo.Operation{add("c.txt", "c"), {Kind: repo.OpCopy, Path: "dir", SrcPath: "gone.txt"}}})
+		require.ErrorIs(t, err, repo.ErrInvalid)
+		require.ErrorContains(t, err, "cannot copy to dir")
+
+		// Diff reports sizes, LFS pointers and binary files of both sides,
+		// including blobs too large to probe in the batch.
+		large := strings.Repeat("l", 2<<20)
+		next := e.commit(id, alice, add("bin.dat", "a\x00b"), add("large.txt", large), add("w.bin", "lfs content"),
+			add("dir/keep.txt", "kk"))
+		changes, err := e.svc.Diff(e.ctx, id, next.SHA)
+		require.NoError(t, err)
+		got := map[string]repo.FileChange{}
+		for _, c := range changes {
+			got[c.Path] = c
+		}
+		require.True(t, got["bin.dat"].Binary)
+		require.Equal(t, int64(3), got["bin.dat"].NewSize)
+		require.False(t, got["large.txt"].Binary)
+		require.Equal(t, int64(len(large)), got["large.txt"].NewSize)
+		require.True(t, got["w.bin"].LFS)
+		require.Equal(t, int64(len("lfs content")), got["w.bin"].NewSize)
+		require.Equal(t, repo.ChangeModified, got["dir/keep.txt"].Status)
+		require.Equal(t, int64(1), got["dir/keep.txt"].OldSize)
+		require.Equal(t, int64(2), got["dir/keep.txt"].NewSize)
+		fd, err := e.svc.FileDiff(e.ctx, id, next.SHA, "dir/keep.txt")
+		require.NoError(t, err)
+		require.Contains(t, fd.Patch, "+kk")
+
+		// The first Commit diffs against the empty tree.
+		first, err := e.svc.Log(e.ctx, id, "main", repo.LogOpts{})
+		require.NoError(t, err)
+		initial, err := e.svc.Diff(e.ctx, id, first[len(first)-1].SHA)
+		require.NoError(t, err)
+		require.Len(t, initial, 1)
+		require.Equal(t, repo.ChangeAdded, initial[0].Status)
+		require.Empty(t, initial[0].OldOID)
+	})
+}

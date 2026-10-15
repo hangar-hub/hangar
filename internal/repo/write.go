@@ -194,24 +194,46 @@ type preparedOp struct {
 }
 
 // prepare writes the content of every add into the staging repository,
-// storing paths that .gitattributes tracks with LFS as LFS objects.
+// storing paths that .gitattributes tracks with LFS as LFS objects. The
+// content of every add is spooled to a file and hashed with one git
+// process, however many files the Commit has.
 func (s *Store) prepare(ctx context.Context, row *repoRow, st *gitstore.Staging, parent model.CommitSHA, p CommitParams) ([]preparedOp, []LFSRef, int64, error) {
 	rules, err := s.lfsRules(ctx, st, row, parent)
 	if err != nil {
 		return nil, nil, 0, err
 	}
+	spool, err := os.MkdirTemp(st.Dir, "spool-")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	defer os.RemoveAll(spool)
 	var (
-		ops   []preparedOp
-		refs  []LFSRef
-		added int64
+		ops     []preparedOp
+		refs    []LFSRef
+		added   int64
+		files   []string
+		sizes   []int64
+		hashFor []int
 	)
+	spoolBlob := func(r io.Reader) (int64, error) {
+		name := filepath.Join(spool, strconv.Itoa(len(files)))
+		n, err := writeSpool(name, r)
+		if err != nil {
+			return n, err
+		}
+		files = append(files, name)
+		sizes = append(sizes, n)
+		hashFor = append(hashFor, len(ops))
+		return n, nil
+	}
 	for _, op := range p.Operations {
 		clean, _ := model.CleanRepoPath(op.Path)
 		po := preparedOp{kind: op.Kind, path: clean, srcRev: op.SrcRevision}
 		switch op.Kind {
 		case OpAdd:
 			content := op.Content
-			if rules.IsLFS(clean) {
+			lfs := rules.IsLFS(clean)
+			if lfs {
 				ptr, err := s.ingestContent(ctx, op.Content)
 				if err != nil {
 					return nil, nil, 0, err
@@ -220,18 +242,16 @@ func (s *Store) prepare(ctx context.Context, row *repoRow, st *gitstore.Staging,
 				added += ptr.Size
 				content = bytes.NewReader(ptr.Bytes())
 			}
-			counter := &countingReader{r: content}
-			oid, err := st.Run(ctx, counter, nil, "hash-object", "-w", "--stdin")
+			n, err := spoolBlob(content)
 			if err != nil {
 				return nil, nil, 0, err
 			}
-			if !rules.IsLFS(clean) {
-				if counter.n > s.opts.MaxBlobSize {
-					return nil, nil, 0, fmt.Errorf("%w: %s is %d bytes, larger than the %d byte limit for files outside LFS; track it with git lfs track or upload it as an LFS file", ErrInvalid, clean, counter.n, s.opts.MaxBlobSize)
+			if !lfs {
+				if n > s.opts.MaxBlobSize {
+					return nil, nil, 0, fmt.Errorf("%w: %s is %d bytes, larger than the %d byte limit for files outside LFS; track it with git lfs track or upload it as an LFS file", ErrInvalid, clean, n, s.opts.MaxBlobSize)
 				}
-				added += counter.n
+				added += n
 			}
-			po.oid = strings.TrimSpace(string(oid))
 		case OpAddLFS:
 			ref, err := s.lfsOp(ctx, row, op, p.AllowMirror)
 			if err != nil {
@@ -242,18 +262,50 @@ func (s *Store) prepare(ctx context.Context, row *repoRow, st *gitstore.Staging,
 				added += ref.Size
 			}
 			ptr := model.LFSPointer{OID: ref.OID, Size: ref.Size}
-			oid, err := st.Run(ctx, bytes.NewReader(ptr.Bytes()), nil, "hash-object", "-w", "--stdin")
-			if err != nil {
+			if _, err := spoolBlob(bytes.NewReader(ptr.Bytes())); err != nil {
 				return nil, nil, 0, err
 			}
-			po.oid = strings.TrimSpace(string(oid))
 			po.kind = OpAdd
 		case OpCopy:
 			po.srcPath, _ = model.CleanRepoPath(op.SrcPath)
 		}
 		ops = append(ops, po)
 	}
+	if len(files) > 0 {
+		// --no-filters hashes the bytes as they are, like --stdin does.
+		out, err := st.Run(ctx, strings.NewReader(strings.Join(files, "\n")+"\n"), nil, "hash-object", "-w", "--no-filters", "--stdin-paths")
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		oids := strings.Fields(string(out))
+		if len(oids) != len(files) {
+			return nil, nil, 0, fmt.Errorf("repo: hash-object returned %d object IDs for %d files", len(oids), len(files))
+		}
+		for i, oid := range oids {
+			ops[hashFor[i]].oid = oid
+			// Small files are read back soon: by the tree cache, the
+			// next Commit's .gitattributes and the web UI.
+			if sizes[i] <= maxCachedBlob {
+				if data, err := os.ReadFile(files[i]); err == nil {
+					s.blobs.add(oid, data)
+				}
+			}
+		}
+	}
 	return ops, refs, added, nil
+}
+
+// writeSpool copies r into a new file and returns the number of bytes.
+func writeSpool(name string, r io.Reader) (int64, error) {
+	f, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // a file in a staging directory Hangar created.
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(f, r)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return n, err
 }
 
 type countingReader struct {
@@ -352,41 +404,93 @@ func (s *Store) ingestContent(ctx context.Context, r io.Reader) (model.LFSPointe
 // Hub's defaults for the Repo type.
 func (s *Store) lfsRules(ctx context.Context, st *gitstore.Staging, row *repoRow, parent model.CommitSHA) (*LFSRules, error) {
 	if parent != "" {
-		out, err := st.Run(ctx, nil, nil, "cat-file", "blob", string(parent)+":.gitattributes")
-		if err == nil {
-			return ParseLFSRules(out), nil
+		data, ok, err := s.gitattributes(ctx, st, row.ID, parent)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return ParseLFSRules(data), nil
 		}
 	}
 	return ParseLFSRules(DefaultGitAttributes(model.RepoType(row.Type))), nil
 }
 
+// gitattributes returns the content of .gitattributes at a Commit, and
+// false when there is no such file. When the Commit is in the tree cache,
+// which it is for every branch tip, the blob comes from the blob cache, so
+// a Commit usually starts no git process for it.
+func (s *Store) gitattributes(ctx context.Context, st *gitstore.Staging, repoID uuid.UUID, commit model.CommitSHA) ([]byte, bool, error) {
+	cached, err := s.treeCached(ctx, s.db, repoID, commit)
+	if err != nil {
+		return nil, false, fmt.Errorf("repo: read tree cache: %w", err)
+	}
+	if cached {
+		r, err := s.treeRow(ctx, repoID, commit, gitattributesPath)
+		switch {
+		case errors.Is(err, ErrEntryNotFound):
+			return nil, false, nil
+		case err != nil:
+			return nil, false, err
+		case r.Type != string(model.EntryFile):
+			return nil, false, nil
+		case r.LFSOID == nil && r.Size <= maxCachedBlob:
+			data, err := s.smallBlob(ctx, repoID, r.GitOID)
+			if err != nil {
+				return nil, false, err
+			}
+			return data, true, nil
+		}
+	}
+	out, err := st.Run(ctx, nil, nil, "cat-file", "blob", string(commit)+":"+gitattributesPath)
+	if err != nil {
+		var ge *gitstore.Error
+		if errors.As(err, &ge) && ctx.Err() == nil {
+			// No .gitattributes, or not a file.
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return out, true, nil
+}
+
+const gitattributesPath = ".gitattributes"
+
 // buildTree applies prepared operations to parent's tree in a temporary
-// index and writes the new tree.
+// index and writes the new tree. Runs of adds and copies go to one
+// update-index process; a delete first writes what is pending, because it
+// looks at the index.
 func (s *Store) buildTree(ctx context.Context, row *repoRow, st *gitstore.Staging, parent model.CommitSHA, ops []preparedOp) (string, error) {
 	idx := filepath.Join(st.Dir, "index-"+uuid.NewString())
 	defer os.Remove(idx)
 	env := []string{"GIT_INDEX_FILE=" + idx, "GIT_LITERAL_PATHSPECS=1"}
 	run := func(stdin io.Reader, args ...string) ([]byte, error) { return st.Run(ctx, stdin, env, args...) }
+	// A missing index file is an empty index, so a first Commit needs no
+	// read-tree.
 	if parent != "" {
 		if _, err := run(nil, "read-tree", string(parent)); err != nil {
 			return "", err
 		}
-	} else if _, err := run(nil, "read-tree", "--empty"); err != nil {
-		return "", err
+	}
+	var pending []cacheInfo
+	flush := func() error {
+		err := addToIndex(ctx, run, pending)
+		pending = pending[:0]
+		return err
 	}
 	for _, op := range ops {
 		switch op.kind {
 		case OpAdd:
-			if _, err := run(nil, "update-index", "--add", "--cacheinfo", "100644,"+op.oid+","+op.path); err != nil {
-				return "", fmt.Errorf("%w: cannot add %s: %s", ErrInvalid, op.path, gitMessage(err))
-			}
+			pending = append(pending, cacheInfo{mode: "100644", oid: op.oid, path: op.path, verb: "add"})
 		case OpDelete:
-			if _, err := run(nil, "ls-files", "--error-unmatch", "--", op.path); err != nil {
-				return "", fmt.Errorf("%w: A file with this name doesn't exist: %s", ErrEntryNotFound, op.path)
+			if err := flush(); err != nil {
+				return "", err
 			}
 			out, err := run(nil, "ls-files", "-z", "--", op.path)
 			if err != nil {
 				return "", err
+			}
+			if len(out) == 0 {
+				return "", fmt.Errorf("%w: A file with this name doesn't exist: %s", ErrEntryNotFound, op.path)
 			}
 			if !containsName(out, op.path) {
 				return "", fmt.Errorf("%w: %s is a folder; delete it as a folder", ErrEntryNotFound, op.path)
@@ -395,6 +499,9 @@ func (s *Store) buildTree(ctx context.Context, row *repoRow, st *gitstore.Stagin
 				return "", err
 			}
 		case OpDeleteFolder:
+			if err := flush(); err != nil {
+				return "", err
+			}
 			args := []string{"ls-files", "-z"}
 			if op.path != "" {
 				args = append(args, "--", op.path+"/")
@@ -429,16 +536,61 @@ func (s *Store) buildTree(ctx context.Context, row *repoRow, st *gitstore.Stagin
 			if len(ents) != 1 || ents[0].typ != "blob" || ents[0].path != op.srcPath {
 				return "", fmt.Errorf("%w: copy source %s does not exist", ErrEntryNotFound, op.srcPath)
 			}
-			if _, err := run(nil, "update-index", "--add", "--cacheinfo", ents[0].mode+","+ents[0].oid+","+op.path); err != nil {
-				return "", fmt.Errorf("%w: cannot copy to %s: %s", ErrInvalid, op.path, gitMessage(err))
-			}
+			pending = append(pending, cacheInfo{mode: ents[0].mode, oid: ents[0].oid, path: op.path, verb: "copy to"})
 		}
+	}
+	if err := flush(); err != nil {
+		return "", err
 	}
 	out, err := run(nil, "write-tree")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// cacheInfo is one file to put in the index.
+type cacheInfo struct {
+	mode, oid, path string
+	// verb names the operation in errors: "add" or "copy to".
+	verb string
+}
+
+// maxCacheInfoArgs bounds the bytes of --cacheinfo arguments given to one
+// update-index process, well below every platform's argument limit.
+const maxCacheInfoArgs = 64 << 10
+
+// addToIndex adds files with `update-index --add --cacheinfo`, several per
+// process. --cacheinfo, unlike --index-info, refuses a file that would
+// replace a folder or the other way round, as the Hub does. git writes
+// nothing when one of them fails, so the failing batch is replayed one
+// file at a time to name the file in the error.
+func addToIndex(ctx context.Context, run func(io.Reader, ...string) ([]byte, error), files []cacheInfo) error {
+	for len(files) > 0 {
+		args := []string{"update-index", "--add"}
+		size, n := 0, 0
+		for n < len(files) && (n == 0 || size < maxCacheInfoArgs) {
+			arg := files[n].mode + "," + files[n].oid + "," + files[n].path
+			args = append(args, "--cacheinfo", arg)
+			size += len(arg)
+			n++
+		}
+		if _, err := run(nil, args...); err != nil {
+			if ctx.Err() != nil {
+				return err
+			}
+			for _, f := range files[:n] {
+				if _, err := run(nil, "update-index", "--add", "--cacheinfo", f.mode+","+f.oid+","+f.path); err != nil {
+					if ctx.Err() != nil {
+						return err
+					}
+					return fmt.Errorf("%w: cannot %s %s: %s", ErrInvalid, f.verb, f.path, gitMessage(err))
+				}
+			}
+		}
+		files = files[n:]
+	}
+	return nil
 }
 
 func containsName(out []byte, name string) bool {
@@ -459,14 +611,35 @@ func gitMessage(err error) string {
 }
 
 // removeFromIndex drops paths from the index. --index-info with mode 0
-// works in a bare repository, unlike --force-remove.
+// works in a bare repository, unlike --force-remove. Paths are quoted, so
+// a name that starts with a double quote or holds a newline is read as is.
 func removeFromIndex(run func(io.Reader, ...string) ([]byte, error), paths []string) error {
 	var b strings.Builder
 	for _, p := range paths {
-		b.WriteString("0 0000000000000000000000000000000000000000\t" + p + "\n")
+		b.WriteString("0 0000000000000000000000000000000000000000\t" + quoteCPath(p) + "\n")
 	}
 	_, err := run(strings.NewReader(b.String()), "update-index", "--index-info")
 	return err
+}
+
+// quoteCPath quotes a path the way git's C-style unquoting reads it back.
+func quoteCPath(p string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		switch {
+		case c == '"' || c == '\\':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		case c < 0x20 || c == 0x7f:
+			fmt.Fprintf(&b, "\\%03o", c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 func sigEnv(sig Signature) []string {
@@ -559,11 +732,11 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 			return nil, err
 		}
 		if parent != "" && exists {
-			parentTree, err := st.Run(ctx, nil, nil, "rev-parse", string(parent)+"^{tree}")
+			parentTree, err := s.commitTree(ctx, st, row.ID, parent)
 			if err != nil {
 				return nil, err
 			}
-			if strings.TrimSpace(string(parentTree)) == tree {
+			if parentTree == tree {
 				return &CommitResult{SHA: parent, Parent: parent, Ref: ref, NoOp: true}, nil
 			}
 		}
@@ -610,6 +783,24 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 		}
 		tip, parent = newTip, newTip
 	}
+}
+
+// commitTree returns the tree of a Commit, from the commits cache when it
+// has the Commit.
+func (s *Store) commitTree(ctx context.Context, st *gitstore.Staging, repoID uuid.UUID, sha model.CommitSHA) (string, error) {
+	var tree string
+	err := s.db.NewSelect().Model((*db.Commit)(nil)).Column("tree").Where("repo_id = ?", repoID).Where("sha = ?", string(sha)).Scan(ctx, &tree)
+	if err == nil && tree != "" {
+		return tree, nil
+	}
+	if err != nil && !db.IsNotFound(err) {
+		return "", err
+	}
+	out, err := st.Run(ctx, nil, nil, "rev-parse", string(sha)+"^{tree}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // commitParent decides the parent of a Commit: the branch tip, CreateFrom

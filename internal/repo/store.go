@@ -100,6 +100,8 @@ type Store struct {
 	fills singleflight.Group
 	// verifies shares one LFS verification between concurrent writers.
 	verifies singleflight.Group
+	// blobs keeps small git blobs in memory.
+	blobs *blobCache
 }
 
 var _ Service = (*Store)(nil)
@@ -132,7 +134,8 @@ func NewStore(opts Options) (*Store, error) {
 	if now == nil {
 		now = db.Now
 	}
-	return &Store{db: opts.DB, git: opts.Git, lfs: opts.LFS, ns: opts.Namespaces, opts: opts, log: log, now: now}, nil
+	return &Store{db: opts.DB, git: opts.Git, lfs: opts.LFS, ns: opts.Namespaces, opts: opts, log: log, now: now,
+		blobs: newBlobCache(blobCacheSize)}, nil
 }
 
 // repoRow is a repos row with its Namespace name.

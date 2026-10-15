@@ -47,6 +47,8 @@ func upProblem(w http.ResponseWriter, r *http.Request, status int, detail string
 func (h *Upstreams) upFail(w http.ResponseWriter, r *http.Request, err error) {
 	var rl *upstream.RateLimitError
 	switch {
+	case clientGone(r, err):
+		writeClientGone(w, r, h.log(), err)
 	case errors.As(err, &rl):
 		w.Header().Set("Retry-After", strconv.Itoa(max(1, int(rl.RetryAfter.Seconds()))))
 		upProblem(w, r, http.StatusServiceUnavailable, "The Upstream is rate limiting Hangar. Try again later.")
