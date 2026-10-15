@@ -162,17 +162,17 @@ Calls that are **not** made on the upload path [SRC, all endpoint calls in `xet_
 ### 2.2 `POST /v1/xorbs/{prefix}/{hash}`
 
 - **Path.** `prefix` is `default` (`data.rs::default_prefix`). Accept any value but key storage by hash only. `hash` is the 64-hex API string form (§3.5).
-- **Body.** A serialized xorb **without footer** [SRC]:
+- **Body.** A serialised xorb **without footer** [SRC]:
   - `xet_data/src/processing/file_upload_session.rs` (around line 387) calls `SerializedXorbObject::from_xorb(xorb, false /*serialize_footer*/, …)`, with the comment "XORBs are sent without footer - the server/client reconstructs it from chunk data."
   - guilt/xet-server PROTOCOL.md §2 confirms this from captured traffic.
   - Still accept a body that ends in a footer, because other clients or older versions may send one. See §3.3.
 - **Response.** 200 with `{"was_inserted": true|false}` (`cas_types/mod.rs::UploadXorbResponse`). `false` means it already existed, which is not an error.
 - **Errors** [DOC, `api.md` §3]:
-  - 400: malformed hash, hash mismatch, or bad serialization.
+  - 400: malformed hash, hash mismatch, or bad serialisation.
   - 401 / 403 as above.
-  - The xorb doc says the server rejects xorbs above 64 MiB serialized. Use 400 or 413; the client treats both as non-retryable.
+  - The xorb doc says the server rejects xorbs above 64 MiB serialised. Use 400 or 413; the client treats both as non-retryable.
 - **Limits:**
-  - At most 64 MiB serialized (`xorb.md`; `xorb_object/constants.rs::MAX_XORB_BYTES`).
+  - At most 64 MiB serialised (`xorb.md`; `xorb_object/constants.rs::MAX_XORB_BYTES`).
   - At most 8192 chunks (`MAX_XORB_CHUNKS`; `deduplication.md`).
   - Each chunk at most 128 KiB uncompressed (`MAX_CHUNK_SIZE = 64Ki*2`, enforced in `xorb_chunk_format.rs::XorbChunkHeader::validate`). Compressed length at most `2*MAX_CHUNK_SIZE`.
 - **Idempotency.** The same hash may be POSTed again, for example by a different machine or a retry.
@@ -196,7 +196,7 @@ Calls that are **not** made on the upload path [SRC, all endpoint calls in `xet_
   - **Implement v2 if any proxy in front of CAS has an idle or response timeout.** Example: Cloudflare's 100 s origin-response limit (Bellatrix remote access goes through a Cloudflare Tunnel). Hangar does reassembly synchronously inside this call (§5), and that can take minutes for large files.
 - **Body.** A shard without footer, `footer_size = 0` (`shard_interface/native.rs::read_shard_to_bytes_remove_footer`; `shard.md` "MUST be omitted"). Format in §4.
 - **Errors.**
-  - 400: bad serialization, failed verification, unknown xorb, or too large (at most 64 MiB per `upload-protocol.md` §6).
+  - 400: bad serialisation, failed verification, unknown xorb, or too large (at most 64 MiB per `upload-protocol.md` §6).
   - 401 / 403 as above.
   - **The client treats a 400 as fatal for the whole upload commit.** That matters for §6.
 
@@ -413,7 +413,7 @@ for each term (xorbHash, start, end, unpackedBytes):
     for c in start..end-1:
         hdr := read 8B; payload := read hdr.compressedLen
         raw := decompress(hdr.scheme, payload, hdr.rawLen)      // §3.2, exact length
-        // optional, defense in depth: blake3.keyed(DATA_KEY, raw) == idx[c].hash
+        // optional, defence in depth: blake3.keyed(DATA_KEY, raw) == idx[c].hash
         tmp.Write(raw); h.Write(raw); total += len(raw)
         all = append(all, (idx[c].hash, len(raw)))
     assert Σ rawLen(term) == unpackedBytes
@@ -478,7 +478,7 @@ Common, normal workflows trigger this. Re-uploading the same weights to a second
 | Repo | Created → last push | What it has | Notes |
 |---|---|---|---|
 | `wzshiming/xet` | 2026-03-24 → 2026-10-13 | Client and server: `server/` (`/v1/xorbs`, `/v1/shards`, `/v2/shards`, `/v1/chunks`, reconstructions), `xorb/` (encode/decode/validate/footer, pierrec/lz4, BG4), `shard/` (encode/decode/validate), `storage/` (local, S3, GC, `putfile`, `reconstructed_file.go`), and an `/xet-bridge/{sha256}` route. Deps: `zeebo/blake3`, `pierrec/lz4/v4`. | Most complete and most active, 6 stars. Its README notes that pre-1.1.10 hf_xet chunking differs, so old upstream xet hashes may not match. The SHA-256 is unaffected, so this doesn't matter to Hangar. |
-| `jmwoliver/xet-go` | 2026-08-04 → 2026-08-20 | "CGO-free Go implementation of the Xet v1.1 data plane". Packages `xethash`, `chunker`, `xorb`, `shard`, `xetcas` with an optional `xetcas/server`, plus content stores (SHA-256 by length), catalogs, and a `conformance/` suite including `go_cas_rust_client_test.go` (Go CAS driven by the Rust client). | Cleanest separation for embedding. Uses a forked blake3 (`jmwoliver/blake3`). 1 star. |
+| `jmwoliver/xet-go` | 2026-08-04 → 2026-08-20 | "CGO-free Go implementation of the Xet v1.1 data plane". Packages `xethash`, `chunker`, `xorb`, `shard`, `xetcas` with an optional `xetcas/server`, plus content stores (SHA-256 by length), catalogues, and a `conformance/` suite including `go_cas_rust_client_test.go` (Go CAS driven by the Rust client). | Cleanest separation for embedding. Uses a forked blake3 (`jmwoliver/blake3`). 1 star. |
 | `guilt/xet-server` | 2026-09-11 → 2026-09-16 | Wire-compatible Hub + CAS server tested with the real `hf` CLI. Own LZ4 frame/block decoder, BG4, fuzz and adversarial tests. Dep: `zeebo/blake3` only. | 1 star. Its `docs/PROTOCOL.md` is a useful list of real-traffic quirks and independently confirms several findings here (no xorb or shard footer, LZ4 frame format, JSON token body, both file flags set, allocation caps, decompression bombs). [UNVERIFIED] Its §13 says the Xet upload starts from the LFS batch endpoint. That describes an older or git-xet flow and contradicts your v2.2.0 finding (preupload, then `new_upload_commit`); not checked. |
 
   Recommendation: **don't take any of these as a dependency.** All are weeks to months old, have a single maintainer and roughly zero adoption. **Do** borrow their parsers and tests (MIT, attribution), and run their test vectors against Hangar's port. The most relevant files to read are wzshiming's `xorb/` and `shard/validate.go`.
