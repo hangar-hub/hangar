@@ -46,7 +46,7 @@ HANGAR_HF_INSTANCE=binary uv run --project compat pytest compat/hf
 | `diffusers` (nightly) | `uv run --frozen --project compat --with diffusers==0.41.0 --with huggingface_hub==1.33.0 python -m pytest compat/hf` |
 | Xet uploads | `HANGAR_HF_INSTANCE=binary HANGAR_HF_XET_UPLOADS=1`, or `HANGAR_HF_XET_UPLOADS=1` against any Instance with W11's CAS endpoints |
 
-`diffusers` 0.41 needs `huggingface_hub` below 2.0, so it is not in the lock; `test_diffusers.py` reports itself as skipped in the other cells. `huggingface_hub` 2.x removed `upload_large_folder`, so `test_upload_large_folder.py` runs in the floor and `diffusers` cells (`huggingface_hub` 1.31.0 and 1.33.0) and reports itself as skipped in the others. On the macOS host the suite was last run on (Darwin 27), the SciPy 1.15.3 wheel the lock picks for Python 3.10 fails to load with a `dyld` error about `__thread_bss`; add `--with scipy==1.14.1` to that cell there.
+`diffusers` 0.41 needs `huggingface_hub` below 2.0, so it is not in the lock; `test_diffusers.py` reports itself as skipped in the other cells. `huggingface_hub` 2.x removed `upload_large_folder`, so `test_upload_large_folder.py` runs in the floor and `diffusers` cells (`huggingface_hub` 1.31.0 and 1.33.0) and reports itself as skipped in the others. `compat/.python-version` pins the lock cell, and `make test-compat`, to Python 3.11, so uv does not build `compat/.venv` on whichever Python it finds first. On the macOS host the suite was last run on (Darwin 27), the SciPy 1.15.3 wheel the lock picks for Python 3.10 fails to load with a `dyld` error about `__thread_bss`; add `--with scipy==1.14.1` to the floor cell there.
 
 ## What it covers
 
