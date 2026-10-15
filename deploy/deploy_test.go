@@ -396,3 +396,146 @@ func TestSetsPublicURL(t *testing.T) {
 		}
 	}
 }
+
+// TestKeycloakRealmDefinesRequestedScopes checks that the example realm can
+// answer Hangar's authorisation request. A realm file that lists
+// clientScopes replaces Keycloak's built-in ones, so every scope Hangar asks
+// for (other than openid), and basic for the sub claim, must be defined in
+// the file and be a default scope of the client. Otherwise Keycloak refuses
+// the request with invalid_scope.
+func TestKeycloakRealmDefinesRequestedScopes(t *testing.T) {
+	b, err := os.ReadFile("compose/keycloak/hangar-realm.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var realm struct {
+		ClientScopes []struct {
+			Name            string `json:"name"`
+			ProtocolMappers []struct {
+				ProtocolMapper string            `json:"protocolMapper"`
+				Config         map[string]string `json:"config"`
+			} `json:"protocolMappers"`
+		} `json:"clientScopes"`
+		Clients []struct {
+			ClientID            string   `json:"clientId"`
+			RedirectURIs        []string `json:"redirectUris"`
+			DefaultClientScopes []string `json:"defaultClientScopes"`
+		} `json:"clients"`
+	}
+	if err := json.Unmarshal(b, &realm); err != nil {
+		t.Fatal(err)
+	}
+	claims := map[string]map[string]bool{}
+	mappers := map[string]map[string]bool{}
+	for _, s := range realm.ClientScopes {
+		claims[s.Name], mappers[s.Name] = map[string]bool{}, map[string]bool{}
+		for _, m := range s.ProtocolMappers {
+			mappers[s.Name][m.ProtocolMapper] = true
+			if c := m.Config["claim.name"]; c != "" {
+				claims[s.Name][c] = true
+			}
+			// Mappers with a fixed claim name.
+			switch m.ProtocolMapper {
+			case "oidc-full-name-mapper":
+				claims[s.Name]["name"] = true
+			case "oidc-sub-mapper":
+				claims[s.Name]["sub"] = true
+			}
+		}
+	}
+
+	_, c := readCompose(t, "compose/oidc-keycloak.yaml")
+	hangarEnv := c.Services["hangar"].Environment
+	var providers []struct {
+		ID       string            `json:"id"`
+		ClientID string            `json:"client_id"`
+		Scopes   []string          `json:"scopes"`
+		Claims   map[string]string `json:"claims"`
+	}
+	raw, _ := hangarEnv["HANGAR_OIDC_PROVIDERS"].(string)
+	if err := json.Unmarshal([]byte(raw), &providers); err != nil || len(providers) != 1 {
+		t.Fatalf("HANGAR_OIDC_PROVIDERS: want one provider, got %d (%v)", len(providers), err)
+	}
+	p := providers[0]
+	var client *struct {
+		ClientID            string   `json:"clientId"`
+		RedirectURIs        []string `json:"redirectUris"`
+		DefaultClientScopes []string `json:"defaultClientScopes"`
+	}
+	for i := range realm.Clients {
+		if realm.Clients[i].ClientID == p.ClientID {
+			client = &realm.Clients[i]
+		}
+	}
+	if client == nil {
+		t.Fatalf("the realm has no client %q", p.ClientID)
+	}
+	defaults := map[string]bool{}
+	for _, s := range client.DefaultClientScopes {
+		defaults[s] = true
+		if claims[s] == nil {
+			t.Errorf("client %s: default scope %q is not defined in clientScopes", client.ClientID, s)
+		}
+	}
+	for _, s := range append([]string{"basic"}, p.Scopes...) {
+		if s == "openid" {
+			continue
+		}
+		if claims[s] == nil {
+			t.Errorf("scope %q is not defined in the realm's clientScopes", s)
+		}
+		if !defaults[s] {
+			t.Errorf("scope %q is not a default scope of client %s", s, client.ClientID)
+		}
+	}
+	if !mappers["basic"]["oidc-sub-mapper"] {
+		t.Error("the basic scope needs an oidc-sub-mapper, or tokens have no sub claim")
+	}
+	for _, claim := range p.Claims {
+		found := false
+		for _, s := range p.Scopes {
+			found = found || claims[s][claim]
+		}
+		if !found {
+			t.Errorf("no requested scope maps the %q claim Hangar reads", claim)
+		}
+	}
+
+	// The redirect URI follows Hangar's public URL, so OIDC works on any
+	// HANGAR_PORT.
+	want := "${" + "HANGAR_PUBLIC_URL}/auth/oidc/" + p.ID + "/callback"
+	if len(client.RedirectURIs) != 1 || client.RedirectURIs[0] != want {
+		t.Errorf("client %s: redirectUris = %q, want [%q]", client.ClientID, client.RedirectURIs, want)
+	}
+	if kc, h := c.Services["keycloak"].Environment["HANGAR_PUBLIC_URL"], hangarEnv["HANGAR_SERVER_PUBLIC_URL"]; kc == nil || kc != h {
+		t.Errorf("the keycloak service's HANGAR_PUBLIC_URL (%v) must match Hangar's HANGAR_SERVER_PUBLIC_URL (%v)", kc, h)
+	}
+}
+
+// gitClone matches a git clone command, with any options before clone, and
+// not a quoted message such as "git clone".
+var gitClone = regexp.MustCompile(`(?:^|[^"'\w-])git\s+(?:-c\s+\S+\s+)*clone\s`)
+
+// TestSmokeCloneSkipsCredentialHelpers checks that scripts/smoke.sh, which
+// CI runs against every Compose example and the Helm chart, clones with the
+// host's credential helpers turned off. A GUI helper such as osxkeychain can
+// block the clone, and git offers URL credentials to helpers for storage.
+func TestSmokeCloneSkipsCredentialHelpers(t *testing.T) {
+	b, err := os.ReadFile("../scripts/smoke.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for n, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") || !gitClone.MatchString(line) {
+			continue
+		}
+		found++
+		if !strings.Contains(line, "git -c credential.helper= ") {
+			t.Errorf("scripts/smoke.sh:%d: run git clone as git -c credential.helper= clone: %s", n+1, strings.TrimSpace(line))
+		}
+	}
+	if found == 0 {
+		t.Fatal("found no git clone in scripts/smoke.sh; is the pattern still right?")
+	}
+}
