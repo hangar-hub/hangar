@@ -12,7 +12,7 @@ Real clients against a real Hangar Instance (docs/spec/13-testing.md). Run them 
 | `lmstudio/` | `hangar lmstudio` install layout. | W9 |
 | `upstream/` | Pulls from huggingface.co and from a second Hangar. | W6 |
 | `xet/` | `hf_xet` uploads. | W11 |
-| `viewer/` | Dataset Viewer API against the Hub's. | W10 |
+| `viewer/` | Dataset Viewer API and Croissant against the Hub's, over fakes and on the binary (SQLite, and Postgres when `HANGAR_TEST_POSTGRES=1`). | W10 |
 
 ## Running
 
