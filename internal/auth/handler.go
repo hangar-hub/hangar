@@ -211,7 +211,7 @@ func (s *Service) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	switch {
 	case errors.As(err, &te):
 		w.Header().Set("Retry-After", strconv.Itoa(int(te.RetryAfter.Round(time.Second).Seconds())))
-		status, detail = http.StatusTooManyRequests, te.Error()
+		status, detail = http.StatusTooManyRequests, te.Message()
 	case errors.Is(err, ErrRegistrationClosed), errors.Is(err, ErrForbidden), errors.Is(err, ErrDisabled):
 		status = http.StatusForbidden
 	case errors.Is(err, ErrNotFound):
