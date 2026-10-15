@@ -82,6 +82,8 @@ export type MockState = {
     }
   >;
   lfsObjects: Set<string>;
+  /** Unused invite and reset link codes, as W5's Invites table holds them. */
+  links: Record<string, "invite" | "reset">;
   started: number;
 };
 
@@ -852,44 +854,16 @@ function speechRepo(): MockRepo {
   });
 }
 
-/** Generated Repos for the `bulk` scenario, to exercise list virtualisation. */
-function bulkRepos(n: number): MockRepo[] {
-  return Array.from({ length: n }, (_, i) => {
-    const name = `bulk-model-${String(i).padStart(3, "0")}`;
-    const files: MockFile[] = [{ path: "README.md", text: `# ${name}\n` }];
-    return finishRepo({
-      repo: repoBase("model", "bulk", name, {
-        summary: { formats: ["safetensors"], parameters: (i + 1) * 10_000_000 },
-        updated_at: iso(i * HOUR),
-        last_modified: iso(i * HOUR),
-      }),
-      commits: makeCommits(`bulk/${name}`, [
-        { title: "Initial commit", author: "ada", ago: i * HOUR, files },
-      ]),
-      dependencies: { needs: [], needed_by: [] },
-      discussions: [],
-      collaborators: [],
-      accessRequests: [],
-    });
-  });
-}
-
-export type Scenario = "default" | "empty" | "bulk";
-
-export function createState(scenario: Scenario = "default"): MockState {
-  const repos =
-    scenario === "empty"
-      ? []
-      : [
-          bertRepo(),
-          llamaRepo(),
-          remoteRepo(),
-          legacyRepo(),
-          imdbRepo(),
-          cifarRepo(),
-          speechRepo(),
-        ];
-  if (scenario === "bulk") repos.push(...bulkRepos(260));
+export function createState(): MockState {
+  const repos = [
+    bertRepo(),
+    llamaRepo(),
+    remoteRepo(),
+    legacyRepo(),
+    imdbRepo(),
+    cifarRepo(),
+    speechRepo(),
+  ];
   const me: S["Me"] = {
     id: uuidOf("user-ada"),
     username: "ada",
@@ -984,7 +958,6 @@ export function createState(scenario: Scenario = "default"): MockState {
         reserved_mirror: true,
         created_at: iso(60 * DAY),
       },
-      { name: "bulk", kind: "org", display_name: "Bulk", created_at: iso(60 * DAY) },
     ],
     members: {
       "ml-team": [
@@ -993,35 +966,32 @@ export function createState(scenario: Scenario = "default"): MockState {
       ],
     },
     repos,
-    collections:
-      scenario === "empty"
-        ? []
-        : [
-            {
-              namespace: "ada",
-              slug: "small-and-fast",
-              title: "Small and fast",
-              description: "Models that run on a laptop.",
-              visibility: "public",
-              updated_at: iso(DAY),
-              items: [
-                {
-                  id: uuidOf("ci1"),
-                  type: "model",
-                  item_id: "TinyLlama/TinyLlama-1.1B-Chat-GGUF",
-                  position: 0,
-                  note: "Q4_K_M is the sweet spot.",
-                },
-                {
-                  id: uuidOf("ci2"),
-                  type: "model",
-                  item_id: "ada/bert-tiny-finetune",
-                  position: 1,
-                },
-                { id: uuidOf("ci3"), type: "dataset", item_id: "ada/imdb-mini", position: 2 },
-              ],
-            },
-          ],
+    collections: [
+      {
+        namespace: "ada",
+        slug: "small-and-fast",
+        title: "Small and fast",
+        description: "Models that run on a laptop.",
+        visibility: "public",
+        updated_at: iso(DAY),
+        items: [
+          {
+            id: uuidOf("ci1"),
+            type: "model",
+            item_id: "TinyLlama/TinyLlama-1.1B-Chat-GGUF",
+            position: 0,
+            note: "Q4_K_M is the sweet spot.",
+          },
+          {
+            id: uuidOf("ci2"),
+            type: "model",
+            item_id: "ada/bert-tiny-finetune",
+            position: 1,
+          },
+          { id: uuidOf("ci3"), type: "dataset", item_id: "ada/imdb-mini", position: 2 },
+        ],
+      },
+    ],
     tokens: [
       {
         id: uuidOf("tok-laptop"),
@@ -1222,6 +1192,7 @@ export function createState(scenario: Scenario = "default"): MockState {
     quotas: { "ml-team": 200 * 1024 * MiB },
     uploads: {},
     lfsObjects: new Set(),
+    links: {},
     started: Date.now(),
   };
 }

@@ -1,9 +1,24 @@
-import { expect, type Route, test } from "@playwright/test";
-import { expectAccessible, settled, signIn, useScenario, watchConsole } from "./helpers";
+import { expect, type Page, type Route, test } from "@playwright/test";
+import {
+  callApi,
+  expectAccessible,
+  parseBytes,
+  searchWithKeyboard,
+  seedBulkRepos,
+  settled,
+  signIn,
+  unique,
+  watchConsole,
+} from "./helpers";
 
 // The flows 15-build-plan.md asks W8 to cover: sign-in, Discover and Pull,
 // upload, browsing files and the GGUF viewer, Token creation and admin
 // settings; plus the dataset Viewer, card editor, search and Collections.
+//
+// They run against the mock or, with HANGAR_URL, a real Instance seeded with
+// the same Repos and users. Anything a flow needs beyond that seed (invites,
+// Tokens, 260 Repos) it makes through the API first, and names it creates
+// are unique, so the flows can run again, and at three widths at once.
 
 test.describe("sign-in", () => {
   test("signs in with a password, shows errors, and signs out", async ({ page }) => {
@@ -17,7 +32,7 @@ test.describe("sign-in", () => {
     await page.getByLabel("Username").fill("ada");
     await page.getByLabel("Password").fill("wrong-password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page.getByRole("alert")).toHaveText("The username or password is wrong.");
+    await expect(page.getByRole("alert")).toHaveText("Wrong username or password.");
     await page.getByLabel("Password").fill("correct-horse-battery");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();
@@ -42,8 +57,14 @@ test.describe("sign-in", () => {
   });
 
   test("accepts an invite", async ({ page }) => {
-    await page.goto("/auth/invite/abc123");
-    await page.getByLabel("Username").fill("grace2");
+    // Invite codes are random: make one as an admin, then sign out.
+    const csrf = await signIn(page);
+    const invite = await callApi(page, csrf, "POST", "/admin/invites", {});
+    expect(invite.status()).toBe(201);
+    const { url } = (await invite.json()) as { url: string };
+    expect((await callApi(page, csrf, "POST", "/auth/logout")).ok()).toBe(true);
+    await page.goto(new URL(url).pathname);
+    await page.getByLabel("Username").fill(`grace-${unique()}`);
     await page.getByLabel("Password", { exact: true }).fill("short");
     await page.getByLabel("Confirm password").fill("short");
     await page.getByRole("button", { name: "Create account" }).click();
@@ -69,8 +90,15 @@ test("Discover a model and pull one quant into the arsenal", async ({ page }) =>
   await result.getByRole("button", { name: "TinyLlama/TinyLlama-1.1B-Chat-GGUF" }).click();
   const panel = page.getByRole("dialog");
   await expect(panel.getByRole("checkbox", { name: /Q4_K_M/ })).toBeChecked();
-  await panel.getByRole("checkbox", { name: /Q8_0/ }).check();
-  await expect(panel.getByText(/To download:/)).toContainText("1.1 GiB");
+  // Choosing Q8_0, which is not in the arsenal, adds its size to the download.
+  const toDownload = panel.getByText(/To download:/);
+  const before = parseBytes(await toDownload.innerText());
+  const q8 = panel.getByRole("checkbox", { name: /Q8_0/ });
+  const q8Size = parseBytes(await labelOf(panel.page(), q8));
+  await q8.check();
+  await expect.poll(async () => parseBytes(await toDownload.innerText())).toBeGreaterThan(before);
+  // Each size is rounded to one decimal place, so allow for that.
+  expect(parseBytes(await toDownload.innerText())).toBeGreaterThanOrEqual(q8Size * 0.95);
   await expectAccessible(page);
   await panel.getByRole("button", { name: "Pull into arsenal" }).click();
   await expect(
@@ -91,9 +119,14 @@ test("Discover a dataset and choose a Parquet-only Pull", async ({ page }) => {
   await signIn(page);
   await page.goto("/discover?type=datasets&repo=stanfordnlp/imdb");
   const panel = page.getByRole("dialog");
-  await panel.getByRole("checkbox", { name: "train" }).check();
+  const train = panel.getByRole("checkbox", { name: "train" });
+  await train.check();
   await panel.getByRole("checkbox", { name: "Parquet export only" }).check();
-  await expect(panel.getByText(/To download:/)).toContainText("21.0 MiB");
+  // A Parquet-only Pull downloads the chosen Split's Parquet export, whose
+  // size the Split's label shows.
+  const parquet = /, (\S+ \S+) Parquet/.exec(await labelOf(page, train))?.[1];
+  expect(parquet).toBeTruthy();
+  await expect(panel.getByText(/To download:/)).toContainText(`To download: ${parquet} of`);
   await panel.getByRole("tab", { name: "Preview" }).click();
   await expect(panel.getByRole("table", { name: "First rows" })).toContainText(
     "A wonderful little production.",
@@ -106,15 +139,18 @@ test.describe("upload", () => {
   test("uploads small and large files in the browser and commits them", async ({ page }) => {
     const problems = watchConsole(page);
     await signIn(page);
+    // Unique names and content, so the upload sends parts and the Commit
+    // changes something however often the flow runs against an Instance.
+    const id = unique();
+    const notes = `notes-${id}.txt`;
+    const weights = `weights-${id}.safetensors`;
+    const buffer = Buffer.alloc(6 * 1024 * 1024, 7);
+    buffer.write(id);
     await page.goto("/ada/bert-tiny-finetune/tree/main");
     await page.getByRole("button", { name: "Upload files" }).click();
     await page.getByLabel("Choose files").setInputFiles([
-      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello from the browser") },
-      {
-        name: "weights.safetensors",
-        mimeType: "application/octet-stream",
-        buffer: Buffer.alloc(6 * 1024 * 1024, 7),
-      },
+      { name: notes, mimeType: "text/plain", buffer: Buffer.from(`hello from the browser ${id}`) },
+      { name: weights, mimeType: "application/octet-stream", buffer },
     ]);
     const list = page.getByRole("list", { name: "Files to upload" });
     await expect(list.getByRole("listitem")).toHaveCount(2);
@@ -125,13 +161,11 @@ test.describe("upload", () => {
       timeout: 20_000,
     });
     const files = page.getByRole("table", { name: "Files in the Repo root" });
-    await expect(files.getByRole("link", { name: "weights.safetensors" })).toBeVisible();
-    await expect(files.getByRole("row").filter({ hasText: "weights.safetensors" })).toContainText(
-      "LFS",
-    );
-    await files.getByRole("link", { name: "notes.txt" }).click();
+    await expect(files.getByRole("link", { name: weights })).toBeVisible();
+    await expect(files.getByRole("row").filter({ hasText: weights })).toContainText("LFS");
+    await files.getByRole("link", { name: notes }).click();
     await expect(page.getByRole("region", { name: "Code" })).toContainText(
-      "hello from the browser",
+      `hello from the browser ${id}`,
     );
     expect(problems).toEqual([]);
   });
@@ -142,10 +176,15 @@ test.describe("upload", () => {
     const problems = watchConsole(page);
     await signIn(page);
     await page.goto("/ada/bert-tiny-finetune/tree/main");
+    // Hangar's parts are at least 16 MiB (repo.PartSize), so 20 MiB is two
+    // parts. Unique content keeps a stored copy from a previous run from
+    // turning the upload into "exists".
+    const buffer = Buffer.alloc(20 * 1024 * 1024, 9);
+    buffer.write(unique());
     const weights = {
       name: "resume.safetensors",
       mimeType: "application/octet-stream",
-      buffer: Buffer.alloc(6 * 1024 * 1024, 9),
+      buffer,
     };
     // Hold part 2 so the page is reloaded with part 1 stored and part 2 not.
     let held: Route | undefined;
@@ -205,7 +244,8 @@ test.describe("upload", () => {
     });
     await page.getByLabel("Open as pull request").check();
     await page.getByRole("button", { name: "Upload and open pull request" }).click();
-    await expect(page).toHaveURL(/\/ada\/bert-tiny-finetune\/discussions\/3$/);
+    // The number is the next free one in the Repo.
+    await expect(page).toHaveURL(/\/ada\/bert-tiny-finetune\/discussions\/\d+$/);
     await expect(page.getByRole("heading", { level: 2 })).toContainText("Upload extra.md");
     await page.getByRole("tab", { name: /Files changed/ }).click();
     await expect(page.getByRole("list", { name: "Changed files" })).toContainText("extra.md");
@@ -299,30 +339,32 @@ test.describe("browse files", () => {
 test("creates a Token that is shown once, then revokes it", async ({ page }) => {
   const problems = watchConsole(page);
   await signIn(page);
+  const name = `ci-runner-${unique()}`;
   await page.goto("/settings/tokens");
   await page.getByRole("button", { name: "Create Token" }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Token" });
-  await dialog.getByLabel("Name", { exact: true }).fill("ci-runner");
+  await dialog.getByLabel("Name", { exact: true }).fill(name);
   await dialog.getByRole("radio", { name: /^write/ }).check();
   await dialog.getByLabel("Only these Namespaces").fill("ada, ml-team");
   await dialog.getByRole("button", { name: "Create Token" }).click();
   const shown = page.getByRole("dialog", { name: "Copy your new Token" });
   const secret = (await shown.getByTestId("token-secret").textContent()) ?? "";
-  expect(secret).toMatch(/^hgr_[0-9a-f]{40}$/);
+  // 05-auth.md: hgr_ and 40 base62 characters.
+  expect(secret).toMatch(/^hgr_[0-9A-Za-z]{40}$/);
   await shown.getByRole("button", { name: "I've copied it" }).click();
-  const row = page.getByRole("row").filter({ hasText: "ci-runner" });
+  const row = page.getByRole("row").filter({ hasText: name });
   await expect(row).toContainText("write");
   await expect(row).toContainText("ada, ml-team");
   await page.reload();
-  await expect(page.getByRole("row").filter({ hasText: "ci-runner" })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: name })).toBeVisible();
   expect(await page.content()).not.toContain(secret);
   await page
     .getByRole("row")
-    .filter({ hasText: "ci-runner" })
+    .filter({ hasText: name })
     .getByRole("button", { name: "Revoke" })
     .click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke Token" }).click();
-  await expect(page.getByRole("row").filter({ hasText: "ci-runner" })).toHaveCount(0);
+  await expect(page.getByRole("row").filter({ hasText: name })).toHaveCount(0);
   expect(problems).toEqual([]);
 });
 
@@ -354,7 +396,14 @@ test.describe("admin settings", () => {
   });
 
   test("manages users, Upstreams, Jobs and storage", async ({ page }) => {
-    await signIn(page);
+    const csrf = await signIn(page);
+    // Make a token.created event to find in the audit log.
+    const token = await callApi(page, csrf, "POST", "/me/tokens", {
+      name: `audit-${unique()}`,
+      scope: "read",
+    });
+    expect(token.status()).toBe(201);
+    const { id } = (await token.json()) as { id: string };
     await page.goto("/admin/users");
     await page
       .getByRole("row")
@@ -379,8 +428,10 @@ test.describe("admin settings", () => {
     await expect(page.getByRole("status").filter({ hasText: "Job queued again." })).toBeVisible();
     await page.goto("/admin/storage");
     await expect(page.getByRole("row").filter({ hasText: "ml-team" })).toContainText("of 200 GiB");
-    await page.goto("/admin/audit?action=token");
+    // The action filter matches whole actions, as W5's audit query does.
+    await page.goto("/admin/audit?action=token.created");
     await expect(page.getByRole("table", { name: "Audit events" })).toContainText("token.created");
+    expect((await callApi(page, csrf, "DELETE", `/me/tokens/${id}`)).ok()).toBe(true);
   });
 });
 
@@ -419,14 +470,27 @@ test.describe("datasets", () => {
     expect(problems).toEqual([]);
   });
 
-  test("shows images and the preparing state", async ({ page }) => {
+  test("shows the preparing state, then images when the export finishes", async ({ page }) => {
     await signIn(page);
+    // A real Parquet export finishes in seconds, so answer the Configs call
+    // as Hangar does while the dataset.convert Job runs: every Split pending.
+    const isConfigs = (url: URL) =>
+      url.pathname === "/api/hangar/v1/repos/datasets/ada/cifar-mini/configs";
+    await page.route(isConfigs, async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as { configs: { splits: { status: string }[] }[] };
+      for (const c of body.configs) for (const sp of c.splits) sp.status = "pending";
+      await route.fulfill({ response, json: body });
+    });
     await page.goto("/datasets/ada/cifar-mini/viewer/default/train");
-    await expect(page.getByRole("img", { name: "img, row 0" })).toBeVisible();
-    await page.goto("/datasets/ml-team/speech-commands-mini/viewer");
     await expect(
       page.getByText("Preparing preview. Hangar is converting this dataset to Parquet."),
     ).toBeVisible();
+    // The Viewer polls while a Split is pending and shows the rows once the
+    // export is ready.
+    await page.unroute(isConfigs);
+    await expect(page.getByRole("img", { name: "img, row 0" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/^Preparing preview/)).toHaveCount(0);
   });
 
   test("edits the dataset card with the form", async ({ page }) => {
@@ -455,12 +519,7 @@ test("searches from anywhere with the keyboard", async ({ page }) => {
   await signIn(page);
   await page.goto("/arsenal");
   await settled(page);
-  const dialog = page.getByRole("dialog", { name: "Search" });
-  await expect(async () => {
-    await page.keyboard.press("/");
-    await expect(dialog).toBeVisible({ timeout: 1000 });
-  }).toPass();
-  await dialog.getByRole("combobox", { name: "Search Hangar" }).fill("imdb");
+  const dialog = await searchWithKeyboard(page, "imdb");
   await dialog.getByRole("option", { name: /datasets\/ada\/imdb-mini/ }).click();
   await expect(page).toHaveURL(/\/datasets\/ada\/imdb-mini$/);
 });
@@ -492,35 +551,49 @@ test("creates a Repo and a Collection in an Organisation's Namespace", async ({ 
   await signIn(page);
   await page.goto("/new");
   await expect(page.getByLabel("Owner")).toHaveCount(0);
+  const id = unique();
   await page.getByLabel("Namespace", { exact: true }).selectOption("ml-team");
-  await page.getByLabel("Model name").fill("laptop-classifier");
+  await page.getByLabel("Model name").fill(`laptop-classifier-${id}`);
   await page.getByRole("radio", { name: /^Private/ }).check();
   await expect(page.getByText("Only members of the Namespace and collaborators.")).toBeVisible();
   await page.getByRole("button", { name: "Create model" }).click();
-  await expect(page).toHaveURL(/\/ml-team\/laptop-classifier$/);
+  await expect(page).toHaveURL(new RegExp(`/ml-team/laptop-classifier-${id}$`));
 
   await page.goto("/collections");
   await page.getByRole("button", { name: "New Collection" }).click();
   const dialog = page.getByRole("dialog", { name: "New Collection" });
   await expect(dialog.getByLabel("Owner")).toHaveCount(0);
   await dialog.getByLabel("Namespace", { exact: true }).selectOption("ml-team");
-  await dialog.getByLabel("Title").fill("Runs on a laptop");
+  await dialog.getByLabel("Title").fill(`Runs on a laptop ${id}`);
   await dialog.getByRole("button", { name: "Create Collection" }).click();
-  await expect(page).toHaveURL(/\/collections\/ml-team\/runs-on-a-laptop-[0-9a-f]{6}$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Runs on a laptop" })).toBeVisible();
+  // The slug is the title in lower case with hyphens (collections.Slugify).
+  await expect(page).toHaveURL(new RegExp(`/collections/ml-team/runs-on-a-laptop-${id}$`));
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Runs on a laptop ${id}` }),
+  ).toBeVisible();
   await expect(page.getByText("Choose Edit to add Repos.")).toBeVisible();
   expect(problems).toEqual([]);
 });
 
-test("shows the empty arsenal and virtualises long lists", async ({ page, baseURL }) => {
-  await useScenario(page, "empty", baseURL ?? "");
-  await signIn(page);
+test("shows the empty arsenal and virtualises long lists", async ({ page }) => {
+  // The seed project made the Repos on a real Instance; the mock makes them
+  // for this session, which takes a few seconds.
+  test.setTimeout(60_000);
+  const csrf = await signIn(page);
+  // An Instance with Repos in it cannot have an empty arsenal, so answer the
+  // arsenal's list call with an empty page.
+  const isList = (url: URL) => url.pathname === "/api/hangar/v1/repos";
+  await page.route(isList, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { items: [], facets: {} } })
+      : route.fallback(),
+  );
   await page.goto("/arsenal");
   await expect(page.getByText("Your arsenal is empty.")).toBeVisible();
-  await page.context().clearCookies();
-  await useScenario(page, "bulk", baseURL ?? "");
-  await signIn(page);
-  await page.goto("/arsenal?ns=bulk&view=list");
+  await page.unroute(isList);
+
+  await seedBulkRepos(page, csrf);
+  await page.goto("/arsenal?ns=bulk&view=list&sort=name");
   const list = page.getByRole("list", { name: "Repos" });
   await expect(list.getByRole("link", { name: "bulk/bulk-model-000" })).toBeVisible();
   // Load every page: by button, or by scrolling to the end of the list.
@@ -536,3 +609,10 @@ test("shows the empty arsenal and virtualises long lists", async ({ page, baseUR
   expect(rendered).toBeGreaterThan(0);
   expect(rendered).toBeLessThan(200);
 });
+
+/** The text of the label for a checkbox. */
+async function labelOf(page: Page, checkbox: ReturnType<Page["getByRole"]>): Promise<string> {
+  const id = await checkbox.getAttribute("id");
+  expect(id).toBeTruthy();
+  return page.locator(`label[for="${id}"]`).innerText();
+}

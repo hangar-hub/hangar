@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { operations } from "../src/api/schema";
-import { createState, type MockState, randomUUID, type Scenario } from "./data.ts";
+import { createState, type MockState, randomUUID } from "./data.ts";
 import { type Ctx, handlers, problem, type Result } from "./handlers.ts";
 import { compileValidators, loadSpec, matchRoute } from "./openapi.ts";
 import { resolveFile } from "./resolve.ts";
@@ -115,10 +115,7 @@ export function createMock(opts: MockOptions = {}) {
     let id = c.mock_session;
     if (!id || !sessions.has(id)) {
       id = id || randomUUID();
-      const scenario = (
-        ["empty", "bulk"].includes(c.mock_scenario ?? "") ? c.mock_scenario : "default"
-      ) as Scenario;
-      const state = createState(scenario);
+      const state = createState();
       state.signedIn = Boolean(opts.signedIn);
       sessions.set(id, state);
       res.appendHeader("Set-Cookie", `mock_session=${id}; Path=/; SameSite=Lax`);
@@ -320,11 +317,11 @@ async function authHandler(
   const raw = await readBody(req);
   const body = raw.length ? (JSON.parse(raw.toString("utf8")) as Record<string, string>) : {};
   const code = m[2] ?? m[3];
-  if (code === "expired") {
-    send(
-      res,
-      problem(404, "This link has expired or was already used. Ask an admin for a new one."),
-    );
+  // Like W5's Register and ResetPassword: the link must exist and be unused
+  // before the password is checked.
+  const kind = m[2] ? "invite" : m[3] ? "reset" : undefined;
+  if (code !== undefined && state.links[code] !== kind) {
+    send(res, problem(404, "The link is invalid, used or expired; ask an admin for a new one."));
     return true;
   }
   if ((body.password ?? "").length < 10) {
@@ -345,6 +342,7 @@ async function authHandler(
     );
     return true;
   }
+  if (code !== undefined) delete state.links[code];
   state.signedIn = true;
   if (body.username)
     state.me = {

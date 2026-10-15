@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { components, operations } from "../src/api/schema";
 import {
   iso,
@@ -316,13 +317,44 @@ function discussionOr404(r: MockRepo, num: string | undefined): S["Discussion"] 
   return d ?? problem(404, `Discussion ${num} does not exist.`);
 }
 
+const base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/** A Token secret as W5's NewTokenSecret makes it: hgr_ and 40 base62 characters. */
+export function tokenSecret(): string {
+  const bytes = randomBytes(40);
+  return `hgr_${Array.from(bytes, (n) => base62[n % 62]).join("")}`;
+}
+
+/** W2's repo.PartSize: at least 16 MiB, and enough for 10,000 parts, rounded up to a MiB. */
+export function partSizeFor(size: number): number {
+  const mib = 1024 * 1024;
+  const ps = Math.max(16 * mib, Math.ceil(size / 10_000));
+  return Math.ceil(ps / mib) * mib;
+}
+
+/** W7's collections.Slugify: lower case, runs of other characters as one hyphen, at most 80. */
+export function slugify(title: string): string {
+  const s = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s.length > 80 ? s.slice(0, 80).replace(/-+$/, "") : s;
+}
+
+/** Stores a single-use invite or reset link code and returns it. */
+function newLink(state: MockState, kind: "invite" | "reset"): string {
+  const code = randomBytes(24).toString("base64url");
+  state.links[code] = kind;
+  return code;
+}
+
 export const handlers: Partial<Record<keyof operations, Handler>> = {
   // Session
   getMe: ({ state }) => ok(state.me),
   login: ({ state, body }) => {
     const { username, password } = body as { username: string; password: string };
     if (password === "wrong-password" || !password) {
-      return problem(401, "The username or password is wrong.");
+      return problem(401, "Wrong username or password.");
     }
     state.signedIn = true;
     state.me = { ...state.me, username: username || state.me.username };
@@ -358,7 +390,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
         { pointer: "/name", detail: "Choose another name." },
       ]);
     }
-    const secret = `hgr_${sha1(`${t.name}${Date.now()}`).slice(0, 40)}`;
+    const secret = tokenSecret();
     const token: S["Token"] = {
       id: randomUUID(),
       name: t.name,
@@ -369,6 +401,15 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       created_at: new Date().toISOString(),
     };
     state.tokens.unshift(token);
+    state.audit.unshift({
+      id: randomUUID(),
+      action: "token.created",
+      actor: state.me.username,
+      target_type: "token",
+      target_id: token.id,
+      data: { name: t.name, scope: t.scope, user: state.me.username },
+      created_at: token.created_at,
+    });
     return ok({ ...token, secret }, 201);
   },
   revokeMyToken: ({ state, params }) => {
@@ -766,7 +807,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       // upload of the same object is in progress, and part URLs are
       // absolute (built from server.public_url).
       const id = randomUUID();
-      const partSize = 5 * 1024 * 1024;
+      const partSize = partSizeFor(f.size);
       const count = Math.max(1, Math.ceil(f.size / partSize));
       ctx.state.uploads[id] = {
         sha256: f.sha256,
@@ -1085,10 +1126,11 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   },
   createCollection: (ctx) => {
     const c = b(ctx) as S["CollectionCreate"];
-    const slug = `${c.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")}-${randomUUID().slice(0, 6)}`;
+    const slug = slugify(c.title.trim());
+    if (!slug) return problem(400, "The title needs a letter or digit.");
+    if (ctx.state.collections.some((x) => x.namespace === c.namespace && x.slug === slug)) {
+      return problem(409, `A Collection ${c.namespace}/${slug} already exists.`);
+    }
     const col: S["Collection"] = {
       namespace: c.namespace,
       slug,
@@ -1419,16 +1461,16 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     if (!u) return problem(404, "User not found.");
     return ok(
       {
-        url: `http://localhost/auth/reset/${sha1(`reset:${u.id}:${Date.now()}`).slice(0, 32)}`,
+        url: `${ctx.origin}/auth/reset/${newLink(ctx.state, "reset")}`,
         expires_at: iso(-72 * 3_600_000),
       },
       201,
     );
   },
-  adminCreateInvite: () =>
+  adminCreateInvite: (ctx) =>
     ok(
       {
-        url: `http://localhost/auth/invite/${sha1(`invite:${Date.now()}`).slice(0, 32)}`,
+        url: `${ctx.origin}/auth/invite/${newLink(ctx.state, "invite")}`,
         expires_at: iso(-72 * 3_600_000),
       },
       201,
@@ -1532,8 +1574,10 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   adminListAudit: (ctx) => {
     const actor = ctx.query.get("actor");
     const action = ctx.query.get("action");
+    // W5's filter: a comma-separated list of exact actions (internal/audit).
+    const actions = (action ?? "").split(",").filter(Boolean);
     const items = ctx.state.audit.filter(
-      (a) => (!actor || a.actor === actor) && (!action || a.action.startsWith(action)),
+      (a) => (!actor || a.actor === actor) && (!actions.length || actions.includes(a.action)),
     );
     return ok(page(ctx, items));
   },
