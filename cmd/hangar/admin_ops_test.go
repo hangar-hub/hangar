@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -192,4 +193,60 @@ func TestAdminReindex(t *testing.T) {
 			require.NotEqual(t, [16]byte{}, [16]byte(j.Repo), "reindex Jobs are scoped to their Repo")
 		}
 	})
+}
+
+func TestParseAdminRepoID(t *testing.T) {
+	for in, want := range map[[2]string]model.RepoID{
+		{"alice/m", ""}:               {Type: model.RepoTypeModel, Namespace: "alice", Name: "m"},
+		{"models/alice/m", "dataset"}: {Type: model.RepoTypeModel, Namespace: "alice", Name: "m"},
+		{"datasets/alice/d", ""}:      {Type: model.RepoTypeDataset, Namespace: "alice", Name: "d"},
+		{"alice/d", "dataset"}:        {Type: model.RepoTypeDataset, Namespace: "alice", Name: "d"},
+		{"alice/m", "model"}:          {Type: model.RepoTypeModel, Namespace: "alice", Name: "m"},
+		{"datasets/alice/d", "model"}: {Type: model.RepoTypeDataset, Namespace: "alice", Name: "d"},
+	} {
+		got, err := parseAdminRepoID(in[0], in[1])
+		require.NoError(t, err, in)
+		require.Equal(t, want, got, in)
+	}
+	_, err := parseAdminRepoID("alice/m", "space")
+	require.ErrorContains(t, err, "--type must be model or dataset")
+	_, err = parseAdminRepoID("no-slash", "")
+	require.Error(t, err)
+
+	out, code := newAdminEnv(t).run("", "admin", "reindex", "--type", "space", "alice/m")
+	require.Equal(t, 1, code)
+	require.Contains(t, out, "--type must be model or dataset")
+}
+
+func TestAdminCommandsRefuseBadSetups(t *testing.T) {
+	// A schema that is not current is refused before anything is built.
+	dir := t.TempDir()
+	set := []string{"--set", "server.data_dir=" + dir, "--set", "database.dsn=" + filepath.Join(dir, "hangar.db"),
+		"--set", "storage.fs.path=" + filepath.Join(dir, "blobs"), "--set", "git.cache_dir=" + filepath.Join(dir, "git-cache"),
+		"--set", "server.public_url=http://localhost:8080"}
+	out, code := execute(t, append([]string{"admin", "gc"}, set...)...)
+	require.Equal(t, 1, code)
+	require.Contains(t, out, "run hangar admin migrate first")
+
+	// So is a configuration that does not validate, as a usage error.
+	out, code = execute(t, "admin", "gc", "--set", "storage.backend=tape", "--set", "server.data_dir="+t.TempDir())
+	require.Equal(t, 1, code)
+	require.Contains(t, out, "storage.backend")
+	require.Equal(t, 2, run([]string{"admin", "gc", "--set", "storage.backend=tape", "--set", "server.data_dir=" + t.TempDir()}),
+		"configuration problems exit with the usage code")
+
+	// A database that cannot be opened fails the migration.
+	blocker := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	out, code = execute(t, "admin", "migrate", "--set", "database.dsn="+filepath.Join(blocker, "hangar.db"))
+	require.Equal(t, 1, code, out)
+}
+
+func TestTextProgress(t *testing.T) {
+	var buf bytes.Buffer
+	p := textProgress{w: &buf}
+	require.NoError(t, p.Report(context.Background(), jobs.ProgressUpdate{Message: "Deleted 3 LFS objects."}))
+	require.NoError(t, p.Report(context.Background(), jobs.ProgressUpdate{}))
+	require.NoError(t, p.SetResult(context.Background(), map[string]int{"n": 1}))
+	require.Equal(t, "Deleted 3 LFS objects.\n", buf.String())
 }

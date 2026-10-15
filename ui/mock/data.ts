@@ -18,6 +18,8 @@ export type MockFile = {
   lfs?: boolean;
   present?: boolean;
   scan?: "safe" | "suspicious" | "unsafe" | "error" | "pending";
+  /** What the pickle scan found, for GET .../files/{rev}/{path}/scan. */
+  findings?: S["ScanFinding"][];
   header?: S["FileHeader"];
 };
 
@@ -651,8 +653,32 @@ function legacyRepo(): MockRepo {
   const id = "ada/legacy-checkpoint";
   const files: MockFile[] = [
     { path: "README.md", text: "# legacy-checkpoint\n\nAn old PyTorch Lightning checkpoint.\n" },
-    { path: "model.ckpt", size: 8 * MiB, lfs: true, present: true, scan: "unsafe" },
-    { path: "optimizer.pt", size: 2 * MiB, lfs: true, present: true, scan: "suspicious" },
+    {
+      path: "model.ckpt",
+      size: 8 * MiB,
+      lfs: true,
+      present: true,
+      scan: "unsafe",
+      findings: [
+        { module: "collections", name: "OrderedDict", opcode: "GLOBAL", status: "safe" },
+        { module: "posix", name: "system", opcode: "STACK_GLOBAL", status: "unsafe" },
+      ],
+    },
+    {
+      path: "optimizer.pt",
+      size: 2 * MiB,
+      lfs: true,
+      present: true,
+      scan: "suspicious",
+      findings: [
+        {
+          module: "sklearn.linear_model",
+          name: "LogisticRegression",
+          opcode: "GLOBAL",
+          status: "suspicious",
+        },
+      ],
+    },
   ];
   return finishRepo({
     repo: repoBase("model", "ada", "legacy-checkpoint", {

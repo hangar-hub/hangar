@@ -17,7 +17,7 @@ test.describe("sign-in", () => {
     await page.getByLabel("Username").fill("ada");
     await page.getByLabel("Password").fill("wrong-password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page.getByRole("alert")).toHaveText("The username or password is wrong.");
+    await expect(page.getByRole("alert")).toHaveText("Wrong username or password.");
     await page.getByLabel("Password").fill("correct-horse-battery");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();
@@ -173,7 +173,7 @@ test.describe("upload", () => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     expect(dialogs).toEqual(["beforeunload"]);
 
-    // The plan starts a new upload, as W2's does; the browser resumes the first.
+    // The plan continues the first upload, as W2's does, and the browser sends only the missing part.
     const puts: string[] = [];
     page.on("request", (r) => {
       if (r.method() === "PUT") puts.push(new URL(r.url()).pathname);
@@ -209,6 +209,7 @@ test.describe("upload", () => {
     await expect(page.getByRole("heading", { level: 2 })).toContainText("Upload extra.md");
     await page.getByRole("tab", { name: /Files changed/ }).click();
     await expect(page.getByRole("list", { name: "Changed files" })).toContainText("extra.md");
+    await expect(page.getByRole("region", { name: "Diff of extra.md" })).toContainText("# Extra");
   });
 });
 
@@ -251,6 +252,9 @@ test.describe("browse files", () => {
     await expect(page.getByRole("heading", { name: /Pickle scan/ })).toContainText(
       "Unsafe imports",
     );
+    const imports = page.getByRole("list", { name: "Imports the scan found" });
+    await expect(imports).toContainText("posix.system");
+    await expect(imports).not.toContainText("collections.OrderedDict");
     await page.goto("/ada/bert-tiny-finetune/commits/main");
     await page.getByRole("link", { name: "Add safetensors weights and ONNX export" }).click();
     const readme = page
@@ -339,6 +343,19 @@ test.describe("admin settings", () => {
     await page.reload();
     await expect(page.getByRole("switch", { name: "Anonymous read" })).toBeChecked();
     await expect(page.getByLabel("Registration")).toHaveValue("open");
+  });
+
+  test("lists every Organisation and filters them", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/admin/organisations");
+    const list = page.getByRole("listitem");
+    await expect(list.filter({ hasText: "ML team" })).toContainText("2 members");
+    await expect(list.filter({ hasText: "TinyLlama" })).toContainText("Created by a Pull");
+    await expect(list).toHaveCount(3);
+    await page.getByLabel("Find an Organisation").fill("tiny");
+    await page.getByLabel("Find an Organisation").press("Enter");
+    await expect(list).toHaveCount(1);
+    await expect(list).toContainText("TinyLlama");
   });
 
   test("validates Pull windows before saving", async ({ page }) => {

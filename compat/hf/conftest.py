@@ -61,6 +61,11 @@ def _start_server() -> Hub:
         raise
 
 
+# HANGAR_HF_BACKEND=binary runs the real hangar binary (compat/harness),
+# seeded with the same users, instead of the Hub API over fakes.
+_SERVE_TEST = "^TestServeBinary$" if os.environ.get("HANGAR_HF_BACKEND") == "binary" else "^TestServeHub$"
+
+
 def _server_env(info_path: Path) -> dict[str, str]:
     env = dict(os.environ, HANGAR_HF_SERVE_INFO=str(info_path))
     # HANGAR_HF_DB=postgres needs dbtest's Postgres: start a container unless
@@ -84,7 +89,7 @@ def _build_and_start(workdir: Path) -> Hub:
     log_path = workdir / "server.log"
     with open(log_path, "wb") as log:
         proc = subprocess.Popen(
-            [str(binary), "-test.run", "^TestServeHub$", "-test.timeout", "0", "-test.v"],
+            [str(binary), "-test.run", _SERVE_TEST, "-test.timeout", "0", "-test.v"],
             cwd=HF_DIR,
             stdin=subprocess.PIPE,
             stdout=log,
@@ -233,8 +238,6 @@ NOT_SUPPORTED = {
     "POST /api/{type}s/{repo}/lfs-files/duplicate": "Cross-Repo LFS copy needs Xet hashes. Copies within a Repo work.",
     "/api/spaces/...": "Spaces are out of scope.",
     "/api/jobs/... and /api/inference/...": "Jobs and the Inference API are out of scope.",
-    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit|hide": "Editing and hiding comments are not in v1.0.",
-    "GET /api/users/{user}/likes, GET /api/{type}s/{repo}/likers": "Liker listings are not in v1.0; like and unlike work.",
 }
 
 

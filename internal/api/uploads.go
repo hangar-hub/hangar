@@ -86,8 +86,10 @@ func (a *UploadsAPI) PlanUploads(w http.ResponseWriter, r *http.Request, pType g
 			item.Action = "exists"
 		default:
 			ps := repo.PartSize(f.Size)
+			// Resume continues the caller's upload of the same object in
+			// this Repo, so planning again after a reload reuses its parts.
 			u, err := a.d.LFS.CreateUpload(r.Context(), repo.UploadParams{OID: f.Sha256, Size: f.Size, RepoUUID: rp.UUID, UserID: p.UserID,
-				Multipart: true, PartSize: ps, TTL: a.d.UploadURLTTL})
+				Multipart: true, PartSize: ps, TTL: a.d.UploadURLTTL, Resume: true})
 			if err != nil {
 				a.d.problem(w, r, err)
 				return

@@ -202,13 +202,12 @@ describe("mock server", () => {
         )
       ).status,
     ).toBe(400);
-    // Like W2, asking again starts a new upload; the browser resumes the
-    // first one by its remembered ID.
+    // Like W2, asking again continues the upload in progress.
     const again = await call("POST", `${api}/repos/models/ada/bert-tiny-finetune/uploads`, {
       files: [{ path: "big.safetensors", size: 6 * 1024 * 1024, sha256: sha }],
     });
     const second = (again.json.files as { upload_id: string }[])[0];
-    expect(second?.upload_id).not.toBe(up.upload_id);
+    expect(second?.upload_id).toBe(up.upload_id);
     await call("PUT", partPath(up.part_urls[1]), new Uint8Array(1024 * 1024), {
       "Content-Type": "application/octet-stream",
     });

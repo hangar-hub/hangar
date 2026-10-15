@@ -996,8 +996,11 @@ func (f *Fake) diffLocked(ctx context.Context, r *fakeRepo, sha model.CommitSHA)
 	if err := f.checkCommit(ctx, r, sha); err != nil {
 		return nil, err
 	}
-	parent := f.firstParent(ctx, r, sha)
-	out, err := f.git.run(ctx, r.dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--no-commit-id", "--raw", parent, string(sha))
+	return f.diffBetweenLocked(ctx, r, f.firstParent(ctx, r, sha), string(sha))
+}
+
+func (f *Fake) diffBetweenLocked(ctx context.Context, r *fakeRepo, from, to string) ([]repo.FileChange, error) {
+	out, err := f.git.run(ctx, r.dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--no-commit-id", "--raw", from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -1053,7 +1056,30 @@ func (f *Fake) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitSH
 	if err != nil {
 		return nil, err
 	}
-	changes, err := f.diffLocked(ctx, r, sha)
+	if err := f.checkCommit(ctx, r, sha); err != nil {
+		return nil, err
+	}
+	return f.fileDiffLocked(ctx, r, f.firstParent(ctx, r, sha), string(sha), p)
+}
+
+// CompareFile implements repo.Service.
+func (f *Fake) CompareFile(ctx context.Context, id model.RepoID, base, head model.CommitSHA, p string) (*repo.FileDiff, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r, err := f.lookup(id)
+	if err != nil {
+		return nil, err
+	}
+	for _, sha := range []model.CommitSHA{base, head} {
+		if err := f.checkCommit(ctx, r, sha); err != nil {
+			return nil, err
+		}
+	}
+	return f.fileDiffLocked(ctx, r, string(base), string(head), p)
+}
+
+func (f *Fake) fileDiffLocked(ctx context.Context, r *fakeRepo, from, to, p string) (*repo.FileDiff, error) {
+	changes, err := f.diffBetweenLocked(ctx, r, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -1063,8 +1089,7 @@ func (f *Fake) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitSH
 		}
 		fd := &repo.FileDiff{FileChange: c}
 		if !c.LFS && !c.Binary && c.OldSize < maxTextDiff && c.NewSize < maxTextDiff {
-			parent := f.firstParent(ctx, r, sha)
-			args := []string{"diff", "-M", parent, string(sha), "--", p}
+			args := []string{"diff", "-M", from, to, "--", p}
 			if c.OldPath != "" {
 				args = append(args, c.OldPath)
 			}
@@ -1076,7 +1101,7 @@ func (f *Fake) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitSH
 		}
 		return fd, nil
 	}
-	return nil, fmt.Errorf("%w: %s did not change in %s", repo.ErrEntryNotFound, p, sha)
+	return nil, fmt.Errorf("%w: %s did not change in %s", repo.ErrEntryNotFound, p, to)
 }
 
 // Refs implements repo.Service.

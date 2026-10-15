@@ -26,7 +26,7 @@ Hangar never records tokens, passwords, cookies, presigned URLs or `Authorizatio
 ## Health
 
 - `/healthz` answers 200 while the process is alive.
-- `/readyz` answers 200 when the database is reachable, migrations are at the expected version and the Blob store answers, and 503 with the failed checks otherwise. Load balancers and Kubernetes should use it.
+- `/readyz` answers 200 when the database is reachable, migrations are at the expected version, the Blob store answers and the server has finished starting, and 503 with the failed checks otherwise. Load balancers and Kubernetes should use it.
 
 ## Elastic
 

@@ -431,6 +431,10 @@ type Service interface {
 	Diff(ctx context.Context, id model.RepoID, sha model.CommitSHA) ([]FileChange, error)
 	// FileDiff returns the diff of one file in a Commit.
 	FileDiff(ctx context.Context, id model.RepoID, sha model.CommitSHA, path string) (*FileDiff, error)
+	// CompareFile returns the diff of one file from Commit base to Commit
+	// head, as a pull request with several Commits shows it against the
+	// fork point. ErrEntryNotFound when the file is the same in both.
+	CompareFile(ctx context.Context, id model.RepoID, base, head model.CommitSHA, path string) (*FileDiff, error)
 
 	// Refs lists every ref.
 	Refs(ctx context.Context, id model.RepoID) (*Refs, error)
@@ -496,6 +500,12 @@ type UploadParams struct {
 	Multipart bool
 	PartSize  int64
 	TTL       time.Duration
+	// Resume returns the user's unexpired multipart upload of the same
+	// object, Repo and part size, if there is one, with its expiry moved to
+	// TTL from now, instead of starting another. The native API's upload
+	// plan sets it, so a client that plans again after a reload continues
+	// the upload that holds its parts.
+	Resume bool
 }
 
 // Upload is an in-progress upload.

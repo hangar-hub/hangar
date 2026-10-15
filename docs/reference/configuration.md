@@ -49,6 +49,7 @@ Blob store for LFS objects, git data and uploads.
 | `storage.s3.secret_access_key`<br>`HANGAR_STORAGE_S3_SECRET_ACCESS_KEY` | string | `""` | Secret access key. |
 | `storage.s3.use_path_style`<br>`HANGAR_STORAGE_S3_USE_PATH_STYLE` | bool | `false` | Use path-style bucket addressing, as MinIO and some other stores need. |
 | `storage.s3.download_mode`<br>`HANGAR_STORAGE_S3_DOWNLOAD_MODE` | string | `redirect` | redirect sends clients to presigned URLs; proxy streams bytes through Hangar. |
+| `storage.s3.upload_mode`<br>`HANGAR_STORAGE_S3_UPLOAD_MODE` | string | `direct` | direct gives clients presigned URLs to upload LFS objects and parts to the store; proxy has them upload through Hangar. Use proxy when clients cannot reach the endpoint. |
 | `storage.s3.presign_ttl`<br>`HANGAR_STORAGE_S3_PRESIGN_TTL` | duration | `1h` | Lifetime of presigned download URLs. |
 
 ## `security`
@@ -199,6 +200,7 @@ Dataset Viewer and Parquet export.
 | `viewer.max_scan_rows`<br>`HANGAR_VIEWER_MAX_SCAN_ROWS` | int | `5000000` | Rows scanned by one filter or search request before it returns partial results. |
 | `viewer.max_scan_seconds`<br>`HANGAR_VIEWER_MAX_SCAN_SECONDS` | duration | `10s` | Time limit of one filter or search request before it returns partial results. |
 | `viewer.max_cell_bytes`<br>`HANGAR_VIEWER_MAX_CELL_BYTES` | size | `100KiB` | Cells larger than this are truncated in Viewer responses. |
+| `viewer.max_request_bytes`<br>`HANGAR_VIEWER_MAX_REQUEST_BYTES` | size | `300000000` | Decoded Parquet data one Dataset Viewer request may hold; requests that need more answer with an error, as the Hub's do. |
 | `viewer.convert_concurrency`<br>`HANGAR_VIEWER_CONVERT_CONCURRENCY` | int | `1` | dataset.convert Jobs per worker. |
 
 ## `telemetry`

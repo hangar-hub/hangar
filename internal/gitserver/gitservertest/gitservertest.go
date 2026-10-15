@@ -21,6 +21,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -35,6 +36,8 @@ type Options struct {
 	Authz       auth.Authz
 	Quota       gitserver.QuotaChecker
 	PullThrough gitserver.PullThrough
+	// Downloads enforces scan.block_unsafe_downloads; optional.
+	Downloads   *scan.Gate
 	Instruments *telemetry.Instruments
 	// Config is used as given, except that PublicURL is the test server's
 	// URL and TempDir defaults to a test temporary directory.
@@ -78,7 +81,7 @@ func Start(t testing.TB, o Options) *Instance {
 	}
 	srv, err := gitserver.New(cfg, gitserver.Deps{
 		Repos: o.Repos, LFS: o.LFS, Authz: o.Authz, Signer: signer,
-		Quota: o.Quota, PullThrough: o.PullThrough, Instruments: o.Instruments,
+		Quota: o.Quota, PullThrough: o.PullThrough, Downloads: o.Downloads, Instruments: o.Instruments,
 	})
 	if err != nil {
 		t.Fatal(err)

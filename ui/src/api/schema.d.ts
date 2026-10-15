@@ -565,6 +565,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/{type}/{ns}/{name}/files/{rev}/{path}/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                /** @description Revision */
+                rev: components["parameters"]["Rev"];
+                /** @description Path in the Repo */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a file's security scan result
+         * @description The imports the pickle scanner found and the integrity problems the scan reported for one file. A file the scan does not check is safe with no findings; a Commit that is not scanned yet is pending.
+         */
+        get: operations["getFileScan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{type}/{ns}/{name}/quants": {
         parameters: {
             query?: never;
@@ -1374,6 +1404,33 @@ export interface paths {
         patch: operations["updateDiscussion"];
         trace?: never;
     };
+    "/repos/{type}/{ns}/{name}/discussions/{num}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                num: components["parameters"]["Num"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get the diff of one file in a pull request
+         * @description The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+         */
+        get: operations["getPullRequestFileDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{type}/{ns}/{name}/discussions/{num}/comments": {
         parameters: {
             query?: never;
@@ -1506,6 +1563,26 @@ export interface paths {
         put?: never;
         /** Send a test event */
         post: operations["testWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Organisations
+         * @description Every Organisation of the Instance in name order, optionally filtered by name or display name. Instance admins only.
+         */
+        get: operations["adminListOrgs"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2131,6 +2208,26 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        FileScan: {
+            path: string;
+            /** @enum {string} */
+            status: "safe" | "suspicious" | "unsafe" | "error" | "pending";
+            findings: components["schemas"]["ScanFinding"][];
+            /** @description Why the scan could not read the file, when status is error. */
+            error?: string;
+        };
+        ScanFinding: {
+            /** @description The imported module, such as os. */
+            module?: string;
+            /** @description The imported name, such as system. */
+            name?: string;
+            /** @description The pickle opcode that imported it: GLOBAL, STACK_GLOBAL or INST. */
+            opcode?: string;
+            /** @enum {string} */
+            status: "safe" | "suspicious" | "unsafe" | "error";
+            /** @description An integrity problem, for findings that are not imports. */
+            detail?: string;
+        };
         QuantGroup: {
             name: string;
             files: string[];
@@ -2704,6 +2801,10 @@ export interface components {
             last_login_at?: string;
             /** Format: date-time */
             created_at: string;
+        };
+        AdminOrgList: {
+            items: components["schemas"]["Namespace"][];
+            next_cursor?: string;
         };
         AdminUserList: {
             items: components["schemas"]["AdminUser"][];
@@ -3766,6 +3867,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileHeader"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getFileScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                /** @description Revision */
+                rev: components["parameters"]["Rev"];
+                /** @description Path in the Repo */
+                path: components["parameters"]["FilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scan result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScan"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -5162,6 +5294,36 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getPullRequestFileDiff: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                type: components["parameters"]["RepoType"];
+                /** @description Namespace name. */
+                ns: components["parameters"]["Ns"];
+                /** @description Repo name. */
+                name: components["parameters"]["Name"];
+                num: components["parameters"]["Num"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diff. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileDiff"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     commentOnDiscussion: {
         parameters: {
             query?: never;
@@ -5416,6 +5578,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookDelivery"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    adminListOrgs: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description Opaque cursor from a previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organisations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrgList"];
                 };
             };
             default: components["responses"]["Problem"];

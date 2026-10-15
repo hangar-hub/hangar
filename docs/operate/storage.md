@@ -27,11 +27,12 @@ storage:
     secret_access_key: ""
     use_path_style: false
     download_mode: redirect                # redirect | proxy
+    upload_mode: direct                    # direct | proxy
     presign_ttl: 1h
 ```
 
-- In `redirect` mode, LFS downloads answer with a presigned URL, so file bytes go straight from the store to the client. Clients must reach the store's endpoint; if they cannot, use `proxy`, which streams through Hangar.
-- Uploads go straight to presigned part URLs where the client supports it.
+- In `redirect` mode, LFS downloads and zip exports answer with a presigned URL, so file bytes go straight from the store to the client. Clients must reach the store's endpoint; if they cannot, use `proxy`, which streams through Hangar.
+- In `direct` upload mode, large-file uploads from git-lfs, `huggingface_hub`, `hangar push` and the web UI go straight to presigned URLs, and the UI's Content Security Policy allows the store's origin. Clients must reach the store's endpoint; if they cannot, set `upload_mode: proxy`, and uploads stream through Hangar into the store.
 - Ollama downloads always stream through Hangar, because Ollama refuses redirects to other hosts.
 
 | Provider | Settings | Notes |

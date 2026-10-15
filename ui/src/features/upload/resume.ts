@@ -1,9 +1,10 @@
 /**
  * Remembers which upload holds the parts of each object, so an upload can
- * resume after a page reload (09-web-ui.md "Upload"). The upload plan may
- * start a new upload every time it is asked, so the browser keeps the ID of
- * the first one per Repo and SHA-256 and asks the server which of its parts
- * exist.
+ * resume after a page reload (09-web-ui.md "Upload"). The upload plan
+ * continues the user's upload of the same object in the Repo, but can start
+ * a new one, for example against an older server, so the browser keeps the
+ * ID of the first one per Repo and SHA-256 and asks the server which of its
+ * parts exist.
  */
 
 const prefix = "hangar-upload:";

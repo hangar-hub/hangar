@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/api/client";
 import { AppLink } from "@/components/AppLink";
@@ -12,23 +12,23 @@ import { fieldErrors, unwrap } from "@/lib/problem";
 import { useSearchState } from "@/lib/use-search-state";
 
 /**
- * Organisations: find one by name and create new ones. The native API has
- * no list of every Organisation, so this page searches Namespaces
- * (docs/build/requests/w8.md asks for `GET /orgs`).
+ * Organisations: every Organisation of the Instance, filtered by name, and
+ * a form to create new ones.
  */
 export function AdminOrganisationsPage() {
   const [search, update] = useSearchState<{ q?: string }>();
   const qc = useQueryClient();
   const toast = useToast();
-  const results = useQuery({
-    queryKey: ["search", "orgs", search.q ?? ""],
-    enabled: Boolean(search.q),
-    queryFn: async () =>
+  const results = useInfiniteQuery({
+    queryKey: ["admin", "orgs", search.q ?? ""],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) =>
       unwrap(
-        await api.GET("/search", {
-          params: { query: { q: search.q ?? "", types: ["namespaces"], limit: 50 } },
+        await api.GET("/admin/orgs", {
+          params: { query: { q: search.q || undefined, cursor: pageParam, limit: 100 } },
         }),
       ),
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
   });
   const [form, setForm] = useState({ name: "", display_name: "", description: "" });
   const create = useMutation({
@@ -45,11 +45,11 @@ export function AdminOrganisationsPage() {
     onSuccess: (n) => {
       toast(`Created ${n.name}.`);
       setForm({ name: "", display_name: "", description: "" });
-      qc.invalidateQueries({ queryKey: ["search"] });
+      qc.invalidateQueries({ queryKey: ["admin", "orgs"] });
     },
   });
   const errs = fieldErrors(create.error);
-  const orgs = results.data?.namespaces.filter((n) => n.kind === "org") ?? [];
+  const orgs = results.data?.pages.flatMap((p) => p.items) ?? [];
   return (
     <PageShell title="Organisations" subtitle="Manage Members from each Organisation's page.">
       <form
@@ -69,12 +69,14 @@ export function AdminOrganisationsPage() {
           defaultValue={search.q ?? ""}
         />
       </form>
-      {!search.q ? null : results.isPending ? (
-        <LoadingRows rows={2} label="Searching" />
+      {results.isPending ? (
+        <LoadingRows rows={2} label="Loading Organisations" />
       ) : results.isError ? (
         <ErrorState error={results.error} onRetry={() => results.refetch()} />
       ) : orgs.length === 0 ? (
-        <EmptyState title={`No Organisations match ${search.q}`} />
+        <EmptyState
+          title={search.q ? `No Organisations match ${search.q}` : "No Organisations yet"}
+        />
       ) : (
         <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
           {orgs.map((o) => (
@@ -91,6 +93,11 @@ export function AdminOrganisationsPage() {
           ))}
         </ul>
       )}
+      {results.hasNextPage ? (
+        <Button onClick={() => results.fetchNextPage()} disabled={results.isFetchingNextPage}>
+          Show more
+        </Button>
+      ) : null}
       <form
         className="max-w-md space-y-3 pt-2"
         onSubmit={(e) => {

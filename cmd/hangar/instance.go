@@ -28,6 +28,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/layout"
+	"github.com/jamesagarside/hangar/internal/datasets/meta"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
 	"github.com/jamesagarside/hangar/internal/datasets/viewer"
 	"github.com/jamesagarside/hangar/internal/db"
@@ -82,6 +83,7 @@ type instance struct {
 	repos       *repo.Store
 	indexer     *indexdb.Service
 	scanner     *scan.Service
+	unsafeGate  *scan.Gate
 	community   *communitydb.DB
 	collections *collections.DB
 	layout      *layout.Service
@@ -221,9 +223,19 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	}
 
 	// Metadata, community and Collections (W7).
-	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
-		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex})
+	ixo := indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
+		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex}
+	if cfg.Viewer.Enabled {
+		ixo.DatasetRows = datasetRows(in.layout, in.datasets)
+	}
+	in.indexer = indexdb.New(ixo)
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
+	// One gate enforces scan.block_unsafe_downloads for every protocol
+	// that serves file bytes.
+	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
+		s, err := in.auth.Settings.Get(ctx)
+		return s.ScanBlockUnsafeDownloads, err
+	})
 	in.community = communitydb.New(communitydb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Log: in.log})
 	in.collections = collections.New(collections.Options{DB: d, Orgs: in.orgs, Repos: in.repos, Authz: in.auth.Authz()})
 	idx.Indexer, comm.Service = in.indexer, in.community
@@ -244,14 +256,14 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	if cfg.Viewer.Enabled {
 		in.pipeline, err = pipeline.New(pipeline.Deps{DB: d, Blobs: in.blobs, Repos: in.repos, LFS: in.lfs, Jobs: in.queue,
 			MaxConvertBytes: cfg.Viewer.MaxConvertBytes.Int64(), TempDir: filepath.Join(cfg.Server.DataDir, "tmp"),
-			ConvertConcurrency: cfg.Viewer.ConvertConcurrency, Log: in.log})
+			ConvertConcurrency: cfg.Viewer.ConvertConcurrency, AfterConvert: in.reindexExported, Log: in.log})
 		if err != nil {
 			return nil, err
 		}
 		in.viewer, err = viewer.New(viewer.Deps{Repos: in.repos, Authz: in.auth.Authz(), Store: in.datasets, Jobs: in.queue,
 			Blobs: in.blobs, Signer: in.signer, Log: in.log, Now: time.Now},
 			viewer.Options{PublicURL: cfg.Server.PublicURL, MaxScanRows: int64(cfg.Viewer.MaxScanRows), MaxScanTime: cfg.Viewer.MaxScanTime,
-				MaxCellBytes: int(cfg.Viewer.MaxCellBytes.Int64())})
+				MaxCellBytes: int(cfg.Viewer.MaxCellBytes.Int64()), MaxRequestBytes: cfg.Viewer.MaxRequestBytes.Int64()})
 		if err != nil {
 			return nil, err
 		}
@@ -262,17 +274,15 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	gcfg := gitserver.ConfigFrom(cfg)
 	gcfg.TempDir = filepath.Join(cfg.Git.CacheDir, "tmp")
 	in.gitServer, err = gitserver.New(gcfg, gitserver.Deps{Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), Signer: in.signer,
-		Quota: repoQuota{in.accounting}, PullThrough: in.pulls.PullThrough(), Log: in.log, Tracer: tel.Tracer(), Instruments: inst})
+		Quota: repoQuota{in.accounting}, PullThrough: in.pulls.PullThrough(), Downloads: in.unsafeGate, Log: in.log, Tracer: tel.Tracer(),
+		Instruments: inst})
 	if err != nil {
 		return nil, err
 	}
 	hubDeps := hfapi.Deps{Settings: hfapi.FromConfig(cfg), Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), Orgs: in.orgs,
 		Community: in.community, Collections: in.collections, Index: in.indexer, Scan: in.scanner, Xet: in.xet,
 		Devices: in.auth.DeviceFlow(), PullThrough: hubPullThrough{in.pulls.PullThrough()}, Instruments: inst, Log: in.log,
-		BlockUnsafe: func(ctx context.Context) (bool, error) {
-			s, err := in.auth.Settings.Get(ctx)
-			return s.ScanBlockUnsafeDownloads, err
-		}}
+		Downloads: in.unsafeGate}
 	if in.viewer != nil {
 		hubDeps.Viewer = in.viewer
 	} else {
@@ -282,8 +292,8 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 		return nil, err
 	}
 	in.ollama, err = ollama.New(ollama.Options{DB: d, Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), OllamaAuth: in.auth.OllamaAuth(),
-		Signer: in.signer, PublicURL: cfg.Server.PublicURL, PullThrough: in.pulls.PullThrough(), Community: in.community,
-		Instruments: inst, Log: in.log})
+		Signer: in.signer, PublicURL: cfg.Server.PublicURL, PullThrough: in.pulls.PullThrough(), Downloads: in.unsafeGate,
+		Community: in.community, Instruments: inst, Log: in.log})
 	if err != nil {
 		return nil, err
 	}
@@ -514,6 +524,45 @@ func datasetLayout(l *layout.Service) func(ctx context.Context, id model.RepoID,
 		}
 		return names, splits, nil
 	}
+}
+
+// datasetRows gives the index (W7) a dataset Commit's rows and size
+// category from its Parquet export (W10), once the export exists (DATA-9).
+func datasetRows(l *layout.Service, store *pipeline.Store) func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID,
+	commit model.CommitSHA) (int64, string, bool, error) {
+	return func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (int64, string, bool, error) {
+		res, err := l.Resolve(ctx, id, commit)
+		if errors.Is(err, datasets.ErrNotFound) {
+			return 0, "", false, nil
+		}
+		if err != nil {
+			return 0, "", false, err
+		}
+		infos := make([]*pipeline.ConfigInfo, 0, len(res.Configs))
+		for _, c := range res.Configs {
+			info, err := store.Info(ctx, repoUUID, commit, c.Name)
+			if errors.Is(err, pipeline.ErrNoInfo) {
+				return 0, "", false, nil
+			}
+			if err != nil {
+				return 0, "", false, err
+			}
+			infos = append(infos, info)
+		}
+		if len(infos) == 0 {
+			return 0, "", false, nil
+		}
+		s := meta.Summarise(nil, infos)
+		return s.NumRows, s.SizeCategory, true, nil
+	}
+}
+
+// reindexExported indexes a dataset Commit again once its Parquet export
+// is stored (W10), so the index has its rows and size category (DATA-9).
+func (in *instance) reindexExported(ctx context.Context, r *repo.Repo, commit model.CommitSHA) error {
+	job := index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: commit}
+	_, err := in.queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: job.DedupeKey(), Payload: job, Repo: r.UUID})
+	return err
 }
 
 // mirrorStatus fills mirror_status on native Repo responses (W2) from the

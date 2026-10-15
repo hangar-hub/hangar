@@ -322,7 +322,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   login: ({ state, body }) => {
     const { username, password } = body as { username: string; password: string };
     if (password === "wrong-password" || !password) {
-      return problem(401, "The username or password is wrong.");
+      return problem(401, "Wrong username or password.");
     }
     state.signedIn = true;
     state.me = { ...state.me, username: username || state.me.username };
@@ -678,6 +678,41 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       change.binary || change.lfs ? "" : unifiedDiff(path, before?.text ?? "", after?.text ?? "");
     return ok({ ...change, patch });
   }),
+  getPullRequestFileDiff: withRepo((ctx, r) => {
+    const d = discussionOr404(r, ctx.params.num);
+    if (isResult(d)) return d;
+    if (d.kind !== "pull_request") return problem(422, "This discussion is not a pull request.");
+    const prs = r.prCommits ?? [];
+    const head = prs.find((c) => c.sha === r.prHeads?.[d.num]);
+    if (!head) return problem(404, `${d.pr_ref} has no Commits yet.`);
+    // The fork point: the first Commit on the way back that is not the pull request's.
+    let fork: MockCommit | undefined = head;
+    while (fork && prs.includes(fork)) {
+      const parent: string | undefined = fork.parents[0];
+      fork = [...r.commits, ...prs].find((x) => x.sha === parent);
+    }
+    const path = ctx.query.get("path") ?? "";
+    const before = fork?.files.find((f) => f.path === path);
+    const after = head.files.find((f) => f.path === path);
+    if ((before?.text ?? before?.size) === (after?.text ?? after?.size)) {
+      return problem(404, `${path} did not change in this pull request.`);
+    }
+    const f = (after ?? before) as MockFile;
+    const lfs = Boolean(f.lfs);
+    const binary = f.text === undefined;
+    const change: S["FileChange"] = {
+      path,
+      status: !before ? "added" : !after ? "deleted" : "modified",
+      old_oid: before ? fileOid(before) : undefined,
+      new_oid: after ? fileOid(after) : undefined,
+      old_size: before ? fileSize(before) : undefined,
+      new_size: after ? fileSize(after) : undefined,
+      lfs,
+      binary,
+    };
+    const patch = binary || lfs ? "" : unifiedDiff(path, before?.text ?? "", after?.text ?? "");
+    return ok({ ...change, patch });
+  }),
   getTreeRoot: withRepo((ctx, r) => tree(ctx, r, "")),
   getTree: withRepo((ctx, r) => tree(ctx, r, ctx.params.path ?? "")),
   getRepoMetadata: withRepo((ctx, r) => {
@@ -692,6 +727,12 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     if (!f) return problem(404, `${ctx.params.path} does not exist at this Revision.`);
     if (!f.header) return problem(400, "Only safetensors and GGUF files have a header to show.");
     return ok(f.header);
+  }),
+  getFileScan: withRepo((ctx, r) => {
+    const c = resolveRev(r, ctx.params.rev);
+    const f = c?.files.find((x) => x.path === ctx.params.path);
+    if (!f) return problem(404, `${ctx.params.path} does not exist at this Revision.`);
+    return ok({ path: f.path, status: f.scan ?? "safe", findings: f.findings ?? [] });
   }),
   listQuants: withRepo((ctx, r) => {
     const c = resolveRev(r, ctx.query.get("rev") ?? undefined) as MockCommit;
@@ -762,20 +803,30 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       if (!lfsExt.test(f.path) && f.size <= 10 * 1024 * 1024)
         return { path: f.path, action: "inline" };
       if (ctx.state.lfsObjects.has(f.sha256)) return { path: f.path, action: "exists" };
-      // Like W2's PlanUploads, every plan starts a new upload, even when an
-      // upload of the same object is in progress, and part URLs are
-      // absolute (built from server.public_url).
-      const id = randomUUID();
+      // Like W2's PlanUploads, a plan continues an upload of the same
+      // object in this Repo that is still in progress, so its parts are
+      // kept, and part URLs are absolute (built from server.public_url).
       const partSize = 5 * 1024 * 1024;
       const count = Math.max(1, Math.ceil(f.size / partSize));
-      ctx.state.uploads[id] = {
-        sha256: f.sha256,
-        size: f.size,
-        partSize,
-        parts: [],
-        state: "uploading",
-        repo: r.repo.id,
-      };
+      const inProgress = Object.entries(ctx.state.uploads).find(
+        ([, u]) =>
+          u.sha256 === f.sha256 &&
+          u.size === f.size &&
+          u.partSize === partSize &&
+          u.repo === r.repo.id &&
+          u.state === "uploading",
+      );
+      const id = inProgress?.[0] ?? randomUUID();
+      if (!inProgress) {
+        ctx.state.uploads[id] = {
+          sha256: f.sha256,
+          size: f.size,
+          partSize,
+          parts: [],
+          state: "uploading",
+          repo: r.repo.id,
+        };
+      }
       const base = `${ctx.origin}/api/hangar/v1/repos/${ctx.params.type}/${r.repo.namespace}/${r.repo.name}/uploads/${id}/parts`;
       return {
         path: f.path,
@@ -1362,6 +1413,21 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   },
 
   // Admin
+  adminListOrgs: (ctx) => {
+    const q = ctx.query.get("q")?.toLowerCase();
+    return ok(
+      page(
+        ctx,
+        ctx.state.namespaces
+          .filter((n) => n.kind === "org")
+          .filter(
+            (n) =>
+              !q || n.name.toLowerCase().includes(q) || n.display_name.toLowerCase().includes(q),
+          )
+          .sort((a, c) => a.name.toLowerCase().localeCompare(c.name.toLowerCase())),
+      ),
+    );
+  },
   adminListUsers: (ctx) => {
     const q = ctx.query.get("q")?.toLowerCase();
     return ok(

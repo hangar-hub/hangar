@@ -4,7 +4,7 @@
 
 Every Hugging Face Hub endpoint that `huggingface_hub` and the libraries built on it call, and whether Hangar serves it. The compatibility suite in `compat/hf` writes this table from its own results, so every row marked supported is covered by a passing test against real clients.
 
-Tested with `huggingface_hub` 2.2.0. 6 not supported, 60 supported.
+Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
 
 | Endpoint | Status | Covered by | Notes |
 |---|---|---|---|
@@ -25,26 +25,28 @@ Tested with `huggingface_hub` 2.2.0. 6 not supported, 60 supported.
 | `DELETE /api/repos/delete` | Supported | `test_delete_repo` |  |
 | `POST /api/repos/move` | Supported | `test_move_repo_redirects` |  |
 | `/api/spaces/...` | Not supported | - | Spaces are out of scope. |
-| `GET /api/users/{user}/likes, GET /api/{type}s/{repo}/likers` | Not supported | - | Liker listings are not in v1.0; like and unlike work. |
+| `GET /api/users/{user}/likes` | Supported | `test_likers_and_liked_repos` |  |
 | `POST /api/validate-yaml` | Supported | `test_upload_file_and_folder` |  |
 | `GET /api/whoami-v2` | Supported | `test_whoami` |  |
 | `GET /api/whoami-v2 (hf auth)` | Supported | `test_hf_auth_login_and_whoami` |  |
 | `DELETE /api/{type}s/{repo}/branch/{branch}` | Supported | `test_branches_and_tags` |  |
 | `POST /api/{type}s/{repo}/branch/{branch}` | Supported | `test_branches_and_tags` |  |
-| `POST /api/{type}s/{repo}/commit/{rev}` | Supported | `test_create_commit_adds_deletes_copies`, `test_upload_file_and_folder`, `test_upload_many_files`, `test_upload_over_multipart_threshold` |  |
+| `POST /api/{type}s/{repo}/commit/{rev}` | Supported | `test_create_commit_adds_deletes_copies`, `test_upload_file_and_folder`, `test_upload_large_file_round_trip`, `test_upload_many_files`, `test_upload_over_multipart_threshold` |  |
 | `POST /api/{type}s/{repo}/commit/{rev}?create_pr=1` | Supported | `test_failed_create_pr_commit_opens_no_pull_request`, `test_hf_upload_to_new_branch_and_pr` |  |
 | `GET /api/{type}s/{repo}/commits/{rev}` | Supported | `test_list_repo_commits` |  |
 | `GET /api/{type}s/{repo}/discussions` | Supported | `test_discussions_and_pull_requests`, `test_failed_create_pr_commit_opens_no_pull_request` |  |
 | `POST /api/{type}s/{repo}/discussions` | Supported | `test_discussions_and_pull_requests` |  |
 | `GET /api/{type}s/{repo}/discussions/{num}` | Supported | `test_discussions_and_pull_requests`, `test_hf_upload_to_new_branch_and_pr` |  |
 | `POST /api/{type}s/{repo}/discussions/{num}/comment` | Supported | `test_discussions_and_pull_requests` |  |
-| `POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit\|hide` | Not supported | - | Editing and hiding comments are not in v1.0. |
+| `POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit` | Supported | `test_edit_and_hide_comments` |  |
+| `POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/hide` | Supported | `test_edit_and_hide_comments` |  |
 | `POST /api/{type}s/{repo}/discussions/{num}/merge` | Supported | `test_discussions_and_pull_requests` |  |
 | `POST /api/{type}s/{repo}/discussions/{num}/status` | Supported | `test_discussions_and_pull_requests` |  |
 | `POST /api/{type}s/{repo}/discussions/{num}/title` | Supported | `test_discussions_and_pull_requests` |  |
 | `POST /api/{type}s/{repo}/lfs-files/duplicate` | Not supported | - | Cross-Repo LFS copy needs Xet hashes. Copies within a Repo work. |
 | `DELETE /api/{type}s/{repo}/like` | Supported | `test_unlike` |  |
-| `POST /api/{type}s/{repo}/like` | Supported | `test_unlike` |  |
+| `POST /api/{type}s/{repo}/like` | Supported | `test_likers_and_liked_repos`, `test_unlike` |  |
+| `GET /api/{type}s/{repo}/likers` | Supported | `test_likers_and_liked_repos` |  |
 | `POST /api/{type}s/{repo}/paths-info/{rev}` | Supported | `test_create_commit_adds_deletes_copies`, `test_tree_and_paths_info` |  |
 | `POST /api/{type}s/{repo}/preupload/{rev}` | Supported | `test_upload_file_and_folder`, `test_upload_many_files`, `test_upload_over_multipart_threshold` |  |
 | `GET /api/{type}s/{repo}/refs` | Supported | `test_branches_and_tags` |  |
@@ -54,7 +56,7 @@ Tested with `huggingface_hub` 2.2.0. 6 not supported, 60 supported.
 | `DELETE /api/{type}s/{repo}/tag/{tag}` | Supported | `test_branches_and_tags` |  |
 | `GET /api/{type}s/{repo}/tree/{rev}/{path}` | Supported | `test_snapshot_download_and_offline`, `test_tree_and_paths_info` |  |
 | `GET /api/{type}s/{repo}/xet-read-token/{rev}` | Not supported | - | Hangar never offers Xet downloads; downloads use plain HTTP. |
-| `GET /api/{type}s/{repo}/xet-write-token/{rev}` | Supported | `test_xet_write_token` |  |
+| `GET /api/{type}s/{repo}/xet-write-token/{rev}` | Supported | `test_upload_large_file_round_trip`, `test_xet_write_token` |  |
 | `POST /{repo}.git/info/lfs/objects/batch (stand-in)` | Supported | `test_upload_file_and_folder` |  |
 | `POST /{repo}.git/info/lfs/objects/batch (stand-in, multipart)` | Supported | `test_upload_over_multipart_threshold` |  |
 | `GET /{repo}/resolve/{rev}/{path}` | Supported | `test_hf_hub_download_by_revision` |  |

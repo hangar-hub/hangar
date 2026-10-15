@@ -229,3 +229,42 @@ func TestJobsListPagesPastHiddenJobs(t *testing.T) {
 	}
 	require.Equal(t, []uuid.UUID{f.pullPublic}, seen, "the listing reaches the visible Job and returns it once")
 }
+
+// TestJobsNameTheirRepo checks that Repo-scoped Jobs carry the Repo's ID
+// in payload.repo, which the Jobs drawer titles them by, also when the
+// handler that queued them put only the Repo UUID in the payload, and that
+// a payload's own repo is kept.
+func TestJobsNameTheirRepo(t *testing.T) {
+	f := newJobAuthzFixture(t)
+	e := f.e
+	payloadRepo := func(user string, id uuid.UUID) any {
+		t.Helper()
+		code, body := e.do(user, http.MethodGet, "/jobs/"+id.String(), nil)
+		require.Equal(t, http.StatusOK, code, string(body))
+		var j gen.Job
+		require.NoError(t, json.Unmarshal(body, &j))
+		if j.Payload == nil {
+			return nil
+		}
+		return (*j.Payload)["repo"]
+	}
+	require.Equal(t, "acme/secret", payloadRepo("alice", f.zipSecret))
+	require.Equal(t, "alice/public", payloadRepo("alice", f.pullPublic))
+	require.Nil(t, payloadRepo("alice", f.instance), "an Instance-wide Job names no Repo")
+	require.Nil(t, payloadRepo("root", f.purged), "a purged Repo has no ID to show")
+	own := e.enqueue("alice", jobs.NewJob{Kind: jobs.KindPull, Repo: f.public.UUID, Payload: map[string]any{"repo": "upstream/name"}})
+	require.Equal(t, "upstream/name", payloadRepo("alice", own))
+
+	code, body := e.do("alice", http.MethodGet, "/jobs?limit=500", nil)
+	require.Equal(t, http.StatusOK, code)
+	var list gen.JobList
+	require.NoError(t, json.Unmarshal(body, &list))
+	found := false
+	for _, j := range list.Items {
+		if j.Id == f.zipSecret {
+			found = true
+			require.Equal(t, "acme/secret", (*j.Payload)["repo"])
+		}
+	}
+	require.True(t, found)
+}

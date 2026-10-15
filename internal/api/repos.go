@@ -56,6 +56,9 @@ type RepoDeps struct {
 	Community       community.Service
 	Index           index.Indexer
 	Scanner         scan.Scanner
+	// Downloads enforces scan.block_unsafe_downloads on zip exports;
+	// optional.
+	Downloads *scan.Gate
 	// PublicURL is server.public_url, for Hangar-served part URLs.
 	PublicURL string
 	// UploadURLTTL is lfs.upload_url_ttl. Zero means 24 hours.
@@ -855,6 +858,14 @@ func (a *ReposAPI) StartZipExport(w http.ResponseWriter, r *http.Request, pType 
 	}
 	if e.Type != model.EntryDirectory {
 		badRequest(w, r, "path", "The path is a file. Download it directly, or choose a folder.")
+		return
+	}
+	if err := a.d.Downloads.CheckTree(r.Context(), rp.UUID, rp.ID, sha, e.Path); scan.IsBlocked(err) {
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden, Detail: err.Error() +
+			" A zip export cannot include it. Download the other files one by one, or choose a folder without it."})
+		return
+	} else if err != nil {
+		a.d.problem(w, r, err)
 		return
 	}
 	p := httpx.Principal(r.Context())

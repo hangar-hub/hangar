@@ -44,6 +44,11 @@ func (e *ThrottledError) Error() string {
 	return fmt.Sprintf("too many failed sign-in attempts; try again in %s", e.RetryAfter.Round(time.Second))
 }
 
+// Message is the error as a sentence for users, as problem details carry it.
+func (e *ThrottledError) Message() string {
+	return fmt.Sprintf("Too many failed sign-in attempts. Try again in %s.", e.RetryAfter.Round(time.Second))
+}
+
 // LoginService runs password sign-in.
 type LoginService struct{ s *Service }
 

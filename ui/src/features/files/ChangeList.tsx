@@ -17,14 +17,31 @@ const statusText = {
   renamed: "Renamed",
 } as const;
 
-function Diff({ repo, sha, change }: { repo: RepoRef; sha: string; change: FileChange }) {
+function Diff({
+  repo,
+  sha,
+  pullRequest,
+  change,
+}: {
+  repo: RepoRef;
+  sha: string;
+  pullRequest?: number;
+  change: FileChange;
+}) {
   const diff = useQuery({
-    queryKey: [...repoKey(repo), "diff", sha, change.path],
+    queryKey: [...repoKey(repo), "diff", pullRequest ? `pr-${pullRequest}` : sha, change.path],
     queryFn: async () =>
       unwrap(
-        await api.GET("/repos/{type}/{ns}/{name}/commits/{sha}/diff", {
-          params: { path: { ...repoPathParams(repo), sha }, query: { path: change.path } },
-        }),
+        pullRequest
+          ? await api.GET("/repos/{type}/{ns}/{name}/discussions/{num}/diff", {
+              params: {
+                path: { ...repoPathParams(repo), num: pullRequest },
+                query: { path: change.path },
+              },
+            })
+          : await api.GET("/repos/{type}/{ns}/{name}/commits/{sha}/diff", {
+              params: { path: { ...repoPathParams(repo), sha }, query: { path: change.path } },
+            }),
       ),
   });
   if (diff.isPending) return <Skeleton className="m-3 h-20" />;
@@ -59,14 +76,20 @@ function SizeChange({ change }: { change: FileChange }) {
   );
 }
 
-/** Files changed in a Commit or pull request, each with an expandable diff. */
+/**
+ * Files changed in a Commit or pull request, each with an expandable diff.
+ * For a pull request, pass its number: each diff then covers every Commit
+ * of the pull request, from where it left its base branch.
+ */
 export function ChangeList({
   repo,
   sha,
+  pullRequest,
   changes,
 }: {
   repo: RepoRef;
   sha: string;
+  pullRequest?: number;
   changes: FileChange[];
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
@@ -95,7 +118,7 @@ export function ChangeList({
               c.lfs || c.binary ? (
                 <SizeChange change={c} />
               ) : (
-                <Diff repo={repo} sha={sha} change={c} />
+                <Diff repo={repo} sha={sha} pullRequest={pullRequest} change={c} />
               )
             ) : null}
           </li>

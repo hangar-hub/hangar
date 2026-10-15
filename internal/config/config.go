@@ -62,12 +62,14 @@ type DatabaseConfig struct {
 	MaxOpenConns int    `koanf:"max_open_conns" desc:"Maximum open database connections per process."`
 }
 
-// Storage backends and download modes.
+// Storage backends, download modes and upload modes.
 const (
 	BackendFS     = "fs"
 	BackendS3     = "s3"
 	DownloadRedir = "redirect"
 	DownloadProxy = "proxy"
+	UploadDirect  = "direct"
+	UploadProxy   = "proxy"
 )
 
 // StorageConfig configures the Blob store.
@@ -92,6 +94,7 @@ type S3Config struct {
 	SecretAccessKey string        `koanf:"secret_access_key" desc:"Secret access key." secret:"true"`
 	UsePathStyle    bool          `koanf:"use_path_style" desc:"Use path-style bucket addressing, as MinIO and some other stores need."`
 	DownloadMode    string        `koanf:"download_mode" desc:"redirect sends clients to presigned URLs; proxy streams bytes through Hangar."`
+	UploadMode      string        `koanf:"upload_mode" desc:"direct gives clients presigned URLs to upload LFS objects and parts to the store; proxy has them upload through Hangar. Use proxy when clients cannot reach the endpoint."`
 	PresignTTL      time.Duration `koanf:"presign_ttl" desc:"Lifetime of presigned download URLs."`
 }
 
@@ -242,6 +245,7 @@ type ViewerConfig struct {
 	MaxScanRows        int           `koanf:"max_scan_rows" desc:"Rows scanned by one filter or search request before it returns partial results."`
 	MaxScanTime        time.Duration `koanf:"max_scan_seconds" desc:"Time limit of one filter or search request before it returns partial results."`
 	MaxCellBytes       ByteSize      `koanf:"max_cell_bytes" desc:"Cells larger than this are truncated in Viewer responses."`
+	MaxRequestBytes    ByteSize      `koanf:"max_request_bytes" desc:"Decoded Parquet data one Dataset Viewer request may hold; requests that need more answer with an error, as the Hub's do."`
 	ConvertConcurrency int           `koanf:"convert_concurrency" desc:"dataset.convert Jobs per worker."`
 }
 
@@ -279,6 +283,7 @@ func Default() Config {
 				Region:       "eu-west-2",
 				Bucket:       "hangar",
 				DownloadMode: DownloadRedir,
+				UploadMode:   UploadDirect,
 				PresignTTL:   time.Hour,
 			},
 		},
@@ -326,6 +331,7 @@ func Default() Config {
 			MaxScanRows:        5_000_000,
 			MaxScanTime:        10 * time.Second,
 			MaxCellBytes:       100 * KiB,
+			MaxRequestBytes:    300_000_000,
 			ConvertConcurrency: 1,
 		},
 		Telemetry: TelemetryConfig{

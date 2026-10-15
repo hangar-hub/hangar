@@ -88,11 +88,12 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	if err != nil {
 		return err
 	}
-	health := newHealth(d, blobs)
-
 	// Health answers at once; the rest of the Instance is built once the
 	// schema is current, which web and worker processes wait for while
-	// hangar admin migrate runs.
+	// hangar admin migrate runs. /readyz answers 503 until the full handler
+	// is installed and the worker has started.
+	var started atomic.Bool
+	health := newHealth(d, blobs, startupCheck(&started))
 	var current atomic.Pointer[http.Handler]
 	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
 	current.Store(&starting)
@@ -166,6 +167,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	}
 	log.InfoContext(ctx, "hangar started", "version", version, "role", cfg.Server.Role, "listen", ln.Addr().String(),
 		"public_url", cfg.Server.PublicURL, "database", cfg.Database.Driver, "blob_store", blobBackend(cfg), "telemetry", tel.Exporters)
+	started.Store(true)
 	if ready != nil {
 		ready <- ln.Addr().String()
 	}
@@ -189,7 +191,13 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 	logged := false
 	for {
-		st, err := d.Schema(ctx)
+		// Schema reads an unreachable database as one with no migrations
+		// table, so ping first to log the real reason.
+		var st db.SchemaStatus
+		err := d.PingContext(ctx)
+		if err == nil {
+			st, err = d.Schema(ctx)
+		}
 		if err == nil && st.UpToDate() {
 			return nil
 		}

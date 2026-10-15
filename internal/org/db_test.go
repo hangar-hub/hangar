@@ -286,3 +286,45 @@ func TestSearchNamespaces(t *testing.T) {
 		require.Equal(t, u["carol"].UserID, ns[0].UserID)
 	})
 }
+
+func TestListOrgs(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		_, o, _, u := setup(t, d)
+		for _, name := range []string{"ML-Team", "acme", "under_score", "zeta"} {
+			_, err := o.CreateOrg(ctx, name, "", u["alice"])
+			require.NoError(t, err)
+		}
+		_, err := o.UpdateOrg(ctx, "zeta", org.OrgUpdate{DisplayName: ptrTo("Machine shop")}, u["alice"])
+		require.NoError(t, err)
+
+		list := func(q, cursor string, limit int) ([]string, string) {
+			t.Helper()
+			nss, next, err := o.ListOrgs(ctx, q, cursor, limit)
+			require.NoError(t, err)
+			out := []string{}
+			for _, ns := range nss {
+				require.Equal(t, org.KindOrg, ns.Kind)
+				out = append(out, ns.Name)
+			}
+			return out, next
+		}
+		all, next := list("", "", 0)
+		require.Equal(t, []string{"acme", "ML-Team", "under_score", "zeta"}, all, "Organisations only, in name order")
+		require.Empty(t, next)
+		page, next := list("", "", 2)
+		require.Equal(t, []string{"acme", "ML-Team"}, page)
+		require.NotEmpty(t, next)
+		page, next = list("", next, 2)
+		require.Equal(t, []string{"under_score", "zeta"}, page)
+		require.Empty(t, next)
+		found, _ := list("MACHINE", "", 10)
+		require.Equal(t, []string{"zeta"}, found, "display names match without case")
+		found, _ = list("_", "", 10)
+		require.Equal(t, []string{"under_score"}, found, "LIKE wildcards are literal")
+		_, _, err = o.ListOrgs(ctx, "", "not base64!", 10)
+		require.ErrorIs(t, err, org.ErrInvalid)
+	})
+}
+
+func ptrTo[T any](v T) *T { return &v }

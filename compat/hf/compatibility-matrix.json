@@ -88,9 +88,11 @@
         "test_exists_checks"
       ]
     },
-    "GET /api/users/{user}/likes, GET /api/{type}s/{repo}/likers": {
-      "note": "Liker listings are not in v1.0; like and unlike work.",
-      "status": "not supported"
+    "GET /api/users/{user}/likes": {
+      "status": "supported",
+      "tests": [
+        "test_likers_and_liked_repos"
+      ]
     },
     "GET /api/whoami-v2": {
       "status": "supported",
@@ -124,6 +126,12 @@
         "test_hf_upload_to_new_branch_and_pr"
       ]
     },
+    "GET /api/{type}s/{repo}/likers": {
+      "status": "supported",
+      "tests": [
+        "test_likers_and_liked_repos"
+      ]
+    },
     "GET /api/{type}s/{repo}/refs": {
       "status": "supported",
       "tests": [
@@ -151,6 +159,7 @@
     "GET /api/{type}s/{repo}/xet-write-token/{rev}": {
       "status": "supported",
       "tests": [
+        "test_upload_large_file_round_trip",
         "test_xet_write_token"
       ]
     },
@@ -244,6 +253,7 @@
       "tests": [
         "test_create_commit_adds_deletes_copies",
         "test_upload_file_and_folder",
+        "test_upload_large_file_round_trip",
         "test_upload_many_files",
         "test_upload_over_multipart_threshold"
       ]
@@ -267,9 +277,17 @@
         "test_discussions_and_pull_requests"
       ]
     },
-    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit|hide": {
-      "note": "Editing and hiding comments are not in v1.0.",
-      "status": "not supported"
+    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit": {
+      "status": "supported",
+      "tests": [
+        "test_edit_and_hide_comments"
+      ]
+    },
+    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/hide": {
+      "status": "supported",
+      "tests": [
+        "test_edit_and_hide_comments"
+      ]
     },
     "POST /api/{type}s/{repo}/discussions/{num}/merge": {
       "status": "supported",
@@ -296,6 +314,7 @@
     "POST /api/{type}s/{repo}/like": {
       "status": "supported",
       "tests": [
+        "test_likers_and_liked_repos",
         "test_unlike"
       ]
     },

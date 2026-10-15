@@ -18,7 +18,8 @@ With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a t
 | `HANGAR_HF_WRITE_MATRIX=1` | Write `compatibility-matrix.json` from the results. |
 | `HANGAR_HF_MULTIPART_THRESHOLD` | The tested Instance's `lfs.multipart_threshold`, with `HANGAR_HF_ENDPOINT` (default 64 MiB). The Go test server lowers it to 5 MiB, the smallest the setting allows. |
 | `HANGAR_HF_MULTIPART_FILE_SIZE` | Size in bytes of the file `test_upload_over_multipart_threshold` uploads. The default is twice the threshold plus one byte; 13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file nightly. |
-| `HANGAR_HF_XET_UPLOADS=1` | Leave Xet on, so the upload tests go through `hf_xet`. Needs an Instance that serves the Xet CAS endpoints (W11); the Go test server does not. |
+| `HANGAR_HF_BACKEND=binary` | Instead of the Go test server, start the real `hangar` binary with `compat/harness` (`HANGAR_BINARY`, or a build of `./cmd/hangar`) and seed it through the native API with the same users, Tokens and Organisation (`TestServeBinary` in `binary_test.go`). |
+| `HANGAR_HF_XET_UPLOADS=1` | Leave Xet on, so the upload tests go through `hf_xet`. Needs an Instance that serves the Xet CAS endpoints, such as `HANGAR_HF_BACKEND=binary`; the Go test server does not. |
 | `HANGAR_HF_WITHOUT_XET=1` | Tell the suite `hf_xet` is not installed, for the matrix cell without it. |
 
 `go test -tags compat ./compat/hf` checks the test server starts and answers.
@@ -34,7 +35,8 @@ With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a t
 | Floor client, Python 3.10 | `UV_PROJECT_ENVIRONMENT=<dir> uv run --frozen --project compat --python 3.10 --with huggingface_hub==1.31.0 python -m pytest compat/hf` |
 | Without `hf_xet` | `uv export --frozen --project compat --no-hashes --no-emit-project`, drop the `hf-xet` line, `uv pip install --no-deps` the rest into a new environment, then run its `python -m pytest compat/hf` with `HANGAR_HF_WITHOUT_XET=1` and its `bin` first on `PATH` |
 | `diffusers` (nightly) | `uv run --frozen --project compat --with diffusers==0.41.0 --with huggingface_hub==1.33.0 python -m pytest compat/hf` |
-| Xet uploads | `HANGAR_HF_XET_UPLOADS=1` against an Instance with W11's CAS endpoints |
+| The real binary | `HANGAR_HF_BACKEND=binary uv run --frozen --project compat python -m pytest compat/hf` |
+| Xet uploads | `HANGAR_HF_BACKEND=binary HANGAR_HF_XET_UPLOADS=1 uv run --frozen --project compat python -m pytest compat/hf` |
 
 `diffusers` 0.41 needs `huggingface_hub` below 2.0, so it is not in the lock; `test_diffusers.py` reports itself as skipped in the other cells. `huggingface_hub` 2.x removed `upload_large_folder`, so `test_upload_large_folder.py` runs in the floor and `diffusers` cells (`huggingface_hub` 1.31.0 and 1.33.0) and reports itself as skipped in the others. On the macOS host the suite was last run on (Darwin 27), the SciPy 1.15.3 wheel the lock picks for Python 3.10 fails to load with a `dyld` error about `__thread_bss`; add `--with scipy==1.14.1` to that cell there.
 

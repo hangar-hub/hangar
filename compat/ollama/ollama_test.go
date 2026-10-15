@@ -5,7 +5,8 @@
 // latest, show, a one-token generation, a private Repo with a registered
 // key, and blobs served directly with no cross-host redirect.
 //
-// Ollama runs from a local binary of the pinned version when
+// Hangar is the real binary (compat/harness), seeded through its native
+// API. Ollama runs from a local binary of the pinned version when
 // HANGAR_OLLAMA_BINARY names one or `ollama` on PATH is that version, and
 // otherwise from the pinned ollama/ollama image.
 package ollama_test
@@ -14,13 +15,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -33,16 +34,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/ssh"
 
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/auth/authtest"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
+	"github.com/jamesagarside/hangar/compat/harness"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
-	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/ollama"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
 )
 
 // Pinned versions and fixtures.
@@ -84,83 +80,12 @@ func sha(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// keyAuth verifies Ollama key signatures the way Ollama's registry auth
-// signs them, for the in-process Instance. W5's auth.Service is the
-// production implementation.
-type keyAuth struct {
-	authn *authtest.Authenticator
-	mu    sync.Mutex
-	keys  map[string]model.Principal
-	seen  map[string]bool
-}
-
-func (k *keyAuth) register(authorizedKey string, p model.Principal) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	fields := strings.Fields(authorizedKey)
-	k.keys[fields[1]] = p
-}
-
-func (k *keyAuth) IssueRegistryToken(_ context.Context, req auth.OllamaTokenRequest) (string, time.Time, error) {
-	pub, sig, ok := strings.Cut(req.Authorization, ":")
-	if !ok {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	k.mu.Lock()
-	p, known := k.keys[pub]
-	k.mu.Unlock()
-	if !known {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	raw, err := base64.StdEncoding.DecodeString(pub)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	key, err := ssh.ParsePublicKey(raw)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	blob, err := base64.StdEncoding.DecodeString(sig)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	empty := sha256.Sum256(nil)
-	data := fmt.Sprintf("%s,%s,%s", req.Method, req.URL, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(empty[:]))))
-	if err := key.Verify([]byte(data), &ssh.Signature{Format: key.Type(), Blob: blob}); err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	u, err := url.Parse(req.URL)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	ts, err := strconv.ParseInt(u.Query().Get("ts"), 10, 64)
-	if err != nil || time.Since(time.Unix(ts, 0)).Abs() > 5*time.Minute {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	nonce := u.Query().Get("nonce")
-	k.mu.Lock()
-	reused := k.seen[nonce]
-	k.seen[nonce] = true
-	k.mu.Unlock()
-	if nonce == "" || reused {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	if !strings.EqualFold(req.Repo.Namespace, p.Username) {
-		return "", time.Time{}, auth.ErrNotFound
-	}
-	token := "ollama-" + sha([]byte(req.URL))
-	p.Method = model.AuthOllamaKey
-	p.Token = &model.TokenInfo{Name: "ollama", Scope: model.ScopeRead,
-		Restrictions: model.TokenRestrictions{Repos: []string{string(req.Repo.Type) + ":" + req.Repo.String()}}}
-	k.authn.Add(token, p)
-	return token, time.Now().Add(5 * time.Minute), nil
-}
-
-// instance is an in-process Hangar serving the Ollama registry.
+// instance is the real hangar binary behind a recording proxy, which logs
+// every request Ollama makes and its status. The proxy keeps the Host
+// header, so the signed blob URLs Hangar returns point back at it.
 type instance struct {
+	*harness.Instance
 	addr     string
-	repos    *repotest.Fake
-	keys     *keyAuth
 	mu       sync.Mutex
 	statuses []string
 }
@@ -175,23 +100,27 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func startInstance(t *testing.T, listen string) *instance {
 	t.Helper()
-	in := &instance{repos: repotest.NewFake(t)}
-	authn := authtest.NewAuthenticator()
-	in.keys = &keyAuth{authn: authn, keys: map[string]model.Principal{}, seen: map[string]bool{}}
-	authz := authtest.NewAuthz()
-	authz.AnonymousRead = true
-	signer, err := httpx.NewSigner([]byte("compat-ollama-instance-key-0123456789"))
+	// Public Repos are readable without an Ollama key, as on the Hub.
+	in := &instance{Instance: harness.Start(t, harness.Options{Set: []string{"security.anonymous_read=true"}})}
+	target, err := url.Parse(in.URL)
 	require.NoError(t, err)
-	h, err := ollama.New(ollama.Options{DB: dbtest.SQLite(t), Repos: in.repos, LFS: in.repos.LFS, Authz: authz,
-		OllamaAuth: in.keys, Signer: signer, PublicURL: "http://" + listen})
-	require.NoError(t, err)
+	proxy := &httputil.ReverseProxy{Rewrite: func(pr *httputil.ProxyRequest) {
+		pr.SetURL(target)
+		pr.Out.Host = pr.In.Host
+	}}
 	record := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		httpx.Dispatch(httpx.Protocols{Ollama: h}, "http://"+listen).ServeHTTP(sw, r)
+		proxy.ServeHTTP(sw, r)
 		in.mu.Lock()
 		signed := ""
 		if r.URL.Query().Get(httpx.SigParam) != "" {
@@ -202,7 +131,7 @@ func startInstance(t *testing.T, listen string) *instance {
 	})
 	ln, err := net.Listen("tcp", listen)
 	require.NoError(t, err)
-	srv := &http.Server{Handler: httpx.RequestIDs(httpx.Authenticate(ollama.ExemptTokenEndpoint(authn), nil)(record)), ReadHeaderTimeout: 30 * time.Second}
+	srv := &http.Server{Handler: record, ReadHeaderTimeout: 30 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 	in.addr = ln.Addr().String()
@@ -374,10 +303,9 @@ func TestOllamaClient(t *testing.T) {
 	_, port, _ := net.SplitHostPort(in.addr)
 	host := r.host(port)
 
-	alice := indextest.Owner("alice")
-	public := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "Tiny-Stories-GGUF"}
-	indextest.CreateRepo(t, in.repos, public, model.VisibilityPublic)
-	indextest.Commit(t, in.repos, public, map[string][]byte{
+	admin := in.AdminToken(t)
+	alice := in.CreateUser(t, admin, "alice")
+	in.CommitFiles(t, alice, "model", "alice", "Tiny-Stories-GGUF", "public", map[string][]byte{
 		"stories260K-Q8_0.gguf": model260K,
 		"tiny-Q4_K_M.gguf":      indextest.LlamaGGUF(t, 15, "Q4_K"),
 		"LICENSE":               []byte("MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy.\n"),
@@ -424,13 +352,11 @@ func TestOllamaClient(t *testing.T) {
 	})
 
 	t.Run("private Repo with a registered key", func(t *testing.T) {
-		private := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "private-stories"}
-		indextest.CreateRepo(t, in.repos, private, model.VisibilityPrivate)
-		indextest.Commit(t, in.repos, private, map[string][]byte{"stories260K-Q8_0.gguf": model260K})
+		in.CommitFiles(t, alice, "model", "alice", "private-stories", "private", map[string][]byte{"stories260K-Q8_0.gguf": model260K})
 		name := host + "/alice/private-stories:q8_0"
 		out, err := r.cli(ctx, "pull", "--insecure", name)
 		require.Error(t, err, "an unregistered key is refused: %s", out)
-		in.keys.register(r.publicKey(t), alice)
+		in.MustAPI(t, http.StatusCreated, http.MethodPost, "/me/ollama-keys", alice, map[string]string{"name": "compat", "public_key": r.publicKey(t)})
 		out, err = r.cli(ctx, "pull", "--insecure", name)
 		require.NoError(t, err, out)
 		require.Contains(t, out, "success")

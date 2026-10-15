@@ -38,6 +38,7 @@ func S3Options(c config.S3Config) s3.Options {
 	return s3.Options{
 		Endpoint: c.Endpoint, Region: c.Region, Bucket: c.Bucket, Prefix: c.Prefix,
 		AccessKeyID: c.AccessKeyID, SecretAccessKey: c.SecretAccessKey, UsePathStyle: c.UsePathStyle,
+		ProxyUploads: c.UploadMode == config.UploadProxy, ProxyDownloads: c.DownloadMode == config.DownloadProxy,
 	}
 }
 

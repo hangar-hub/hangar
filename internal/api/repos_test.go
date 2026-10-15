@@ -415,6 +415,11 @@ func TestUploadCommitAndBrowseEndpoints(t *testing.T) {
 	f.expect(http.StatusOK, http.MethodGet, "alice", uploadPath, nil).json(t, &status)
 	require.Equal(t, gen.UploadStatusState("uploading"), status.State)
 	require.Len(t, status.Parts, 1)
+	// Planning again, as the UI does after a reload, continues this upload
+	// with its part instead of starting another (requests W8 item 9).
+	var again gen.UploadPlan
+	f.expect(http.StatusOK, http.MethodPost, "alice", base+"/uploads", plan).json(t, &again)
+	require.Equal(t, *up.UploadId, *again.Files[1].UploadId)
 	f.expect(http.StatusBadRequest, http.MethodPut, "alice", uploadPath+"/parts/1", []byte("short"))
 	f.expect(http.StatusOK, http.MethodPost, "alice", uploadPath+"/complete", gen.UploadComplete{Parts: []gen.UploadedPart{part}}).json(t, &status)
 	require.Equal(t, gen.UploadStatusState("verified"), status.State)

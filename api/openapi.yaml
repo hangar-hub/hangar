@@ -408,6 +408,18 @@ paths:
       responses:
         "200": {description: The header as JSON., content: {application/json: {schema: {$ref: "#/components/schemas/FileHeader"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/files/{rev}/{path}/scan:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Rev"}, {$ref: "#/components/parameters/FilePath"}]
+    get:
+      tags: [repos]
+      operationId: getFileScan
+      summary: Get a file's security scan result
+      description: >-
+        The imports the pickle scanner found and the integrity problems the scan reported for one file. A file the
+        scan does not check is safe with no findings; a Commit that is not scanned yet is pending.
+      responses:
+        "200": {description: The scan result., content: {application/json: {schema: {$ref: "#/components/schemas/FileScan"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /repos/{type}/{ns}/{name}/quants:
     parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
     get:
@@ -930,6 +942,19 @@ paths:
       responses:
         "200": {description: The discussion., content: {application/json: {schema: {$ref: "#/components/schemas/Discussion"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/discussions/{num}/diff:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
+    get:
+      tags: [community]
+      operationId: getPullRequestFileDiff
+      summary: Get the diff of one file in a pull request
+      description: >-
+        The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull
+        request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+      parameters: [{name: path, in: query, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: The diff., content: {application/json: {schema: {$ref: "#/components/schemas/FileDiff"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /repos/{type}/{ns}/{name}/discussions/{num}/comments:
     parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
     post:
@@ -1029,6 +1054,16 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
 
   # Admin ---------------------------------------------------------------------------------
+  /admin/orgs:
+    get:
+      tags: [admin]
+      operationId: adminListOrgs
+      summary: List Organisations
+      description: Every Organisation of the Instance in name order, optionally filtered by name or display name. Instance admins only.
+      parameters: [{name: q, in: query, schema: {type: string}}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Organisations., content: {application/json: {schema: {$ref: "#/components/schemas/AdminOrgList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /admin/users:
     get:
       tags: [admin]
@@ -1639,6 +1674,23 @@ components:
       properties:
         format: {type: string, enum: [safetensors, gguf]}
         header: {type: object, additionalProperties: true}
+    FileScan:
+      type: object
+      required: [path, status, findings]
+      properties:
+        path: {type: string}
+        status: {type: string, enum: [safe, suspicious, unsafe, error, pending]}
+        findings: {type: array, items: {$ref: "#/components/schemas/ScanFinding"}}
+        error: {type: string, description: "Why the scan could not read the file, when status is error."}
+    ScanFinding:
+      type: object
+      required: [status]
+      properties:
+        module: {type: string, description: "The imported module, such as os."}
+        name: {type: string, description: "The imported name, such as system."}
+        opcode: {type: string, description: "The pickle opcode that imported it: GLOBAL, STACK_GLOBAL or INST."}
+        status: {type: string, enum: [safe, suspicious, unsafe, error]}
+        detail: {type: string, description: "An integrity problem, for findings that are not imports."}
     QuantGroup:
       type: object
       required: [name, files, size, present]
@@ -2245,6 +2297,10 @@ components:
         oidc_providers: {type: array, items: {type: string}}
         last_login_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
+    AdminOrgList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Namespace"}}, next_cursor: {type: string}}
     AdminUserList:
       type: object
       required: [items]

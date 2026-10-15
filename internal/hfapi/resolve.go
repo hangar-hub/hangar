@@ -107,14 +107,26 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	blob.SetDownloadHeaders(hdr, path.Base(clean))
 	hdr.Set("Content-Disposition", contentDisposition(path.Base(clean)))
 
-	if r.Method == http.MethodGet && !h.allowDownload(w, r, rp, sha, clean) {
-		return
+	redirect := e.IsLFS() && h.d.Settings.RedirectDownloads
+	if r.Method == http.MethodGet {
+		if !h.allowDownload(w, r, rp, sha, clean) {
+			return
+		}
+	} else if redirect && !httpx.QueryBool(r.URL.Query(), "accept_risk", false) {
+		// A HEAD of a file a GET would refuse keeps its metadata but gets
+		// no presigned link, which would download it past the gate.
+		err := h.d.Downloads.CheckFile(ctx, rp.UUID, rp.ID, sha, clean)
+		if err != nil && !scan.IsBlocked(err) {
+			h.internalError(w, r, err)
+			return
+		}
+		redirect = err == nil
 	}
 	if e.IsLFS() && !e.Present {
 		h.serveNotPresent(w, r, rp, sha, e)
 		return
 	}
-	if e.IsLFS() && h.d.Settings.RedirectDownloads {
+	if redirect {
 		u, err := h.d.LFS.PresignGet(ctx, e.LFS.OID, h.d.Settings.PresignTTL, path.Base(clean))
 		switch {
 		case err == nil:
@@ -172,37 +184,23 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	}
 }
 
-// allowDownload enforces scan.block_unsafe_downloads: with the setting
-// on, a file the scan marked unsafe downloads only with accept_risk=1, and
-// otherwise gets 403 with a message that says why and how to go ahead.
+// allowDownload enforces scan.block_unsafe_downloads through the shared
+// gate: with the setting on, a file the scan marked unsafe, or a file that
+// can run code and is not scanned yet, downloads only with accept_risk=1,
+// and otherwise gets 403 with a message that says why and how to go ahead.
 func (h *Handler) allowDownload(w http.ResponseWriter, r *http.Request, rp *repo.Repo, sha model.CommitSHA, filePath string) bool {
-	if h.d.BlockUnsafe == nil || httpx.QueryBool(r.URL.Query(), "accept_risk", false) {
+	if httpx.QueryBool(r.URL.Query(), "accept_risk", false) {
 		return true
 	}
-	ctx := r.Context()
-	block, err := h.d.BlockUnsafe(ctx)
-	if err != nil {
-		h.internalError(w, r, err)
+	err := h.d.Downloads.CheckFile(r.Context(), rp.UUID, rp.ID, sha, filePath)
+	if scan.IsBlocked(err) {
+		httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusForbidden,
+			Message: err.Error() + " To download it anyway, add accept_risk=1 to the URL."})
 		return false
-	}
-	if !block {
-		return true
-	}
-	res, err := h.d.Scan.Results(ctx, rp.UUID, sha)
-	if errors.Is(err, scan.ErrNotScanned) {
-		return true
 	}
 	if err != nil {
 		h.internalError(w, r, err)
 		return false
-	}
-	for _, f := range res.Files {
-		if f.Path == filePath && f.Status == scan.StatusUnsafe {
-			httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusForbidden,
-				Message: filePath + " is marked unsafe by Hangar's security scan: loading it can run code. " +
-					"An admin blocks unsafe downloads on this Instance. To download it anyway, add accept_risk=1 to the URL."})
-			return false
-		}
 	}
 	return true
 }

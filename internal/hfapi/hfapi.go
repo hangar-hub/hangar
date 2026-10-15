@@ -123,6 +123,9 @@ type Deps struct {
 	// scan marked unsafe answers 403 unless the request has accept_risk=1.
 	// Nil never blocks.
 	BlockUnsafe func(ctx context.Context) (bool, error)
+	// Downloads is the shared gate for that setting, so every protocol
+	// decides alike. Nil builds one from BlockUnsafe and Scan.
+	Downloads   *scan.Gate
 	Instruments *telemetry.Instruments
 	Log         *slog.Logger
 	// Now returns the current time; nil means time.Now.
@@ -180,6 +183,9 @@ func New(d Deps) (*Handler, error) {
 	if d.Settings.VerifyWait <= 0 {
 		d.Settings.VerifyWait = defaultVerifyWait
 	}
+	if d.Downloads == nil {
+		d.Downloads = &scan.Gate{Block: d.BlockUnsafe, Results: d.Scan.Results, Repos: d.Repos}
+	}
 	h := &Handler{d: d, log: d.Log, now: d.Now}
 	if h.log == nil {
 		h.log = slog.New(slog.DiscardHandler)
@@ -226,6 +232,9 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request, p reqPath) {
 		h.serveRepos(w, r, p.shift(1))
 	case "collections":
 		h.serveCollections(w, r, p.shift(1))
+	case "users":
+		h.route(w, r, "/api/users/{user}/likes", p.len() == 3 && p.at(2) == "likes", map[string]http.HandlerFunc{
+			http.MethodGet: func(w http.ResponseWriter, r *http.Request) { h.userLikes(w, r, p.at(1)) }})
 	case "models", "datasets":
 		t := model.RepoTypeModel
 		if p.segs[0] == "datasets" {

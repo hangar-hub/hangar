@@ -65,7 +65,7 @@ export function AdminSettingsPage() {
         />
         <Switch
           label="Block downloads of unsafe files"
-          hint="Files with unsafe pickle imports need explicit confirmation in the UI and are refused to API clients."
+          hint="Files with unsafe pickle imports, and pickle files not scanned yet, need explicit confirmation in the UI and are refused to API clients, git-lfs, Ollama and zip exports."
           checked={Boolean(s.scan_block_unsafe_downloads)}
           onCheckedChange={(v) => set({ scan_block_unsafe_downloads: v })}
         />

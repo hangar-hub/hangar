@@ -425,10 +425,30 @@ func TestAdminEndpoints(t *testing.T) {
 		e.user("alice", false)
 		root, alice := e.login("root"), e.login("alice")
 
-		for _, path := range []string{"/admin/users", "/admin/settings", "/admin/tokens", "/admin/audit"} {
+		for _, path := range []string{"/admin/users", "/admin/orgs", "/admin/settings", "/admin/tokens", "/admin/audit"} {
 			alice.do(http.MethodGet, "/api/hangar/v1"+path, nil, http.StatusForbidden, nil)
 			e.anon().do(http.MethodGet, "/api/hangar/v1"+path, nil, http.StatusUnauthorized, nil)
 		}
+
+		// Every Organisation, for the admin Organisations page.
+		for _, name := range []string{"acme", "beta"} {
+			alice.do(http.MethodPost, "/api/hangar/v1/orgs", map[string]any{"name": name}, http.StatusCreated, nil)
+		}
+		var orgs gen.AdminOrgList
+		root.do(http.MethodGet, "/api/hangar/v1/admin/orgs", nil, http.StatusOK, &orgs)
+		require.Len(t, orgs.Items, 2)
+		require.Equal(t, "acme", orgs.Items[0].Name)
+		require.Equal(t, 1, *orgs.Items[0].MemberCount, "the creator is a Member")
+		root.do(http.MethodGet, "/api/hangar/v1/admin/orgs?limit=1", nil, http.StatusOK, &orgs)
+		require.Len(t, orgs.Items, 1)
+		require.NotNil(t, orgs.NextCursor)
+		var last gen.AdminOrgList
+		root.do(http.MethodGet, "/api/hangar/v1/admin/orgs?limit=1&cursor="+*orgs.NextCursor, nil, http.StatusOK, &last)
+		require.Equal(t, "beta", last.Items[0].Name)
+		require.Nil(t, last.NextCursor)
+		root.do(http.MethodGet, "/api/hangar/v1/admin/orgs?q=ACM", nil, http.StatusOK, &orgs)
+		require.Len(t, orgs.Items, 1)
+		root.do(http.MethodGet, "/api/hangar/v1/admin/orgs?cursor=***", nil, http.StatusUnprocessableEntity, nil)
 
 		var u gen.AdminUser
 		root.do(http.MethodPost, "/api/hangar/v1/admin/users", map[string]any{"username": "dave", "email": "dave@example.com"}, http.StatusCreated, &u)

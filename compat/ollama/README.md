@@ -20,10 +20,10 @@ Runs the real Ollama client against Hangar's Ollama registry (DOWN-4, [08](../..
 
 ```sh
 go test -tags compat -count=1 ./compat/ollama/
-HANGAR_OLLAMA_BINARY=/usr/local/bin/ollama go test -tags compat -count=1 ./compat/ollama/
+HANGAR_BINARY=bin/hangar HANGAR_OLLAMA_BINARY=/usr/local/bin/ollama go test -tags compat -count=1 ./compat/ollama/
 ```
 
-The suite starts Hangar's Ollama registry in the test process, with the Repo service fake from `internal/repo/repotest` and a key verifier that checks Ollama's signatures the way `auth.OllamaStore` does. With a local binary, Ollama runs with its own temporary `HOME` and `OLLAMA_MODELS`, so it never touches your models or keys.
+The suite runs the real `hangar` binary with `compat/harness` (`HANGAR_BINARY`, or a build of `./cmd/hangar`), on SQLite and the filesystem Blob store with `security.anonymous_read` on, and seeds it through the native API: a user, a public and a private Repo, and the user's Ollama key, which `auth.OllamaStore` checks. A recording proxy in front of Hangar logs each request Ollama makes; it keeps the `Host` header, so the signed blob URLs point back at it. With a local binary, Ollama runs with its own temporary `HOME` and `OLLAMA_MODELS`, so it never touches your models or keys. CI runs the suite in the `compat` job of `.github/workflows/compat.yml` with the pinned image.
 
 ## Ollama limits
 

@@ -214,6 +214,11 @@ func (l *LFS) CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
+	if p.Resume && p.Multipart && p.UserID != uuid.Nil && p.RepoUUID != uuid.Nil {
+		if u, err := l.resumeUpload(ctx, p, ttl); err != nil || u != nil {
+			return u, err
+		}
+	}
 	id := db.NewID()
 	row := &db.Upload{ID: id, OID: p.OID, Size: p.Size, Kind: uploadKindLFS, StorageKey: model.LFSObjectKey(p.OID),
 		Parts: []db.UploadPart{}, ExpiresAt: l.now().Add(ttl)}
@@ -245,6 +250,26 @@ func (l *LFS) CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 			_ = l.blobs.AbortMultipart(context.WithoutCancel(ctx), row.StorageKey, row.UploadID)
 		}
 		return nil, fmt.Errorf("repo: record upload: %w", err)
+	}
+	return toUpload(row), nil
+}
+
+// resumeUpload returns the newest unexpired multipart upload that matches
+// p, with its expiry extended to ttl from now, or nil when there is none.
+func (l *LFS) resumeUpload(ctx context.Context, p UploadParams, ttl time.Duration) (*Upload, error) {
+	row := new(db.Upload)
+	err := l.db.NewSelect().Model(row).Where("oid = ?", p.OID).Where("size = ?", p.Size).Where("kind = ?", uploadKindLFS).
+		Where("part_size = ?", p.PartSize).Where("upload_id <> ''").Where("user_id = ?", p.UserID).Where("repo_id = ?", p.RepoUUID).
+		Where("expires_at > ?", l.now()).OrderExpr("created_at DESC").Limit(1).Scan(ctx)
+	if db.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("repo: find an upload to resume: %w", err)
+	}
+	row.ExpiresAt = l.now().Add(ttl)
+	if _, err := l.db.NewUpdate().Model(row).Column("expires_at").WherePK().Exec(ctx); err != nil {
+		return nil, fmt.Errorf("repo: extend upload: %w", err)
 	}
 	return toUpload(row), nil
 }

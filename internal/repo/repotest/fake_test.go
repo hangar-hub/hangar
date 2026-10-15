@@ -291,6 +291,18 @@ func TestLogDiffAndFileDiff(t *testing.T) {
 	_, err = f.FileDiff(ctx, modelID, two.SHA, "README.md")
 	require.ErrorIs(t, err, repo.ErrEntryNotFound)
 
+	// CompareFile spans Commits: from the initial Commit to two, a.txt is
+	// added with both lines.
+	cf, err := f.CompareFile(ctx, modelID, log[2].SHA, two.SHA, "a.txt")
+	require.NoError(t, err)
+	require.Equal(t, repo.ChangeAdded, cf.Status)
+	require.Contains(t, cf.Patch, "+line 1")
+	require.Contains(t, cf.Patch, "+line 2")
+	_, err = f.CompareFile(ctx, modelID, model.CommitSHA(strings.Repeat("0", 40)), two.SHA, "a.txt")
+	require.ErrorIs(t, err, repo.ErrRevisionNotFound)
+	_, err = f.CompareFile(ctx, model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "nope"}, log[2].SHA, two.SHA, "a.txt")
+	require.ErrorIs(t, err, repo.ErrNotFound)
+
 	// The root Commit diffs against the empty tree.
 	initial := log[2].SHA
 	rootChanges, err := f.Diff(ctx, modelID, initial)
@@ -668,4 +680,21 @@ func TestMapNamespace(t *testing.T) {
 	r, err = f.Transfer(ctx, r.ID, "other", actor)
 	require.NoError(t, err)
 	require.Equal(t, other, r.NamespaceID)
+}
+
+func TestFakeLFSResumeUpload(t *testing.T) {
+	ctx := context.Background()
+	f := repotest.NewFake(t)
+	oid := strings.Repeat("c", 64)
+	user, r1, r2 := uuid.New(), uuid.New(), uuid.New()
+	params := repo.UploadParams{OID: oid, Size: 24, Multipart: true, PartSize: 10, UserID: user, RepoUUID: r1, Resume: true}
+	up, err := f.LFS.CreateUpload(ctx, params)
+	require.NoError(t, err)
+	again, err := f.LFS.CreateUpload(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, up.ID, again.ID, "the user's upload in this Repo continues")
+	params.RepoUUID = r2
+	other, err := f.LFS.CreateUpload(ctx, params)
+	require.NoError(t, err)
+	require.NotEqual(t, up.ID, other.ID, "another Repo gets its own upload")
 }

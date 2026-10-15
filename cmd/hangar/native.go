@@ -51,7 +51,8 @@ func newNativeServer(in *instance) (*nativeServer, error) {
 		Upstreams: &api.Upstreams{Service: in.pulls, Client: in.client, Repos: in.repos, Authz: authz, Queue: in.queue, Log: in.log},
 	}
 	rd := api.RepoDeps{Repos: in.repos, LFS: in.lfs, Authz: authz, Orgs: in.orgs, Jobs: in.queue, Collections: in.collections,
-		NamespaceSearch: in.orgs, Community: in.community, Index: in.indexer, Scanner: in.scanner, PublicURL: cfg.Server.PublicURL,
+		NamespaceSearch: in.orgs, Community: in.community, Index: in.indexer, Scanner: in.scanner, Downloads: in.unsafeGate,
+		PublicURL:    cfg.Server.PublicURL,
 		UploadURLTTL: cfg.LFS.UploadURLTTL, InlineMax: cfg.HFAPI.RegularUploadMax.Int64(), Facets: true,
 		MirrorStatus: in.mirrorStatus, Log: in.log}
 	var err error
