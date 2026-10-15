@@ -169,7 +169,7 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
     if (status === 404 || status === 401) {
       return (
         <section aria-labelledby="page-title" className="space-y-4">
-          <h1 id="page-title" className="font-mono text-xl font-semibold">
+          <h1 id="page-title" className="font-mono text-xl font-semibold break-all">
             {kind === "dataset" ? "datasets/" : ""}
             {ns}/{name}
           </h1>

@@ -2,6 +2,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import { ScrollRegion } from "@/components/ScrollRegion";
 import { CodeView } from "./CodeView";
 import { supportedLanguage } from "./highlight";
 
@@ -28,6 +29,29 @@ export function isExternal(src: string, origin: string = window.location.origin)
   } catch {
     return false;
   }
+}
+
+type HastNode = { type: string; value?: string; tagName?: string; children?: HastNode[] };
+
+function hastText(n: HastNode): string {
+  return n.type === "text" ? (n.value ?? "") : (n.children ?? []).map(hastText).join("");
+}
+
+/**
+ * Names a table's scroll region after its header cells, so each table on a
+ * page is a distinct region: "Table: Metric, Value".
+ */
+export function tableLabel(table: HastNode | undefined): string {
+  const headers: string[] = [];
+  const walk = (n: HastNode) => {
+    if (n.tagName === "th") headers.push(hastText(n).trim());
+    else for (const c of n.children ?? []) walk(c);
+  };
+  if (table) walk(table);
+  const named = headers.filter(Boolean);
+  if (!named.length) return "Table";
+  const label = `Table: ${named.join(", ")}`;
+  return label.length > 80 ? `${label.slice(0, 79).trimEnd()}…` : label;
 }
 
 /**
@@ -80,6 +104,15 @@ export default function Markdown({
         >
           {children}
         </a>
+      );
+    },
+    table({ node, children }) {
+      // A wide table scrolls inside a region keyboard users can focus and
+      // scroll, rather than pushing the page sideways.
+      return (
+        <ScrollRegion label={tableLabel(node as HastNode | undefined)} className="my-3">
+          <table>{children}</table>
+        </ScrollRegion>
       );
     },
     pre({ node }) {

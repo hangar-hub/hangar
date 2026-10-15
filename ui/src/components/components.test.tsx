@@ -1,10 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DiffView, diffLines } from "@/features/files/DiffView";
 import { ApiError } from "@/lib/problem";
 import { PageShell } from "./PageShell";
 import { isSearchShortcut } from "./SearchPalette";
+import { Dialog } from "./ui/dialog";
 import { EmptyState, ErrorState, PermissionDenied } from "./ui/states";
 import { DataTable } from "./ui/table";
 
@@ -47,6 +49,29 @@ describe("states", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Arsenal" })).toBeInTheDocument();
     expect(screen.getByText("Discover a model to pull, or upload your own.")).toBeInTheDocument();
     expect(screen.getByText("Admins only.")).toBeInTheDocument();
+  });
+});
+
+describe("Dialog", () => {
+  it("focuses the first focusable element, or the one it is given", () => {
+    const { unmount } = render(
+      <Dialog open title="Plain">
+        <input aria-label="Field" />
+      </Dialog>,
+    );
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+    unmount();
+    // The search palette opens with focus in its input, so typing searches.
+    function WithInitialFocus() {
+      const ref = useRef<HTMLInputElement>(null);
+      return (
+        <Dialog open title="Search" initialFocus={ref}>
+          <input ref={ref} aria-label="Search Hangar" />
+        </Dialog>
+      );
+    }
+    render(<WithInitialFocus />);
+    expect(screen.getByRole("textbox", { name: "Search Hangar" })).toHaveFocus();
   });
 });
 
