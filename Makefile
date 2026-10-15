@@ -129,11 +129,11 @@ cover: ## Check Go coverage per package against the floors in 13-testing.md
 	./scripts/coverage.sh -tags integration
 
 .PHONY: e2e
-e2e: ui-deps ## Run Playwright against the mock server, or HANGAR_URL when set
+e2e: ui-deps ## Run Playwright against the mock server
 	cd ui && $(PNPM) exec playwright test
 
 .PHONY: e2e-real
-e2e-real: ui-deps ## Seed the running Hangar at HANGAR_URL and run the e2e-real flows (needs HANGAR_E2E_ADMIN_PASSWORD)
+e2e-real: ui-deps ## Seed the running Hangar at HANGAR_URL and its Upstream, then run the e2e-real suite (see ui/playwright.real.config.ts)
 	cd ui && $(PNPM) exec playwright test -c playwright.real.config.ts
 
 ## Packaging ---------------------------------------------------------------------------
