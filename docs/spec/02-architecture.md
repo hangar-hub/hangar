@@ -266,6 +266,8 @@ storage:
     use_path_style: false
     download_mode: redirect                 # redirect | proxy
     presign_ttl: 1h
+    retries: 5                              # resend a failed part or object upload; 0 = never
+    stall_timeout: 2m                       # cancel and retry a request that makes no progress
 
 security:
   instance_key: ""                          # 32-byte base64; encrypts stored secrets; required

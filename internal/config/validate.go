@@ -112,6 +112,12 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	if c.Storage.S3.PresignTTL < time.Minute || c.Storage.S3.PresignTTL > 7*24*time.Hour {
 		e.addf("storage.s3.presign_ttl must be between 1m and 168h (the S3 limit)")
 	}
+	if c.Storage.S3.Retries < 0 || c.Storage.S3.Retries > 20 {
+		e.addf("storage.s3.retries must be between 0 and 20")
+	}
+	if c.Storage.S3.StallTimeout < 10*time.Second {
+		e.addf("storage.s3.stall_timeout must be at least 10s")
+	}
 
 	// security
 	if c.Security.InstanceKey == "" {

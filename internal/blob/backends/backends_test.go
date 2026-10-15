@@ -61,3 +61,13 @@ func TestOpenS3(t *testing.T) {
 	_, err = backends.Open(context.Background(), cfg)
 	require.Error(t, err)
 }
+
+func TestS3OptionsRetries(t *testing.T) {
+	opts := backends.S3Options(config.S3Config{Retries: 3, StallTimeout: 5 * time.Minute})
+	require.Equal(t, 3, opts.Retries)
+	require.Equal(t, 5*time.Minute, opts.StallTimeout)
+	require.Equal(t, -1, backends.S3Options(config.S3Config{}).Retries, "storage.s3.retries 0 turns retries off")
+	def := config.Default().Storage.S3
+	require.Equal(t, 5, backends.S3Options(def).Retries)
+	require.Equal(t, 2*time.Minute, backends.S3Options(def).StallTimeout)
+}
