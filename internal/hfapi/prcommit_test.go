@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/community"
@@ -185,6 +186,39 @@ func TestCreatePRDiscardsPullRequestWhenCommitFails(t *testing.T) {
 		ndjson(t, header("Fix", string(base)), fileLine("a.txt", "b")))
 	require.Equal(t, http.StatusInternalServerError, r.StatusCode)
 	requireNoPullRequests(t, e, rp)
+}
+
+// undiscardable refuses every discard, as the Community service does when
+// someone commented on the pull request before the Commit failed.
+type undiscardable struct{ community.Service }
+
+func (undiscardable) Discard(context.Context, uuid.UUID, int) error {
+	return community.ErrNotDiscardable
+}
+
+func TestCreatePRClosesPullRequestThatCannotBeDiscarded(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, func(o *hfapitest.Options) {
+		o.Deps = func(d *hfapi.Deps) {
+			d.Repos = failingCommits{Service: d.Repos}
+			d.Community = undiscardable{Service: d.Community}
+		}
+	})
+	rp, base := seed(t, e, "alice", modelID("alice", "kept"), model.VisibilityPublic, map[string]string{"a.txt": "a"})
+	r := e.Request(t, http.MethodPost, "/api/models/alice/kept/commit/main?create_pr=1", "bob",
+		ndjson(t, header("Fix", string(base)), fileLine("a.txt", "b")))
+	require.Equal(t, http.StatusInternalServerError, r.StatusCode)
+
+	list, total, err := e.Community.List(context.Background(), rp.UUID, community.ListOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 1, total)
+	d, err := e.Community.Get(context.Background(), rp.UUID, list[0].Num)
+	require.NoError(t, err)
+	require.True(t, d.IsPullRequest())
+	require.Equal(t, community.StatusClosed, d.Status)
+	last := d.Events[len(d.Events)-1]
+	require.Equal(t, community.EventStatusChange, last.Type)
+	require.Contains(t, last.Body, "the commit that opened this pull request failed")
 }
 
 func TestCreatePROnMirror(t *testing.T) {
