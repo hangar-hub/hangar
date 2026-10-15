@@ -110,7 +110,8 @@ func TestCurrentCarriesResultsForUnchangedFiles(t *testing.T) {
 
 // TestCurrentWithoutScannedAncestor checks that nothing is carried when no
 // ancestor within reach is scanned, so every file the scan reads is
-// pending and the gate fails closed as before.
+// pending. The gate then takes the result of the same file in a scanned
+// Commit, and fails closed when there is none.
 func TestCurrentWithoutScannedAncestor(t *testing.T) {
 	d := dbtest.SQLite(t)
 	ctx := t.Context()
@@ -143,6 +144,11 @@ func TestCurrentWithoutScannedAncestor(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, v.From)
 	require.True(t, v.Pending("evil.pkl"))
-	g := s.NewGate(func(context.Context) (bool, error) { return true, nil })
-	require.Equal(t, scan.BlockNotScanned, blockedReason(t, g.CheckFile(ctx, r.UUID, id, head, "evil.pkl")))
+	// Without carried results the gate fails closed, and the same file in
+	// a scanned Commit (Gate.Scanned) decides it when one is stored.
+	block := func(context.Context) (bool, error) { return true, nil }
+	alone := &scan.Gate{Block: block, Results: s.Results, Repos: fake}
+	require.Equal(t, scan.BlockNotScanned, blockedReason(t, alone.CheckFile(ctx, r.UUID, id, head, "evil.pkl")))
+	g := s.NewGate(block)
+	require.Equal(t, scan.BlockUnsafe, blockedReason(t, g.CheckFile(ctx, r.UUID, id, head, "evil.pkl")))
 }
