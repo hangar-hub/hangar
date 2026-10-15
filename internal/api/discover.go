@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,21 @@ type Upstreams struct {
 	Authz   auth.Authz
 	Queue   jobs.Queue
 	Log     *slog.Logger
+	// UpdateCheckTimeout bounds how long GET .../mirror waits for the
+	// Upstream to say whether it has moved on. Past it, the answer leaves
+	// out update_available. Zero means DefaultUpdateCheckTimeout.
+	UpdateCheckTimeout time.Duration
+}
+
+// DefaultUpdateCheckTimeout is how long GET .../mirror waits, by default,
+// for the Upstream's answer to "has it moved on?".
+const DefaultUpdateCheckTimeout = 5 * time.Second
+
+func (h *Upstreams) updateCheckTimeout() time.Duration {
+	if h.UpdateCheckTimeout > 0 {
+		return h.UpdateCheckTimeout
+	}
+	return DefaultUpdateCheckTimeout
 }
 
 func (h *Upstreams) log() *slog.Logger {

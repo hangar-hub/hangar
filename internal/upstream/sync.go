@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
@@ -219,7 +218,8 @@ func (s *Service) Detach(ctx context.Context, p model.Principal, r *repo.Repo) e
 
 // UpdateAvailable reports whether the Upstream's tracked branch has moved
 // past the Mirror's last synced Commit. It asks the Upstream, so callers
-// use it on single-Repo views only.
+// use it on single-Repo views only, and bound it with ctx: the Client's
+// own request timeout is the only other limit.
 func (s *Service) UpdateAvailable(ctx context.Context, p model.Principal, r *repo.Repo) (bool, error) {
 	m, up, err := s.Mirror(ctx, r)
 	if err != nil || m.DetachedAt != nil || !up.Enabled {
@@ -229,8 +229,6 @@ func (s *Service) UpdateAvailable(ctx context.Context, p model.Principal, r *rep
 	if err != nil {
 		return false, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
 	info, err := s.opts.Client.RepoInfo(ctx, *up, cred, m.UpstreamRepo, m.TrackRef)
 	if err != nil {
 		return false, err

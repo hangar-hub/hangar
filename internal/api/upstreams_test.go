@@ -2,12 +2,17 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -17,7 +22,9 @@ import (
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/upstream"
 	"github.com/jamesagarside/hangar/internal/upstream/upstreamtest"
 )
 
@@ -37,12 +44,24 @@ type upstreamsEnv struct {
 
 type upstreamstest = upstreamtest.Harness
 
+// testUpdateCheckTimeout is the update check budget in tests that check
+// the value of update_available. The test Upstream runs git for each
+// answer, which takes more than the 5-second default on a loaded machine;
+// TestGetMirrorWithoutUpdateCheck covers the budget itself.
+const testUpdateCheckTimeout = time.Minute
+
 func newUpstreamsEnv(t *testing.T, d *db.DB) *upstreamsEnv {
 	t.Helper()
-	h := upstreamtest.NewHarness(t, d, upstreamtest.HarnessOptions{})
+	return newUpstreamsEnvWith(t, d, upstreamtest.HarnessOptions{}, func(u *api.Upstreams) { u.UpdateCheckTimeout = testUpdateCheckTimeout })
+}
+
+func newUpstreamsEnvWith(t *testing.T, d *db.DB, o upstreamtest.HarnessOptions, configure func(*api.Upstreams)) *upstreamsEnv {
+	t.Helper()
+	h := upstreamtest.NewHarness(t, d, o)
 	authn := authtest.NewAuthenticator()
-	handler := gen.HandlerWithOptions(upstreamsServer{Upstreams: &api.Upstreams{Service: h.Service, Client: h.Client, Repos: h.Repos, Authz: h.Authz,
-		Queue: h.Queue}}, gen.ChiServerOptions{BaseURL: "/api/hangar/v1"})
+	ups := &api.Upstreams{Service: h.Service, Client: h.Client, Repos: h.Repos, Authz: h.Authz, Queue: h.Queue}
+	configure(ups)
+	handler := gen.HandlerWithOptions(upstreamsServer{Upstreams: ups}, gen.ChiServerOptions{BaseURL: "/api/hangar/v1"})
 	chain := httpx.RequestIDs(httpx.Authenticate(authn, nil)(handler))
 	srv := httptest.NewServer(chain)
 	t.Cleanup(srv.Close)
@@ -226,6 +245,73 @@ func TestUpstreamsAPI(t *testing.T) {
 		require.Equal(t, http.StatusNoContent, code)
 		code, _ = e.do(t, "root", http.MethodGet, "/admin/upstreams/"+id, nil)
 		require.Equal(t, http.StatusNotFound, code)
+	})
+}
+
+// stallingInfo is an upstream.Client whose RepoInfo, once stalled, waits
+// for its context to end, as an Upstream that never answers would. It
+// reports how each stalled call ended on ended.
+type stallingInfo struct {
+	upstream.Client
+	stalled atomic.Bool
+	ended   chan stalledCall
+}
+
+type stalledCall struct {
+	budget time.Duration
+	err    error
+}
+
+func (c *stallingInfo) RepoInfo(ctx context.Context, u upstream.Upstream, cred upstream.Credentials, id model.RepoID, rev string) (*upstream.RepoInfo, error) {
+	if !c.stalled.Load() {
+		return c.Client.RepoInfo(ctx, u, cred, id, rev)
+	}
+	dl, ok := ctx.Deadline()
+	if !ok {
+		err := errors.New("the update check has no deadline")
+		c.ended <- stalledCall{err: err}
+		return nil, err
+	}
+	budget := time.Until(dl)
+	<-ctx.Done()
+	c.ended <- stalledCall{budget: budget, err: ctx.Err()}
+	return nil, ctx.Err()
+}
+
+// TestGetMirrorWithoutUpdateCheck: when the Upstream does not answer
+// within the update check budget, GET .../mirror still answers, without
+// update_available, and logs why.
+func TestGetMirrorWithoutUpdateCheck(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		client := &stallingInfo{Client: upstream.NewHTTPClient(upstream.HTTPOptions{Version: "test", BaseBackoff: time.Millisecond,
+			Sleep: func(context.Context, time.Duration) error { return nil }}), ended: make(chan stalledCall, 1)}
+		var logs bytes.Buffer
+		const budget = 200 * time.Millisecond
+		e := newUpstreamsEnvWith(t, d, upstreamtest.HarnessOptions{Client: client}, func(u *api.Upstreams) {
+			u.UpdateCheckTimeout = budget
+			u.Log = slog.New(slog.NewTextHandler(&logs, nil))
+		})
+		h := e.h
+		alice := h.User("alice")
+		e.authn.Add("alice", alice)
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "slow"}
+		h.Seed(id, map[string][]byte{"config.json": []byte(`{}`)}, nil)
+		jid, _, err := h.Service.StartPull(h.Ctx, upstream.PullRequest{Repo: id, Actor: alice})
+		require.NoError(t, err)
+		h.Run(10)
+		require.Equal(t, jobs.StatusSucceeded, h.Job(jid).Status, h.Job(jid).Error)
+
+		client.stalled.Store(true)
+		code, body := e.do(t, "alice", http.MethodGet, "/repos/models/acme/slow/mirror", nil)
+		require.Equal(t, http.StatusOK, code, body)
+		require.Equal(t, "acme/slow", body["upstream_repo"])
+		require.Equal(t, "ok", body["status"])
+		require.NotContains(t, body, "update_available", "an unanswered update check leaves the field out")
+		call := <-client.ended
+		require.ErrorIs(t, call.err, context.DeadlineExceeded)
+		require.LessOrEqual(t, call.budget, budget, "the handler bounds the update check")
+		require.Contains(t, logs.String(), "update check failed")
+		require.Contains(t, logs.String(), "acme/slow")
 	})
 }
 
