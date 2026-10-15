@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -330,6 +331,12 @@ func TestListAndSearchEndpoints(t *testing.T) {
 	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?limit=0", nil)
 	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?limit=501", nil)
 	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?params_min=-1", nil)
+	for _, p := range []string{"rows_min", "rows_max"} {
+		var problem map[string]any
+		f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?"+p+"=-1", nil).json(t, &problem)
+		require.Contains(t, fmt.Sprint(problem), p+" cannot be negative")
+	}
+	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?rows_min=ten", nil)
 	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?cursor=x", nil)
 	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?format=gguf", nil)
 	f.expect(http.StatusBadRequest, http.MethodGet, "bob", "/repos?type=spaces", nil)

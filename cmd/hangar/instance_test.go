@@ -226,10 +226,10 @@ func TestDatasetWiring(t *testing.T) {
 
 	// Before the export the index has no rows; the export queues another
 	// index Job, which records them and the size category (DATA-9).
-	rowsOf := datasetRows(in.layout, in.datasets)
-	_, _, ok, err := rowsOf(ctx, r.UUID, r.ID, head)
+	splitsOf := datasetSplits(in.datasets)
+	before, err := splitsOf(ctx, r.UUID, head)
 	require.NoError(t, err)
-	require.False(t, ok)
+	require.Empty(t, before)
 	pendingIndex := func() []*jobs.Job {
 		list, _, err := in.queue.List(ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindIndex}, Statuses: []jobs.Status{jobs.StatusPending}})
 		require.NoError(t, err)
@@ -244,18 +244,15 @@ func TestDatasetWiring(t *testing.T) {
 	again := pendingIndex()
 	require.Len(t, again, 1, "the export queues the index again")
 	require.Equal(t, r.UUID, again[0].Repo)
-	rows, category, ok, err := rowsOf(ctx, r.UUID, r.ID, head)
+	after, err := splitsOf(ctx, r.UUID, head)
 	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, int64(1), rows)
-	require.Equal(t, "n<1K", category)
+	require.Len(t, after, 1)
+	require.True(t, after[0].Converted)
+	require.Equal(t, int64(1), after[0].Rows)
 	sum, err := in.indexer.Index(ctx, r.UUID, r.ID, head)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), sum.Dataset.Rows)
 	require.Equal(t, "n<1K", sum.Dataset.SizeCategory)
-	_, _, ok, err = rowsOf(ctx, r.UUID, model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "missing"}, head)
-	require.NoError(t, err)
-	require.False(t, ok, "a missing dataset has no rows")
 
 	// With the viewer off there is no pipeline to queue for.
 	in.pipeline = nil

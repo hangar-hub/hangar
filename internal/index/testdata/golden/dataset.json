@@ -42,6 +42,42 @@
     "splits": {
       "default": 2
     },
+    "split_sizes": [
+      {
+        "config": "default",
+        "split": "train",
+        "num_rows": 1,
+        "num_bytes": 20,
+        "num_bytes_parquet": 600
+      },
+      {
+        "config": "default",
+        "split": "test",
+        "num_rows": 1,
+        "num_bytes": 25,
+        "num_bytes_parquet": 610
+      }
+    ],
+    "rows": 2,
+    "bytes": 45,
+    "features": {
+      "default": [
+        {
+          "name": "text",
+          "type": {
+            "dtype": "string",
+            "_type": "Value"
+          }
+        },
+        {
+          "name": "label",
+          "type": {
+            "dtype": "int64",
+            "_type": "Value"
+          }
+        }
+      ]
+    },
     "modalities": [
       "image",
       "tabular",

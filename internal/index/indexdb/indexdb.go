@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/jamesagarside/hangar/internal/datasets/meta"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/index"
 	"github.com/jamesagarside/hangar/internal/index/gguf"
@@ -46,16 +48,32 @@ type Options struct {
 	// Layout returns a dataset Commit's Configs and Split counts (DATA-9);
 	// optional. The datasets package provides it.
 	Layout func(ctx context.Context, id model.RepoID, commit model.CommitSHA) ([]string, map[string]int, error)
+	// DatasetSplits returns the converted Splits of a dataset Commit, from
+	// its Parquet export, for rows, bytes and features per Split (DATA-9);
+	// optional. The datasets package provides it.
+	DatasetSplits func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) ([]DatasetSplit, error)
 	// AfterIndex runs after a Job stores results, for example to enqueue
 	// dataset.convert; optional. Its error fails the Job so it is retried.
 	AfterIndex func(ctx context.Context, job index.CommitJob, s *index.Summary) error
-	// DatasetRows returns a dataset Commit's row count and its Hub size
-	// category from the Parquet export, with ok false until the export
-	// exists (DATA-9); optional. The size category from rows takes the
-	// place of the card's size_categories.
-	DatasetRows func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (rows int64, sizeCategory string, ok bool, err error)
 	// Window is the ranged read size; zero means 1 MiB.
 	Window int64
+}
+
+// DatasetSplit is one Split of a dataset Commit as the Parquet export
+// records it.
+type DatasetSplit struct {
+	Config string
+	Split  string
+	// Converted is true when the Split has a Parquet export; Partial when
+	// the export stopped at the size limit. Splits that are not converted
+	// have no sizes yet.
+	Converted    bool
+	Partial      bool
+	Rows         int64
+	Bytes        int64
+	ParquetBytes int64
+	// Features are the Split's columns, in order, or nil.
+	Features []index.FeatureColumn
 }
 
 // Service is the database-backed Indexer.
@@ -124,16 +142,8 @@ func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 	if err != nil {
 		return nil, err
 	}
-	if sum.Dataset != nil && s.o.DatasetRows != nil {
-		rows, category, ok, err := s.o.DatasetRows(ctx, repoUUID, id, commit)
-		switch {
-		case err != nil:
-			// The export may be in progress; the index after the export
-			// has the rows.
-			s.o.Log.WarnContext(ctx, "read dataset rows", "repo.id", id.String(), "commit", string(commit), "error", err.Error())
-		case ok:
-			setDatasetRows(sum, rows, category)
-		}
+	if _, err := s.applySplits(ctx, repoUUID, commit, sum); err != nil {
+		return nil, err
 	}
 	raw, err := json.Marshal(sum)
 	if err != nil {
@@ -152,7 +162,11 @@ func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 }
 
 // Get implements Indexer. It returns the newest stored version, so results
-// from an older indexer stay visible while re-indexing runs.
+// from an older indexer stay visible while re-indexing runs. A dataset's
+// Split sizes come from its Parquet export, which usually finishes after
+// the index Job, so Get adds sizes that are newer than the stored results
+// and stores them, because the export keeps rows only for the Commit it
+// last converted.
 func (s *Service) Get(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) (*index.Summary, error) {
 	var row db.Metadata
 	err := s.o.DB.NewSelect().Model(&row).Where("repo_id = ?", repoUUID).Where("commit_sha = ?", string(commit)).
@@ -167,7 +181,110 @@ func (s *Service) Get(ctx context.Context, repoUUID uuid.UUID, commit model.Comm
 	if err := json.Unmarshal(row.Summary, &sum); err != nil {
 		return nil, fmt.Errorf("decode index results: %w", err)
 	}
+	changed, err := s.applySplits(ctx, repoUUID, commit, &sum)
+	if err != nil {
+		return nil, err
+	}
+	if changed {
+		raw, err := json.Marshal(&sum)
+		if err != nil {
+			return nil, err
+		}
+		row.Summary, row.UpdatedAt = raw, db.Now()
+		_, err = s.o.DB.NewUpdate().Model(&row).Column("summary", "updated_at").WherePK().Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("store dataset sizes: %w", err)
+		}
+	}
 	return &sum, nil
+}
+
+// applySplits fills a dataset Summary's rows, bytes, features and size
+// category from the Parquet export, and reports whether they changed.
+// Commits the export has no Splits for keep what they have: the export
+// drops the rows of a Commit when it converts a newer one.
+func (s *Service) applySplits(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA, sum *index.Summary) (bool, error) {
+	d := sum.Dataset
+	if d == nil || s.o.DatasetSplits == nil {
+		return false, nil
+	}
+	splits, err := s.o.DatasetSplits(ctx, repoUUID, commit)
+	if err != nil {
+		return false, fmt.Errorf("dataset splits: %w", err)
+	}
+	var sizes []index.SplitSize
+	var rows, bytes int64
+	features := map[string][]index.FeatureColumn{}
+	complete := len(splits) > 0
+	for _, sp := range splits {
+		if !sp.Converted {
+			complete = false
+			continue
+		}
+		sizes = append(sizes, index.SplitSize{Config: sp.Config, Split: sp.Split, Rows: sp.Rows, Bytes: sp.Bytes,
+			ParquetBytes: sp.ParquetBytes, Partial: sp.Partial})
+		rows += sp.Rows
+		bytes += sp.Bytes
+		if sp.Partial {
+			complete = false
+		}
+		if _, ok := features[sp.Config]; !ok && len(sp.Features) > 0 {
+			features[sp.Config] = sp.Features
+		}
+	}
+	if len(sizes) == 0 {
+		return false, nil
+	}
+	if len(features) == 0 {
+		features = nil
+	}
+	before, err := json.Marshal(d)
+	if err != nil {
+		return false, err
+	}
+	d.SplitSizes, d.Rows, d.Bytes, d.Features = sizes, rows, bytes, features
+	if complete {
+		d.SizeCategory = meta.SizeCategory(rows)
+	}
+	syncSizeTag(sum)
+	after, err := json.Marshal(d)
+	if err != nil {
+		return false, err
+	}
+	return !sameJSON(before, after), nil
+}
+
+// sameJSON compares two JSON documents by value: Postgres jsonb returns
+// objects with their keys reordered and spaces added.
+func sameJSON(a, b []byte) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
+}
+
+// syncSizeTag keeps the size_categories tag equal to the size category.
+func syncSizeTag(sum *index.Summary) {
+	const prefix = "size_categories:"
+	tags := sum.Tags[:0:0]
+	at := -1
+	for _, t := range sum.Tags {
+		if strings.HasPrefix(t, prefix) {
+			if at < 0 {
+				at = len(tags)
+			}
+			continue
+		}
+		tags = append(tags, t)
+	}
+	if c := sum.Dataset.SizeCategory; c != "" {
+		if at < 0 {
+			at = len(tags)
+		}
+		tags = append(tags[:at], append([]string{prefix + c}, tags[at:]...)...)
+	}
+	sum.Tags = tags
 }
 
 // IndexedAt returns when a Commit was indexed, or index.ErrNotIndexed.
@@ -379,21 +496,4 @@ func plainValue(v gguf.Value) any {
 		return v.Items
 	}
 	return map[string]any{"type": "array", "length": v.Len}
-}
-
-// setDatasetRows records a dataset's row count and the size category it
-// gives, replacing the card's size_categories and its tag.
-func setDatasetRows(sum *index.Summary, rows int64, category string) {
-	sum.Dataset.Rows = rows
-	if category == "" || category == sum.Dataset.SizeCategory {
-		return
-	}
-	sum.Dataset.SizeCategory = category
-	tags := sum.Tags[:0:0]
-	for _, t := range sum.Tags {
-		if !strings.HasPrefix(t, "size_categories:") {
-			tags = append(tags, t)
-		}
-	}
-	sum.Tags = append(tags, "size_categories:"+category)
 }

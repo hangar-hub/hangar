@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +29,6 @@ import (
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/layout"
-	"github.com/jamesagarside/hangar/internal/datasets/meta"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
 	"github.com/jamesagarside/hangar/internal/datasets/viewer"
 	"github.com/jamesagarside/hangar/internal/db"
@@ -48,6 +48,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/secrets"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/jamesagarside/hangar/internal/upstream/deps"
 	"github.com/jamesagarside/hangar/internal/webhook"
 	"github.com/jamesagarside/hangar/internal/xet"
 )
@@ -223,12 +224,8 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	}
 
 	// Metadata, community and Collections (W7).
-	ixo := indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
-		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex}
-	if cfg.Viewer.Enabled {
-		ixo.DatasetRows = datasetRows(in.layout, in.datasets)
-	}
-	in.indexer = indexdb.New(ixo)
+	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
+		Layout: datasetLayout(in.layout), DatasetSplits: datasetSplits(in.datasets), AfterIndex: in.afterIndex})
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
 	// One gate enforces scan.block_unsafe_downloads for every protocol
 	// that serves file bytes.
@@ -526,43 +523,58 @@ func datasetLayout(l *layout.Service) func(ctx context.Context, id model.RepoID,
 	}
 }
 
-// datasetRows gives the index (W7) a dataset Commit's rows and size
-// category from its Parquet export (W10), once the export exists (DATA-9).
-func datasetRows(l *layout.Service, store *pipeline.Store) func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID,
-	commit model.CommitSHA) (int64, string, bool, error) {
-	return func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (int64, string, bool, error) {
-		res, err := l.Resolve(ctx, id, commit)
-		if errors.Is(err, datasets.ErrNotFound) {
-			return 0, "", false, nil
-		}
-		if err != nil {
-			return 0, "", false, err
-		}
-		infos := make([]*pipeline.ConfigInfo, 0, len(res.Configs))
-		for _, c := range res.Configs {
-			info, err := store.Info(ctx, repoUUID, commit, c.Name)
-			if errors.Is(err, pipeline.ErrNoInfo) {
-				return 0, "", false, nil
-			}
-			if err != nil {
-				return 0, "", false, err
-			}
-			infos = append(infos, info)
-		}
-		if len(infos) == 0 {
-			return 0, "", false, nil
-		}
-		s := meta.Summarise(nil, infos)
-		return s.NumRows, s.SizeCategory, true, nil
-	}
-}
-
 // reindexExported indexes a dataset Commit again once its Parquet export
 // is stored (W10), so the index has its rows and size category (DATA-9).
 func (in *instance) reindexExported(ctx context.Context, r *repo.Repo, commit model.CommitSHA) error {
 	job := index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: commit}
 	_, err := in.queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: job.DedupeKey(), Payload: job, Repo: r.UUID})
 	return err
+}
+
+// datasetSplits gives the index (W7) rows, bytes and features per Split
+// from W10's Parquet export (DATA-9).
+func datasetSplits(st *pipeline.Store) func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) ([]indexdb.DatasetSplit, error) {
+	return func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) ([]indexdb.DatasetSplit, error) {
+		rows, err := st.Splits(ctx, repoUUID, commit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]indexdb.DatasetSplit, 0, len(rows))
+		for _, r := range rows {
+			if r.Config == pipeline.DatasetLevel && r.Split == pipeline.DatasetLevel {
+				continue
+			}
+			sp := indexdb.DatasetSplit{Config: r.Config, Split: r.Split, Converted: r.Ready(), Partial: r.Status == pipeline.StatusPartial,
+				Rows: r.NumRows, Bytes: r.NumBytesSource, ParquetBytes: r.NumBytesParquet}
+			for _, f := range r.Features {
+				typ, err := json.Marshal(f.Feature)
+				if err != nil {
+					return nil, err
+				}
+				sp.Features = append(sp.Features, index.FeatureColumn{Name: f.Name, Type: typ})
+			}
+			out = append(out, sp)
+		}
+		return out, nil
+	}
+}
+
+// datasetModels lists the models whose cards name a dataset, at their
+// default branch heads, that p can read (DATA-9), from W6's Dependencies.
+func datasetModels(pulls *upstream.Service) func(ctx context.Context, p model.Principal, r *repo.Repo) ([]model.RepoID, error) {
+	return func(ctx context.Context, p model.Principal, r *repo.Repo) ([]model.RepoID, error) {
+		needed, err := pulls.NeededBy(ctx, p, r)
+		if err != nil {
+			return nil, err
+		}
+		var out []model.RepoID
+		for _, n := range needed {
+			if n.Kind == deps.KindDataset && n.Repo.Type == model.RepoTypeModel && !slices.ContainsFunc(out, n.Repo.Equal) {
+				out = append(out, n.Repo)
+			}
+		}
+		return out, nil
+	}
 }
 
 // mirrorStatus fills mirror_status on native Repo responses (W2) from the

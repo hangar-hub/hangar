@@ -357,7 +357,8 @@ func (a *ReposAPI) ListRepos(w http.ResponseWriter, r *http.Request, params gen.
 		src  *int64
 		name string
 	}{{&opts.ParamsMin, params.ParamsMin, "params_min"}, {&opts.ParamsMax, params.ParamsMax, "params_max"},
-		{&opts.ContextMin, params.ContextMin, "context_min"}, {&opts.SizeMax, params.SizeMax, "size_max"}} {
+		{&opts.ContextMin, params.ContextMin, "context_min"}, {&opts.SizeMax, params.SizeMax, "size_max"},
+		{&opts.RowsMin, params.RowsMin, "rows_min"}, {&opts.RowsMax, params.RowsMax, "rows_max"}} {
 		if v.src != nil {
 			if *v.src < 0 {
 				badRequest(w, r, v.name, v.name+" cannot be negative")

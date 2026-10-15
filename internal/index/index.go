@@ -82,18 +82,56 @@ type GGUF struct {
 	EOSToken      string `json:"eos_token,omitempty"`
 }
 
+// SplitSize is the size of one converted Split (DATA-9), from the dataset
+// Parquet export.
+type SplitSize struct {
+	Config string `json:"config"`
+	Split  string `json:"split"`
+	// Rows is the number of rows, and Bytes the size of the source data.
+	Rows         int64 `json:"num_rows"`
+	Bytes        int64 `json:"num_bytes"`
+	ParquetBytes int64 `json:"num_bytes_parquet"`
+	// Partial means the export stopped at the conversion size limit, so
+	// Rows and the byte counts cover only the rows it holds.
+	Partial bool `json:"partial,omitempty"`
+}
+
+// FeatureColumn is one column of a dataset Config's features: its name and
+// its type in the `datasets` library's JSON form. Features are a list, not
+// a JSON object, because Postgres stores the index as jsonb, which does
+// not keep the order of object keys, and column order matters.
+type FeatureColumn struct {
+	Name string          `json:"name"`
+	Type json.RawMessage `json:"type"`
+}
+
 // DatasetSummary is the dataset part of the index (DATA-9).
 type DatasetSummary struct {
-	Configs      []string       `json:"configs,omitempty"`
-	Splits       map[string]int `json:"splits,omitempty"`
-	Rows         int64          `json:"rows,omitempty"`
-	Modalities   []string       `json:"modalities,omitempty"`
-	Formats      []string       `json:"formats,omitempty"`
-	Tasks        []string       `json:"task_categories,omitempty"`
-	Languages    []string       `json:"languages,omitempty"`
-	SizeCategory string         `json:"size_category,omitempty"`
-	PrettyName   string         `json:"pretty_name,omitempty"`
-	TrainedBy    []string       `json:"models,omitempty"`
+	Configs []string `json:"configs,omitempty"`
+	// Splits counts the Splits of each Config.
+	Splits map[string]int `json:"splits,omitempty"`
+	// SplitSizes holds rows and bytes per Split once the dataset is
+	// converted to Parquet, in the conversion's order.
+	SplitSizes []SplitSize `json:"split_sizes,omitempty"`
+	// Rows and Bytes total SplitSizes.
+	Rows  int64 `json:"rows,omitempty"`
+	Bytes int64 `json:"bytes,omitempty"`
+	// Features maps each converted Config to its columns, in order.
+	Features   map[string][]FeatureColumn `json:"features,omitempty"`
+	Modalities []string                   `json:"modalities,omitempty"`
+	Formats    []string                   `json:"formats,omitempty"`
+	Tasks      []string                   `json:"task_categories,omitempty"`
+	Languages  []string                   `json:"languages,omitempty"`
+	// SizeCategory is the Hub's size_categories bucket, such as
+	// `1K<n<10K`: computed from Rows when every Split is fully converted,
+	// otherwise the card's value.
+	SizeCategory string `json:"size_category,omitempty"`
+	PrettyName   string `json:"pretty_name,omitempty"`
+	// TrainedBy lists the model Repos whose cards list this dataset, at
+	// their default branch heads. It is never stored: it changes when
+	// other Repos change, and depends on who is reading, so the native API
+	// fills it for each request with the models the caller can read.
+	TrainedBy []string `json:"models,omitempty"`
 }
 
 // Summary is the index of one Commit (the metadata.summary column).
@@ -116,6 +154,9 @@ type Summary struct {
 	GGUF          *GGUF           `json:"gguf,omitempty"`
 	Config        json.RawMessage `json:"config,omitempty"`
 	Dataset       *DatasetSummary `json:"dataset,omitempty"`
+	// Datasets lists the datasets a model card names in its `datasets`
+	// metadata (DATA-9), the reverse of DatasetSummary.TrainedBy.
+	Datasets []string `json:"datasets,omitempty"`
 }
 
 // QuantGroup is one entry in the GGUF quant picker (PULL-4): every file of a

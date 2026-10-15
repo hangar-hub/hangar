@@ -37,7 +37,7 @@ const (
 func (o ListOptions) needsFacts() bool {
 	return len(o.Formats)+len(o.Tasks)+len(o.Libraries)+len(o.Quants)+len(o.Licences)+
 		len(o.Modalities)+len(o.Languages)+len(o.SizeCategories) > 0 ||
-		o.ParamsMin > 0 || o.ParamsMax > 0 || o.ContextMin > 0 || o.IncludeFacets ||
+		o.ParamsMin > 0 || o.ParamsMax > 0 || o.ContextMin > 0 || o.RowsMin > 0 || o.RowsMax > 0 || o.IncludeFacets ||
 		o.Sort == "parameters" || o.Sort == "downloads" || o.Sort == "likes"
 }
 
@@ -274,7 +274,7 @@ type repoFacts struct {
 	formats, tasks, libraries, quants, licences []string
 	modalities, languages                       []string
 	sizeCategory                                string
-	parameters, contextLength                   int64
+	parameters, contextLength, rows             int64
 	downloads, likes                            int64
 }
 
@@ -336,6 +336,7 @@ func (f *repoFacts) fromSummary(sum *index.Summary) {
 		f.modalities = d.Modalities
 		f.languages = d.Languages
 		f.sizeCategory = d.SizeCategory
+		f.rows = d.Rows
 		f.tasks = append(f.tasks, d.Tasks...)
 		for _, fm := range d.Formats {
 			if !slices.Contains(f.formats, fm) {
@@ -370,6 +371,8 @@ func (f repoFacts) matches(o ListOptions) bool {
 	case o.ParamsMin > 0 && f.parameters < o.ParamsMin, o.ParamsMax > 0 && (f.parameters == 0 || f.parameters > o.ParamsMax):
 		return false
 	case o.ContextMin > 0 && f.contextLength < o.ContextMin:
+		return false
+	case o.RowsMin > 0 && f.rows < o.RowsMin, o.RowsMax > 0 && (f.rows == 0 || f.rows > o.RowsMax):
 		return false
 	}
 	return true

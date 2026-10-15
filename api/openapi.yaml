@@ -236,6 +236,8 @@ paths:
         - {name: modality, in: query, schema: {type: string}}
         - {name: language, in: query, schema: {type: string}}
         - {name: size_category, in: query, schema: {type: string}}
+        - {name: rows_min, in: query, description: Datasets with at least this many rows. Rows are known once a dataset is converted to Parquet., schema: {type: integer, format: int64}}
+        - {name: rows_max, in: query, description: Datasets with at most this many rows. Datasets whose rows are not known yet do not match., schema: {type: integer, format: int64}}
         - {name: sort, in: query, schema: {type: string, enum: [updated, name, size, parameters, downloads, likes]}}
         - {$ref: "#/components/parameters/Cursor"}
         - {$ref: "#/components/parameters/Limit"}

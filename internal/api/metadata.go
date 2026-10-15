@@ -55,7 +55,10 @@ type MetaDeps struct {
 	Webhooks    WebhookStore
 	// Audit records webhook changes; optional.
 	Audit audit.Recorder
-	Log   *slog.Logger
+	// DatasetModels lists the models whose cards name a dataset, at their
+	// default branch heads, that p can read (DATA-9); optional.
+	DatasetModels func(ctx context.Context, p model.Principal, r *repo.Repo) ([]model.RepoID, error)
+	Log           *slog.Logger
 }
 
 func (d *MetaDeps) init() error {
@@ -224,6 +227,21 @@ func (a *MetadataAPI) GetRepoMetadata(w http.ResponseWriter, r *http.Request, pT
 	case err != nil:
 		a.d.metaProblem(w, r, err)
 		return
+	}
+	if sum.Dataset != nil && a.d.DatasetModels != nil {
+		models, err := a.d.DatasetModels(r.Context(), httpx.Principal(r.Context()), rp)
+		if err != nil {
+			a.d.metaProblem(w, r, err)
+			return
+		}
+		// Copy, so the index's own value is never changed.
+		ds, withModels := *sum.Dataset, *sum
+		ds.TrainedBy = nil
+		for _, m := range models {
+			ds.TrainedBy = append(ds.TrainedBy, m.String())
+		}
+		withModels.Dataset = &ds
+		sum = &withModels
 	}
 	raw, err := json.Marshal(sum)
 	if err != nil {

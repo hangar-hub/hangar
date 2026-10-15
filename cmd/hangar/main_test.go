@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -279,6 +281,78 @@ func TestReadyzReportsSchemaAndBlobStore(t *testing.T) {
 	b, err := json.Marshal(failed)
 	require.NoError(t, err)
 	require.NotContains(t, string(b), cfg.Database.DSN, "failures do not reveal the DSN")
+}
+
+func TestReadyzFailsUntilTheInstanceHasStarted(t *testing.T) {
+	cfg := testConfig(t)
+	ctx := context.Background()
+	d, err := openDatabase(ctx, cfg, false)
+	require.NoError(t, err)
+	defer d.Close()
+	require.NoError(t, d.Migrate(ctx))
+	blobs := newEmptyBlobs()
+	require.NoError(t, ensureSentinel(ctx, blobs))
+	var started atomic.Bool
+	h := newHealth(d, blobs, startupCheck(&started))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "the server is still starting")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	require.Equal(t, http.StatusOK, rec.Code, "liveness does not wait for startup")
+
+	started.Store(true)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+}
+
+// TestFirstReadyAnswerServesEveryRoute polls /readyz from the moment the
+// port opens, as compat/harness and load balancers do, and checks that the
+// first 200 means the API is served: before, /readyz answered 200 while the
+// starting handler still answered 404 to everything else.
+func TestFirstReadyAnswerServesEveryRoute(t *testing.T) {
+	cfg := testConfig(t)
+	port, err := freePort()
+	require.NoError(t, err)
+	cfg.Server.Listen = "127.0.0.1:" + strconv.Itoa(port)
+	base := "http://" + cfg.Server.Listen
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, io.Discard, nil) }()
+	t.Cleanup(func() {
+		cancel()
+		require.NoError(t, <-done)
+	})
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		require.True(t, time.Now().Before(deadline), "/readyz did not answer 200 within 60 seconds")
+		resp, err := client.Get(base + "/readyz")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+	resp, err := client.Get(base + "/api/hangar/v1/me")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode, "the native API is served once /readyz answers 200")
+}
+
+func freePort() (int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port, nil
 }
 
 // TestEveryCommandTakesJSON walks the whole binary's command tree, the

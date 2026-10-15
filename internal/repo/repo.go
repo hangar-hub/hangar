@@ -132,10 +132,13 @@ type ListOptions struct {
 	ContextMin int64
 	SizeMax    int64
 	Tags       []string
-	// Dataset filters (DATA-11).
+	// Dataset filters (DATA-11). RowsMin and RowsMax bound a dataset's
+	// row count, known once its Parquet export exists; zero means no bound.
 	Modalities     []string
 	Languages      []string
 	SizeCategories []string
+	RowsMin        int64
+	RowsMax        int64
 	IncludeFacets  bool
 	// Sort is one of updated, created, name, size, parameters, downloads, likes.
 	Sort string

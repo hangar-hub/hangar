@@ -81,7 +81,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | DATA-6 | Done | mock Viewer flow; real-Instance Viewer flow |
 | DATA-7 | Done | `internal/upstream` dataset Discover tests |
 | DATA-8 | Done | `internal/upstream` dataset selection tests |
-| DATA-9 | Done | `internal/index` dataset summary; `internal/index/indexdb` `TestDatasetRowsReplaceTheCardSizeCategory`; `internal/datasets/pipeline` `TestAfterConvertRunsOncePerExport`; `cmd/hangar` `TestDatasetWiring` |
+| DATA-9 | Done | `internal/index` dataset summary; `internal/index/indexdb` `TestDatasetSplitSizesFollowTheParquetExport` and `TestModelCardDatasetsAreIndexed`; `internal/datasets/pipeline` `TestAfterConvertRunsOncePerExport`; `cmd/hangar` `TestDatasetWiring` |
 | DATA-10 | Done | `internal/datasets/croissant` |
 | DATA-11 | Done | `internal/repo` list filters on the dataset summary; mock Arsenal facets |
 | DATA-12 | Done | `internal/cli` dataset tests |

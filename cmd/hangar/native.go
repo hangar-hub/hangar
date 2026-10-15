@@ -69,7 +69,7 @@ func newNativeServer(in *instance) (*nativeServer, error) {
 		return nil, err
 	}
 	md := api.MetaDeps{Repos: in.repos, Authz: authz, Orgs: in.orgs, Index: in.indexer, Scanner: in.scanner, Community: in.community,
-		Collections: in.collections, Webhooks: in.webhooks, Audit: in.audit, Log: in.log}
+		Collections: in.collections, Webhooks: in.webhooks, Audit: in.audit, DatasetModels: datasetModels(in.pulls), Log: in.log}
 	if s.MetadataAPI, err = api.NewMetadataAPI(md); err != nil {
 		return nil, err
 	}

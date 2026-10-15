@@ -3370,6 +3370,10 @@ export interface operations {
                 modality?: string;
                 language?: string;
                 size_category?: string;
+                /** @description Datasets with at least this many rows. Rows are known once a dataset is converted to Parquet. */
+                rows_min?: number;
+                /** @description Datasets with at most this many rows. Datasets whose rows are not known yet do not match. */
+                rows_max?: number;
                 sort?: "updated" | "name" | "size" | "parameters" | "downloads" | "likes";
                 /** @description Opaque cursor from a previous page. */
                 cursor?: components["parameters"]["Cursor"];

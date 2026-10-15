@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/db"
@@ -51,7 +52,7 @@ func fixtures() []fixture {
 	return []fixture{
 		{name: "bert", typ: model.RepoTypeModel, files: func(t testing.TB) map[string][]byte {
 			return map[string][]byte{
-				"README.md":             []byte("---\nlicense: apache-2.0\ntags:\n- test\n---\n# Tiny BERT\n"),
+				"README.md":             []byte("---\nlicense: apache-2.0\ntags:\n- test\ndatasets:\n- fixtures/dataset\n- wikipedia\n---\n# Tiny BERT\n"),
 				"config.json":           []byte(`{"architectures":["BertModel"],"model_type":"bert","max_position_embeddings":512,"vocab_size":1124}`),
 				"tokenizer_config.json": []byte(`{"cls_token":"[CLS]","sep_token":"[SEP]","mask_token":"[MASK]","pad_token":"[PAD]","unk_token":"[UNK]"}`),
 				"model.safetensors":     indextest.Safetensors(t, map[string]string{"format": "pt"}, st("embeddings.word_embeddings.weight", "F32", 1124, 32), st("embeddings.position_ids", "I64", 1, 512)),
@@ -177,7 +178,16 @@ func indexFixture(t *testing.T, d *db.DB, f fixture) *index.Summary {
 	layout := func(context.Context, model.RepoID, model.CommitSHA) ([]string, map[string]int, error) {
 		return []string{"default"}, map[string]int{"default": 2}, nil
 	}
-	svc := indexdb.New(indexdb.Options{DB: d, Repos: fake, Layout: layout, Window: 64})
+	// The dataset fixture's Parquet export: two Splits with their sizes.
+	splits := func(context.Context, uuid.UUID, model.CommitSHA) ([]indexdb.DatasetSplit, error) {
+		cols := []index.FeatureColumn{{Name: "text", Type: json.RawMessage(`{"dtype":"string","_type":"Value"}`)},
+			{Name: "label", Type: json.RawMessage(`{"dtype":"int64","_type":"Value"}`)}}
+		return []indexdb.DatasetSplit{
+			{Config: "default", Split: "train", Converted: true, Rows: 1, Bytes: 20, ParquetBytes: 600, Features: cols},
+			{Config: "default", Split: "test", Converted: true, Rows: 1, Bytes: 25, ParquetBytes: 610, Features: cols},
+		}, nil
+	}
+	svc := indexdb.New(indexdb.Options{DB: d, Repos: fake, Layout: layout, DatasetSplits: splits, Window: 64})
 	sum, err := svc.Index(ctx, r.UUID, id, sha)
 	require.NoError(t, err)
 	got, err := svc.Get(ctx, r.UUID, sha)

@@ -142,7 +142,7 @@ How the integration lead resolved every item in `requests/*.md` in phase 2, on b
 | 1. Interface changes | Accepted. |
 | 2. Wiring | Applied; the Viewer and pipeline exist only with `viewer.enabled`. |
 | 3. Triggers | Applied: `dataset.convert` after the index of a dataset's default-branch head; user Commits to `refs/convert/*` are refused (`repo.Store`, so the Hub API and native API too; pushes were already refused). |
-| 4. DATA-9 and DATA-11 summaries | Applied: the index gets each Config and its Split count, formats, modalities, tasks, languages and pretty name from the files and card, and, once the Parquet export exists, the rows and the size category they give (`indexdb.Options.DatasetRows`, re-indexed by the pipeline's `AfterConvert`). `repo.List` filters on them. |
+| 4. DATA-9 and DATA-11 summaries | Applied: the index gets each Config and its Split count, formats, modalities, tasks, languages and pretty name from the files and card, and, once the Parquet export exists, rows, bytes and columns per Split and the size category the rows give (`indexdb.Options.DatasetSplits`, re-indexed by the pipeline's `AfterConvert`), and the models whose cards name the dataset. `repo.List` filters on them, including `rows_min` and `rows_max`. |
 | 5. CLI | Applied (W9). |
 | 6. UI | Accepted. |
 | 7. DuckDB note | Applied (W9's `docs/guides/datasets.md`). |

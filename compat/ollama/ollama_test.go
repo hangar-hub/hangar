@@ -5,8 +5,12 @@
 // latest, show, a one-token generation, a private Repo with a registered
 // key, and blobs served directly with no cross-host redirect.
 //
-// Hangar is the real binary (compat/harness), seeded through its native
-// API. Ollama runs from a local binary of the pinned version when
+// Every scenario runs against each target: the registry in the test
+// process over the Repo service fake, and the hangar binary (built from
+// ./cmd/hangar, or HANGAR_BINARY) on SQLite and, with Postgres tests on, on
+// Postgres, so the wiring in cmd/hangar is checked as well as the package.
+//
+// Ollama runs from a local binary of the pinned version when
 // HANGAR_OLLAMA_BINARY names one or `ollama` on PATH is that version, and
 // otherwise from the pinned ollama/ollama image.
 package ollama_test
@@ -21,8 +25,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,9 +37,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/compat/harness"
+	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
+	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/ollama"
 )
 
@@ -80,12 +83,44 @@ func sha(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// instance is the real hangar binary behind a recording proxy, which logs
-// every request Ollama makes and its status. The proxy keeps the Host
-// header, so the signed blob URLs Hangar returns point back at it.
-type instance struct {
-	*harness.Instance
-	addr     string
+// owner is the User who owns the test Repos and registers the Ollama key.
+const owner = "alice"
+
+// target is a Hangar Instance the scenarios run against.
+type target interface {
+	// addr is the host and port Ollama connects to.
+	addr() string
+	// createRepo creates a model Repo owned by owner and commits files.
+	createRepo(t *testing.T, id model.RepoID, vis model.Visibility, files map[string][]byte)
+	// registerKey registers an Ollama public key, in authorized_keys
+	// form, for owner.
+	registerKey(t *testing.T, authorizedKey string)
+	// log returns a line per request Ollama sent: the status, method,
+	// path, whether the URL was signed, and the Range header.
+	log() []string
+}
+
+// targetFactory starts a target listening on listen.
+type targetFactory struct {
+	name  string
+	start func(t *testing.T, listen string) target
+}
+
+// targets lists the Instances to test: the Ollama registry in the test
+// process, and the hangar binary on SQLite and, when Postgres tests are on
+// (HANGAR_TEST_POSTGRES=1 or HANGAR_TEST_POSTGRES_DSN), on Postgres.
+func targets(t *testing.T) []targetFactory {
+	out := []targetFactory{{"in-process", startInProcess}, {"binary-sqlite", startBinarySQLite}}
+	if dbtest.PostgresEnabled() {
+		out = append(out, targetFactory{"binary-postgres", startBinaryPostgres})
+	} else {
+		t.Logf("binary-postgres not run: set %s=1 or %s to run it", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
+	}
+	return out
+}
+
+// recorder records a line per request for target.log.
+type recorder struct {
 	mu       sync.Mutex
 	statuses []string
 }
@@ -108,40 +143,25 @@ func (w *statusWriter) Flush() {
 
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-func startInstance(t *testing.T, listen string) *instance {
-	t.Helper()
-	// Public Repos are readable without an Ollama key, as on the Hub.
-	in := &instance{Instance: harness.Start(t, harness.Options{Set: []string{"security.anonymous_read=true"}})}
-	target, err := url.Parse(in.URL)
-	require.NoError(t, err)
-	proxy := &httputil.ReverseProxy{Rewrite: func(pr *httputil.ProxyRequest) {
-		pr.SetURL(target)
-		pr.Out.Host = pr.In.Host
-	}}
-	record := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// wrap records every request next serves.
+func (rec *recorder) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		proxy.ServeHTTP(sw, r)
-		in.mu.Lock()
+		next.ServeHTTP(sw, r)
 		signed := ""
 		if r.URL.Query().Get(httpx.SigParam) != "" {
 			signed = " signed"
 		}
-		in.statuses = append(in.statuses, fmt.Sprintf("%d %s %s%s range=%q", sw.status, r.Method, r.URL.Path, signed, r.Header.Get("Range")))
-		in.mu.Unlock()
+		rec.mu.Lock()
+		rec.statuses = append(rec.statuses, fmt.Sprintf("%d %s %s%s range=%q", sw.status, r.Method, r.URL.Path, signed, r.Header.Get("Range")))
+		rec.mu.Unlock()
 	})
-	ln, err := net.Listen("tcp", listen)
-	require.NoError(t, err)
-	srv := &http.Server{Handler: record, ReadHeaderTimeout: 30 * time.Second}
-	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { _ = srv.Close() })
-	in.addr = ln.Addr().String()
-	return in
 }
 
-func (in *instance) log() []string {
-	in.mu.Lock()
-	defer in.mu.Unlock()
-	return append([]string(nil), in.statuses...)
+func (rec *recorder) log() []string {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	return append([]string(nil), rec.statuses...)
 }
 
 // runner runs Ollama commands, locally or in a container.
@@ -291,21 +311,33 @@ func generate(t *testing.T, r runner, name string) string {
 
 func TestOllamaClient(t *testing.T) {
 	model260K := fixture(t)
-	var r runner
-	listen := "127.0.0.1:0"
-	if bin := localOllama(); bin != "" {
-		r = startLocal(t, bin)
-	} else {
-		listen = "0.0.0.0:0"
-		r = startDocker(t)
+	for _, f := range targets(t) {
+		t.Run(f.name, func(t *testing.T) {
+			r, listen := startRunner(t)
+			scenarios(t, r, f.start(t, listen), model260K)
+		})
 	}
-	in := startInstance(t, listen)
-	_, port, _ := net.SplitHostPort(in.addr)
+}
+
+// startRunner starts an Ollama with an empty model store and a new key,
+// so each target's pulls download every layer and the private Repo check
+// starts from an unregistered key. It returns the address the target must
+// listen on for that Ollama to reach it.
+func startRunner(t *testing.T) (runner, string) {
+	t.Helper()
+	if bin := localOllama(); bin != "" {
+		return startLocal(t, bin), "127.0.0.1:0"
+	}
+	return startDocker(t), "0.0.0.0:0"
+}
+
+// scenarios runs the client checks against one target.
+func scenarios(t *testing.T, r runner, in target, model260K []byte) {
+	_, port, _ := net.SplitHostPort(in.addr())
 	host := r.host(port)
 
-	admin := in.AdminToken(t)
-	alice := in.CreateUser(t, admin, "alice")
-	in.CommitFiles(t, alice, "model", "alice", "Tiny-Stories-GGUF", "public", map[string][]byte{
+	public := model.RepoID{Type: model.RepoTypeModel, Namespace: owner, Name: "Tiny-Stories-GGUF"}
+	in.createRepo(t, public, model.VisibilityPublic, map[string][]byte{
 		"stories260K-Q8_0.gguf": model260K,
 		"tiny-Q4_K_M.gguf":      indextest.LlamaGGUF(t, 15, "Q4_K"),
 		"LICENSE":               []byte("MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy.\n"),
@@ -352,11 +384,12 @@ func TestOllamaClient(t *testing.T) {
 	})
 
 	t.Run("private Repo with a registered key", func(t *testing.T) {
-		in.CommitFiles(t, alice, "model", "alice", "private-stories", "private", map[string][]byte{"stories260K-Q8_0.gguf": model260K})
+		private := model.RepoID{Type: model.RepoTypeModel, Namespace: owner, Name: "private-stories"}
+		in.createRepo(t, private, model.VisibilityPrivate, map[string][]byte{"stories260K-Q8_0.gguf": model260K})
 		name := host + "/alice/private-stories:q8_0"
 		out, err := r.cli(ctx, "pull", "--insecure", name)
 		require.Error(t, err, "an unregistered key is refused: %s", out)
-		in.MustAPI(t, http.StatusCreated, http.MethodPost, "/me/ollama-keys", alice, map[string]string{"name": "compat", "public_key": r.publicKey(t)})
+		in.registerKey(t, r.publicKey(t))
 		out, err = r.cli(ctx, "pull", "--insecure", name)
 		require.NoError(t, err, out)
 		require.Contains(t, out, "success")

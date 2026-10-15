@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,12 @@ type metaEnv struct {
 
 func newMetaEnv(t *testing.T) *metaEnv {
 	t.Helper()
+	return newMetaEnvWith(t, nil)
+}
+
+// newMetaEnvWith is newMetaEnv with a hook that changes the dependencies.
+func newMetaEnvWith(t *testing.T, with func(*api.MetaDeps)) *metaEnv {
+	t.Helper()
 	ctx := context.Background()
 	d := dbtest.SQLite(t)
 	e := &metaEnv{t: t, db: d, repos: repotest.NewFake(t), authz: authtest.NewAuthz(), audit: audittest.NewFake(), got: make(chan *http.Request, 16)}
@@ -105,6 +112,9 @@ func newMetaEnv(t *testing.T) *metaEnv {
 		Community:   communitydb.New(communitydb.Options{DB: d, Repos: e.repos, Webhooks: hooks}),
 		Collections: collections.New(collections.Options{DB: d, Orgs: orgs, Repos: e.repos, Authz: e.authz}),
 		Webhooks:    hooks, Audit: e.audit,
+	}
+	if with != nil {
+		with(&deps)
 	}
 	s := metaServer{}
 	s.MetadataAPI, err = api.NewMetadataAPI(deps)
@@ -161,6 +171,53 @@ func (e *metaEnv) json(method, path, token string, body any, want int, out any) 
 	if out != nil {
 		require.NoError(e.t, json.Unmarshal(b, out), string(b))
 	}
+}
+
+func TestDatasetMetadataListsTheModelsTheCallerCanRead(t *testing.T) {
+	var asked []model.Principal
+	fail := false
+	e := newMetaEnvWith(t, func(d *api.MetaDeps) {
+		d.DatasetModels = func(_ context.Context, p model.Principal, r *repo.Repo) ([]model.RepoID, error) {
+			if fail {
+				return nil, errors.New("dependencies unavailable")
+			}
+			asked = append(asked, p)
+			require.Equal(t, "alice/reviews", r.ID.String())
+			if p.Username != "bob" {
+				return nil, nil
+			}
+			return []model.RepoID{{Type: model.RepoTypeModel, Namespace: "bob", Name: "classifier"}}, nil
+		}
+	})
+	ctx := context.Background()
+	ds, err := e.repos.Create(ctx, repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "reviews"}, Actor: e.alice})
+	require.NoError(t, err)
+	indextest.InsertRepoRow(t, e.db, ds)
+	sha := indextest.Commit(t, e.repos, ds.ID, map[string][]byte{"data/train.csv": []byte("text\nhello\n")})
+	_, err = e.index.Index(ctx, ds.UUID, ds.ID, sha)
+	require.NoError(t, err)
+	_, err = e.index.Index(ctx, e.model.UUID, e.model.ID, e.sha)
+	require.NoError(t, err)
+
+	var md gen.RepoMetadata
+	e.json("GET", "/repos/datasets/alice/reviews/metadata", "bob-token", nil, http.StatusOK, &md)
+	dataset := (*md.Summary)["dataset"].(map[string]any)
+	require.Equal(t, []any{"bob/classifier"}, dataset["models"])
+	e.json("GET", "/repos/datasets/alice/reviews/metadata", "alice-token", nil, http.StatusOK, &md)
+	require.NotContains(t, (*md.Summary)["dataset"].(map[string]any), "models", "each caller gets the models they can read")
+	require.Len(t, asked, 2)
+	require.Equal(t, "bob", asked[0].Username)
+
+	stored, err := e.index.Get(ctx, ds.UUID, sha)
+	require.NoError(t, err)
+	require.Empty(t, stored.Dataset.TrainedBy, "the list is never stored in the index")
+
+	e.json("GET", "/repos/models/alice/tiny/metadata", "bob-token", nil, http.StatusOK, &md)
+	require.Len(t, asked, 2, "model metadata does not look for models")
+
+	fail = true
+	status, _ := e.do("GET", "/repos/datasets/alice/reviews/metadata", "bob-token", nil)
+	require.Equal(t, http.StatusInternalServerError, status)
 }
 
 func TestMetadataEndpoints(t *testing.T) {
