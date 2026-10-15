@@ -54,7 +54,12 @@ type Deps struct {
 	TempDir string
 	// ConvertConcurrency is viewer.convert_concurrency.
 	ConvertConcurrency int
-	Log                *slog.Logger
+	// AfterConvert runs after a Commit's Parquet export is stored, for
+	// example to index the Commit again with its row counts (DATA-9);
+	// optional. It does not run for an export that already existed, and its
+	// error is logged without failing the Job, whose export is done.
+	AfterConvert func(ctx context.Context, r *repo.Repo, commit model.CommitSHA) error
+	Log          *slog.Logger
 }
 
 // Pipeline runs the dataset Jobs.
@@ -141,6 +146,11 @@ func (p *Pipeline) HandleConvert(ctx context.Context, j *jobs.Job, progress jobs
 	}
 	if err := p.convert(ctx, r, pl.Commit, progress); err != nil {
 		return err
+	}
+	if p.d.AfterConvert != nil {
+		if err := p.d.AfterConvert(ctx, r, pl.Commit); err != nil {
+			p.d.Log.WarnContext(ctx, "after dataset export", "repo.id", r.ID.String(), "commit", string(pl.Commit), "error", err.Error())
+		}
 	}
 	_, err = p.d.Jobs.Enqueue(ctx, StatsJob(r.UUID, pl.Commit))
 	return err

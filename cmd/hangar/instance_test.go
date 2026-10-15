@@ -224,6 +224,39 @@ func TestDatasetWiring(t *testing.T) {
 	require.Len(t, js, 1, "the head of a dataset's default branch is exported to Parquet")
 	require.Equal(t, r.UUID, js[0].Repo)
 
+	// Before the export the index has no rows; the export queues another
+	// index Job, which records them and the size category (DATA-9).
+	rowsOf := datasetRows(in.layout, in.datasets)
+	_, _, ok, err := rowsOf(ctx, r.UUID, r.ID, head)
+	require.NoError(t, err)
+	require.False(t, ok)
+	pendingIndex := func() []*jobs.Job {
+		list, _, err := in.queue.List(ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindIndex}, Statuses: []jobs.Status{jobs.StatusPending}})
+		require.NoError(t, err)
+		return list
+	}
+	// The Commits' own index Jobs have not run (there is no worker); clear
+	// them, as a finished index would.
+	for _, j := range pendingIndex() {
+		require.NoError(t, in.queue.Cancel(ctx, j.ID))
+	}
+	require.NoError(t, in.pipeline.HandleConvert(ctx, js[0], nil))
+	again := pendingIndex()
+	require.Len(t, again, 1, "the export queues the index again")
+	require.Equal(t, r.UUID, again[0].Repo)
+	rows, category, ok, err := rowsOf(ctx, r.UUID, r.ID, head)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, int64(1), rows)
+	require.Equal(t, "n<1K", category)
+	sum, err := in.indexer.Index(ctx, r.UUID, r.ID, head)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), sum.Dataset.Rows)
+	require.Equal(t, "n<1K", sum.Dataset.SizeCategory)
+	_, _, ok, err = rowsOf(ctx, r.UUID, model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "missing"}, head)
+	require.NoError(t, err)
+	require.False(t, ok, "a missing dataset has no rows")
+
 	// With the viewer off there is no pipeline to queue for.
 	in.pipeline = nil
 	require.NoError(t, in.afterIndex(ctx, index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: head}, nil))

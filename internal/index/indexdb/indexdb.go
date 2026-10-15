@@ -49,6 +49,11 @@ type Options struct {
 	// AfterIndex runs after a Job stores results, for example to enqueue
 	// dataset.convert; optional. Its error fails the Job so it is retried.
 	AfterIndex func(ctx context.Context, job index.CommitJob, s *index.Summary) error
+	// DatasetRows returns a dataset Commit's row count and its Hub size
+	// category from the Parquet export, with ok false until the export
+	// exists (DATA-9); optional. The size category from rows takes the
+	// place of the card's size_categories.
+	DatasetRows func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (rows int64, sizeCategory string, ok bool, err error)
 	// Window is the ranged read size; zero means 1 MiB.
 	Window int64
 }
@@ -118,6 +123,17 @@ func (s *Service) Index(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 	sum, err := index.Extract(ctx, id.Type, files, repoSource{repos: s.o.Repos, id: id, commit: commit, window: s.o.Window}, layout)
 	if err != nil {
 		return nil, err
+	}
+	if sum.Dataset != nil && s.o.DatasetRows != nil {
+		rows, category, ok, err := s.o.DatasetRows(ctx, repoUUID, id, commit)
+		switch {
+		case err != nil:
+			// The export may be in progress; the index after the export
+			// has the rows.
+			s.o.Log.WarnContext(ctx, "read dataset rows", "repo.id", id.String(), "commit", string(commit), "error", err.Error())
+		case ok:
+			setDatasetRows(sum, rows, category)
+		}
 	}
 	raw, err := json.Marshal(sum)
 	if err != nil {
@@ -363,4 +379,21 @@ func plainValue(v gguf.Value) any {
 		return v.Items
 	}
 	return map[string]any{"type": "array", "length": v.Len}
+}
+
+// setDatasetRows records a dataset's row count and the size category it
+// gives, replacing the card's size_categories and its tag.
+func setDatasetRows(sum *index.Summary, rows int64, category string) {
+	sum.Dataset.Rows = rows
+	if category == "" || category == sum.Dataset.SizeCategory {
+		return
+	}
+	sum.Dataset.SizeCategory = category
+	tags := sum.Tags[:0:0]
+	for _, t := range sum.Tags {
+		if !strings.HasPrefix(t, "size_categories:") {
+			tags = append(tags, t)
+		}
+	}
+	sum.Tags = append(tags, "size_categories:"+category)
 }

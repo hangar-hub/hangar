@@ -28,6 +28,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/datasets"
 	"github.com/jamesagarside/hangar/internal/datasets/layout"
+	"github.com/jamesagarside/hangar/internal/datasets/meta"
 	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
 	"github.com/jamesagarside/hangar/internal/datasets/viewer"
 	"github.com/jamesagarside/hangar/internal/db"
@@ -222,8 +223,12 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	}
 
 	// Metadata, community and Collections (W7).
-	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
-		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex})
+	ixo := indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
+		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex}
+	if cfg.Viewer.Enabled {
+		ixo.DatasetRows = datasetRows(in.layout, in.datasets)
+	}
+	in.indexer = indexdb.New(ixo)
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
 	// One gate enforces scan.block_unsafe_downloads for every protocol
 	// that serves file bytes.
@@ -251,7 +256,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	if cfg.Viewer.Enabled {
 		in.pipeline, err = pipeline.New(pipeline.Deps{DB: d, Blobs: in.blobs, Repos: in.repos, LFS: in.lfs, Jobs: in.queue,
 			MaxConvertBytes: cfg.Viewer.MaxConvertBytes.Int64(), TempDir: filepath.Join(cfg.Server.DataDir, "tmp"),
-			ConvertConcurrency: cfg.Viewer.ConvertConcurrency, Log: in.log})
+			ConvertConcurrency: cfg.Viewer.ConvertConcurrency, AfterConvert: in.reindexExported, Log: in.log})
 		if err != nil {
 			return nil, err
 		}
@@ -519,6 +524,45 @@ func datasetLayout(l *layout.Service) func(ctx context.Context, id model.RepoID,
 		}
 		return names, splits, nil
 	}
+}
+
+// datasetRows gives the index (W7) a dataset Commit's rows and size
+// category from its Parquet export (W10), once the export exists (DATA-9).
+func datasetRows(l *layout.Service, store *pipeline.Store) func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID,
+	commit model.CommitSHA) (int64, string, bool, error) {
+	return func(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA) (int64, string, bool, error) {
+		res, err := l.Resolve(ctx, id, commit)
+		if errors.Is(err, datasets.ErrNotFound) {
+			return 0, "", false, nil
+		}
+		if err != nil {
+			return 0, "", false, err
+		}
+		infos := make([]*pipeline.ConfigInfo, 0, len(res.Configs))
+		for _, c := range res.Configs {
+			info, err := store.Info(ctx, repoUUID, commit, c.Name)
+			if errors.Is(err, pipeline.ErrNoInfo) {
+				return 0, "", false, nil
+			}
+			if err != nil {
+				return 0, "", false, err
+			}
+			infos = append(infos, info)
+		}
+		if len(infos) == 0 {
+			return 0, "", false, nil
+		}
+		s := meta.Summarise(nil, infos)
+		return s.NumRows, s.SizeCategory, true, nil
+	}
+}
+
+// reindexExported indexes a dataset Commit again once its Parquet export
+// is stored (W10), so the index has its rows and size category (DATA-9).
+func (in *instance) reindexExported(ctx context.Context, r *repo.Repo, commit model.CommitSHA) error {
+	job := index.CommitJob{RepoUUID: r.UUID, Repo: r.ID.String(), Type: r.ID.Type, Commit: commit}
+	_, err := in.queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: job.DedupeKey(), Payload: job, Repo: r.UUID})
+	return err
 }
 
 // mirrorStatus fills mirror_status on native Repo responses (W2) from the
