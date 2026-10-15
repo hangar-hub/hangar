@@ -326,6 +326,9 @@ func (s *Service) HandleJob(ctx context.Context, j *jobs.Job, _ jobs.Progress) e
 		return nil
 	}
 	res, err := s.ScanCommit(ctx, r.UUID, r.ID, p.Commit)
+	if err != nil && s.deletedMeanwhile(ctx, r) {
+		return nil
+	}
 	if errors.Is(err, repo.ErrRevisionNotFound) || errors.Is(err, repo.ErrNotFound) {
 		return jobs.Permanent(err)
 	}
@@ -345,6 +348,18 @@ func (s *Service) HandleJob(ctx context.Context, j *jobs.Job, _ jobs.Progress) e
 		}
 	}
 	return nil
+}
+
+// deletedMeanwhile reports whether the Repo was deleted or purged while
+// its scan ran, so a failure caused by the deletion, such as OpenFile
+// returning repo.ErrNotFound, ends the Job quietly instead of failing it.
+func (s *Service) deletedMeanwhile(ctx context.Context, r *repo.Repo) bool {
+	now, err := s.o.Repos.GetByUUID(ctx, r.UUID)
+	if errors.Is(err, repo.ErrNotFound) || (err == nil && now.DeletedAt != nil) {
+		s.o.Log.DebugContext(ctx, "scan stopped: repo deleted", "repo.id", r.ID.String())
+		return true
+	}
+	return false
 }
 
 // RescanStale enqueues low-priority scan Jobs for branch heads whose

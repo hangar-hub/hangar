@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/index"
@@ -327,4 +330,45 @@ func TestModelCardDatasetsAreIndexed(t *testing.T) {
 		require.Equal(t, []string{"alice/reviews", "imdb"}, sum.Datasets)
 		require.Nil(t, sum.Dataset, "a model has no dataset summary")
 	})
+}
+
+// deletingRepos deletes the Repo when the index first opens a file, as a
+// user deleting the Repo while its index Job runs does.
+type deletingRepos struct {
+	*repotest.Fake
+	id   model.RepoID
+	once sync.Once
+}
+
+func (d *deletingRepos) OpenFile(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, rng *blob.Range) (io.ReadCloser, model.Entry, error) {
+	d.once.Do(func() {
+		if err := d.Delete(ctx, d.id, indextest.Owner(d.id.Namespace)); err != nil {
+			panic(err)
+		}
+	})
+	return d.Fake.OpenFile(ctx, id, commit, p, rng)
+}
+
+func TestHandleJobOfARepoDeletedWhileItRuns(t *testing.T) {
+	d := dbtest.SQLite(t)
+	e := newEnv(t, d)
+	ctx := t.Context()
+	raw, err := json.Marshal(index.CommitJob{RepoUUID: e.repo.UUID, Commit: e.sha})
+	require.NoError(t, err)
+
+	svc := indexdb.New(indexdb.Options{DB: d, Repos: &deletingRepos{Fake: e.repos, id: e.id}, Webhooks: e.hooks})
+	require.NoError(t, svc.HandleJob(ctx, &jobs.Job{Kind: jobs.KindIndex, Payload: raw}, nil),
+		"a Repo deleted mid-index ends the Job without failing it")
+	require.Empty(t, e.hooks.Names())
+	_, err = e.repos.Restore(ctx, e.id, indextest.Owner("alice"))
+	require.NoError(t, err)
+
+	// The hook after the index fails because the Repo was deleted meanwhile.
+	hooked := indexdb.New(indexdb.Options{DB: d, Repos: e.repos, AfterIndex: func(ctx context.Context, j index.CommitJob, _ *index.Summary) error {
+		if err := e.repos.Delete(ctx, e.id, indextest.Owner("alice")); err != nil {
+			return err
+		}
+		return repo.ErrNotFound
+	}})
+	require.NoError(t, hooked.HandleJob(ctx, &jobs.Job{Kind: jobs.KindIndex, Payload: raw}, nil))
 }
