@@ -34,7 +34,10 @@ jobs:
         run: make fixtures
       - name: Build hangar
         run: go build -o "$RUNNER_TEMP/hangar" ./cmd/hangar && echo "HANGAR_BINARY=$RUNNER_TEMP/hangar" >> "$GITHUB_ENV"
-      - name: Go and pytest suites, including git, LM Studio and the Hub clients
+      # compat/ollama runs the pinned Ollama image against the binary above.
+      - name: Pull the pinned Ollama image
+        run: docker pull "ollama/ollama:$(sed -n 's/^const TestedOllamaVersion = "\(.*\)"$/\1/p' internal/ollama/*.go)"
+      - name: Go and pytest suites, including git, Ollama, LM Studio and the Hub clients
         run: make test-compat
 
   # The Hub client matrix from compat/hf/README.md ("Client matrix"): the
