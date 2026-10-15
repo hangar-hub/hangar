@@ -33,6 +33,14 @@ const (
 	phaseFailed   = "failed"
 )
 
+// refConflictMessage is the progress message of a Pull that plans again
+// because the Mirror's history changed while it stored it.
+const refConflictMessage = "Planning again: the Mirror's history changed while this Pull stored it"
+
+// maxRefConflicts bounds how many times a Pull plans again at once after
+// a ref conflict.
+const maxRefConflicts = 5
+
 // Failure reasons in a failed Pull's result.
 const (
 	reasonUpstreamNotFound = "upstream_not_found"
@@ -77,6 +85,9 @@ type pullState struct {
 	AlreadyPresent int        `json:"already_present"`
 	Dependencies   []depState `json:"dependencies,omitempty"`
 	Warnings       []string   `json:"warnings,omitempty"`
+	// RefConflicts counts the times planning met another run storing the
+	// Mirror's history and planned again at once.
+	RefConflicts int `json:"ref_conflicts,omitempty"`
 }
 
 // File statuses in pullState.
@@ -105,8 +116,22 @@ func (s *Service) runPull(ctx context.Context, j *jobs.Job, prog jobs.Progress) 
 		}
 	}
 	if st.Phase == "" || st.Phase == phaseFailed {
-		st = pullState{}
+		st = pullState{RefConflicts: st.RefConflicts}
 		if err := s.plan(ctx, j, prog, &p, &st); err != nil {
+			if errors.Is(err, repo.ErrRefConflict) && st.RefConflicts < maxRefConflicts {
+				// Another run stored history in this Mirror at the same
+				// time: a sync, another Pull of it, or a second run of
+				// this Job after a lost lease. Planning again sees that
+				// history, so it is not a failure to back off from. The
+				// count stops a conflict that keeps coming back from
+				// planning again for ever: past it, the Job's backoff
+				// applies.
+				st = pullState{RefConflicts: st.RefConflicts + 1}
+				if serr := prog.SetResult(ctx, st); serr != nil {
+					return serr
+				}
+				return s.snooze(s.opts.Now().Add(s.opts.PollInterval), refConflictMessage)
+			}
 			return s.failPull(ctx, prog, &p, &st, err)
 		}
 	}
@@ -261,7 +286,7 @@ func (s *Service) plan(ctx context.Context, j *jobs.Job, prog jobs.Progress, p *
 		}
 	}
 	for i := range st.Files {
-		if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, commit, &st.Files[i]); err != nil {
+		if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, commit, &st.Files[i], st.Files[i].OID); err != nil {
 			return err
 		}
 	}
@@ -288,10 +313,12 @@ func (s *Service) plan(ctx context.Context, j *jobs.Job, prog jobs.Progress, p *
 }
 
 // queueTransfer queues the pull.file Job that transfers f into r at
-// commit, or joins the Job already transferring the object (Pulls of the
-// same object share one Job by OID).
-func (s *Service) queueTransfer(ctx context.Context, parent jobs.JobID, p *pullPayload, up *Upstream, upID model.RepoID, r *repo.Repo, commit model.CommitSHA, f *fileState) error {
-	id, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: f.OID, ParentID: parent, CreatedBy: p.RequestedBy, Repo: r.UUID,
+// commit, or joins the active Job with the same dedupe key. Pulls first
+// queue under the bare OID, so Pulls of the same object share one Job
+// whatever their Namespace; ownTransferKey keeps a transfer to one
+// Namespace.
+func (s *Service) queueTransfer(ctx context.Context, parent jobs.JobID, p *pullPayload, up *Upstream, upID model.RepoID, r *repo.Repo, commit model.CommitSHA, f *fileState, key string) error {
+	id, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: key, ParentID: parent, CreatedBy: p.RequestedBy, Repo: r.UUID,
 		Payload: filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: upID.String(), Type: r.ID.Type, Repo: r.ID.String(),
 			RepoUUID: r.UUID, Commit: commit, Path: f.Path, OID: f.OID, Size: f.Size, RequestedBy: p.RequestedBy, Now: p.Now}})
 	if err != nil {
@@ -639,20 +666,41 @@ func (s *Service) markJoinedTransfer(ctx context.Context, r *repo.Repo, fj *jobs
 	return true, s.opts.Repos.SetLFSPresence(ctx, r.ID, []repo.LFSRef{{OID: f.OID, Size: f.Size, Present: true}})
 }
 
+// ownTransferKey is the dedupe key of a transfer of oid that only Pulls
+// into the Namespace ns can join. A Pull uses it after another
+// Namespace's quota refused the shared transfer it joined, so no other
+// Namespace's Pull, and no other Namespace's quota, can hold it up again.
+func ownTransferKey(oid string, ns uuid.UUID) string {
+	return oid + "/namespace/" + ns.String()
+}
+
 // requeueRefusedTransfer handles a transfer that the Namespace quota
-// refused. When the refused pull.file Job was started by a Pull into
-// another Repo (the Jobs are shared by OID), the refusal was that Repo's
-// Namespace quota, not this one's: this Pull queues a transfer of its own,
-// whose quota check is its own Namespace's, and never takes the other
-// Namespace's reason or message. queued is false when the refused Job was
-// this Repo's own, so the refusal stands.
+// refused. When the refused pull.file Job was a shared one (keyed by the
+// bare OID) that a Pull into another Namespace started, the refusal was
+// that Namespace's quota, not this one's: this Pull queues a transfer of
+// its own under ownTransferKey, whose quota check is its own Namespace's,
+// and never takes the other Namespace's reason or message. queued is false
+// when the refusal stands: the refused Job stored into this Namespace, or
+// it was already a transfer of this Namespace's own. So a Pull requeues
+// each file at most once, however many other Namespaces' Pulls are
+// refused for the same object meanwhile.
 func (s *Service) requeueRefusedTransfer(ctx context.Context, j *jobs.Job, p *pullPayload, r *repo.Repo, st *pullState, fj *jobs.Job, f *fileState) (queued bool, err error) {
+	if fj.DedupeKey != f.OID {
+		return false, nil
+	}
 	var fp filePayload
 	if err := fj.DecodePayload(&fp); err != nil {
 		return false, err
 	}
 	if fp.RepoUUID == r.UUID {
 		return false, nil
+	}
+	other, err := s.opts.Repos.GetByUUID(ctx, fp.RepoUUID)
+	switch {
+	case err == nil && other.NamespaceID == r.NamespaceID:
+		return false, nil
+	case err != nil && !errors.Is(err, repo.ErrNotFound):
+		return false, err
 	}
 	upID, err := p.upstreamID()
 	if err != nil {
@@ -662,7 +710,7 @@ func (s *Service) requeueRefusedTransfer(ctx context.Context, j *jobs.Job, p *pu
 	if err != nil {
 		return false, err
 	}
-	if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, st.Commit, f); err != nil {
+	if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, st.Commit, f, ownTransferKey(f.OID, r.NamespaceID)); err != nil {
 		return false, err
 	}
 	f.Status, f.BytesDone, f.Error, f.Reason = fileQueued, 0, "", ""

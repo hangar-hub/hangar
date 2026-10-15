@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,6 +208,68 @@ func TestPullRejectsCorruptDownloadsAndRetries(t *testing.T) {
 		for _, f := range files {
 			require.Equal(t, 2, f.Attempts, "a corrupt object is rejected and downloaded again")
 		}
+	})
+}
+
+// TestPullPlansAgainWhenAnotherRunStoredTheHistory covers two runs storing
+// a Mirror's history at once (a sync, another Pull, or a second run of the
+// same Job after a lost lease). The run that loses gets repo.ErrRefConflict
+// and must plan again at once, not back off as from a failure.
+func TestPullPlansAgainWhenAnotherRunStoredTheHistory(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		w := []byte("weights")
+		commit := e.Seed(tiny, map[string][]byte{"config.json": []byte(`{}`)}, map[string][]byte{"model.safetensors": w})
+		var raced atomic.Bool
+		e.Repos.BeforeApplyPack(func(ctx context.Context, p repo.ApplyPackParams) error {
+			if p.Pack == nil || !raced.CompareAndSwap(false, true) {
+				return nil
+			}
+			// The other run stores the same history first.
+			if err := e.Repos.Fake.ApplyPack(ctx, p); err != nil {
+				return err
+			}
+			return fmt.Errorf("apply: %w", repo.ErrRefConflict)
+		})
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		e.Queue.RunPending(e.Ctx)
+		require.True(t, raced.Load(), "the race happened")
+		j := e.Job(id)
+		require.Equal(t, jobs.StatusPending, j.Status)
+		require.Contains(t, j.Error, "Planning again: the Mirror's history changed while this Pull stored it",
+			"the run that lost the race plans again: %s", j.Error)
+		require.NotContains(t, j.Error, "store the upstream history")
+		e.Run(10)
+		j = e.Job(id)
+		require.Equal(t, jobs.StatusSucceeded, j.Status, j.Error)
+		require.Equal(t, w, readFile(t, e.Repos, tiny, commit, "model.safetensors"))
+	})
+}
+
+// TestPullBacksOffFromAConflictThatKeepsComingBack bounds the immediate
+// re-planning: a ref conflict on every try ends in the Job's normal
+// retries with backoff after a few rounds.
+func TestPullBacksOffFromAConflictThatKeepsComingBack(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		e.Seed(tiny, map[string][]byte{"config.json": []byte(`{}`)}, nil)
+		e.Repos.BeforeApplyPack(func(context.Context, repo.ApplyPackParams) error {
+			return fmt.Errorf("apply: %w", repo.ErrRefConflict)
+		})
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		for range 5 {
+			e.Queue.RunPending(e.Ctx)
+			require.Contains(t, e.Job(id).Error, "Planning again")
+			e.Advance(time.Hour)
+		}
+		e.Queue.RunPending(e.Ctx)
+		j := e.Job(id)
+		require.Contains(t, j.Error, "store the upstream history", "the sixth conflict is a failure to retry with backoff")
+		require.EqualValues(t, 5, pullState(t, j)["ref_conflicts"])
 	})
 }
 

@@ -111,6 +111,20 @@ func NewHTTPClient(opts HTTPOptions) *HTTPClient {
 	return &HTTPClient{opts: opts, hc: hc}
 }
 
+type noRetriesKey struct{}
+
+// WithoutRetries returns a context under which an HTTPClient makes one
+// attempt per request: no retries on 429, 5xx or network errors, and no
+// backoff. A 429 still comes back as a RateLimitError.
+func WithoutRetries(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noRetriesKey{}, true)
+}
+
+func retriesOff(ctx context.Context) bool {
+	off, _ := ctx.Value(noRetriesKey{}).(bool)
+	return off
+}
+
 func sleepCtx(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -208,7 +222,7 @@ func (c *HTTPClient) doRetry(ctx context.Context, r request) (*http.Response, er
 			drain(resp)
 			return nil, err
 		}
-		if r.noRetry || attempt >= c.opts.MaxAttempts {
+		if r.noRetry || retriesOff(ctx) || attempt >= c.opts.MaxAttempts {
 			return nil, lastErr
 		}
 		if wait == 0 {

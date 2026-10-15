@@ -229,6 +229,8 @@ type localOptions struct {
 	// existing reuses another Instance's Repo rows and Blob store (a
 	// second worker of one Instance).
 	existing *localInstance
+	// beforeQuotaCheck runs before each quota check a Pull makes.
+	beforeQuotaCheck func(ctx context.Context)
 }
 
 func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *localInstance {
@@ -273,7 +275,7 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 		Dependencies: config.DependencyConfig{AutoPullCode: true, MaxDepth: 5},
 		Settings:     func(context.Context) (upstream.Settings, error) { return *l.settings.Load(), nil },
 		ParseWindows: func(specs []string) (upstream.Windows, error) { return jobs.ParseWindows(specs, time.UTC) },
-		Snooze:       jobs.Snooze, PartSize: o.partSize, PollInterval: 200 * time.Millisecond, Quota: pullQuota{l.quota}})
+		Snooze:       jobs.Snooze, PartSize: o.partSize, PollInterval: 200 * time.Millisecond, Quota: pullQuota{Accounting: l.quota, before: o.beforeQuotaCheck}})
 	require.NoError(t, err)
 	require.NoError(t, l.svc.RegisterJobs(l.reg))
 	l.worker = jobs.NewWorker(d, l.reg, jobs.WorkerOptions{Owner: owner, Concurrency: 4, Lease: 3 * time.Second, PollInterval: 50 * time.Millisecond,
@@ -794,9 +796,16 @@ func writeFile(t *testing.T, path string, b []byte) {
 // pullQuota is the adapter the integration lead wires between W1's
 // Namespace quotas and Pulls: W1's refusals become upstream.ErrQuotaExceeded
 // with W1's message kept.
-type pullQuota struct{ *gc.Accounting }
+type pullQuota struct {
+	*gc.Accounting
+	// before is a test hook that runs before each check.
+	before func(ctx context.Context)
+}
 
 func (q pullQuota) CheckQuota(ctx context.Context, ns uuid.UUID, adding int64) error {
+	if q.before != nil {
+		q.before(ctx)
+	}
 	err := q.Accounting.CheckQuota(ctx, ns, adding)
 	if errors.Is(err, gc.ErrQuotaExceeded) {
 		return upstream.QuotaExceeded(err)
@@ -874,6 +883,102 @@ func TestRealPullRespectsNamespaceQuota(t *testing.T) {
 		usage, err = l.quota.NamespaceUsage(l.ctx, roomy.ID)
 		require.NoError(t, err)
 		require.Equal(t, int64(len(big)), usage.LFSBytes)
+	})
+}
+
+// TestRealPullEndsPromptlyAfterALostLease is the root cause of a
+// TestRealPullRespectsNamespaceQuota failure on a loaded machine. The
+// worker leases Jobs for 3 seconds and renews every second; a renewal
+// that comes late lets the worker recover the pull Job and start a second
+// run of it while the first is still going. Both runs store the Mirror's
+// history: the second wins, and the first one's ApplyPack fails with
+// repo.ErrRefConflict. The Pull used to take that as a failure and back
+// off for 30 seconds or more, so the Job sat pending past the test's
+// wait. This test makes the lease expire at that point on purpose. The
+// Pull must plan again at once and end with its own quota refusal.
+func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		up := newSecondInstance(t)
+		sel := model.RepoID{Type: model.RepoTypeModel, Namespace: "roomy", Name: "weights"}
+		var (
+			l     *localInstance
+			jid   jobs.JobID
+			calls atomic.Int32
+		)
+		ready := make(chan struct{})
+		// The hook reads and writes with l.ctx: the run it is called
+		// from can lose its lease, which cancels the run's context.
+		get := func() *jobs.Job {
+			j, err := l.queue.Get(l.ctx, jid)
+			if err != nil {
+				t.Errorf("read the pull Job: %v", err)
+				return &jobs.Job{}
+			}
+			return j
+		}
+		waitFor := func(what string, cond func() bool) {
+			deadline := time.Now().Add(time.Minute)
+			for !cond() {
+				if time.Now().After(deadline) {
+					t.Errorf("timed out waiting until %s", what)
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		hook := func(context.Context) {
+			<-ready
+			switch calls.Add(1) {
+			case 1:
+				// The first run is about to store the history. Its lease
+				// expires, and the worker starts a second run, which
+				// stores the history first.
+				waitFor("a second run of the Pull stored the history", func() bool {
+					if get().Attempts < 2 {
+						// Only the first run's lease: a second run must
+						// keep its own.
+						_, err := d.NewUpdate().Model((*db.Job)(nil)).Set("lease_expires_at = ?", time.Now().UTC().Add(-time.Minute)).
+							Where("id = ? AND status = ? AND attempts = 1", jid, string(jobs.StatusRunning)).Exec(l.ctx)
+						if err != nil {
+							t.Errorf("expire the lease: %v", err)
+						}
+						return false
+					}
+					_, err := l.real.Resolve(l.ctx, sel, "main")
+					return err == nil
+				})
+			case 3:
+				// The second run's selection check waits until the first
+				// run has given up on its pack: it either recorded an
+				// error to back off from or planned again, after which
+				// the worker may already have started a third run.
+				waitFor("the first run gave up on its pack", func() bool {
+					j := get()
+					return j.Status != jobs.StatusRunning || j.Error != "" || bytes.Contains(j.Result, []byte(`"ref_conflicts"`))
+				})
+			}
+		}
+		l = newLocal(t, d, up.URL, localOptions{partSize: 1 << 20, beforeQuotaCheck: hook})
+		owner := up.Real.AddUser(t, sel.Namespace)
+		_, err := up.Real.Create(l.ctx, repo.CreateParams{ID: sel, Actor: owner, Visibility: model.VisibilityPublic})
+		require.NoError(t, err)
+		up.seed(t, sel, map[string][]byte{"config.json": []byte(`{}`), "model.safetensors": bytes.Repeat([]byte("over quota "), 20_000)})
+		roomy, err := l.orgs.EnsureMirrorNamespace(l.ctx, sel.Namespace)
+		require.NoError(t, err)
+		require.NoError(t, l.quota.SetQuota(l.ctx, roomy.ID, 64<<10))
+
+		jid, _, err = l.svc.StartPull(l.ctx, upstream.PullRequest{Repo: sel, Actor: l.user})
+		require.NoError(t, err)
+		close(ready)
+		// Well under the 30-second backoff the Pull used to wait.
+		j := l.wait(jid, 20*time.Second)
+		require.GreaterOrEqual(t, calls.Load(), int32(3), "the lease expired mid-run")
+		require.Equal(t, jobs.StatusFailed, j.Status, j.Error)
+		var st map[string]any
+		require.NoError(t, json.Unmarshal(j.Result, &st))
+		require.Equal(t, "quota_exceeded", st["reason"])
+		require.Contains(t, j.Error, "storage quota. Delete files or ask an admin to raise the quota.")
+		require.Equal(t, "Storage quota exceeded", j.Progress.Message)
 	})
 }
 

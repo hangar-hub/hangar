@@ -40,6 +40,29 @@ type DBRepos struct {
 
 	mu     sync.Mutex
 	marked map[string][]string
+	// beforeApply runs before ApplyPack; see BeforeApplyPack.
+	beforeApply func(ctx context.Context, p repo.ApplyPackParams) error
+}
+
+// BeforeApplyPack sets a hook that runs before each ApplyPack. When it
+// returns an error, ApplyPack returns that error and stores nothing.
+func (r *DBRepos) BeforeApplyPack(fn func(ctx context.Context, p repo.ApplyPackParams) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.beforeApply = fn
+}
+
+// ApplyPack implements repo.Service, running the BeforeApplyPack hook first.
+func (r *DBRepos) ApplyPack(ctx context.Context, p repo.ApplyPackParams) error {
+	r.mu.Lock()
+	fn := r.beforeApply
+	r.mu.Unlock()
+	if fn != nil {
+		if err := fn(ctx, p); err != nil {
+			return err
+		}
+	}
+	return r.Fake.ApplyPack(ctx, p)
 }
 
 // SetLFSPresence implements repo.Service and records the objects marked
