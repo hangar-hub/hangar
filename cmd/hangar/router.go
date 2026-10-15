@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,10 +29,25 @@ import (
 	"github.com/jamesagarside/hangar/internal/xet"
 )
 
-// newHealth builds the readiness checks: database reachable, migrations at
-// the expected version, and the Blob store sentinel readable.
-func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
-	return httpx.NewHealth(
+// errStarting is the startup check's failure until the Instance serves
+// every route.
+var errStarting = errors.New("the Instance is starting")
+
+// newHealth builds the readiness checks: the Instance has started, the
+// database is reachable with migrations at the expected version, and the
+// Blob store sentinel is readable. /readyz fails the startup check until
+// the returned function is called. Health answers while the rest of the
+// Instance is built, with only the start-up handler mounted, so without
+// that check /readyz would answer 200 while every other route answers 404.
+func newHealth(d *db.DB, blobs blob.Store) (*httpx.Health, func()) {
+	var started atomic.Bool
+	h := httpx.NewHealth(
+		httpx.Check{Name: "startup", Run: func(context.Context) error {
+			if !started.Load() {
+				return errStarting
+			}
+			return nil
+		}},
 		httpx.Check{Name: "database", Run: func(ctx context.Context) error {
 			if err := d.PingContext(ctx); err != nil {
 				return fmt.Errorf("database unreachable: %w", err)
@@ -50,6 +66,7 @@ func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
 			return err
 		}},
 	)
+	return h, func() { started.Store(true) }
 }
 
 // ensureSentinel writes the Blob store sentinel that /readyz checks.

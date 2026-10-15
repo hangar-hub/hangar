@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -220,12 +221,53 @@ func TestCommands(t *testing.T) {
 	require.Equal(t, 0, run([]string{"version"}))
 }
 
+// TestReadyzWaitsForStartup checks /readyz stays 503 until serve has
+// mounted every route. Health answers while the rest of the Instance is
+// built; before the startup check, /readyz answered 200 in that window while
+// the native API answered 404, so harnesses and readiness probes sent
+// requests too early.
+func TestReadyzWaitsForStartup(t *testing.T) {
+	cfg := testConfig(t)
+	ctx := context.Background()
+	d, err := openDatabase(ctx, cfg, false)
+	require.NoError(t, err)
+	defer d.Close()
+	require.NoError(t, d.Migrate(ctx))
+	tel, err := telemetry.Setup(ctx, telemetry.Options{Config: cfg.Telemetry, Version: version,
+		Getenv: func(string) string { return "" }, Stdout: io.Discard})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
+	blobs, err := openBlobStore(ctx, cfg, tel)
+	require.NoError(t, err)
+	health, markStarted := newHealth(d, blobs)
+	// The handler serve mounts while the Instance starts.
+	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
+
+	get := func(path string) (int, string) {
+		rec := httptest.NewRecorder()
+		starting.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec.Code, rec.Body.String()
+	}
+	code, body := get("/readyz")
+	require.Equal(t, http.StatusServiceUnavailable, code, body)
+	require.JSONEq(t, `{"status":"not ready","failed":[{"name":"startup","error":"the Instance is starting"}]}`, body)
+	code, _ = get("/healthz")
+	require.Equal(t, http.StatusOK, code, "the process is alive while it starts")
+	code, _ = get("/api/hangar/v1/me")
+	require.Equal(t, http.StatusNotFound, code, "only health is mounted while the Instance starts")
+
+	markStarted()
+	code, body = get("/readyz")
+	require.Equal(t, http.StatusOK, code, body)
+}
+
 func TestReadyzReportsSchemaAndBlobStore(t *testing.T) {
 	cfg := testConfig(t)
 	d, err := openDatabase(context.Background(), cfg, false)
 	require.NoError(t, err)
 	defer d.Close()
-	h := newHealth(d, newEmptyBlobs())
+	h, markStarted := newHealth(d, newEmptyBlobs())
+	markStarted()
 	failed := h.Failures(context.Background())
 	names := []string{}
 	for _, f := range failed {
@@ -376,7 +418,9 @@ func TestWorkerServesOnlyHealth(t *testing.T) {
 	in, err := newInstance(ctx, cfg, tel, d, blobs)
 	require.NoError(t, err)
 	t.Cleanup(func() { in.close(ctx) })
-	h, err := newHandler(ctx, in, newHealth(d, blobs), true)
+	health, markStarted := newHealth(d, blobs)
+	markStarted()
+	h, err := newHandler(ctx, in, health, true)
 	require.NoError(t, err)
 	for path, want := range map[string]int{"/healthz": http.StatusOK, "/readyz": http.StatusOK, "/api/hangar/v1/me": http.StatusNotFound,
 		"/": http.StatusNotFound, "/api/models/a/b": http.StatusNotFound} {

@@ -88,7 +88,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	if err != nil {
 		return err
 	}
-	health := newHealth(d, blobs)
+	health, markStarted := newHealth(d, blobs)
 
 	// Health answers at once; the rest of the Instance is built once the
 	// schema is current, which web and worker processes wait for while
@@ -149,6 +149,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return err
 	}
 	current.Store(&handler)
+	markStarted()
 
 	// Jobs run in roles all and worker. On shutdown the worker returns
 	// running Jobs to the queue.
