@@ -26,6 +26,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/org/orgtest"
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/repo/repotest"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/secrets"
 	"github.com/jamesagarside/hangar/internal/upstream"
 	"github.com/jamesagarside/hangar/internal/webhook/webhooktest"
@@ -211,6 +212,8 @@ type HarnessOptions struct {
 	Client upstream.Client
 	// Limiter defaults to a HookLimiter.
 	Limiter jobs.Limiter
+	// Downloads is upstream.Options.Downloads; nil never blocks.
+	Downloads *scan.Gate
 }
 
 // Harness is an upstream.Service over fakes: a Fake Upstream behind a
@@ -297,7 +300,7 @@ func NewHarness(t testing.TB, d *db.DB, o HarnessOptions) *Harness {
 		},
 		ParseWindows: ParseHourWindows,
 		Snooze:       func(until time.Time, reason string) error { return &Snoozed{Until: until, Reason: reason} },
-		Signer:       signer, PublicURL: "http://hangar.test", Dependencies: dc, UserTokens: h, Quota: h.Quota, Audit: h.Audit,
+		Signer:       signer, Downloads: o.Downloads, PublicURL: "http://hangar.test", Dependencies: dc, UserTokens: h, Quota: h.Quota, Audit: h.Audit,
 		PartSize: o.PartSize, PullAttempts: 100, PollInterval: time.Second, PullThroughWait: 5 * time.Second, SpoolDir: t.TempDir(), Now: h.Now})
 	require.NoError(t, err)
 	require.NoError(t, h.Service.RegisterJobs(h.Jobs))

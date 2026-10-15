@@ -149,7 +149,7 @@ func newFixture(t *testing.T, tweaks ...func(*api.RepoDeps)) *fixture {
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusBadRequest, Detail: err.Error()})
 		}})
-	mux.Handle(api.ExportPath, httpx.RequestIDs(api.ExportHandler(real.Blobs, f.signer)))
+	mux.Handle(api.ExportPath, httpx.RequestIDs(api.ExportHandler(real.Blobs, f.signer, nil)))
 	mux.Handle("/", httpx.RequestIDs(httpx.Authenticate(f.authn, nil)(native)))
 	return f
 }
