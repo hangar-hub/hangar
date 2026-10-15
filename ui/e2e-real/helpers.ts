@@ -4,6 +4,7 @@ import {
   expect,
   type Page,
   request,
+  test,
 } from "@playwright/test";
 import { unique } from "../e2e/helpers";
 import { gguf } from "./gguf";
@@ -43,13 +44,63 @@ export type Session = {
   dispose(): Promise<void>;
 };
 
+/** The longest sign-in lock (docs/spec/05-auth.md, "Local accounts"). */
+const longestLock = 15 * 60_000;
+
+/** Throttled sign-ins in a row before a caller gives up and reports the lock. */
+const lockTries = 3;
+
+/**
+ * How long a sign-in answer asks the caller to wait, in milliseconds: the
+ * Retry-After of a 429, plus half a second for its rounding to whole
+ * seconds. Undefined for any other answer. Sign-in throttling counts
+ * failures per IP address for an hour (docs/spec/05-auth.md), and the
+ * sign-in flow makes one at each width, all from this host, so a rerun
+ * within the hour meets locks of a second, then two, four and so on.
+ */
+export function signInLock(res: {
+  status(): number;
+  headers(): Record<string, string>;
+}): number | undefined {
+  if (res.status() !== 429) return undefined;
+  const seconds = Number(res.headers()["retry-after"]);
+  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+  return Math.min(seconds * 1000, longestLock) + 500;
+}
+
+/** Waits out a sign-in lock, adding the wait to the running test's timeout. */
+export async function waitOutLock(ms: number): Promise<void> {
+  let info: ReturnType<typeof test.info> | undefined;
+  try {
+    info = test.info();
+  } catch {
+    // seed.ts runs as global setup, outside any test, with no timeout to extend.
+  }
+  if (info && info.timeout > 0) info.setTimeout(info.timeout + ms);
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+/** Signs in through the API, waiting out a lock from earlier failures on this host. */
+async function postLogin(
+  ctx: APIRequestContext,
+  username: string,
+  password: string,
+): Promise<APIResponse> {
+  for (let tries = 1; ; tries++) {
+    const res = await ctx.post(`${api}/auth/login`, { data: { username, password } });
+    const lock = signInLock(res);
+    if (lock === undefined || tries === lockTries) return res;
+    await waitOutLock(lock);
+  }
+}
+
 export async function session(
   baseURL: string,
   username: string,
   password: string,
 ): Promise<Session> {
   const ctx = await request.newContext({ baseURL });
-  const res = await ctx.post(`${api}/auth/login`, { data: { username, password } });
+  const res = await postLogin(ctx, username, password);
   expect(res.ok(), `sign in as ${username} on ${baseURL}: ${await res.text()}`).toBe(true);
   const csrf = (await res.json()).csrf_token as string;
   return {
@@ -68,7 +119,7 @@ export async function session(
 export async function signIn(page: Page, username = user.username, password = user.password) {
   // Sign-in with a session cookie needs its CSRF token, so start afresh.
   await page.context().clearCookies();
-  const res = await page.request.post(`${api}/auth/login`, { data: { username, password } });
+  const res = await postLogin(page.request, username, password);
   expect(res.ok(), await res.text()).toBe(true);
 }
 
