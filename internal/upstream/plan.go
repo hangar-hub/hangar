@@ -33,6 +33,14 @@ const (
 	phaseFailed   = "failed"
 )
 
+// refConflictMessage is the progress message of a Pull that plans again
+// because the Mirror's history changed while it stored it.
+const refConflictMessage = "Planning again: the Mirror's history changed while this Pull stored it"
+
+// maxRefConflicts bounds how many times a Pull plans again at once after
+// a ref conflict.
+const maxRefConflicts = 5
+
 // Failure reasons in a failed Pull's result.
 const (
 	reasonUpstreamNotFound = "upstream_not_found"
@@ -77,6 +85,9 @@ type pullState struct {
 	AlreadyPresent int        `json:"already_present"`
 	Dependencies   []depState `json:"dependencies,omitempty"`
 	Warnings       []string   `json:"warnings,omitempty"`
+	// RefConflicts counts the times planning met another run storing the
+	// Mirror's history and planned again at once.
+	RefConflicts int `json:"ref_conflicts,omitempty"`
 }
 
 // File statuses in pullState.
@@ -105,8 +116,22 @@ func (s *Service) runPull(ctx context.Context, j *jobs.Job, prog jobs.Progress) 
 		}
 	}
 	if st.Phase == "" || st.Phase == phaseFailed {
-		st = pullState{}
+		st = pullState{RefConflicts: st.RefConflicts}
 		if err := s.plan(ctx, j, prog, &p, &st); err != nil {
+			if errors.Is(err, repo.ErrRefConflict) && st.RefConflicts < maxRefConflicts {
+				// Another run stored history in this Mirror at the same
+				// time: a sync, another Pull of it, or a second run of
+				// this Job after a lost lease. Planning again sees that
+				// history, so it is not a failure to back off from. The
+				// count stops a conflict that keeps coming back from
+				// planning again for ever: past it, the Job's backoff
+				// applies.
+				st = pullState{RefConflicts: st.RefConflicts + 1}
+				if serr := prog.SetResult(ctx, st); serr != nil {
+					return serr
+				}
+				return s.snooze(s.opts.Now().Add(s.opts.PollInterval), refConflictMessage)
+			}
 			return s.failPull(ctx, prog, &p, &st, err)
 		}
 	}
