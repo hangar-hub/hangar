@@ -1542,6 +1542,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Organisations
+         * @description Every Organisation of the Instance in name order, optionally filtered by name or display name. Instance admins only.
+         */
+        get: operations["adminListOrgs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users": {
         parameters: {
             query?: never;
@@ -2754,6 +2774,10 @@ export interface components {
             last_login_at?: string;
             /** Format: date-time */
             created_at: string;
+        };
+        AdminOrgList: {
+            items: components["schemas"]["Namespace"][];
+            next_cursor?: string;
         };
         AdminUserList: {
             items: components["schemas"]["AdminUser"][];
@@ -5497,6 +5521,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookDelivery"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    adminListOrgs: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description Opaque cursor from a previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organisations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrgList"];
                 };
             };
             default: components["responses"]["Problem"];

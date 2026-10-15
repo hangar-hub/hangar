@@ -160,3 +160,18 @@ test("pages and searches rows in the Dataset Viewer", async ({ page }) => {
   );
   expect(problems).toEqual([]);
 });
+
+test("creates an Organisation and lists it for admins", async ({ page }) => {
+  const problems = watchConsole(page);
+  await signIn(page, "hangar-admin", adminPassword);
+  await page.goto("/admin/organisations");
+  const name = `org-${Date.now()}`;
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Create Organisation" }).click();
+  await expect(page.getByRole("status").filter({ hasText: `Created ${name}.` })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: name })).toContainText("1 members");
+  await page.getByLabel("Find an Organisation").fill(name);
+  await page.getByLabel("Find an Organisation").press("Enter");
+  await expect(page.getByRole("listitem")).toHaveCount(1);
+  expect(problems).toEqual([]);
+});

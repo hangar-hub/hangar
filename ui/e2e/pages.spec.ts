@@ -65,6 +65,7 @@ const signedIn = [
   "/admin",
   "/admin/system",
   "/admin/users",
+  "/admin/organisations",
   "/admin/organisations?q=ml",
   "/admin/upstreams",
   "/admin/pulls",

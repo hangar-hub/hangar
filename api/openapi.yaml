@@ -1041,6 +1041,16 @@ paths:
         default: {$ref: "#/components/responses/Problem"}
 
   # Admin ---------------------------------------------------------------------------------
+  /admin/orgs:
+    get:
+      tags: [admin]
+      operationId: adminListOrgs
+      summary: List Organisations
+      description: Every Organisation of the Instance in name order, optionally filtered by name or display name. Instance admins only.
+      parameters: [{name: q, in: query, schema: {type: string}}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Organisations., content: {application/json: {schema: {$ref: "#/components/schemas/AdminOrgList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /admin/users:
     get:
       tags: [admin]
@@ -2274,6 +2284,10 @@ components:
         oidc_providers: {type: array, items: {type: string}}
         last_login_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
+    AdminOrgList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Namespace"}}, next_cursor: {type: string}}
     AdminUserList:
       type: object
       required: [items]

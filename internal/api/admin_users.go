@@ -40,6 +40,33 @@ func (h *Identity) AdminListUsers(w http.ResponseWriter, r *http.Request, params
 	httpx.WriteJSON(w, r, http.StatusOK, out)
 }
 
+// AdminListOrgs implements GET /admin/orgs: every Organisation, for the
+// admin Organisations page.
+func (h *Identity) AdminListOrgs(w http.ResponseWriter, r *http.Request, params gen.AdminListOrgsParams) {
+	if _, ok := h.instanceAdmin(w, r); !ok {
+		return
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = *params.Cursor
+	}
+	orgs, next, err := h.orgs.ListOrgs(r.Context(), idStr(params.Q), cursor, idLimit(params.Limit))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := gen.AdminOrgList{Items: make([]gen.Namespace, 0, len(orgs)), NextCursor: idNextCursor(next)}
+	for i := range orgs {
+		n, err := h.orgs.MemberCount(r.Context(), orgs[i].ID)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		out.Items = append(out.Items, idNamespaceOut(&orgs[i], n))
+	}
+	httpx.WriteJSON(w, r, http.StatusOK, out)
+}
+
 // AdminCreateUser implements POST /admin/users. Without a password the
 // user signs in with OIDC, or the admin sends a reset link.
 func (h *Identity) AdminCreateUser(w http.ResponseWriter, r *http.Request) {

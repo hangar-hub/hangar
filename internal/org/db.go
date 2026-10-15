@@ -2,6 +2,7 @@ package org
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -684,6 +685,47 @@ func (o *DBService) SearchNamespaces(ctx context.Context, query string, limit in
 		out = append(out, *rows[i].toNamespace())
 	}
 	return out, nil
+}
+
+// ListOrgs returns Organisations in name order, those whose name or
+// display name contains q (ignoring case) when q is set, at most limit
+// (default 50, at most 500) after cursor, and the cursor of the next page
+// or "".
+func (o *DBService) ListOrgs(ctx context.Context, q, cursor string, limit int) ([]Namespace, string, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	limit = min(limit, 500)
+	where := "WHERE n.kind = ?"
+	args := []any{KindOrg}
+	if q != "" {
+		pattern := "%" + likeEscaper.Replace(strings.ToLower(q)) + "%"
+		where += ` AND (lower(n.name) LIKE ? ESCAPE '\' OR lower(n.display_name) LIKE ? ESCAPE '\')`
+		args = append(args, pattern, pattern)
+	}
+	if cursor != "" {
+		after, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil {
+			return nil, "", fmt.Errorf("%w: the cursor is not valid", ErrInvalid)
+		}
+		where += " AND lower(n.name) > ?"
+		args = append(args, string(after))
+	}
+	args = append(args, limit+1)
+	var rows []nsRow
+	if err := o.db.NewRaw(nsSelect+where+" ORDER BY lower(n.name) LIMIT ?", args...).Scan(ctx, &rows); err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(rows) > limit {
+		rows = rows[:limit]
+		next = base64.RawURLEncoding.EncodeToString([]byte(strings.ToLower(rows[len(rows)-1].Name)))
+	}
+	out := make([]Namespace, 0, len(rows))
+	for i := range rows {
+		out = append(out, *rows[i].toNamespace())
+	}
+	return out, next, nil
 }
 
 // likeEscaper escapes the LIKE wildcards and the escape character itself.

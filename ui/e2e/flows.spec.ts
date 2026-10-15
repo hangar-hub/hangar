@@ -344,6 +344,19 @@ test.describe("admin settings", () => {
     await expect(page.getByLabel("Registration")).toHaveValue("open");
   });
 
+  test("lists every Organisation and filters them", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/admin/organisations");
+    const list = page.getByRole("listitem");
+    await expect(list.filter({ hasText: "ML team" })).toContainText("2 members");
+    await expect(list.filter({ hasText: "TinyLlama" })).toContainText("Created by a Pull");
+    await expect(list).toHaveCount(3);
+    await page.getByLabel("Find an Organisation").fill("tiny");
+    await page.getByLabel("Find an Organisation").press("Enter");
+    await expect(list).toHaveCount(1);
+    await expect(list).toContainText("TinyLlama");
+  });
+
   test("validates Pull windows before saving", async ({ page }) => {
     await signIn(page);
     await page.goto("/admin/pulls");

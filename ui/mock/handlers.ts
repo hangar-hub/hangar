@@ -1368,6 +1368,21 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   },
 
   // Admin
+  adminListOrgs: (ctx) => {
+    const q = ctx.query.get("q")?.toLowerCase();
+    return ok(
+      page(
+        ctx,
+        ctx.state.namespaces
+          .filter((n) => n.kind === "org")
+          .filter(
+            (n) =>
+              !q || n.name.toLowerCase().includes(q) || n.display_name.toLowerCase().includes(q),
+          )
+          .sort((a, c) => a.name.toLowerCase().localeCompare(c.name.toLowerCase())),
+      ),
+    );
+  },
   adminListUsers: (ctx) => {
     const q = ctx.query.get("q")?.toLowerCase();
     return ok(
