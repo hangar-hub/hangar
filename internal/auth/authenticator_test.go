@@ -202,8 +202,9 @@ func TestAuthenticateSessionsAndCSRF(t *testing.T) {
 		_, err = authReq(t, s, http.MethodPatch, func(r *http.Request) { withCookie(r); r.Header.Set(auth.CSRFHeader, sess.CSRFToken) })
 		require.NoError(t, err)
 
-		_, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: "nope"}) })
-		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		p, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: "nope"}) })
+		require.NoError(t, err, "an unknown session cookie is stale, not an error")
+		require.True(t, p.IsAnonymous())
 
 		// Sessions list and revoke.
 		list, err := s.Sessions.List(ctx, alice.ID)
@@ -215,8 +216,9 @@ func TestAuthenticateSessionsAndCSRF(t *testing.T) {
 
 		// Expiry after session_ttl.
 		clock.Advance(s.Config().Security.SessionTTL)
-		_, err = authReq(t, s, http.MethodGet, withCookie)
-		require.ErrorIs(t, err, auth.ErrInvalidCredentials, "expired session")
+		p, err = authReq(t, s, http.MethodGet, withCookie)
+		require.NoError(t, err, "an expired session is stale, not an error")
+		require.True(t, p.IsAnonymous(), "expired session")
 		n, err := s.Sessions.DeleteExpired(ctx)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), n)
@@ -240,8 +242,9 @@ func TestAuthenticateSessionsAndCSRF(t *testing.T) {
 		disabled := true
 		_, err = s.Users.Update(ctx, alice.ID, auth.UserUpdate{Disabled: &disabled}, model.System())
 		require.NoError(t, err)
-		_, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: secret3}) })
-		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		p, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: secret3}) })
+		require.NoError(t, err)
+		require.True(t, p.IsAnonymous(), "a disabled user's session is stale")
 	})
 }
 
