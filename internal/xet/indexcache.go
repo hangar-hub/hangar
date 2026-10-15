@@ -15,8 +15,14 @@ type indexLoader func(h Hash, charge func(chunks int) error) (*XorbIndex, error)
 // takes about 360 KiB in memory, so holding every index a shard names
 // would let a small shard fill memory. The cache instead holds at most
 // maxHeld chunks of index, dropping the least recently used index to make
-// room, and charges every chunk it loads, reloads included, against
-// maxLoaded. Both are charged before an index's entries are read.
+// room, and charges every chunk it loads, reloads included, against two
+// bounds: maxLoaded, the fixed ceiling of MaxShardIndexLoads, and allowed,
+// what the shard itself pays for. allowed starts at the shard's reload
+// allowance (Shard.indexReloadAllowance) and grows by indexLoadsFactor
+// times a xorb's chunk count the first time that xorb is loaded, so a shard
+// may load each xorb it names once per pass, and reload indexes only in
+// proportion to the chunks it names. Everything is charged from the index
+// header, before an index's entries are read.
 //
 // An index dropped while a caller still uses it stays alive until that
 // caller moves on, so memory is at most maxHeld chunks plus the one or two
@@ -25,12 +31,14 @@ type indexCache struct {
 	load      indexLoader
 	maxHeld   int64
 	maxLoaded int64
+	allowed   int64 // the index chunks the shard has paid for so far
 
 	held   int64 // chunks of the indexes in lru
 	loaded int64 // chunks loaded in all
 	peak   int64 // the most chunks held at once
 	lru    *list.List
 	byHash map[Hash]*list.Element
+	seen   map[Hash]struct{} // xorbs loaded at least once
 }
 
 type cachedIndex struct {
@@ -38,13 +46,14 @@ type cachedIndex struct {
 	idx  *XorbIndex
 }
 
-// newIndexCache returns a cache bounded by l.MaxShardIndexChunks and
-// l.MaxShardIndexLoads (after WithDefaults).
-func newIndexCache(l Limits, load indexLoader) *indexCache {
+// newIndexCache returns a cache bounded by l.MaxShardIndexChunks,
+// l.MaxShardIndexLoads (after WithDefaults) and a shard's reload
+// allowance.
+func newIndexCache(l Limits, reloads int64, load indexLoader) *indexCache {
 	l = l.WithDefaults()
 	return &indexCache{
-		load: load, maxHeld: l.MaxShardIndexChunks, maxLoaded: l.MaxShardIndexLoads,
-		lru: list.New(), byHash: map[Hash]*list.Element{},
+		load: load, maxHeld: l.MaxShardIndexChunks, maxLoaded: l.MaxShardIndexLoads, allowed: reloads,
+		lru: list.New(), byHash: map[Hash]*list.Element{}, seen: map[Hash]struct{}{},
 	}
 }
 
@@ -86,6 +95,17 @@ func (c *indexCache) reserve(h Hash, n int64) error {
 		return fmt.Errorf("%w: loading the index of xorb %s would take the shard over %d index chunks loaded",
 			ErrTooLarge, h, c.maxLoaded)
 	}
+	_, seen := c.seen[h]
+	allowed := c.allowed
+	if !seen {
+		allowed = satAdd(allowed, satMul(indexLoadsFactor, n))
+	}
+	if n > allowed-c.loaded {
+		return fmt.Errorf("%w: loading the index of xorb %s would take the shard over the %d index chunks "+
+			"it may load for the xorbs and chunks it names", ErrTooLarge, h, allowed)
+	}
+	c.allowed = allowed
+	c.seen[h] = struct{}{}
 	for c.held+n > c.maxHeld {
 		e := c.lru.Back()
 		old := c.lru.Remove(e).(*cachedIndex)

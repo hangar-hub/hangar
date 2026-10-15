@@ -433,8 +433,10 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 		}
 	}
 	// Indexes are loaded as each check needs them, within the shard's
-	// index limits, rather than all held until the shard is done.
-	cache := newIndexCache(s.limits, func(h Hash, charge func(int) error) (*XorbIndex, error) {
+	// index limits, rather than all held until the shard is done. What a
+	// shard may load grows with the xorbs and chunks it names, not with
+	// how often it names them.
+	cache := newIndexCache(s.limits, sh.indexReloadAllowance(s.limits), func(h Hash, charge func(int) error) (*XorbIndex, error) {
 		idx, err := s.loadIndex(ctx, h, charge)
 		if errors.Is(err, blob.ErrNotFound) {
 			return nil, unknownXorb(h)
@@ -443,7 +445,8 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 	})
 	defer func() {
 		span.SetAttributes(attribute.Int64("xet.shard.index_chunks_loaded", cache.loaded),
-			attribute.Int64("xet.shard.index_chunks_peak", cache.peak))
+			attribute.Int64("xet.shard.index_chunks_peak", cache.peak),
+			attribute.Int64("xet.shard.index_chunks_allowed", cache.allowed))
 	}()
 	index := IndexFunc(cache.get)
 	// Every term must fit its stored xorb before any file is checked.
