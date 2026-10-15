@@ -906,15 +906,17 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 			calls atomic.Int32
 		)
 		ready := make(chan struct{})
-		get := func(ctx context.Context) *jobs.Job {
-			j, err := l.queue.Get(ctx, jid)
+		// The hook reads and writes with l.ctx: the run it is called
+		// from can lose its lease, which cancels the run's context.
+		get := func() *jobs.Job {
+			j, err := l.queue.Get(l.ctx, jid)
 			if err != nil {
 				t.Errorf("read the pull Job: %v", err)
 				return &jobs.Job{}
 			}
 			return j
 		}
-		waitFor := func(ctx context.Context, what string, cond func() bool) {
+		waitFor := func(what string, cond func() bool) {
 			deadline := time.Now().Add(time.Minute)
 			for !cond() {
 				if time.Now().After(deadline) {
@@ -924,29 +926,36 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
-		hook := func(ctx context.Context) {
+		hook := func(context.Context) {
 			<-ready
 			switch calls.Add(1) {
 			case 1:
 				// The first run is about to store the history. Its lease
 				// expires, and the worker starts a second run, which
 				// stores the history first.
-				waitFor(ctx, "a second run of the Pull stored the history", func() bool {
-					if get(ctx).Attempts < 2 {
+				waitFor("a second run of the Pull stored the history", func() bool {
+					if get().Attempts < 2 {
+						// Only the first run's lease: a second run must
+						// keep its own.
 						_, err := d.NewUpdate().Model((*db.Job)(nil)).Set("lease_expires_at = ?", time.Now().UTC().Add(-time.Minute)).
-							Where("id = ? AND status = ?", jid, string(jobs.StatusRunning)).Exec(ctx)
+							Where("id = ? AND status = ? AND attempts = 1", jid, string(jobs.StatusRunning)).Exec(l.ctx)
 						if err != nil {
 							t.Errorf("expire the lease: %v", err)
 						}
 						return false
 					}
-					_, err := l.real.Resolve(ctx, sel, "main")
+					_, err := l.real.Resolve(l.ctx, sel, "main")
 					return err == nil
 				})
 			case 3:
 				// The second run's selection check waits until the first
-				// run has handed the Job back to the queue.
-				waitFor(ctx, "the first run handed the Job back", func() bool { return get(ctx).Status != jobs.StatusRunning })
+				// run has given up on its pack: it either recorded an
+				// error to back off from or planned again, after which
+				// the worker may already have started a third run.
+				waitFor("the first run gave up on its pack", func() bool {
+					j := get()
+					return j.Status != jobs.StatusRunning || j.Error != "" || bytes.Contains(j.Result, []byte(`"ref_conflicts"`))
+				})
 			}
 		}
 		l = newLocal(t, d, up.URL, localOptions{partSize: 1 << 20, beforeQuotaCheck: hook})
