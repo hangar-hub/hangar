@@ -28,10 +28,17 @@ import (
 	"github.com/jamesagarside/hangar/internal/xet"
 )
 
-// newHealth builds the readiness checks: database reachable, migrations at
-// the expected version, and the Blob store sentinel readable.
-func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
+// newHealth builds the readiness checks: the Instance serving every route
+// (started reports it), database reachable, migrations at the expected
+// version, and the Blob store sentinel readable.
+func newHealth(d *db.DB, blobs blob.Store, started func() bool) *httpx.Health {
 	return httpx.NewHealth(
+		httpx.Check{Name: "startup", Run: func(context.Context) error {
+			if !started() {
+				return errors.New("the Instance is still starting")
+			}
+			return nil
+		}},
 		httpx.Check{Name: "database", Run: func(ctx context.Context) error {
 			if err := d.PingContext(ctx); err != nil {
 				return fmt.Errorf("database unreachable: %w", err)

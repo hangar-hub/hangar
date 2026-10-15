@@ -88,7 +88,11 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	if err != nil {
 		return err
 	}
-	health := newHealth(d, blobs)
+	// /healthz answers at once, but /readyz waits until every route is
+	// served, so load balancers and compat/harness never send a request
+	// to the starting handler, which serves only health.
+	var started atomic.Bool
+	health := newHealth(d, blobs, started.Load)
 
 	// Health answers at once; the rest of the Instance is built once the
 	// schema is current, which web and worker processes wait for while
@@ -149,6 +153,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return err
 	}
 	current.Store(&handler)
+	started.Store(true)
 
 	// Jobs run in roles all and worker. On shutdown the worker returns
 	// running Jobs to the queue.
