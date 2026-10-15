@@ -181,9 +181,11 @@ type Store interface {
 	// AbortMultipart discards the upload and its parts.
 	AbortMultipart(ctx context.Context, key, uploadID string) error
 
-	// PresignGet returns a URL that downloads the object without credentials,
-	// with Content-Disposition naming filename. ErrNotSupported on the
-	// filesystem backend.
+	// PresignGet returns a URL that downloads the object without credentials.
+	// The response always has Content-Type SafeContentType and an attachment
+	// Content-Disposition naming filename (ContentDisposition), whatever the
+	// object was stored with, so a browser never renders it on the
+	// bucket's origin. ErrNotSupported on the filesystem backend.
 	PresignGet(ctx context.Context, key string, ttl time.Duration, filename string) (url string, err error)
 	// PresignPut returns a URL and headers that upload exactly size bytes to
 	// key without credentials. When sha256 is not nil and the backend
