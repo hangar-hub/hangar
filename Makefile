@@ -155,7 +155,7 @@ KUBECONFORM = $(GO) run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 \
 	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
 .PHONY: lint-deploy
-lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Compose files and the workflows' action refs
+lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Compose files, the workflows' action refs and that jobs needing uv install it
 	helm lint deploy/helm/hangar -f deploy/helm/hangar/ci/default-values.yaml
 	helm lint deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml
 	@for values in deploy/helm/hangar/ci/default-values.yaml deploy/helm/examples/scale-values.yaml; do \
@@ -172,6 +172,7 @@ lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Com
 	goreleaser check
 	shellcheck scripts/*.sh loadtest/*.sh
 	./scripts/check-action-refs.sh
+	./scripts/check-workflow-uv.sh
 
 .PHONY: docs
 docs: ## Build the documentation site into site/ (needs uv)

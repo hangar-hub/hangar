@@ -158,6 +158,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # TestLFSMultipartTransfer runs the hf CLI from the compat lock as the
+      # git-lfs multipart transfer agent, found with `uv run --project compat`.
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Install the hf CLI from the compat lock
+        run: uv sync --frozen --project compat
       - name: compat/git
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
