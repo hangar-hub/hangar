@@ -78,3 +78,47 @@ def test_collections(api, hub, repo_name):
     assert len(api.get_collection(c.slug).items) == 1
     api.delete_collection(c.slug)
     api.delete_collection(c.slug, missing_ok=True)
+
+
+@pytest.mark.endpoint(
+    "GET /api/{type}s/{repo}/likers",
+    "GET /api/users/{user}/likes",
+    "POST /api/{type}s/{repo}/like",
+)
+def test_likers_and_liked_repos(api, hub, repo_name):
+    repo = api.create_repo(repo_name).repo_id
+    bob = HfApi(endpoint=hub.endpoint, token=hub.token("bob"))
+    # huggingface_hub has unlike() but no like(); the web UI likes Repos.
+    r = requests.post(f"{hub.endpoint}/api/models/{repo}/like", headers={"authorization": f"Bearer {hub.token('bob')}"}, timeout=10)
+    assert r.status_code == 200
+    likers = list(api.list_repo_likers(repo))
+    assert len(likers) == 1
+    assert likers[0].fullname
+    likes = api.list_liked_repos("bob")
+    assert likes.user == "bob"
+    assert repo in likes.models
+    bob.unlike(repo)
+    assert list(api.list_repo_likers(repo)) == []
+    with pytest.raises(HfHubHTTPError):
+        api.list_liked_repos("nobody-by-this-name")
+
+
+@pytest.mark.endpoint(
+    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit",
+    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/hide",
+)
+def test_edit_and_hide_comments(api, hub, repo_name):
+    repo = api.create_repo(repo_name).repo_id
+    bob = HfApi(endpoint=hub.endpoint, token=hub.token("bob"))
+    d = bob.create_discussion(repo, "Typo", description="There is a typo.")
+    comment = bob.comment_discussion(repo, d.num, "It is in README.md, line 3.")
+    edited = bob.edit_discussion_comment(repo, d.num, comment.id, "It is in README.md, line 4.")
+    assert edited.content == "It is in README.md, line 4."
+    assert edited.edited
+    with pytest.raises(HfHubHTTPError):
+        HfApi(endpoint=hub.endpoint, token=hub.token("carol")).edit_discussion_comment(repo, d.num, comment.id, "Spam")
+    with pytest.warns(UserWarning):
+        hidden = api.hide_discussion_comment(repo, d.num, comment.id)
+    assert hidden.hidden
+    details = api.get_discussion_details(repo, d.num)
+    assert [e for e in details.events if e.id == comment.id][0].hidden

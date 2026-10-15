@@ -45,6 +45,11 @@ func (h *Handler) serveDiscussions(w http.ResponseWriter, r *http.Request, ref r
 		h.route(w, r, prefix+"/{num}/title", true, methods{http.MethodPost: func(w http.ResponseWriter, r *http.Request) { h.renameDiscussion(w, r, ref, num) }})
 	case args.len() == 2 && args.at(1) == "merge":
 		h.route(w, r, prefix+"/{num}/merge", true, methods{http.MethodPost: func(w http.ResponseWriter, r *http.Request) { h.mergeDiscussion(w, r, ref, num) }})
+	case args.len() == 4 && args.at(1) == "comment" && (args.at(3) == "edit" || args.at(3) == "hide"):
+		change := args.at(3)
+		h.route(w, r, prefix+"/{num}/comment/{id}/"+change, true, methods{http.MethodPost: func(w http.ResponseWriter, r *http.Request) {
+			h.commentChange(w, r, ref, num, args.at(2), change)
+		}})
 	default:
 		h.notFound(w, r)
 	}
@@ -112,6 +117,14 @@ func (h *Handler) discussionJSON(rp *repo.Repo, d *community.Discussion, details
 
 // eventJSON renders a thread event in the shape huggingface_hub's
 // deserialize_event reads.
+// numEdits is 1 for an edited comment: Hangar keeps only the latest text.
+func numEdits(e community.Event) int {
+	if e.Edited {
+		return 1
+	}
+	return 0
+}
+
 func eventJSON(e community.Event) map[string]any {
 	str := func(keys ...string) string {
 		for _, k := range keys {
@@ -125,7 +138,7 @@ func eventJSON(e community.Event) map[string]any {
 	switch e.Type {
 	case community.EventComment:
 		data = map[string]any{
-			"edited": false, "hidden": e.Hidden, "numEdits": 0, "editors": []string{},
+			"edited": e.Edited, "hidden": e.Hidden, "numEdits": numEdits(e), "editors": []string{},
 			"latest": map[string]any{"raw": e.Body, "html": "<p>" + html.EscapeString(e.Body) + "</p>", "author": map[string]any{"name": e.Author}},
 		}
 	case community.EventStatusChange:

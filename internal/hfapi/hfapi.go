@@ -232,6 +232,9 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request, p reqPath) {
 		h.serveRepos(w, r, p.shift(1))
 	case "collections":
 		h.serveCollections(w, r, p.shift(1))
+	case "users":
+		h.route(w, r, "/api/users/{user}/likes", p.len() == 3 && p.at(2) == "likes", map[string]http.HandlerFunc{
+			http.MethodGet: func(w http.ResponseWriter, r *http.Request) { h.userLikes(w, r, p.at(1)) }})
 	case "models", "datasets":
 		t := model.RepoTypeModel
 		if p.segs[0] == "datasets" {

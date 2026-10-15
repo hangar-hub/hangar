@@ -233,8 +233,6 @@ NOT_SUPPORTED = {
     "POST /api/{type}s/{repo}/lfs-files/duplicate": "Cross-Repo LFS copy needs Xet hashes. Copies within a Repo work.",
     "/api/spaces/...": "Spaces are out of scope.",
     "/api/jobs/... and /api/inference/...": "Jobs and the Inference API are out of scope.",
-    "POST /api/{type}s/{repo}/discussions/{num}/comment/{id}/edit|hide": "Editing and hiding comments are not in v1.0.",
-    "GET /api/users/{user}/likes, GET /api/{type}s/{repo}/likers": "Liker listings are not in v1.0; like and unlike work.",
 }
 
 

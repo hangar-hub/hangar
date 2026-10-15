@@ -70,6 +70,8 @@ func (h *Handler) serveRepoAPI(w http.ResponseWriter, r *http.Request, t model.R
 		h.route(w, r, prefix+"/commit/{rev}", rev != "" && tail.len() == 0, methods{http.MethodPost: func(w http.ResponseWriter, r *http.Request) { h.commit(w, r, ref, rev) }})
 	case "discussions":
 		h.serveDiscussions(w, r, ref, prefix+"/discussions", args)
+	case "likers":
+		h.route(w, r, prefix+"/likers", args.len() == 0, methods{http.MethodGet: func(w http.ResponseWriter, r *http.Request) { h.likers(w, r, ref) }})
 	case "like":
 		h.route(w, r, prefix+"/like", args.len() == 0, methods{
 			http.MethodPost:   func(w http.ResponseWriter, r *http.Request) { h.like(w, r, ref, true) },
