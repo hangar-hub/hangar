@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -296,10 +297,7 @@ func (a *app) selectFiles(ctx context.Context, c *client, ref repoRef, o pullOpt
 	}
 	var out []gen.TreeEntry
 	for _, e := range entries {
-		// With a quant, take its GGUF files and projectors, plus the small
-		// non-LFS files (README.md, config.json and the like) that come with
-		// the history anyway.
-		if quantFiles != nil && !quantFiles[e.Path] && e.Lfs != nil {
+		if quantFiles != nil && !quantFiles[e.Path] && !keepWithQuant(e) {
 			continue
 		}
 		if !inc.empty() && !inc.match(e.Path) {
@@ -311,6 +309,17 @@ func (a *app) selectFiles(ctx context.Context, c *client, ref repoRef, o pullOpt
 		out = append(out, e)
 	}
 	return out, commit, nil
+}
+
+// keepWithQuant reports whether a file outside the chosen quant group still
+// comes with a quant: the small files (README.md, config.json and the like)
+// that come with the history anyway. Other GGUF files never do, whether they
+// are LFS objects or regular git blobs: an Instance stores a GGUF file under
+// hfapi.regular_upload_max as a regular blob, because the default
+// .gitattributes has no *.gguf rule. Other LFS objects, such as safetensors
+// weights, are left out too.
+func keepWithQuant(e gen.TreeEntry) bool {
+	return e.Lfs == nil && !strings.EqualFold(path.Ext(e.Path), ".gguf")
 }
 
 // pickQuant returns the files of a quant group (case-insensitive) and its

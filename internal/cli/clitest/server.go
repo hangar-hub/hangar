@@ -21,6 +21,7 @@ import (
 
 	"github.com/jamesagarside/hangar/internal/api/gen"
 	"github.com/jamesagarside/hangar/internal/model"
+	hangarrepo "github.com/jamesagarside/hangar/internal/repo"
 )
 
 // server implements the native API operations the CLI uses. The rest
@@ -180,7 +181,9 @@ func (s *server) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if body.Visibility != nil {
 		repo.Visibility = *body.Visibility
 	}
-	s.i.commitFiles(repo, "main", []File{{Path: ".gitattributes", Content: []byte("*.gguf filter=lfs diff=lfs merge=lfs -text\n")}})
+	// A new Repo's first Commit holds the Hub's default .gitattributes, as on
+	// a real Instance.
+	s.i.commitFiles(repo, "main", []File{{Path: ".gitattributes", Content: hangarrepo.DefaultGitAttributes(id.Type)}})
 	writeJSON(w, http.StatusCreated, s.apiRepo(repo))
 }
 
@@ -366,12 +369,23 @@ func (s *server) ListDatasetConfigs(w http.ResponseWriter, r *http.Request, ns, 
 	writeJSON(w, http.StatusOK, gen.DatasetConfigs{Commit: repo.refs[repo.DefaultBranch], FromCard: false, Configs: cfgs})
 }
 
-func lfsPath(p string) bool {
-	switch path.Ext(p) {
-	case ".gguf", ".safetensors", ".bin", ".parquet":
-		return true
+// lfsRules returns the LFS rules of a Repo's .gitattributes at a branch,
+// falling back to the Hub's default for the Repo type, as the real upload
+// plan and Commit endpoint do (internal/api/uploads.go).
+func (s *server) lfsRules(r *Repo, branch string) *hangarrepo.LFSRules {
+	var files map[string]File
+	if c := r.commits[r.refs[branch]]; c != nil {
+		files = c.files
 	}
-	return false
+	return lfsRulesOf(r.ID.Type, files)
+}
+
+// lfsRulesOf parses the .gitattributes among files, or the Hub's default.
+func lfsRulesOf(t model.RepoType, files map[string]File) *hangarrepo.LFSRules {
+	if f, ok := files[".gitattributes"]; ok {
+		return hangarrepo.ParseLFSRules(f.Content)
+	}
+	return hangarrepo.ParseLFSRules(hangarrepo.DefaultGitAttributes(t))
 }
 
 func (s *server) PlanUploads(w http.ResponseWriter, r *http.Request, t gen.RepoType, ns, name string) {
@@ -390,14 +404,19 @@ func (s *server) PlanUploads(w http.ResponseWriter, r *http.Request, t gen.RepoT
 	if repo == nil {
 		return
 	}
+	branch := repo.DefaultBranch
+	if body.Revision != nil && *body.Revision != "" {
+		branch = *body.Revision
+	}
+	rules := s.lfsRules(repo, branch)
 	plan := gen.UploadPlan{Files: []gen.UploadPlanItem{}}
 	for _, f := range body.Files {
 		item := gen.UploadPlanItem{Path: f.Path}
 		switch {
+		case !rules.IsLFS(f.Path) && f.Size <= s.i.InlineMax:
+			item.Action = gen.Inline
 		case s.i.objects[f.Sha256] != nil:
 			item.Action = gen.Exists
-		case f.Size <= s.i.InlineMax && !lfsPath(f.Path):
-			item.Action = gen.Inline
 		default:
 			if repo.Mirror && !s.mirrorWants(repo, f.Sha256) {
 				problem(w, http.StatusForbidden, "Mirrors are read-only; only objects the Mirror is missing can be uploaded.")
@@ -662,6 +681,9 @@ func (s *server) CreateCommit(w http.ResponseWriter, r *http.Request, t gen.Repo
 			files[p] = f
 		}
 	}
+	// Like the real Commit endpoint, an inline file that .gitattributes puts
+	// in LFS is stored as an LFS object.
+	rules := lfsRulesOf(repo.ID.Type, files)
 	for _, op := range body.Operations {
 		switch op.Op {
 		case gen.Add:
@@ -670,7 +692,11 @@ func (s *server) CreateCommit(w http.ResponseWriter, r *http.Request, t gen.Repo
 				problem(w, http.StatusBadRequest, "Bad base64.")
 				return
 			}
-			files[op.Path] = File{Path: op.Path, Content: b}
+			f := File{Path: op.Path, Content: b, LFS: rules.IsLFS(op.Path)}
+			if f.LFS {
+				s.i.objects[f.sha256()] = b
+			}
+			files[op.Path] = f
 		case gen.AddLfs:
 			obj := s.i.objects[deref(op.Sha256)]
 			if obj == nil || int64(len(obj)) != deref(op.Size) {

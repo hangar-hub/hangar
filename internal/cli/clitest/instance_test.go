@@ -411,3 +411,69 @@ func TestFailPartLastWaitsForTheOtherParts(t *testing.T) {
 	require.Equal(t, http.StatusOK, put(2))
 	require.Equal(t, 4, i.PartPuts())
 }
+
+// The fake's upload plan follows the real server's: a file goes inline when
+// the Repo's .gitattributes leaves it out of LFS and it is no larger than
+// InlineMax (10 MiB by default, hfapi.regular_upload_max), whatever its
+// extension. A new Repo starts with the Hub's default .gitattributes, which
+// has no *.gguf rule.
+func TestUploadPlanFollowsGitAttributes(t *testing.T) {
+	i := clitest.New(t)
+	ctx := context.Background()
+	c := client(t, i, clitest.Token)
+	r, err := c.CreateRepoWithResponse(ctx, gen.RepoCreate{Type: gen.RepoTypeSingularModel, Namespace: "acme", Name: "q"})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, r.StatusCode())
+	attrs := i.Files(mustID(t, "acme/q"), "main")[".gitattributes"]
+	require.Contains(t, string(attrs), "*.safetensors filter=lfs")
+	require.NotContains(t, string(attrs), "*.gguf")
+
+	gguf, st := []byte("GGUF small quant"), []byte("small weights")
+	plan := func() []gen.UploadPlanItem {
+		t.Helper()
+		p, err := c.PlanUploadsWithResponse(ctx, gen.Models, "acme", "q", gen.UploadPlanRequest{Files: []gen.UploadFile{
+			{Path: "tiny-Q4_K_M.gguf", Size: int64(len(gguf)), Sha256: shaHex(gguf)},
+			{Path: "model.safetensors", Size: int64(len(st)), Sha256: shaHex(st)},
+			{Path: "big.gguf", Size: 10<<20 + 1, Sha256: strings.Repeat("a", 64)},
+		}})
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, p.StatusCode(), string(p.Body))
+		return p.JSON200.Files
+	}
+	got := plan()
+	require.Equal(t, gen.Inline, got[0].Action, "a small GGUF file is a regular blob")
+	require.Equal(t, gen.Upload, got[1].Action, ".gitattributes puts safetensors in LFS")
+	require.Equal(t, gen.Upload, got[2].Action, "over InlineMax")
+
+	// Committed inline, the GGUF file has no LFS metadata in the tree.
+	cr, err := c.CreateCommitWithResponse(ctx, gen.Models, "acme", "q", gen.CommitRequest{Summary: "Add", Operations: []gen.CommitOperation{
+		{Op: gen.Add, Path: "tiny-Q4_K_M.gguf", ContentBase64: ptr(base64.StdEncoding.EncodeToString(gguf))},
+	}})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, cr.StatusCode(), string(cr.Body))
+	tree, err := c.GetTreeRootWithResponse(ctx, gen.Models, "acme", "q", "main", &gen.GetTreeRootParams{})
+	require.NoError(t, err)
+	for _, e := range tree.JSON200.Items {
+		if e.Path == "tiny-Q4_K_M.gguf" {
+			require.Nil(t, e.Lfs)
+		}
+	}
+
+	// Once the Repo's .gitattributes tracks *.gguf, GGUF files are LFS
+	// objects, through the plan and through an inline add. As on the server,
+	// a Commit follows its parent's .gitattributes.
+	commit := func(summary, p string, content []byte) {
+		t.Helper()
+		cr, err := c.CreateCommitWithResponse(ctx, gen.Models, "acme", "q", gen.CommitRequest{Summary: summary, Operations: []gen.CommitOperation{
+			{Op: gen.Add, Path: p, ContentBase64: ptr(base64.StdEncoding.EncodeToString(content))},
+		}})
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, cr.StatusCode(), string(cr.Body))
+	}
+	commit("Track GGUF", ".gitattributes", append(attrs, []byte("*.gguf filter=lfs diff=lfs merge=lfs -text\n")...))
+	require.Equal(t, gen.Upload, plan()[0].Action)
+	commit("Add Q8_0", "other-Q8_0.gguf", gguf)
+	require.True(t, i.IsLFS(mustID(t, "acme/q"), "main", "other-Q8_0.gguf"))
+	require.False(t, i.IsLFS(mustID(t, "acme/q"), "main", "tiny-Q4_K_M.gguf"))
+	require.Equal(t, gguf, i.Files(mustID(t, "acme/q"), "main")["other-Q8_0.gguf"])
+}

@@ -36,8 +36,11 @@ const Token = "hgr_alice_test_token"
 type File struct {
 	Path    string
 	Content []byte
-	// LFS stores the file as an LFS object. Files over LFSThreshold, and
-	// GGUF, safetensors and bin files, are LFS automatically.
+	// LFS stores the file as an LFS object. In fixtures added with AddRepo,
+	// AddUpstream and AddUpstreamRevision, files over LFSThreshold, and
+	// GGUF, safetensors, bin and Parquet files, are LFS automatically, as
+	// large weights on the Hub are. Files uploaded through the API follow
+	// the Repo's .gitattributes and InlineMax, as on a real Instance.
 	LFS bool
 }
 
@@ -113,7 +116,9 @@ type Instance struct {
 	Users map[string]string
 	// LFSThreshold makes files over this size LFS objects. Default 1 KiB.
 	LFSThreshold int64
-	// InlineMax is the largest non-LFS file the upload plan sends inline.
+	// InlineMax is the largest file the upload plan sends inline when
+	// .gitattributes leaves it out of LFS, as hfapi.regular_upload_max does on
+	// a real Instance. Default 10 MiB, the server's default.
 	InlineMax int64
 	// PartSize is the multipart part size. Default 64 KiB.
 	PartSize int64
@@ -164,7 +169,7 @@ func New(t testing.TB) *Instance {
 	i := &Instance{
 		Users:        map[string]string{Token: "alice"},
 		LFSThreshold: 1 << 10,
-		InlineMax:    1 << 10,
+		InlineMax:    10 << 20,
 		PartSize:     64 << 10,
 		JobPolls:     2,
 		repos:        map[string]*Repo{},
@@ -329,6 +334,18 @@ func (i *Instance) Present(id model.RepoID, rev, p string) bool {
 	}
 	f, ok := r.commits[r.refs[rev]].files[p]
 	return ok && i.present(f)
+}
+
+// IsLFS reports whether a file of a Repo at a revision is an LFS object, as
+// opposed to a regular git blob.
+func (i *Instance) IsLFS(id model.RepoID, rev, p string) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	r := i.repos[repoKey(id)]
+	if r == nil || r.commits[r.refs[rev]] == nil {
+		return false
+	}
+	return r.commits[r.refs[rev]].files[p].LFS
 }
 
 func (i *Instance) present(f File) bool {
