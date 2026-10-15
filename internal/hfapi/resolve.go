@@ -107,14 +107,26 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	blob.SetDownloadHeaders(hdr, path.Base(clean))
 	hdr.Set("Content-Disposition", contentDisposition(path.Base(clean)))
 
-	if r.Method == http.MethodGet && !h.allowDownload(w, r, rp, sha, clean) {
-		return
+	redirect := e.IsLFS() && h.d.Settings.RedirectDownloads
+	if r.Method == http.MethodGet {
+		if !h.allowDownload(w, r, rp, sha, clean) {
+			return
+		}
+	} else if redirect && !httpx.QueryBool(r.URL.Query(), "accept_risk", false) {
+		// A HEAD of a file a GET would refuse keeps its metadata but gets
+		// no presigned link, which would download it past the gate.
+		err := h.d.Downloads.CheckFile(ctx, rp.UUID, rp.ID, sha, clean)
+		if err != nil && !scan.IsBlocked(err) {
+			h.internalError(w, r, err)
+			return
+		}
+		redirect = err == nil
 	}
 	if e.IsLFS() && !e.Present {
 		h.serveNotPresent(w, r, rp, sha, e)
 		return
 	}
-	if e.IsLFS() && h.d.Settings.RedirectDownloads {
+	if redirect {
 		u, err := h.d.LFS.PresignGet(ctx, e.LFS.OID, h.d.Settings.PresignTTL, path.Base(clean))
 		switch {
 		case err == nil:
