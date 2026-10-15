@@ -127,17 +127,34 @@ func startInstance(t *testing.T, dsn string) backend {
 	password := hex.EncodeToString(secret)
 	set := []string{"security.anonymous_read=true"}
 	if dsn != "" {
-		set = append(set, "database.dsn="+dsn)
+		// database.driver defaults to sqlite, which would open the URL as
+		// a file path.
+		set = append(set, "database.driver=postgres", "database.dsn="+dsn)
 	}
 	inst := harness.Start(t, harness.Options{Set: set, StartTimeout: 3 * time.Minute,
 		Env: []string{"HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD=" + password}})
 	i := &instance{inst: inst}
-	i.token = i.createToken(t, password)
+	i.token = i.createToken(t, password, "write")
+	// The backend must run on the database it is named after.
+	want := "sqlite"
+	if dsn != "" {
+		want = "postgres"
+	}
+	status, body := i.get(t, inst.URL+"/api/hangar/v1/admin/system", i.createToken(t, password, "admin"))
+	require.Equal(t, http.StatusOK, status, "admin system: %s", body)
+	var sys struct {
+		Database struct {
+			Driver string `json:"driver"`
+		} `json:"database"`
+	}
+	require.NoError(t, json.Unmarshal(body, &sys))
+	require.Equal(t, want, sys.Database.Driver)
 	return i
 }
 
-// createToken signs in as the bootstrap admin and creates a write Token.
-func (i *instance) createToken(t *testing.T, password string) string {
+// createToken signs in as the bootstrap admin and creates a Token with
+// scope.
+func (i *instance) createToken(t *testing.T, password, scope string) string {
 	login, err := json.Marshal(map[string]string{"username": instanceUser, "password": password})
 	require.NoError(t, err)
 	res, err := http.Post(i.inst.URL+"/api/hangar/v1/auth/login", "application/json", bytes.NewReader(login))
@@ -151,7 +168,7 @@ func (i *instance) createToken(t *testing.T, password string) string {
 	}
 	require.NoError(t, json.Unmarshal(body, &me))
 	req, err := http.NewRequest(http.MethodPost, i.inst.URL+"/api/hangar/v1/me/tokens",
-		strings.NewReader(`{"name":"compat-viewer","scope":"write"}`))
+		strings.NewReader(`{"name":"compat-viewer-`+scope+`","scope":"`+scope+`"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-CSRF-Token", me.CSRFToken)
