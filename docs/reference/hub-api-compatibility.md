@@ -57,8 +57,8 @@ Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
 | `GET /api/{type}s/{repo}/tree/{rev}/{path}` | Supported | `test_snapshot_download_and_offline`, `test_tree_and_paths_info` |  |
 | `GET /api/{type}s/{repo}/xet-read-token/{rev}` | Not supported | - | Hangar never offers Xet downloads; downloads use plain HTTP. |
 | `GET /api/{type}s/{repo}/xet-write-token/{rev}` | Supported | `test_upload_large_file_round_trip`, `test_xet_write_token` |  |
-| `POST /{repo}.git/info/lfs/objects/batch (stand-in)` | Supported | `test_upload_file_and_folder` |  |
-| `POST /{repo}.git/info/lfs/objects/batch (stand-in, multipart)` | Supported | `test_upload_over_multipart_threshold` |  |
+| `POST /{repo}.git/info/lfs/objects/batch` | Supported | `test_upload_file_and_folder` |  |
+| `POST /{repo}.git/info/lfs/objects/batch (multipart)` | Supported | `test_upload_over_multipart_threshold` |  |
 | `GET /{repo}/resolve/{rev}/{path}` | Supported | `test_hf_hub_download_by_revision` |  |
 | `HEAD /{repo}/resolve/{rev}/{path}` | Supported | `test_hf_hub_download_by_revision` |  |
 | `GET /{repo}/resolve/{rev}/{path} (Range)` | Supported | `test_ranges_and_safetensors_metadata` |  |

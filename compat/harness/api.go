@@ -77,13 +77,6 @@ func (i *Instance) Token(t testing.TB, username, password string) string {
 	return i.token(t, username, password, "write")
 }
 
-// ScopedToken signs in with a password and creates a Token of the scope
-// (read, write or admin) for the user.
-func (i *Instance) ScopedToken(t testing.TB, username, password, scope string) string {
-	t.Helper()
-	return i.token(t, username, password, scope)
-}
-
 func (i *Instance) token(t testing.TB, username, password, scope string) string {
 	t.Helper()
 	jar, _ := cookiejar.New(nil)

@@ -10,16 +10,25 @@ uv run --project compat pytest compat/hf
 
 With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a test binary and starts it. That server is the Hub API from `internal/hfapi` over the fakes in `internal/hfapi/hfapitest`, including a stand-in for the git-lfs batch endpoint, which `internal/gitserver` serves in a full build.
 
+To test the real `hangar` binary instead, as CI's `hub-binary` job does:
+
+```sh
+HANGAR_HF_INSTANCE=binary uv run --project compat pytest compat/hf
+```
+
+`conftest.py` starts the binary (`HANGAR_BINARY`, or one built from `./cmd/hangar`) on a temporary SQLite database with `security.anonymous_read` on and `lfs.multipart_threshold` at 5 MiB, then creates `alice`, `bob`, `carol` and the `acme` Organisation through the Hangar API, signed in as the bootstrap admin `hangar-admin`, which stands in for `admin`.
+
 | Variable | Effect |
 |---|---|
-| `HANGAR_HF_ENDPOINT`, `HANGAR_HF_TOKENS` | Test an Instance that is already running, such as `hangar server`. `HANGAR_HF_TOKENS` is JSON with Tokens for `alice` (admin scope, admin of the `acme` Organisation), `bob` (write scope, read Member of `acme`), `carol` (read scope) and `admin` (an Instance admin). `HANGAR_HF_ORG` renames `acme`. |
+| `HANGAR_HF_INSTANCE=binary` | Start the real `hangar` binary and test it (see above). |
+| `HANGAR_HF_ENDPOINT`, `HANGAR_HF_TOKENS` | Test an Instance that is already running, such as `hangar server`, with `security.anonymous_read` on. `HANGAR_HF_TOKENS` is JSON with Tokens for `alice` (admin scope, admin of the `acme` Organisation), `bob` (write scope, read Member of `acme`), `carol` (read scope) and `admin` (an Instance admin). `HANGAR_HF_ORG` renames `acme`. |
 | `HANGAR_HF_GO_TAGS=w2real` | Build the test server with a `compat && w2real` backend file that uses the real `internal/repo`. See [`docs/build/handoffs/w4.md`](../../docs/build/handoffs/w4.md) for the file. |
-| `HANGAR_HF_DB=postgres` | With `HANGAR_HF_GO_TAGS=w2real`, run the real `internal/repo` on Postgres instead of SQLite. `conftest.py` sets `HANGAR_TEST_POSTGRES=1` for the test server (a Postgres container, so Docker must be running) unless `HANGAR_TEST_POSTGRES_DSN` names a server. |
+| `HANGAR_HF_DB=postgres` | With `HANGAR_HF_GO_TAGS=w2real`, run the real `internal/repo` on Postgres instead of SQLite. `conftest.py` sets `HANGAR_TEST_POSTGRES=1` for the test server (a Postgres container, so Docker must be running) unless `HANGAR_TEST_POSTGRES_DSN` names a server. With `HANGAR_HF_INSTANCE=binary`, run the binary on the database in `HANGAR_HF_DATABASE_DSN`. |
+| `HANGAR_HF_DATABASE_DSN` | With `HANGAR_HF_INSTANCE=binary` and `HANGAR_HF_DB=postgres`, a `postgres://` URL of an empty database for the binary. |
 | `HANGAR_HF_WRITE_MATRIX=1` | Write `compatibility-matrix.json` from the results. |
 | `HANGAR_HF_MULTIPART_THRESHOLD` | The tested Instance's `lfs.multipart_threshold`, with `HANGAR_HF_ENDPOINT` (default 64 MiB). The Go test server lowers it to 5 MiB, the smallest the setting allows. |
-| `HANGAR_HF_MULTIPART_FILE_SIZE` | Size in bytes of the file `test_upload_over_multipart_threshold` uploads. The default is twice the threshold plus one byte; 13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file nightly. |
-| `HANGAR_HF_BACKEND=binary` | Instead of the Go test server, start the real `hangar` binary with `compat/harness` (`HANGAR_BINARY`, or a build of `./cmd/hangar`) and seed it through the native API with the same users, Tokens and Organisation (`TestServeBinary` in `binary_test.go`). |
-| `HANGAR_HF_XET_UPLOADS=1` | Leave Xet on, so the upload tests go through `hf_xet`. Needs an Instance that serves the Xet CAS endpoints, such as `HANGAR_HF_BACKEND=binary`; the Go test server does not. |
+| `HANGAR_HF_MULTIPART_FILE_SIZE` | Size in bytes of the file `test_upload_over_multipart_threshold` uploads. The default is twice the larger of the threshold and 16 MiB, plus one byte: `internal/gitserver` makes parts of at least 16 MiB ([`04-git.md`](../../docs/spec/04-git.md)), so the file always has more than one part. 13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file nightly. |
+| `HANGAR_HF_XET_UPLOADS=1` | Leave Xet on, so the upload tests go through `hf_xet`, except `test_upload_over_multipart_threshold`, which tests the LFS multipart transfer and always turns Xet off. Needs an Instance that serves the Xet CAS endpoints (W11), such as the binary; the Go test server does not. |
 | `HANGAR_HF_WITHOUT_XET=1` | Tell the suite `hf_xet` is not installed, for the matrix cell without it. |
 
 `go test -tags compat ./compat/hf` checks the test server starts and answers.
@@ -35,8 +44,7 @@ With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a t
 | Floor client, Python 3.10 | `UV_PROJECT_ENVIRONMENT=<dir> uv run --frozen --project compat --python 3.10 --with huggingface_hub==1.31.0 python -m pytest compat/hf` |
 | Without `hf_xet` | `uv export --frozen --project compat --no-hashes --no-emit-project`, drop the `hf-xet` line, `uv pip install --no-deps` the rest into a new environment, then run its `python -m pytest compat/hf` with `HANGAR_HF_WITHOUT_XET=1` and its `bin` first on `PATH` |
 | `diffusers` (nightly) | `uv run --frozen --project compat --with diffusers==0.41.0 --with huggingface_hub==1.33.0 python -m pytest compat/hf` |
-| The real binary | `HANGAR_HF_BACKEND=binary uv run --frozen --project compat python -m pytest compat/hf` |
-| Xet uploads | `HANGAR_HF_BACKEND=binary HANGAR_HF_XET_UPLOADS=1 uv run --frozen --project compat python -m pytest compat/hf` |
+| Xet uploads | `HANGAR_HF_INSTANCE=binary HANGAR_HF_XET_UPLOADS=1`, or `HANGAR_HF_XET_UPLOADS=1` against any Instance with W11's CAS endpoints |
 
 `diffusers` 0.41 needs `huggingface_hub` below 2.0, so it is not in the lock; `test_diffusers.py` reports itself as skipped in the other cells. `huggingface_hub` 2.x removed `upload_large_folder`, so `test_upload_large_folder.py` runs in the floor and `diffusers` cells (`huggingface_hub` 1.31.0 and 1.33.0) and reports itself as skipped in the others. On the macOS host the suite was last run on (Darwin 27), the SciPy 1.15.3 wheel the lock picks for Python 3.10 fails to load with a `dyld` error about `__thread_bss`; add `--with scipy==1.14.1` to that cell there.
 
@@ -58,6 +66,6 @@ With no other settings, `conftest.py` builds `compat/hf/server_test.go` into a t
 
 ## Not covered here
 
-- Xet uploads through `hf_xet` need the CAS endpoints, which W11's `internal/xet` serves and `compat/xet` covers. Upload tests here run with Xet turned off, as with `HF_HUB_DISABLE_XET=1`, unless `HANGAR_HF_XET_UPLOADS=1`.
-- The git-lfs batch endpoint itself is W3's (`compat/git`). Here the batch endpoint is `hfapitest`'s stand-in, with basic and multipart transfers over `repo.LFSStore`; rerun `test_upload_over_multipart_threshold` against W3's `internal/gitserver` once it is wired.
+- Xet uploads through `hf_xet` need the CAS endpoints, which W11's `internal/xet` serves and `compat/xet` covers. Upload tests here run with Xet turned off, as with `HF_HUB_DISABLE_XET=1`, unless `HANGAR_HF_XET_UPLOADS=1` against the binary or another Instance.
+- The git-lfs batch endpoint itself is W3's (`compat/git`). Against the Go test server the batch endpoint is `hfapitest`'s stand-in, with basic and multipart transfers over `repo.LFSStore` and parts the size of the threshold; against the binary it is W3's `internal/gitserver`.
 - Pull-through: `compat/upstream` (W6).

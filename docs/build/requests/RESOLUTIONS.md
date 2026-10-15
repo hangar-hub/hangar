@@ -49,7 +49,7 @@ How the integration lead resolved every item in `requests/*.md` in phase 2, on b
 | 5. Repo events from the Repo service | Accepted: `repo.Store` gets `Audit` and `Webhooks`. |
 | 6. Likers, liked-by, comment edit and hide | Applied in phase 2 round 1: `GET .../likers`, `GET /api/users/{user}/likes` and `POST .../comment/{id}/edit\|hide` over W7's methods (`internal/hfapi/likes.go`), tested in `internal/hfapi`, `cmd/hangar` and `compat/hf`. |
 | 7. Fake workarounds | Accepted; W2 item 9 removed the differences. |
-| 8. Client matrix CI | Applied (W9). Phase 2 round 1 added the `binary` and `binary-xet` cells: `HANGAR_HF_BACKEND=binary` runs the suite against the wired binary seeded through the native API, and `binary-xet` adds `HANGAR_HF_XET_UPLOADS=1`. |
+| 8. Client matrix CI | Applied (W9). Phase 2 round 1 added the `hub-binary` job: `HANGAR_HF_INSTANCE=binary` runs the suite against the wired binary on SQLite or Postgres, seeded through the native API, and its Xet cells add `HANGAR_HF_XET_UPLOADS=1`. |
 | 9. `hangar env` | Applied (W9). |
 | 10. Matrix data file | Applied (W9's `make generate`). |
 | 11. Undo a failed `create_pr` | Applied: `closeFailedPR` now calls `community.Service.Discard`, and closes the pull request with a comment only if it cannot be discarded. |

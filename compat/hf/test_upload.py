@@ -27,7 +27,7 @@ def _write(root: Path, files: dict[str, bytes]) -> Path:
     "POST /api/validate-yaml",
     "POST /api/{type}s/{repo}/preupload/{rev}",
     "POST /api/{type}s/{repo}/commit/{rev}",
-    "POST /{repo}.git/info/lfs/objects/batch (stand-in)",
+    "POST /{repo}.git/info/lfs/objects/batch",
 )
 def test_upload_file_and_folder(api, repo_name, tmp_path):
     repo = api.create_repo(repo_name).repo_id
@@ -53,30 +53,38 @@ def test_upload_file_and_folder(api, repo_name, tmp_path):
     assert again.oid == commit.oid
 
 
+# The smallest multipart part internal/gitserver hands out: parts are
+# max(16 MiB, ceil(size/10000)) (04-git.md), whatever lfs.multipart_threshold
+# is. The hfapitest stand-in uses the threshold instead, which is smaller.
+MIN_LFS_PART_SIZE = 16 << 20
+
+
 def _multipart_file_size(hub) -> int:
     """The size of the file test_upload_over_multipart_threshold uploads.
 
     13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file
-    nightly; HANGAR_HF_MULTIPART_FILE_SIZE sets it. The default, two parts
-    and one byte, keeps local runs small and still ends on a short part.
-    Hangar's git-lfs server makes parts of at least 16 MiB, whatever the
-    threshold, so the default is at least two of those.
+    nightly; HANGAR_HF_MULTIPART_FILE_SIZE sets it. The default is twice the
+    larger of the threshold and 16 MiB, plus one byte. The stand-in's parts
+    are the threshold and internal/gitserver's are 16 MiB for a file this
+    size, so it keeps local runs small and still makes at least three parts,
+    the last one short.
     """
-    part = max(hub.multipart_threshold, 16 << 20)
-    return int(os.environ.get("HANGAR_HF_MULTIPART_FILE_SIZE", 2 * part + 1))
+    default = 2 * max(hub.multipart_threshold, MIN_LFS_PART_SIZE) + 1
+    return int(os.environ.get("HANGAR_HF_MULTIPART_FILE_SIZE", default))
 
 
 @pytest.mark.endpoint(
     "POST /api/{type}s/{repo}/preupload/{rev}",
     "POST /api/{type}s/{repo}/commit/{rev}",
-    "POST /{repo}.git/info/lfs/objects/batch (stand-in, multipart)",
+    "POST /{repo}.git/info/lfs/objects/batch (multipart)",
 )
 def test_upload_over_multipart_threshold(api, hub, repo_name, tmp_path, monkeypatch):
     from huggingface_hub import constants, lfs
 
-    # This test is about the LFS multipart transfer, so it uploads through
-    # LFS also in the Xet uploads cell; test_upload_large_file_round_trip
-    # covers large files through hf_xet there.
+    # This test is about the LFS multipart transfer, so it turns Xet off even
+    # in the Xet uploads cell (HANGAR_HF_XET_UPLOADS=1): with Xet on, hf_xet
+    # takes the file and huggingface_hub never asks for an LFS upload.
+    # test_upload_large_file_round_trip covers large files through hf_xet.
     monkeypatch.setattr(constants, "HF_HUB_DISABLE_XET", True)
 
     size = _multipart_file_size(hub)
@@ -108,7 +116,8 @@ def test_upload_over_multipart_threshold(api, hub, repo_name, tmp_path, monkeypa
     assert len(multipart) == 1
     name, chunk_size, parts = multipart[0]
     assert name == "big.bin"
-    assert parts == math.ceil(size / chunk_size) > 1
+    assert parts == math.ceil(size / chunk_size), f"{parts} part URLs for {size} bytes in parts of {chunk_size}"
+    assert parts > 1, f"the server's part size ({chunk_size} bytes) leaves {size} bytes in one part; upload a larger file"
 
     meta = {s.rfilename: s for s in api.model_info(repo, files_metadata=True).siblings}
     assert meta["big.bin"].lfs is not None

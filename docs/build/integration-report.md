@@ -13,7 +13,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | S3 proxy modes against MinIO | `HANGAR_TEST_MINIO=1 go test -run 'TestS3ProxyModes\|TestOpenS3' ./cmd/hangar/ ./internal/blob/...` | ok |
 | Unsafe-download gate on every route | `go test -run TestUnsafeDownloadGateCoversEveryRoute ./cmd/hangar/` and the gate tests in `internal/scan`, `internal/hfapi`, `internal/gitserver`, `internal/ollama`, `internal/api` | ok |
 | Ollama client against the binary | `HANGAR_BINARY=... go test -tags compat ./compat/ollama/` with Ollama 0.31.1 | 7 of 7 subtests passed |
-| Hub clients against the binary | `HANGAR_HF_BACKEND=binary uv run --project compat pytest compat/hf`, also with `HANGAR_HF_XET_UPLOADS=1` | 41 passed (the library tests on Python 3.11, see the README note on SciPy and macOS) |
+| Hub clients against the binary | `HANGAR_HF_INSTANCE=binary uv run --project compat pytest compat/hf`, also with `HANGAR_HF_XET_UPLOADS=1` | 41 passed (the library tests on Python 3.11, see the README note on SciPy and macOS) |
 | Hub clients against the fakes, with the matrix written | `HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf` | 41 passed |
 | UI against the mock | `pnpm exec playwright test e2e/flows.spec.ts e2e/pages.spec.ts` | 297 passed |
 | UI against a real Instance | `make e2e-real` (seeded by `ui/e2e-real/seed.ts`) | 16 passed, desktop and phone |
@@ -39,7 +39,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | UP-4 | Done | `internal/cli` push tests; `hangar push` of 12 MiB on the `postgres-minio` and `scale` examples |
 | UP-5 | Done | `internal/blob` `TestStreamsLargeObjects` on both backends; nightly 6 GiB Hub cell |
 | UP-6 | Done | `internal/repo/lfs_test.go`; `compat/hf` `test_upload_over_multipart_threshold` (second upload sends nothing) |
-| UP-7 | Done | `compat/xet` (hf_xet 1.6.0 and 1.7.0, fakes and real); `compat/hf` `binary-xet` cell |
+| UP-7 | Done | `compat/xet` (hf_xet 1.6.0 and 1.7.0, fakes and real); `compat/hf` `hub-binary` job, Xet cells |
 | DOWN-1 | Done | `internal/hfapi` resolve tests; `compat/hf` `test_download.py` |
 | DOWN-2 | Done | `internal/blob/backends` `TestOpenS3`; `internal/hfapi` `TestResolveRedirectMode`; `cmd/hangar` `TestS3ProxyModesKeepTransfersOnHangar` for proxy mode |
 | DOWN-3 | Done | `compat/git`; `internal/gitserver` |
@@ -105,7 +105,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 3. Large-file uploads failed on the S3 examples, whose MinIO endpoint clients cannot resolve. `storage.s3.upload_mode: proxy` sends uploads through Hangar, `download_mode: proxy` now covers zip exports too, and both examples set them.
 4. `scan.block_unsafe_downloads` applied to Hub API `GET /resolve` only and failed open while a scan was pending. `scan.Gate` now covers the Hub API (including presigned links on `HEAD`), git-lfs batches and signed links, Ollama blobs and zip exports, fails closed for pickle, joblib and NumPy files without a result, and the UI asks before such a download.
 5. The Home page demo is recorded.
-6. `compat/ollama` runs against the binary; Playwright has a real-Instance suite in CI; the Hub client suite has `binary` and `binary-xet` cells.
+6. `compat/ollama` runs against the binary; Playwright has a real-Instance suite in CI; the Hub client suite has the `hub-binary` job (SQLite and Postgres, with and without Xet uploads, and the floor client).
 7. Requests done this round: W4 6 and 8, W8 2, 3, 5, 7 and 9, W10 4 and 10 (see [`RESOLUTIONS.md`](requests/RESOLUTIONS.md)). Found while doing them: the sign-in throttling message was a raw Go error, and the mock's wrong-password message differed from the server's.
 
 ## Open issues
@@ -115,5 +115,5 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 - **git-upload-pack and unsafe files.** `scan.Gate` does not gate `git clone` without LFS, because git sends whole Commits. The Hub's default `.gitattributes` keeps every pickle format in LFS, and [Security](../operate/security.md) says so.
 - **Scan errors are not blocked.** A file the scanner read but could not parse (status `error`) downloads with blocking on, because many `.bin` files are not pickles. The phase 3 review should confirm the trade-off.
 - **A flaky Upstreams test.** `internal/api` `TestUpstreamsAPI/sqlite` failed once (`update_available` was true) in a full `-race` run on a heavily loaded machine and passed three times in a row afterwards. W6 should find the cause.
-- **Not rerun in this round.** Helm on kind and the `quickstart` and `oidc-keycloak` Compose examples were not rerun after these fixes, and the new `binary` and `binary-xet` Hub cells and real-Instance Playwright step ran locally only, as there is no remote yet.
+- **Not rerun in this round.** Helm on kind and the `quickstart` and `oidc-keycloak` Compose examples were not rerun after these fixes, and the new `hub-binary` Hub cells and real-Instance Playwright step ran locally only, as there is no remote yet.
 - **`/admin/system` does not report `upload_mode`.** It reports `download_mode`; adding `upload_mode` changes the OpenAPI file and is left to the owners.
