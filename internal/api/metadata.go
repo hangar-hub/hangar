@@ -341,28 +341,27 @@ func (a *MetadataAPI) GetFileScan(w http.ResponseWriter, r *http.Request, pType 
 		httpx.WriteJSON(w, r, http.StatusOK, out)
 		return
 	}
-	res, err := a.d.Scanner.Results(r.Context(), rp.UUID, sha)
-	switch {
-	case errors.Is(err, scan.ErrNotScanned):
-		out.Status = "pending"
-	case err != nil:
+	// While the Commit's scan is pending, a file unchanged since the
+	// nearest scanned ancestor keeps that result, as in the tree listing.
+	v, err := scan.Current(r.Context(), a.d.Scanner.Results, a.d.Repos, rp.UUID, rp.ID, sha, []string{clean})
+	if err != nil {
 		a.d.metaProblem(w, r, err)
 		return
-	default:
-		for _, f := range res.Files {
-			if f.Path != clean {
-				continue
-			}
-			out.Status = gen.FileScanStatus(f.Status)
-			if f.Error != "" {
-				msg := f.Error
-				out.Error = &msg
-			}
-			for _, fd := range f.Findings {
-				out.Findings = append(out.Findings, gen.ScanFinding{Module: optString(fd.Module), Name: optString(fd.Name),
-					Opcode: optString(fd.Opcode), Status: gen.ScanFindingStatus(fd.Status), Detail: optString(fd.Detail)})
-			}
+	}
+	f, ok := v.File(clean)
+	switch {
+	case ok:
+		out.Status = gen.FileScanStatus(f.Status)
+		if f.Error != "" {
+			msg := f.Error
+			out.Error = &msg
 		}
+		for _, fd := range f.Findings {
+			out.Findings = append(out.Findings, gen.ScanFinding{Module: optString(fd.Module), Name: optString(fd.Name),
+				Opcode: optString(fd.Opcode), Status: gen.ScanFindingStatus(fd.Status), Detail: optString(fd.Detail)})
+		}
+	case !v.Scanned:
+		out.Status = "pending"
 	}
 	httpx.WriteJSON(w, r, http.StatusOK, out)
 }

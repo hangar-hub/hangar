@@ -17,7 +17,7 @@
 With **Block downloads of unsafe files** on (`scan_block_unsafe_downloads` in the native API), Hangar refuses to serve:
 
 - Files the security scan marked unsafe.
-- Pickle, joblib and NumPy files that have no scan result yet, because the scan is still running or its Job failed. They download once the scan finds them safe.
+- Pickle, joblib and NumPy files that have no scan result yet, because the scan is still running or its Job failed. They download once the scan finds them safe. While the scan of a new Commit runs, a file whose content is unchanged since an earlier scanned Commit keeps that Commit's result, in the web UI and for downloads by path.
 
 The setting applies to every way a file leaves Hangar: `huggingface_hub` and other Hub API clients, the web UI, git-lfs, the Ollama registry and zip exports. Hub API and web UI downloads can go ahead with `accept_risk=1` in the URL; git-lfs and Ollama answer with a 403 and the reason, and a zip export of a folder with such a file is refused. A `git clone` without LFS is not checked, because git transfers whole Commits; the Hub's default `.gitattributes`, which Hangar applies to new Repos, stores every pickle format in LFS.
 

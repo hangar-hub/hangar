@@ -38,6 +38,18 @@ func TestFileScan(t *testing.T) {
 	require.Equal(t, "GLOBAL", *f.Opcode)
 	require.Equal(t, gen.ScanFindingStatus("unsafe"), f.Status)
 
+	// A later Commit whose scan is pending keeps the findings of the
+	// unchanged file, so the file page lists them straight away.
+	next := indextest.Commit(t, e.repos, e.model.ID, map[string][]byte{"other.txt": []byte("other")})
+	fs = gen.FileScan{}
+	e.json("GET", "/repos/models/alice/tiny/files/"+string(next)+"/evil.pkl/scan", "bob-token", nil, http.StatusOK, &fs)
+	require.Equal(t, gen.FileScanStatus("unsafe"), fs.Status)
+	require.NotEmpty(t, fs.Findings)
+	require.Equal(t, "os", *fs.Findings[0].Module)
+	fs = gen.FileScan{}
+	e.json("GET", "/repos/models/alice/tiny/files/"+string(next)+"/other.txt/scan", "bob-token", nil, http.StatusOK, &fs)
+	require.Equal(t, gen.FileScanStatus("pending"), fs.Status, "a file with no carried result is pending until the scan runs")
+
 	e.json("GET", base+"/notes.txt/scan", "bob-token", nil, http.StatusOK, &fs)
 	require.Equal(t, gen.FileScanStatus("safe"), fs.Status, "a file the scan does not check is safe")
 	require.Empty(t, fs.Findings)
