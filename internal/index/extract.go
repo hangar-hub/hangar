@@ -20,8 +20,9 @@ import (
 )
 
 // Version is the indexer version. Results are keyed by it; bumping it
-// re-indexes every branch head in the background.
-const Version = 1
+// re-indexes every branch head in the background. Version 2 adds the
+// datasets a model card lists.
+const Version = 2
 
 // Limits on small files the indexer reads whole.
 const (
@@ -149,6 +150,9 @@ func (x *extractor) run(s *Summary, t model.RepoType, layout DatasetLayout) erro
 	x.hubConfig(s)
 	if t == model.RepoTypeDataset {
 		x.dataset(s, layout)
+	}
+	if t == model.RepoTypeModel {
+		s.Datasets = card.Strings(s.CardData, "datasets")
 	}
 	x.tags(s, t)
 	for _, p := range x.paths {

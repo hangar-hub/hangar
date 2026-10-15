@@ -13,6 +13,10 @@
   },
   "context_length": 512,
   "card_data": {
+    "datasets": [
+      "fixtures/dataset",
+      "wikipedia"
+    ],
     "license": "apache-2.0",
     "tags": [
       "test"
@@ -29,11 +33,13 @@
     "safetensors",
     "bert",
     "feature-extraction",
+    "dataset:fixtures/dataset",
+    "dataset:wikipedia",
     "license:apache-2.0"
   ],
   "size": {
-    "total": 149974,
-    "present": 149974
+    "total": 150015,
+    "present": 150015
   },
   "files": [
     {
@@ -56,5 +62,9 @@
       "sep_token": "[SEP]",
       "unk_token": "[UNK]"
     }
-  }
+  },
+  "datasets": [
+    "fixtures/dataset",
+    "wikipedia"
+  ]
 }

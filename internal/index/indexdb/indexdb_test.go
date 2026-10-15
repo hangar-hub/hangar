@@ -214,3 +214,117 @@ func TestReindexStaleQueuesBranchHeadsOnly(t *testing.T) {
 func st(name, dtype string, shape ...int64) safetensors.Tensor {
 	return safetensors.Tensor{Name: name, DType: dtype, Shape: shape}
 }
+
+// splitsHook is a DatasetSplits hook whose answer the test changes, as the
+// Parquet export does when it converts a Commit.
+type splitsHook struct {
+	splits []indexdb.DatasetSplit
+	err    error
+}
+
+func (h *splitsHook) get(context.Context, uuid.UUID, model.CommitSHA) ([]indexdb.DatasetSplit, error) {
+	return h.splits, h.err
+}
+
+func TestDatasetSplitSizesFollowTheParquetExport(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := t.Context()
+		repos := repotest.NewFake(t)
+		id := model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "reviews"}
+		r := indextest.CreateRepo(t, repos, id, model.VisibilityPublic)
+		indextest.InsertRepoRow(t, d, r)
+		sha := indextest.Commit(t, repos, id, map[string][]byte{
+			"README.md":       []byte("---\nsize_categories:\n- n<1K\nlanguage:\n- en\n---\n# Reviews\n"),
+			"data/train.csv":  []byte("text,label\ngood,1\n"),
+			"data/test.jsonl": []byte(`{"text":"bad","label":0}` + "\n"),
+		})
+		hook := &splitsHook{}
+		svc := indexdb.New(indexdb.Options{DB: d, Repos: repos, DatasetSplits: hook.get})
+
+		// Indexed before the export: the card's size category, no sizes.
+		sum, err := svc.Index(ctx, r.UUID, id, sha)
+		require.NoError(t, err)
+		require.Equal(t, "n<1K", sum.Dataset.SizeCategory)
+		require.Empty(t, sum.Dataset.SplitSizes)
+		require.Contains(t, sum.Tags, "size_categories:n<1K")
+
+		// The export finishes: rows and bytes per Split, features per
+		// Config, and the size category computed from the rows.
+		feat := []index.FeatureColumn{
+			{Name: "text", Type: json.RawMessage(`{"dtype":"string","_type":"Value"}`)},
+			{Name: "label", Type: json.RawMessage(`{"dtype":"int64","_type":"Value"}`)},
+		}
+		hook.splits = []indexdb.DatasetSplit{
+			{Config: "default", Split: "train", Converted: true, Rows: 12000, Bytes: 900000, ParquetBytes: 400000, Features: feat},
+			{Config: "default", Split: "test", Converted: true, Rows: 3000, Bytes: 200000, ParquetBytes: 90000, Features: feat},
+		}
+		got, err := svc.Get(ctx, r.UUID, sha)
+		require.NoError(t, err)
+		require.Equal(t, []index.SplitSize{
+			{Config: "default", Split: "train", Rows: 12000, Bytes: 900000, ParquetBytes: 400000},
+			{Config: "default", Split: "test", Rows: 3000, Bytes: 200000, ParquetBytes: 90000},
+		}, got.Dataset.SplitSizes)
+		require.Equal(t, int64(15000), got.Dataset.Rows)
+		require.Equal(t, int64(1100000), got.Dataset.Bytes)
+		cols := got.Dataset.Features["default"]
+		require.Len(t, cols, 2)
+		for i, c := range cols {
+			require.Equal(t, feat[i].Name, c.Name, "columns keep their order")
+			require.JSONEq(t, string(feat[i].Type), string(c.Type))
+		}
+		require.Equal(t, "10K<n<100K", got.Dataset.SizeCategory, "computed from rows, over the card's value")
+		require.Contains(t, got.Tags, "size_categories:10K<n<100K")
+		require.NotContains(t, got.Tags, "size_categories:n<1K")
+
+		// The sizes are stored: the export drops a Commit's rows when it
+		// converts a newer Commit, and the index keeps them.
+		var row db.Metadata
+		require.NoError(t, d.NewSelect().Model(&row).Where("repo_id = ?", r.UUID).Where("commit_sha = ?", string(sha)).Scan(ctx))
+		require.Contains(t, string(row.Summary), `"split_sizes"`)
+		_, err = svc.Get(ctx, r.UUID, sha)
+		require.NoError(t, err)
+		var again db.Metadata
+		require.NoError(t, d.NewSelect().Model(&again).Where("repo_id = ?", r.UUID).Where("commit_sha = ?", string(sha)).Scan(ctx))
+		require.True(t, row.UpdatedAt.Equal(again.UpdatedAt), "Get writes only when the sizes change")
+		hook.splits = nil
+		kept, err := svc.Get(ctx, r.UUID, sha)
+		require.NoError(t, err)
+		require.Equal(t, got.Dataset.SplitSizes, kept.Dataset.SplitSizes)
+		require.Equal(t, got.Dataset.SizeCategory, kept.Dataset.SizeCategory)
+		require.Len(t, kept.Dataset.Features["default"], 2)
+
+		// A partial export or a Split still converting gives rows so far,
+		// but not a size category from them.
+		hook.splits = []indexdb.DatasetSplit{
+			{Config: "default", Split: "train", Converted: true, Partial: true, Rows: 5_000_000, Bytes: 1 << 30},
+			{Config: "default", Split: "test"},
+		}
+		sum, err = svc.Index(ctx, r.UUID, id, sha)
+		require.NoError(t, err)
+		require.Equal(t, int64(5_000_000), sum.Dataset.Rows)
+		require.True(t, sum.Dataset.SplitSizes[0].Partial)
+		require.Equal(t, "n<1K", sum.Dataset.SizeCategory, "the card's value while the rows are incomplete")
+
+		hook.err = errors.New("database unavailable")
+		_, err = svc.Get(ctx, r.UUID, sha)
+		require.ErrorContains(t, err, "dataset splits")
+	})
+}
+
+func TestModelCardDatasetsAreIndexed(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := t.Context()
+		repos := repotest.NewFake(t)
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "classifier"}
+		r := indextest.CreateRepo(t, repos, id, model.VisibilityPublic)
+		indextest.InsertRepoRow(t, d, r)
+		sha := indextest.Commit(t, repos, id, map[string][]byte{
+			"README.md": []byte("---\ndatasets:\n- alice/reviews\n- imdb\n---\n# Classifier\n"),
+		})
+		svc := indexdb.New(indexdb.Options{DB: d, Repos: repos})
+		sum, err := svc.Index(ctx, r.UUID, id, sha)
+		require.NoError(t, err)
+		require.Equal(t, []string{"alice/reviews", "imdb"}, sum.Datasets)
+		require.Nil(t, sum.Dataset, "a model has no dataset summary")
+	})
+}

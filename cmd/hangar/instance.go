@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +48,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/secrets"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/jamesagarside/hangar/internal/upstream/deps"
 	"github.com/jamesagarside/hangar/internal/webhook"
 	"github.com/jamesagarside/hangar/internal/xet"
 )
@@ -222,7 +224,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 
 	// Metadata, community and Collections (W7).
 	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
-		Layout: datasetLayout(in.layout), AfterIndex: in.afterIndex})
+		Layout: datasetLayout(in.layout), DatasetSplits: datasetSplits(in.datasets), AfterIndex: in.afterIndex})
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
 	in.community = communitydb.New(communitydb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Log: in.log})
 	in.collections = collections.New(collections.Options{DB: d, Orgs: in.orgs, Repos: in.repos, Authz: in.auth.Authz()})
@@ -513,6 +515,52 @@ func datasetLayout(l *layout.Service) func(ctx context.Context, id model.RepoID,
 			splits[c.Name] = n
 		}
 		return names, splits, nil
+	}
+}
+
+// datasetSplits gives the index (W7) rows, bytes and features per Split
+// from W10's Parquet export (DATA-9).
+func datasetSplits(st *pipeline.Store) func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) ([]indexdb.DatasetSplit, error) {
+	return func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) ([]indexdb.DatasetSplit, error) {
+		rows, err := st.Splits(ctx, repoUUID, commit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]indexdb.DatasetSplit, 0, len(rows))
+		for _, r := range rows {
+			if r.Config == pipeline.DatasetLevel && r.Split == pipeline.DatasetLevel {
+				continue
+			}
+			sp := indexdb.DatasetSplit{Config: r.Config, Split: r.Split, Converted: r.Ready(), Partial: r.Status == pipeline.StatusPartial,
+				Rows: r.NumRows, Bytes: r.NumBytesSource, ParquetBytes: r.NumBytesParquet}
+			for _, f := range r.Features {
+				typ, err := json.Marshal(f.Feature)
+				if err != nil {
+					return nil, err
+				}
+				sp.Features = append(sp.Features, index.FeatureColumn{Name: f.Name, Type: typ})
+			}
+			out = append(out, sp)
+		}
+		return out, nil
+	}
+}
+
+// datasetModels lists the models whose cards name a dataset, at their
+// default branch heads, that p can read (DATA-9), from W6's Dependencies.
+func datasetModels(pulls *upstream.Service) func(ctx context.Context, p model.Principal, r *repo.Repo) ([]model.RepoID, error) {
+	return func(ctx context.Context, p model.Principal, r *repo.Repo) ([]model.RepoID, error) {
+		needed, err := pulls.NeededBy(ctx, p, r)
+		if err != nil {
+			return nil, err
+		}
+		var out []model.RepoID
+		for _, n := range needed {
+			if n.Kind == deps.KindDataset && n.Repo.Type == model.RepoTypeModel && !slices.ContainsFunc(out, n.Repo.Equal) {
+				out = append(out, n.Repo)
+			}
+		}
+		return out, nil
 	}
 }
 

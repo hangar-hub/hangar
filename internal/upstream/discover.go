@@ -432,6 +432,16 @@ func (s *Service) Graph(ctx context.Context, p model.Principal, r *repo.Repo) (*
 	} else if !errors.Is(err, repo.ErrRevisionNotFound) {
 		return nil, err
 	}
+	if g.NeededBy, err = s.NeededBy(ctx, p, r); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// NeededBy returns the Repos that p can read whose default branch heads
+// need r, by r's own ID or, for a Mirror, by its ID on the Upstream.
+func (s *Service) NeededBy(ctx context.Context, p model.Principal, r *repo.Repo) ([]NeededBy, error) {
+	var out []NeededBy
 	targets := []model.RepoID{r.ID}
 	if up := s.mirrorUpstream(ctx, r); up != nil {
 		if uid, ok := up.UpstreamID(r.ID); ok && !uid.Equal(r.ID) {
@@ -470,11 +480,11 @@ func (s *Service) Graph(ctx context.Context, p model.Principal, r *repo.Repo) (*
 			if err != nil {
 				return nil, err
 			}
-			g.NeededBy = append(g.NeededBy, NeededBy{Repo: src.ID, Dependency: row.Dependency, Arsenal: st})
+			out = append(out, NeededBy{Repo: src.ID, Dependency: row.Dependency, Arsenal: st})
 		}
 	}
-	sort.Slice(g.NeededBy, func(i, j int) bool { return g.NeededBy[i].Repo.String() < g.NeededBy[j].Repo.String() })
-	return g, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Repo.String() < out[j].Repo.String() })
+	return out, nil
 }
 
 // mirrorUpstream returns the Upstream of a Mirror, or nil.
