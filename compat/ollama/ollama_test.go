@@ -5,6 +5,11 @@
 // latest, show, a one-token generation, a private Repo with a registered
 // key, and blobs served directly with no cross-host redirect.
 //
+// Every scenario runs against each target: the registry in the test
+// process over the Repo service fake, and the hangar binary (built from
+// ./cmd/hangar, or HANGAR_BINARY) on SQLite and, with Postgres tests on, on
+// Postgres, so the wiring in cmd/hangar is checked as well as the package.
+//
 // Ollama runs from a local binary of the pinned version when
 // HANGAR_OLLAMA_BINARY names one or `ollama` on PATH is that version, and
 // otherwise from the pinned ollama/ollama image.
@@ -14,14 +19,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,16 +36,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/ssh"
 
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/auth/authtest"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/index/indextest"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/ollama"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
 )
 
 // Pinned versions and fixtures.
@@ -84,83 +83,44 @@ func sha(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// keyAuth verifies Ollama key signatures the way Ollama's registry auth
-// signs them, for the in-process Instance. W5's auth.Service is the
-// production implementation.
-type keyAuth struct {
-	authn *authtest.Authenticator
-	mu    sync.Mutex
-	keys  map[string]model.Principal
-	seen  map[string]bool
+// owner is the User who owns the test Repos and registers the Ollama key.
+const owner = "alice"
+
+// target is a Hangar Instance the scenarios run against.
+type target interface {
+	// addr is the host and port Ollama connects to.
+	addr() string
+	// createRepo creates a model Repo owned by owner and commits files.
+	createRepo(t *testing.T, id model.RepoID, vis model.Visibility, files map[string][]byte)
+	// registerKey registers an Ollama public key, in authorized_keys
+	// form, for owner.
+	registerKey(t *testing.T, authorizedKey string)
+	// log returns a line per request Ollama sent: the status, method,
+	// path, whether the URL was signed, and the Range header.
+	log() []string
 }
 
-func (k *keyAuth) register(authorizedKey string, p model.Principal) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	fields := strings.Fields(authorizedKey)
-	k.keys[fields[1]] = p
+// targetFactory starts a target listening on listen.
+type targetFactory struct {
+	name  string
+	start func(t *testing.T, listen string) target
 }
 
-func (k *keyAuth) IssueRegistryToken(_ context.Context, req auth.OllamaTokenRequest) (string, time.Time, error) {
-	pub, sig, ok := strings.Cut(req.Authorization, ":")
-	if !ok {
-		return "", time.Time{}, auth.ErrInvalidCredentials
+// targets lists the Instances to test: the Ollama registry in the test
+// process, and the hangar binary on SQLite and, when Postgres tests are on
+// (HANGAR_TEST_POSTGRES=1 or HANGAR_TEST_POSTGRES_DSN), on Postgres.
+func targets(t *testing.T) []targetFactory {
+	out := []targetFactory{{"in-process", startInProcess}, {"binary-sqlite", startBinarySQLite}}
+	if dbtest.PostgresEnabled() {
+		out = append(out, targetFactory{"binary-postgres", startBinaryPostgres})
+	} else {
+		t.Logf("binary-postgres not run: set %s=1 or %s to run it", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
 	}
-	k.mu.Lock()
-	p, known := k.keys[pub]
-	k.mu.Unlock()
-	if !known {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	raw, err := base64.StdEncoding.DecodeString(pub)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	key, err := ssh.ParsePublicKey(raw)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	blob, err := base64.StdEncoding.DecodeString(sig)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	empty := sha256.Sum256(nil)
-	data := fmt.Sprintf("%s,%s,%s", req.Method, req.URL, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(empty[:]))))
-	if err := key.Verify([]byte(data), &ssh.Signature{Format: key.Type(), Blob: blob}); err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	u, err := url.Parse(req.URL)
-	if err != nil {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	ts, err := strconv.ParseInt(u.Query().Get("ts"), 10, 64)
-	if err != nil || time.Since(time.Unix(ts, 0)).Abs() > 5*time.Minute {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	nonce := u.Query().Get("nonce")
-	k.mu.Lock()
-	reused := k.seen[nonce]
-	k.seen[nonce] = true
-	k.mu.Unlock()
-	if nonce == "" || reused {
-		return "", time.Time{}, auth.ErrInvalidCredentials
-	}
-	if !strings.EqualFold(req.Repo.Namespace, p.Username) {
-		return "", time.Time{}, auth.ErrNotFound
-	}
-	token := "ollama-" + sha([]byte(req.URL))
-	p.Method = model.AuthOllamaKey
-	p.Token = &model.TokenInfo{Name: "ollama", Scope: model.ScopeRead,
-		Restrictions: model.TokenRestrictions{Repos: []string{string(req.Repo.Type) + ":" + req.Repo.String()}}}
-	k.authn.Add(token, p)
-	return token, time.Now().Add(5 * time.Minute), nil
+	return out
 }
 
-// instance is an in-process Hangar serving the Ollama registry.
-type instance struct {
-	addr     string
-	repos    *repotest.Fake
-	keys     *keyAuth
+// recorder records a line per request for target.log.
+type recorder struct {
 	mu       sync.Mutex
 	statuses []string
 }
@@ -177,42 +137,25 @@ func (w *statusWriter) WriteHeader(code int) {
 
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-func startInstance(t *testing.T, listen string) *instance {
-	t.Helper()
-	in := &instance{repos: repotest.NewFake(t)}
-	authn := authtest.NewAuthenticator()
-	in.keys = &keyAuth{authn: authn, keys: map[string]model.Principal{}, seen: map[string]bool{}}
-	authz := authtest.NewAuthz()
-	authz.AnonymousRead = true
-	signer, err := httpx.NewSigner([]byte("compat-ollama-instance-key-0123456789"))
-	require.NoError(t, err)
-	h, err := ollama.New(ollama.Options{DB: dbtest.SQLite(t), Repos: in.repos, LFS: in.repos.LFS, Authz: authz,
-		OllamaAuth: in.keys, Signer: signer, PublicURL: "http://" + listen})
-	require.NoError(t, err)
-	record := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// wrap records every request next serves.
+func (rec *recorder) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		httpx.Dispatch(httpx.Protocols{Ollama: h}, "http://"+listen).ServeHTTP(sw, r)
-		in.mu.Lock()
+		next.ServeHTTP(sw, r)
 		signed := ""
 		if r.URL.Query().Get(httpx.SigParam) != "" {
 			signed = " signed"
 		}
-		in.statuses = append(in.statuses, fmt.Sprintf("%d %s %s%s range=%q", sw.status, r.Method, r.URL.Path, signed, r.Header.Get("Range")))
-		in.mu.Unlock()
+		rec.mu.Lock()
+		rec.statuses = append(rec.statuses, fmt.Sprintf("%d %s %s%s range=%q", sw.status, r.Method, r.URL.Path, signed, r.Header.Get("Range")))
+		rec.mu.Unlock()
 	})
-	ln, err := net.Listen("tcp", listen)
-	require.NoError(t, err)
-	srv := &http.Server{Handler: httpx.RequestIDs(httpx.Authenticate(ollama.ExemptTokenEndpoint(authn), nil)(record)), ReadHeaderTimeout: 30 * time.Second}
-	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { _ = srv.Close() })
-	in.addr = ln.Addr().String()
-	return in
 }
 
-func (in *instance) log() []string {
-	in.mu.Lock()
-	defer in.mu.Unlock()
-	return append([]string(nil), in.statuses...)
+func (rec *recorder) log() []string {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	return append([]string(nil), rec.statuses...)
 }
 
 // runner runs Ollama commands, locally or in a container.
@@ -362,22 +305,33 @@ func generate(t *testing.T, r runner, name string) string {
 
 func TestOllamaClient(t *testing.T) {
 	model260K := fixture(t)
-	var r runner
-	listen := "127.0.0.1:0"
-	if bin := localOllama(); bin != "" {
-		r = startLocal(t, bin)
-	} else {
-		listen = "0.0.0.0:0"
-		r = startDocker(t)
+	for _, f := range targets(t) {
+		t.Run(f.name, func(t *testing.T) {
+			r, listen := startRunner(t)
+			scenarios(t, r, f.start(t, listen), model260K)
+		})
 	}
-	in := startInstance(t, listen)
-	_, port, _ := net.SplitHostPort(in.addr)
+}
+
+// startRunner starts an Ollama with an empty model store and a new key,
+// so each target's pulls download every layer and the private Repo check
+// starts from an unregistered key. It returns the address the target must
+// listen on for that Ollama to reach it.
+func startRunner(t *testing.T) (runner, string) {
+	t.Helper()
+	if bin := localOllama(); bin != "" {
+		return startLocal(t, bin), "127.0.0.1:0"
+	}
+	return startDocker(t), "0.0.0.0:0"
+}
+
+// scenarios runs the client checks against one target.
+func scenarios(t *testing.T, r runner, in target, model260K []byte) {
+	_, port, _ := net.SplitHostPort(in.addr())
 	host := r.host(port)
 
-	alice := indextest.Owner("alice")
-	public := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "Tiny-Stories-GGUF"}
-	indextest.CreateRepo(t, in.repos, public, model.VisibilityPublic)
-	indextest.Commit(t, in.repos, public, map[string][]byte{
+	public := model.RepoID{Type: model.RepoTypeModel, Namespace: owner, Name: "Tiny-Stories-GGUF"}
+	in.createRepo(t, public, model.VisibilityPublic, map[string][]byte{
 		"stories260K-Q8_0.gguf": model260K,
 		"tiny-Q4_K_M.gguf":      indextest.LlamaGGUF(t, 15, "Q4_K"),
 		"LICENSE":               []byte("MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy.\n"),
@@ -424,13 +378,12 @@ func TestOllamaClient(t *testing.T) {
 	})
 
 	t.Run("private Repo with a registered key", func(t *testing.T) {
-		private := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "private-stories"}
-		indextest.CreateRepo(t, in.repos, private, model.VisibilityPrivate)
-		indextest.Commit(t, in.repos, private, map[string][]byte{"stories260K-Q8_0.gguf": model260K})
+		private := model.RepoID{Type: model.RepoTypeModel, Namespace: owner, Name: "private-stories"}
+		in.createRepo(t, private, model.VisibilityPrivate, map[string][]byte{"stories260K-Q8_0.gguf": model260K})
 		name := host + "/alice/private-stories:q8_0"
 		out, err := r.cli(ctx, "pull", "--insecure", name)
 		require.Error(t, err, "an unregistered key is refused: %s", out)
-		in.keys.register(r.publicKey(t), alice)
+		in.registerKey(t, r.publicKey(t))
 		out, err = r.cli(ctx, "pull", "--insecure", name)
 		require.NoError(t, err, out)
 		require.Contains(t, out, "success")

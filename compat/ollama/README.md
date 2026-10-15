@@ -20,10 +20,21 @@ Runs the real Ollama client against Hangar's Ollama registry (DOWN-4, [08](../..
 
 ```sh
 go test -tags compat -count=1 ./compat/ollama/
+HANGAR_TEST_POSTGRES=1 go test -tags compat -count=1 ./compat/ollama/
 HANGAR_OLLAMA_BINARY=/usr/local/bin/ollama go test -tags compat -count=1 ./compat/ollama/
 ```
 
-The suite starts Hangar's Ollama registry in the test process, with the Repo service fake from `internal/repo/repotest` and a key verifier that checks Ollama's signatures the way `auth.OllamaStore` does. With a local binary, Ollama runs with its own temporary `HOME` and `OLLAMA_MODELS`, so it never touches your models or keys.
+Every scenario runs against each of these targets, with a new Ollama (empty model store, new key) for each:
+
+| Target | What it runs |
+|---|---|
+| `in-process` | Hangar's Ollama registry in the test process, over the Repo service fake from `internal/repo/repotest`, with a key verifier that checks Ollama's signatures the way `auth.OllamaStore` does. |
+| `binary-sqlite` | The `hangar` binary from `compat/harness` (built from `./cmd/hangar`, or `HANGAR_BINARY`) on a temporary SQLite database, with every real service wired. The suite signs in as the bootstrap admin, creates a Token, uploads the Repos with `hangar push`, and registers the Ollama key through `/api/hangar/v1/me/ollama-keys`. |
+| `binary-postgres` | The same binary on a fresh Postgres database. It runs when `HANGAR_TEST_POSTGRES=1` (a `postgres:18-alpine` container, so Docker must be running) or `HANGAR_TEST_POSTGRES_DSN` names a server. `make test-compat` sets `HANGAR_TEST_POSTGRES=1`. |
+
+For the binary targets, Ollama connects through a reverse proxy in the test process that keeps the `Host` header and records each request, so the suite can check the token endpoint and the signed, ranged blob downloads.
+
+With a local binary, Ollama runs with its own temporary `HOME` and `OLLAMA_MODELS`, so it never touches your models or keys.
 
 ## Ollama limits
 
