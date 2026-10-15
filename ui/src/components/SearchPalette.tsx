@@ -10,7 +10,7 @@ import {
   Telescope,
   User,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import { useGo } from "@/components/AppLink";
 import { Dialog } from "@/components/ui/dialog";
@@ -53,6 +53,7 @@ export function SearchPalette() {
   const [q, setQ] = useState("");
   const query = useDebounced(q.trim(), 150);
   const navigateTo = useGo();
+  const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -105,9 +106,11 @@ export function SearchPalette() {
         onOpenChange={setOpen}
         title="Search"
         description="Repos, Namespaces, Collections and actions."
+        initialFocus={input}
       >
         <Command label="Search Hangar" shouldFilter={false} className="-mx-1">
           <Command.Input
+            ref={input}
             value={q}
             onValueChange={setQ}
             placeholder="Search by name, such as llama or ml-team"

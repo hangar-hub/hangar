@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
+  callApi,
   expectAccessible,
   expectGlossaryTerms,
   expectNoHorizontalOverflow,
+  searchWithKeyboard,
   settled,
   signIn,
+  unique,
   watchConsole,
 } from "./helpers";
 
@@ -75,6 +78,9 @@ const signedIn = [
   "/admin/audit",
   "/admin/settings",
   "/no-such-namespace",
+  // Not-found states with long IDs that have no spaces or hyphens to wrap at.
+  `/ada/${"m".repeat(90)}`,
+  `/ada/bert-tiny-finetune/blob/main/${"a".repeat(120)}.txt`,
 ];
 
 const signedOut = [
@@ -111,6 +117,33 @@ for (const path of signedOut) {
     expect(problems).toEqual([]);
   });
 }
+
+test("a wide Markdown table scrolls in a region keyboard users can focus", async ({ page }) => {
+  const csrf = await signIn(page);
+  const columns = Array.from({ length: 16 }, (_, i) => `measurement_column_${i}`);
+  const markdown = [
+    "# Results",
+    "",
+    `| ${columns.join(" | ")} |`,
+    `|${columns.map(() => "---").join("|")}|`,
+    `| ${columns.map((_, i) => `${i}.0`).join(" | ")} |`,
+    "",
+  ].join("\n");
+  const path = `wide-table-${unique()}.md`;
+  const commit = await callApi(page, csrf, "POST", "/repos/models/ada/bert-tiny-finetune/commits", {
+    summary: `Add ${path}`,
+    operations: [{ op: "add", path, content_base64: Buffer.from(markdown).toString("base64") }],
+  });
+  expect(commit.status()).toBe(201);
+  await page.goto(`/ada/bert-tiny-finetune/blob/main/${path}`);
+  const region = page.getByRole("region", { name: /^Table: measurement_column_0/ });
+  await expect(region.getByRole("table")).toBeVisible();
+  // The table is wider than the region at every width, so the region scrolls.
+  expect(await region.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await settled(page);
+  await expectNoHorizontalOverflow(page);
+  await expectAccessible(page);
+});
 
 test("the main navigation works on every width", async ({ page, isMobile }) => {
   await signIn(page);
@@ -181,12 +214,7 @@ test("the search palette passes axe", async ({ page }) => {
   await signIn(page);
   await page.goto("/arsenal");
   await settled(page);
-  const dialog = page.getByRole("dialog", { name: "Search" });
-  await expect(async () => {
-    await page.keyboard.press("/");
-    await expect(dialog).toBeVisible({ timeout: 1000 });
-  }).toPass();
-  await dialog.getByRole("combobox", { name: "Search Hangar" }).fill("imdb");
+  const dialog = await searchWithKeyboard(page, "imdb");
   await expect(dialog.getByRole("option").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectAccessible(page);

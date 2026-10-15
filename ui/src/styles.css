@@ -190,10 +190,14 @@ body {
   padding-left: 1em;
   color: var(--hg-muted);
 }
+/*
+ * Wide tables scroll inside a focusable ScrollRegion (Markdown.tsx). Cells
+ * keep whole words, so a table grows and scrolls instead of breaking every
+ * word to fit.
+ */
 .prose-hangar table {
   border-collapse: collapse;
-  display: block;
-  overflow-x: auto;
+  overflow-wrap: break-word;
 }
 .prose-hangar th,
 .prose-hangar td {

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LazyMarkdown } from "./LazyMarkdown";
-import Markdown, { isExternal } from "./Markdown";
+import Markdown, { isExternal, tableLabel } from "./Markdown";
 
 describe("Markdown cards", () => {
   it("removes scripts, event handlers and iframes", () => {
@@ -31,6 +31,24 @@ describe("Markdown cards", () => {
       "noopener noreferrer nofollow",
     );
     expect(screen.getByRole("link", { name: "local" })).not.toHaveAttribute("target");
+  });
+
+  it("puts each table in its own focusable scroll region", () => {
+    render(
+      <Markdown>
+        {
+          "| Metric | Value |\n|---|---|\n| Accuracy | 0.81 |\n\n| Split | Rows |\n|---|---|\n| train | 10 |"
+        }
+      </Markdown>,
+    );
+    const first = screen.getByRole("region", { name: "Table: Metric, Value" });
+    const second = screen.getByRole("region", { name: "Table: Split, Rows" });
+    // axe's scrollable-region-focusable: keyboard users scroll a wide table
+    // by focusing its region, so the table itself must not scroll.
+    expect(first).toHaveAttribute("tabindex", "0");
+    expect(second).toHaveAttribute("tabindex", "0");
+    expect(first.querySelector("table")).toHaveTextContent("Accuracy");
+    expect(tableLabel(undefined)).toBe("Table");
   });
 
   it("does not load external images when the Instance turns them off", () => {

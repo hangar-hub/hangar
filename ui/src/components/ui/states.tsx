@@ -39,7 +39,8 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-start gap-2 rounded-lg border border-dashed border-line-strong px-5 py-8",
+        // IDs and paths in titles have no spaces, so let them wrap anywhere.
+        "flex flex-col items-start gap-2 rounded-lg border border-dashed border-line-strong px-5 py-8 wrap-anywhere",
         className,
       )}
     >
@@ -107,7 +108,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
       <AlertTriangle className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="font-medium text-danger">This didn't load</p>
-        <p className="mt-1 text-sm">{errorMessage(error)}</p>
+        <p className="mt-1 text-sm wrap-anywhere">{errorMessage(error)}</p>
         {onRetry ? (
           <Button size="sm" className="mt-3" onClick={onRetry}>
             <RotateCw aria-hidden="true" />

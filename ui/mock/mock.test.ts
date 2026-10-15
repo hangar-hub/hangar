@@ -50,6 +50,7 @@ async function call(
 }
 
 const api = "/api/hangar/v1";
+const MiB = 1024 * 1024;
 
 beforeAll(async () => {
   const mw = createMock();
@@ -78,10 +79,13 @@ describe("mock server", () => {
   it("answers 401 until signed in and refuses unknown paths", async () => {
     expect((await call("GET", `${api}/me`)).status).toBe(401);
     expect((await call("GET", `${api}/auth/providers`)).status).toBe(200);
-    expect(
-      (await call("POST", `${api}/auth/login`, { username: "ada", password: "wrong-password" }))
-        .status,
-    ).toBe(401);
+    const wrong = await call("POST", `${api}/auth/login`, {
+      username: "ada",
+      password: "wrong-password",
+    });
+    expect(wrong.status).toBe(401);
+    // W5's text (internal/api/auth.go), which the sign-in page shows.
+    expect(wrong.json.detail).toBe("Wrong username or password.");
     expect((await call("POST", `${api}/auth/login`, { username: "ada" })).status).toBe(400);
     const me = await call("POST", `${api}/auth/login`, {
       username: "ada",
@@ -171,20 +175,27 @@ describe("mock server", () => {
     const plan = await call("POST", `${api}/repos/models/ada/bert-tiny-finetune/uploads`, {
       files: [
         { path: "notes.txt", size: 5, sha256: "b".repeat(64) },
-        { path: "big.safetensors", size: 6 * 1024 * 1024, sha256: sha },
+        { path: "big.safetensors", size: 20 * MiB, sha256: sha },
       ],
     });
     expect(plan.status).toBe(200);
-    const files = plan.json.files as { action: string; upload_id?: string; part_urls?: string[] }[];
+    const files = plan.json.files as {
+      action: string;
+      upload_id?: string;
+      part_size?: number;
+      part_urls?: string[];
+    }[];
     expect(files.map((f) => f.action)).toEqual(["inline", "upload"]);
-    const up = files[1] as { upload_id: string; part_urls: string[] };
+    const up = files[1] as { upload_id: string; part_urls: string[]; part_size: number };
+    // W2's repo.PartSize: never under 16 MiB, so 20 MiB is two parts.
+    expect(up.part_size).toBe(16 * MiB);
     expect(up.part_urls).toHaveLength(2);
     // Part URLs are absolute, as W2 builds them from server.public_url.
     expect(up.part_urls[0]).toBe(
       `${base}${api}/repos/models/ada/bert-tiny-finetune/uploads/${up.upload_id}/parts/1`,
     );
     const partPath = (u: string | undefined) => new URL(u ?? "").pathname;
-    const p1 = await call("PUT", partPath(up.part_urls[0]), new Uint8Array(5 * 1024 * 1024), {
+    const p1 = await call("PUT", partPath(up.part_urls[0]), new Uint8Array(16 * MiB), {
       "Content-Type": "application/octet-stream",
     });
     expect(p1.status).toBe(200);
@@ -204,11 +215,11 @@ describe("mock server", () => {
     ).toBe(400);
     // Like W2, asking again continues the upload in progress.
     const again = await call("POST", `${api}/repos/models/ada/bert-tiny-finetune/uploads`, {
-      files: [{ path: "big.safetensors", size: 6 * 1024 * 1024, sha256: sha }],
+      files: [{ path: "big.safetensors", size: 20 * MiB, sha256: sha }],
     });
     const second = (again.json.files as { upload_id: string }[])[0];
     expect(second?.upload_id).toBe(up.upload_id);
-    await call("PUT", partPath(up.part_urls[1]), new Uint8Array(1024 * 1024), {
+    await call("PUT", partPath(up.part_urls[1]), new Uint8Array(4 * MiB), {
       "Content-Type": "application/octet-stream",
     });
     const done = await call(
@@ -226,7 +237,7 @@ describe("mock server", () => {
       summary: "Add weights",
       operations: [
         { op: "add", path: "notes.txt", content_base64: Buffer.from("hello").toString("base64") },
-        { op: "add_lfs", path: "big.safetensors", sha256: sha, size: 6 * 1024 * 1024 },
+        { op: "add_lfs", path: "big.safetensors", sha256: sha, size: 20 * MiB },
       ],
     });
     expect(commit.status).toBe(201);
@@ -317,6 +328,66 @@ describe("mock server", () => {
     );
     expect(pending.status).toBe(500);
     expect(pending.headers.get("x-error-code")).toBe("ResponseNotReady");
+  });
+
+  it("makes Tokens, Collection slugs and audit filters the way the real handlers do", async () => {
+    const token = await call("POST", `${api}/me/tokens`, { name: "format-check", scope: "read" });
+    expect(token.status).toBe(201);
+    // W5's NewTokenSecret: hgr_ and 40 base62 characters.
+    expect(token.json.secret).toMatch(/^hgr_[0-9A-Za-z]{40}$/);
+
+    // W7's Slugify, with no suffix; the same title again is a conflict.
+    const col = await call("POST", `${api}/collections`, {
+      namespace: "ada",
+      title: "  Runs on a Laptop!  ",
+    });
+    expect(col.status).toBe(201);
+    expect(col.json.slug).toBe("runs-on-a-laptop");
+    const again = await call("POST", `${api}/collections`, {
+      namespace: "ada",
+      title: "Runs on a laptop",
+    });
+    expect(again.status).toBe(409);
+    expect(
+      (await call("POST", `${api}/collections`, { namespace: "ada", title: "!!" })).status,
+    ).toBe(400);
+
+    // W5's audit filter matches whole actions, a comma-separated list of them.
+    const prefix = await call("GET", `${api}/admin/audit?action=token`);
+    expect(prefix.json.items).toEqual([]);
+    const exact = await call("GET", `${api}/admin/audit?action=token.created`);
+    const created = exact.json.items ?? [];
+    expect(created.length).toBeGreaterThan(0);
+    expect(created.every((e) => e.action === "token.created")).toBe(true);
+    // Creating a Token records an event, as W5's TokenService does.
+    expect(created.some((e) => e.target_id === token.json.id)).toBe(true);
+    const both = await call("GET", `${api}/admin/audit?action=token.created,user.disabled`);
+    expect(new Set(both.json.items?.map((e) => e.action))).toEqual(
+      new Set(["token.created", "user.disabled"]),
+    );
+  });
+
+  it("accepts only invite and reset links an admin made, once each", async () => {
+    const invite = await call("POST", `${api}/admin/invites`, {});
+    expect(invite.status).toBe(201);
+    const url = new URL(String(invite.json.url));
+    expect(url.origin).toBe(base);
+    const code = url.pathname.split("/").pop() ?? "";
+    const accept = (path: string, password = "a-long-enough-password") =>
+      call("POST", path, { username: "newcomer", password });
+    expect((await accept("/auth/invite/abc123")).status).toBe(404);
+    // The link stays usable after a password W5 refuses.
+    expect((await accept(`/auth/invite/${code}`, "short")).status).toBe(400);
+    expect((await accept(`/auth/invite/${code}`)).status).toBe(201);
+    expect((await accept(`/auth/invite/${code}`)).status).toBe(404);
+    // Accepting signed the newcomer in; sign ada back in for the next tests.
+    await call("POST", `${api}/auth/login`, { username: "ada", password: "correct-horse" });
+    // An invite code is not a reset code.
+    const second = await call("POST", `${api}/admin/invites`, {});
+    const other = new URL(String(second.json.url)).pathname.split("/").pop() ?? "";
+    expect((await accept(`/auth/reset/${other}`)).status).toBe(404);
+    expect((await accept(`/auth/invite/${other}`)).status).toBe(201);
+    await call("POST", `${api}/auth/login`, { username: "ada", password: "correct-horse" });
   });
 
   it("keeps each browser session's data apart", async () => {

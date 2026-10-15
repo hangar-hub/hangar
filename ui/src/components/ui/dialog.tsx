@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { Dialog as RadixDialog } from "radix-ui";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,6 +17,7 @@ export function Dialog({
   side,
   wide,
   trigger,
+  initialFocus,
 }: {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -27,6 +28,11 @@ export function Dialog({
   side?: "right" | "left";
   wide?: boolean;
   trigger?: ReactNode;
+  /**
+   * The element to focus when the dialog opens. Without it, focus goes to
+   * the first focusable element, which is the Close button.
+   */
+  initialFocus?: RefObject<HTMLElement | null>;
 }) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -34,6 +40,11 @@ export function Dialog({
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 bg-steel-950/50" />
         <RadixDialog.Content
+          onOpenAutoFocus={(e) => {
+            if (!initialFocus?.current) return;
+            e.preventDefault();
+            initialFocus.current.focus();
+          }}
           className={cn(
             "fixed z-50 flex flex-col border border-line bg-surface text-ink shadow-xl focus:outline-none",
             side

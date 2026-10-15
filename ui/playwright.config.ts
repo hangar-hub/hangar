@@ -3,8 +3,10 @@ import { defineConfig, devices } from "@playwright/test";
 // End-to-end tests run against the mock server in mock/ (generated from
 // api/openapi.yaml), serving the production build under the real Content
 // Security Policy. Set HANGAR_URL to run them against a running Hangar
-// instead, such as the Compose quickstart; the flows expect the mock's
-// fixture data, so seed an Instance with it first (docs/build/handoffs/w8.md).
+// instead, such as the Compose quickstart. The flows expect the Repos and
+// users in the mock's fixture data (docs/build/handoffs/w8.md); they make
+// everything else they need through the API, and the `seed` project makes
+// the Repos they share once, before the three widths run.
 const external = process.env.HANGAR_URL;
 const baseURL = external ?? "http://127.0.0.1:4174";
 
@@ -26,14 +28,21 @@ export default defineConfig({
         timeout: 120_000,
       },
   projects: [
-    { name: "phone", use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
+    { name: "seed", testMatch: /seed\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "phone",
+      use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
+      dependencies: ["seed"],
+    },
     {
       name: "tablet",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1024, height: 768 } },
+      dependencies: ["seed"],
     },
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+      dependencies: ["seed"],
     },
   ],
 });
