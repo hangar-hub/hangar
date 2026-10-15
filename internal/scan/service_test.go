@@ -277,7 +277,7 @@ func FuzzScanFile(f *testing.F) {
 	})
 }
 
-func TestRescanStaleQueuesBranchHeadsOnly(t *testing.T) {
+func TestRescanStaleQueuesRefTipsOnly(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := t.Context()
 		fake := repotest.NewFake(t)
@@ -304,6 +304,13 @@ func TestRescanStaleQueuesBranchHeadsOnly(t *testing.T) {
 		var p index.CommitJob
 		require.NoError(t, list[0].DecodePayload(&p))
 		require.Equal(t, head, p.Commit)
+
+		// A tag makes the older Commit a ref tip, which is rescanned too.
+		require.NoError(t, fake.CreateTag(ctx, repo.TagParams{Repo: id, Tag: "v1", Revision: string(old), Actor: indextest.Owner("alice")}))
+		q = jobstest.NewFake(jobs.NewRegistry())
+		n, err = s.RescanStale(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
 	})
 }
 

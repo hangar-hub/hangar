@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -17,12 +18,13 @@ import (
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
 	"github.com/jamesagarside/hangar/internal/scan/scantest"
+	"github.com/jamesagarside/hangar/internal/upstream"
 )
 
 // unsafeDownloadRoutes lists every route that serves the bytes of a Repo
 // file, by protocol. TestUnsafeDownloadGateCoversEveryRoute checks each one
 // refuses a file the scan marked unsafe while scan.block_unsafe_downloads
-// is on; a new download route must be added here. Pull-through serves
+// is on; a new download route must be added here. Pull-through also serves
 // through the Hub API and Ollama routes, and presigned redirects are issued
 // only after these checks. git-upload-pack is not gated (scan.Gate).
 var unsafeDownloadRoutes = []string{
@@ -31,6 +33,7 @@ var unsafeDownloadRoutes = []string{
 	"GET /{repo}.git/info/lfs/objects/{oid} (signed)",
 	"GET /v2/{ns}/{name}/blobs/{digest}",
 	"POST /api/hangar/v1/repos/{type}/{ns}/{name}/zip",
+	"GET /api/hangar/v1/pull-through/{repo}/{oid} (signed)",
 }
 
 func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
@@ -107,11 +110,18 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 		return out.Objects[0].Actions["download"].Href
 	}
 
-	// With the setting off every route serves the file. The signed link
-	// is kept to check that links issued before an admin turns blocking on
+	// With the setting off every route serves the file. The signed links
+	// are kept to check that links issued before an admin turns blocking on
 	// are refused too.
 	href := signedHref()
 	require.NotEmpty(t, href)
+	// The git-lfs batch of a Mirror issues Pull-through links for objects
+	// it does not hold; this one is signed the same way.
+	pullThroughHref, err := in.signer.Sign(pub+upstream.PullThroughPath+r.UUID.String()+"/"+oid+"?size="+jsonInt(e.Size),
+		"pull-through:"+r.UUID.String()+":"+oid, time.Hour)
+	require.NoError(t, err)
+	resp, body := do(http.MethodGet, pullThroughHref, "", false)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode, "the link verifies and the Repo is not a Mirror: %s", body)
 	setBlock(true)
 
 	checks := map[string]func(){
@@ -144,6 +154,11 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode, body)
 			require.Contains(t, body, "cannot include it")
 		},
+		unsafeDownloadRoutes[5]: func() {
+			resp, body := do(http.MethodGet, pullThroughHref, "", false)
+			require.Equal(t, http.StatusForbidden, resp.StatusCode, body)
+			require.Contains(t, body, "marked unsafe")
+		},
 	}
 	require.Len(t, checks, len(unsafeDownloadRoutes), "every listed route has a check")
 	for _, route := range unsafeDownloadRoutes {
@@ -151,12 +166,12 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 	}
 
 	// Safe files still download everywhere.
-	resp, _ := do(http.MethodGet, pub+"/alice/m/resolve/main/README.md", "", false)
+	resp, _ = do(http.MethodGet, pub+"/alice/m/resolve/main/README.md", "", false)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Turned off again, the object downloads through git-lfs.
 	setBlock(false)
-	resp, body := do(http.MethodGet, href, "", false)
+	resp, body = do(http.MethodGet, href, "", false)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, string(scantest.OSSystemProtocol0()), body)
 }

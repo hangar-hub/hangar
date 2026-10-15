@@ -25,7 +25,8 @@ import (
 )
 
 // CommitJob is the payload of the index and scan Jobs that run for every
-// Commit that becomes the head of a branch (07-indexing-and-scanning.md).
+// Commit that becomes the head of a branch, and of the scan Jobs for tag
+// and pull request tips (07-indexing-and-scanning.md).
 type CommitJob struct {
 	RepoUUID uuid.UUID       `json:"repo_uuid"`
 	Repo     string          `json:"repo"`
@@ -166,15 +167,31 @@ func (s *Store) afterRefMove(ctx context.Context, row *repoRow, updates []gitsto
 	}
 	r := toRepo(row)
 	for _, u := range updates {
-		if u.New.IsZero() || !strings.HasPrefix(u.Name, model.RefHeads) {
+		// Branches are indexed and scanned. Tags and pull request refs are
+		// scanned too, because scan.block_unsafe_downloads refuses files
+		// that can run code until their Commit has a scan result.
+		head := strings.HasPrefix(u.Name, model.RefHeads)
+		if u.New.IsZero() || (!head && !strings.HasPrefix(u.Name, model.RefTags) && !strings.HasPrefix(u.Name, model.RefPR)) {
 			continue
 		}
-		if err := s.ensureTree(ctx, row.ID, u.New); err != nil {
+		commit := u.New
+		if !head {
+			// An annotated tag names a tag object; scan its Commit.
+			peeled, err := s.peel(ctx, row.ID, u.New)
+			if err != nil {
+				s.log.WarnContext(ctx, "peel ref", "repo.uuid", row.ID.String(), "ref", u.Name, "error", err.Error())
+				continue
+			}
+			commit = peeled
+		}
+		if err := s.ensureTree(ctx, row.ID, commit); err != nil {
 			s.log.WarnContext(ctx, "fill tree cache", "repo.uuid", row.ID.String(), "error", err.Error())
 		}
-		payload := CommitJob{RepoUUID: row.ID, Repo: r.ID.String(), Type: r.ID.Type, Commit: u.New}
-		key := row.ID.String() + ":" + string(u.New)
-		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: key, Payload: payload, Repo: row.ID})
+		payload := CommitJob{RepoUUID: row.ID, Repo: r.ID.String(), Type: r.ID.Type, Commit: commit}
+		key := row.ID.String() + ":" + string(commit)
+		if head {
+			s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: key, Payload: payload, Repo: row.ID})
+		}
 		s.enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: key, Payload: payload, Repo: row.ID})
 	}
 	if n, err := s.db.NewSelect().Model((*db.Pack)(nil)).Where("repo_id = ?", row.ID).Where("state = ?", gitstore.PackLive).Count(ctx); err == nil && n > int64(s.opts.CompactThreshold) {

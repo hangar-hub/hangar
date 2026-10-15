@@ -3,6 +3,7 @@ package upstream_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -417,5 +418,86 @@ func TestPullThroughPullFiles(t *testing.T) {
 			scoped = scoped || (j.Repo == r.UUID && j.CreatedBy == alice.UserID)
 		}
 		require.True(t, scoped, "the Pull belongs to the caller and is scoped to the Mirror")
+	})
+}
+
+// switchGate is a download gate a test turns on and off.
+type switchGate struct {
+	mu    sync.Mutex
+	block bool
+	fail  error
+	calls int
+}
+
+func (g *switchGate) set(block bool, fail error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.block, g.fail = block, fail
+}
+
+func (g *switchGate) CheckObjects(_ context.Context, _ uuid.UUID, _ model.RepoID, oids []string) (map[string]error, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.calls++
+	if g.fail != nil {
+		return nil, g.fail
+	}
+	out := map[string]error{}
+	if g.block {
+		for _, o := range oids {
+			out[o] = errors.New("evil.pkl is marked unsafe by Hangar's security scan")
+		}
+	}
+	return out, nil
+}
+
+// TestPullThroughLinkRechecksTheDownloadGate checks that a Pull-through
+// link signed before an admin turned on scan.block_unsafe_downloads does
+// not stream the object, as the signed git-lfs download link does not.
+func TestPullThroughLinkRechecksTheDownloadGate(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		gate := &switchGate{}
+		e := newEnv(t, d, upstreamtest.HarnessOptions{Downloads: gate})
+		alice := e.User("alice")
+		w := []byte("pickle bytes for git-lfs")
+		e.Seed(tiny, nil, map[string][]byte{"evil.pkl": w})
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice, Selection: upstream.Selection{None: true}})
+		require.NoError(t, err)
+		e.Run(5)
+		require.Equal(t, jobs.StatusSucceeded, e.Job(id).Status, e.Job(id).Error)
+		r, _ := e.Repos.Get(e.Ctx, tiny)
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"*"}, PullThroughMinRole: "user"})
+		pt := e.Service.PullThrough()
+		href, ok, err := pt.DownloadURL(e.Ctx, alice, r, sha(w), int64(len(w)))
+		require.NoError(t, err)
+		require.True(t, ok)
+		srv := httptest.NewServer(pt.Handler())
+		defer srv.Close()
+		u, _ := url.Parse(href)
+		get := func() (int, string) {
+			resp, err := http.Get(srv.URL + u.RequestURI())
+			require.NoError(t, err)
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			return resp.StatusCode, string(body)
+		}
+
+		cdn := e.Server.Requests("cdn")
+		gate.set(true, nil)
+		status, body := get()
+		require.Equal(t, http.StatusForbidden, status, body)
+		require.Contains(t, body, "marked unsafe")
+		require.Equal(t, cdn, e.Server.Requests("cdn"), "a refused object is not fetched from the Upstream")
+
+		gate.set(false, errors.New("settings unavailable"))
+		status, body = get()
+		require.Equal(t, http.StatusInternalServerError, status, body)
+		require.NotContains(t, body, "settings unavailable", "internal errors are not shown to clients")
+
+		gate.set(false, nil)
+		status, body = get()
+		require.Equal(t, http.StatusOK, status, body)
+		require.Equal(t, string(w), body)
+		require.Equal(t, 3, gate.calls)
 	})
 }

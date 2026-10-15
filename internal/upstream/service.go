@@ -71,6 +71,14 @@ type MirrorStateSetter interface {
 	SetMirrorState(ctx context.Context, id model.RepoID, mirror bool) error
 }
 
+// DownloadGate refuses downloads of objects that
+// scan.block_unsafe_downloads blocks. scan.Gate implements it.
+type DownloadGate interface {
+	// CheckObjects returns an error, with a message for users, for each
+	// OID that must not download.
+	CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, oids []string) (map[string]error, error)
+}
+
 // Options configure a Service. Every field except UserTokens, Quota,
 // Audit, Instruments, Log, Now and the tuning values is required.
 type Options struct {
@@ -92,6 +100,10 @@ type Options struct {
 	// Signer signs Pull-through URLs for git-lfs downloads.
 	Signer    *httpx.Signer
 	PublicURL string
+	// Downloads, when set, enforces scan.block_unsafe_downloads on
+	// Pull-through links each time they are used, so a link issued before
+	// an admin turned blocking on does not stream a refused object.
+	Downloads DownloadGate
 	// Dependencies are pull.dependencies.
 	Dependencies config.DependencyConfig
 	UserTokens   UserTokens

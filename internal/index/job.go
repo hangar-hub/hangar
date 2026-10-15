@@ -7,8 +7,9 @@ import (
 )
 
 // CommitJob is the payload of the index and scan Jobs that run for every
-// Commit that becomes the head of a branch. Its JSON matches
-// repo.CommitJob, which the Repo service enqueues.
+// Commit that becomes the head of a branch (and of the scan Jobs for tag
+// and pull request tips). Its JSON matches repo.CommitJob, which the Repo
+// service enqueues.
 type CommitJob struct {
 	RepoUUID uuid.UUID       `json:"repo_uuid"`
 	Repo     string          `json:"repo"`

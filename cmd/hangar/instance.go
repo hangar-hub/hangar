@@ -206,6 +206,15 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	in.layout = &layout.Service{Repos: in.repos}
 	in.datasets = &pipeline.Store{DB: d, Blobs: in.blobs}
 
+	// The security scan (W7). One gate enforces scan.block_unsafe_downloads
+	// for every protocol that serves file bytes, Pull-through links
+	// included, so it exists before the Upstream service.
+	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
+	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
+		s, err := in.auth.Settings.Get(ctx)
+		return s.ScanBlockUnsafeDownloads, err
+	})
+
 	// Upstreams and Pulls (W6).
 	in.client = upstream.NewHTTPClient(upstream.HTTPOptions{Version: version, Tracer: tel.Tracer()})
 	in.pulls, err = upstream.New(upstream.Options{
@@ -216,7 +225,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 			return jobs.ParseWindows(specs, in.loc)
 		},
 		Snooze: jobs.Snooze, MirrorState: in.repos, UserTokens: in.auth.UpstreamTokens, Signer: in.signer,
-		PublicURL: cfg.Server.PublicURL, Dependencies: cfg.Pull.Dependencies, Quota: pullQuota{in.accounting},
+		PublicURL: cfg.Server.PublicURL, Downloads: in.unsafeGate, Dependencies: cfg.Pull.Dependencies, Quota: pullQuota{in.accounting},
 		SpoolDir: filepath.Join(cfg.Server.DataDir, "pull-through"), Instruments: inst, Log: in.log,
 	})
 	if err != nil {
@@ -226,13 +235,6 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	// Metadata, community and Collections (W7).
 	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
 		Layout: datasetLayout(in.layout), DatasetSplits: datasetSplits(in.datasets), AfterIndex: in.afterIndex})
-	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
-	// One gate enforces scan.block_unsafe_downloads for every protocol
-	// that serves file bytes.
-	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
-		s, err := in.auth.Settings.Get(ctx)
-		return s.ScanBlockUnsafeDownloads, err
-	})
 	in.community = communitydb.New(communitydb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Log: in.log})
 	in.collections = collections.New(collections.Options{DB: d, Orgs: in.orgs, Repos: in.repos, Authz: in.auth.Authz()})
 	idx.Indexer, comm.Service = in.indexer, in.community

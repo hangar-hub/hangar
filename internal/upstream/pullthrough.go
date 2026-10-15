@@ -391,6 +391,20 @@ func (pt *PullThrough) Handler() http.Handler {
 			httpx.WriteError(w, r, http.StatusNotFound, "not_found", "Not found.")
 			return
 		}
+		if gate := pt.s.opts.Downloads; gate != nil {
+			// The link was signed when git-lfs asked for it; blocking may
+			// have been turned on since, so the object is checked again.
+			blocked, err := gate.CheckObjects(ctx, rp.UUID, rp.ID, []string{oid})
+			if err != nil {
+				pt.s.log.ErrorContext(ctx, "pull-through download check", "repo", rp.ID.Path(), "error", err.Error())
+				httpx.WriteError(w, r, http.StatusInternalServerError, "internal_error", "Internal server error. The request ID is "+httpx.RequestID(ctx)+".")
+				return
+			}
+			if err := blocked[oid]; err != nil {
+				httpx.WriteError(w, r, http.StatusForbidden, "forbidden", err.Error())
+				return
+			}
+		}
 		m, up, err := pt.s.Mirror(ctx, rp)
 		if err != nil || m.DetachedAt != nil || !up.Enabled {
 			httpx.WriteError(w, r, http.StatusNotFound, "not_found", "The Repo is no longer a Mirror.")

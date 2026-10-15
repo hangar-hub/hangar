@@ -362,8 +362,8 @@ func (s *Service) deletedMeanwhile(ctx context.Context, r *repo.Repo) bool {
 	return false
 }
 
-// RescanStale enqueues low-priority scan Jobs for branch heads whose
-// results come from an older scanner version, and returns how many it
+// RescanStale enqueues low-priority scan Jobs for ref tips whose results
+// come from an older scanner version, and returns how many it
 // queued. Run it when a worker starts after Version changes.
 func (s *Service) RescanStale(ctx context.Context, q jobs.Queue) (int, error) {
 	var rows []struct {
@@ -392,8 +392,8 @@ func (s *Service) RescanStale(ctx context.Context, q jobs.Queue) (int, error) {
 					return queued, err
 				}
 				heads[row.RepoID] = map[model.CommitSHA]bool{}
-				for _, b := range refs.Branches {
-					heads[row.RepoID][b.Target] = true
+				for _, c := range refTips(refs) {
+					heads[row.RepoID][c] = true
 				}
 			}
 		}

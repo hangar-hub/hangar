@@ -163,3 +163,64 @@ func TestUploadExpireCanBeLeftToGC(t *testing.T) {
 		}
 	})
 }
+
+func TestScanJobsForTagsAndPullRequests(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "scan-refs"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		first := e.commit(id, alice, add("a", "a"))
+		pr, err := e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Revision: model.PRRef(1), CreateFrom: first.SHA,
+			Summary: "pr", Operations: []repo.Operation{add("b", "b")}, Actor: alice})
+		require.NoError(t, err)
+		// The annotated tag names a tag object, not a Commit.
+		require.NoError(t, e.svc.CreateTag(e.ctx, repo.TagParams{Repo: id, Tag: "v1", Revision: pr.SHA.String(), Message: "Release 1", Actor: alice}))
+
+		commits := func(kind jobs.Kind) map[model.CommitSHA]bool {
+			js, _, err := e.jobs.List(e.ctx, jobs.Filter{Kinds: []jobs.Kind{kind}})
+			require.NoError(t, err)
+			out := map[model.CommitSHA]bool{}
+			for _, j := range js {
+				var p repo.CommitJob
+				require.NoError(t, j.DecodePayload(&p))
+				out[p.Commit] = true
+			}
+			return out
+		}
+		scans, indexes := commits(jobs.KindScan), commits(jobs.KindIndex)
+		require.True(t, scans[pr.SHA], "a pull request's Commit is scanned, so blocking unsafe downloads does not refuse its files for good")
+		require.False(t, indexes[pr.SHA], "only branch heads are indexed")
+		for c := range scans {
+			info, err := e.svc.GetCommit(e.ctx, id, c)
+			require.NoError(t, err, "scan Jobs name Commits, never tag objects")
+			require.Equal(t, c, info.SHA)
+		}
+
+		// A lightweight tag queues a scan of its Commit too. Cancel the
+		// pull request's scan first, so the tag's Job is not deduplicated.
+		tagged, err := e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Revision: model.PRRef(2), CreateFrom: first.SHA,
+			Summary: "pr 2", Operations: []repo.Operation{add("c", "c")}, Actor: alice})
+		require.NoError(t, err)
+		active := func() bool {
+			js, _, err := e.jobs.List(e.ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindScan}})
+			require.NoError(t, err)
+			found := false
+			for _, j := range js {
+				var p repo.CommitJob
+				require.NoError(t, j.DecodePayload(&p))
+				if p.Commit == tagged.SHA && j.Status.Active() {
+					found = true
+				}
+			}
+			return found
+		}
+		js, _, err := e.jobs.List(e.ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindScan}})
+		require.NoError(t, err)
+		for _, j := range js {
+			require.NoError(t, e.jobs.Cancel(e.ctx, j.ID))
+		}
+		require.False(t, active())
+		require.NoError(t, e.svc.CreateTag(e.ctx, repo.TagParams{Repo: id, Tag: "v2", Revision: tagged.SHA.String(), Actor: alice}))
+		require.True(t, active())
+	})
+}
