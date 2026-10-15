@@ -2,7 +2,7 @@ version: "2"
 
 run:
   timeout: 10m
-  build-tags: [integration, compat, pins]
+  build-tags: [integration, compat, pins, helm]
 
 linters:
   default: none

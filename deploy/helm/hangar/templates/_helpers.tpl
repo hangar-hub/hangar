@@ -121,6 +121,12 @@ metadata:
 spec:
   serviceAccountName: {{ include "hangar.serviceAccountName" $ }}
   automountServiceAccountToken: {{ $.Values.serviceAccount.automountServiceAccountToken }}
+  {{- /*
+  No service-link variables: with the release name hangar, the Service is
+  named hangar and Kubernetes would inject HANGAR_SERVICE_HOST, HANGAR_PORT
+  and the like, which Hangar rejects as unknown configuration.
+  */}}
+  enableServiceLinks: false
   {{- with $.Values.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}

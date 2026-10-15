@@ -59,6 +59,9 @@ spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ if .Values.serviceAccount.create }}default{{ else }}{{ include "hangar.serviceAccountName" . }}{{ end }}
       automountServiceAccountToken: false
+      # No HANGAR_SERVICE_HOST and the like from the Service, which exists on
+      # upgrade; Hangar rejects unknown HANGAR_* variables.
+      enableServiceLinks: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
