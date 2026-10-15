@@ -167,7 +167,10 @@ type Progress interface {
 }
 
 // Handler runs one Job. Handlers must be idempotent: a Job whose lease
-// expires runs again. Return a Permanent error to fail without retrying.
+// expires runs again. A run that lost its Job that way keeps going until its
+// next Progress call, which returns ErrLeaseLost and cancels its context; its
+// final result is discarded. Return a Permanent error to fail without
+// retrying.
 type Handler func(ctx context.Context, j *Job, progress Progress) error
 
 // Filter selects Jobs for List.

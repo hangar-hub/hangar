@@ -452,7 +452,7 @@ func (w *Worker) claim(ctx context.Context, kinds []string, n int, limitKind *Ki
 func (w *Worker) start(ctx context.Context, row *db.Job) {
 	job, err := fromRow(row)
 	if err != nil {
-		w.finish(ctx, job, row.ID, Kind(row.Kind), Permanent(err), nil, time.Now())
+		w.finish(ctx, job, row.ID, Kind(row.Kind), row.Attempts, Permanent(err), nil, time.Now())
 		return
 	}
 	reg, ok := w.reg.Lookup(job.Kind)
@@ -497,7 +497,7 @@ func (w *Worker) run(ctx context.Context, job *Job, reg Registration, traceCtx m
 		jobCtx, cancelTimeout = context.WithTimeout(jobCtx, reg.Options.Timeout)
 		defer cancelTimeout()
 	}
-	p := &progress{w: w, id: job.ID, cancel: cancel}
+	p := &progress{w: w, id: job.ID, attempt: job.Attempts, cancel: cancel}
 	stopRenew := w.renewLease(jobCtx, p)
 
 	err := safeRun(jobCtx, reg.Handler, job, p)
@@ -512,7 +512,7 @@ func (w *Worker) run(ctx context.Context, job *Job, reg Registration, traceCtx m
 		w.log.ErrorContext(ctx, "job handler panicked", "job_id", job.ID, "kind", job.Kind,
 			"panic", RedactURLs(fmt.Sprint(pe.value)), "stack", string(pe.stack))
 	}
-	outcome := w.finish(ctx, job, job.ID, job.Kind, err, p, started)
+	outcome := w.finish(ctx, job, job.ID, job.Kind, job.Attempts, err, p, started)
 	if outcome == "failed" || outcome == "retry" {
 		recordJobError(span, err)
 		span.SetStatus(codes.Error, "job failed")
@@ -574,14 +574,29 @@ func (w *Worker) renewLease(ctx context.Context, p *progress) (stop func()) {
 	return func() { once.Do(func() { close(done) }) }
 }
 
+// fenceRun limits an update of a Job row to the run that claimed it as
+// attempt: the row must still be running under this worker's lease with the
+// same attempt number. The owner alone is not enough. If a renewal is late,
+// RecoverExpired returns the Job to the queue and this same worker can claim
+// it again while the first run is still going; the new claim raises
+// attempts, so the stale run's next write matches no row and it stops.
+//
+// The attempt number identifies the run because, while a run holds the Job,
+// only that run can lower attempts (a snooze or a shutdown release gives the
+// attempt back as it ends the run), so the row never returns to running at
+// the same attempt while an older run with that attempt is still going.
+func (w *Worker) fenceRun(q *bun.UpdateQuery, id JobID, attempt int) *bun.UpdateQuery {
+	return q.Where("id = ? AND lease_owner = ? AND status = ? AND attempts = ?", id, w.opts.Owner, string(StatusRunning), attempt)
+}
+
 // finish records the result of a run and returns its outcome for metrics:
-// succeeded, failed, retry, snoozed, released, cancelled or lost.
-func (w *Worker) finish(ctx context.Context, job *Job, id JobID, kind Kind, runErr error, p *progress, started time.Time) string {
+// succeeded, failed, retry, snoozed, released, cancelled or lost. attempt is
+// the attempt number the run was claimed with.
+func (w *Worker) finish(ctx context.Context, job *Job, id JobID, kind Kind, attempt int, runErr error, p *progress, started time.Time) string {
 	bg := context.WithoutCancel(ctx)
 	now := w.now()
-	upd := w.db.NewUpdate().Model((*db.Job)(nil)).
-		Set("lease_owner = NULL").Set("lease_expires_at = NULL").Set("updated_at = ?", now).
-		Where("id = ? AND lease_owner = ? AND status = ?", id, w.opts.Owner, string(StatusRunning))
+	upd := w.fenceRun(w.db.NewUpdate().Model((*db.Job)(nil)).
+		Set("lease_owner = NULL").Set("lease_expires_at = NULL").Set("updated_at = ?", now), id, attempt)
 	if p != nil {
 		if pending := p.takePending(); pending != nil {
 			upd.Set("progress = ?", pending)
@@ -656,9 +671,12 @@ const progressInterval = time.Second
 // progress implements Progress for a running Job. Reports are written at
 // most once a second; the latest is always written when the Job finishes.
 type progress struct {
-	w      *Worker
-	id     JobID
-	cancel context.CancelCauseFunc
+	w  *Worker
+	id JobID
+	// attempt is the attempt number this run was claimed with; writes are
+	// fenced on it (see fenceRun).
+	attempt int
+	cancel  context.CancelCauseFunc
 
 	mu      sync.Mutex
 	written time.Time
@@ -727,13 +745,13 @@ func (p *progress) renew(ctx context.Context) error {
 	})
 }
 
-// write updates the Job row and extends the lease, if this worker still
-// holds it. Otherwise it cancels the handler and returns ErrLeaseLost.
+// write updates the Job row and extends the lease, if this run still holds
+// it (see fenceRun). Otherwise it cancels the handler and returns
+// ErrLeaseLost, or ErrCancelled if a user cancelled the Job.
 func (p *progress) write(ctx context.Context, set func(*bun.UpdateQuery)) error {
 	now := p.w.now()
-	q := p.w.db.NewUpdate().Model((*db.Job)(nil)).
-		Set("lease_expires_at = ?", now.Add(p.w.opts.Lease)).Set("updated_at = ?", now).
-		Where("id = ? AND lease_owner = ? AND status = ?", p.id, p.w.opts.Owner, string(StatusRunning))
+	q := p.w.fenceRun(p.w.db.NewUpdate().Model((*db.Job)(nil)).
+		Set("lease_expires_at = ?", now.Add(p.w.opts.Lease)).Set("updated_at = ?", now), p.id, p.attempt)
 	set(q)
 	res, err := q.Exec(context.WithoutCancel(ctx))
 	if err != nil {
