@@ -84,6 +84,62 @@ jobs:
                 uv run --frozen --project compat --with diffusers==0.41.0 --with huggingface_hub==1.33.0 python -m pytest compat/hf ;;
           esac
 
+  # The same suite against the real hangar binary instead of the Go test
+  # server over fakes: W3's git-lfs batch and multipart endpoints, W11's Xet
+  # CAS with HANGAR_HF_XET_UPLOADS=1 (the Xet uploads cell), on SQLite and
+  # Postgres. conftest.py creates the users, Tokens and Organisation.
+  hub-binary:
+    name: Hub clients on the binary (${{ matrix.cell }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {cell: sqlite, db: sqlite, xet: "0"}
+          - {cell: sqlite-xet, db: sqlite, xet: "1"}
+          - {cell: postgres, db: postgres, xet: "0"}
+          - {cell: postgres-xet, db: postgres, xet: "1"}
+          - {cell: floor-xet, db: sqlite, xet: "1", hub: "1.31.0"}
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: hangar
+          POSTGRES_PASSWORD: hangar
+          POSTGRES_DB: hangar
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hangar"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      HANGAR_HF_INSTANCE: binary
+      HANGAR_HF_DB: ${{ matrix.db }}
+      HANGAR_HF_DATABASE_DSN: postgres://hangar:hangar@localhost:5432/hangar?sslmode=disable
+      HANGAR_HF_XET_UPLOADS: ${{ matrix.xet }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Build hangar
+        run: go build -o "$RUNNER_TEMP/hangar" ./cmd/hangar && echo "HANGAR_BINARY=$RUNNER_TEMP/hangar" >> "$GITHUB_ENV"
+      - name: Choose the multipart test size
+        run: |
+          # 200 MB on pull requests; a 6 GiB file nightly (13-testing.md).
+          if [ "${{ github.event_name }}" = "schedule" ]; then size=6442450944; else size=200000000; fi
+          echo "HANGAR_HF_MULTIPART_FILE_SIZE=$size" >> "$GITHUB_ENV"
+      - name: Run the cell
+        env:
+          HUB: ${{ matrix.hub }}
+        run: |
+          if [ -n "$HUB" ]; then
+            UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/venv-floor" \
+              uv run --frozen --project compat --python 3.10 --with "huggingface_hub==$HUB" python -m pytest compat/hf
+          else
+            uv run --frozen --project compat python -m pytest compat/hf
+          fi
+
   # git 2.39 (Debian 12) as well as the latest git in the job above (13-testing.md).
   git-239:
     name: git 2.39 (Debian 12)

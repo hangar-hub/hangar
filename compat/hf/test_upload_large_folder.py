@@ -40,7 +40,7 @@ def _write(root: Path, files: dict[str, bytes]) -> Path:
     "upload_large_folder (huggingface_hub 1.x)",
     "POST /api/{type}s/{repo}/preupload/{rev}",
     "POST /api/{type}s/{repo}/commit/{rev}",
-    "POST /{repo}.git/info/lfs/objects/batch (stand-in)",
+    "POST /{repo}.git/info/lfs/objects/batch",
 )
 @pytest.mark.parametrize("repo_type", ["model", "dataset"])
 def test_upload_large_folder(api, repo_name, repo_type, tmp_path):
