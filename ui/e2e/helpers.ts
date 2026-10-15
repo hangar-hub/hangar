@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { type APIResponse, expect, type Locator, type Page } from "@playwright/test";
+import { type APIResponse, expect, type Locator, type Page, type Response } from "@playwright/test";
 
 /**
  * Signs in through the API before the first page load, so the page starts
@@ -115,6 +115,20 @@ export async function searchWithKeyboard(page: Page, query: string): Promise<Loc
   await page.keyboard.type(query);
   await expect(input).toHaveValue(query);
   return dialog;
+}
+
+/**
+ * Waits for the page's next Commit to a Repo, such as
+ * "models/ada/bert-tiny-finetune". A Commit runs git on the server, which can
+ * take seconds on a loaded host, so flows wait for the Commit itself rather
+ * than for a fixed time before they look for its result.
+ */
+export function commitResponse(page: Page, repo: string): Promise<Response> {
+  return page.waitForResponse(
+    (r) =>
+      r.request().method() === "POST" &&
+      new URL(r.url()).pathname === `/api/hangar/v1/repos/${repo}/commits`,
+  );
 }
 
 /** Fails the test on Content Security Policy violations and uncaught errors. */
