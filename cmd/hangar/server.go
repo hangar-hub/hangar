@@ -88,7 +88,8 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	if err != nil {
 		return err
 	}
-	health := newHealth(d, blobs)
+	var serving atomic.Bool
+	health := newHealth(d, blobs, servingCheck(&serving))
 
 	// Health answers at once; the rest of the Instance is built once the
 	// schema is current, which web and worker processes wait for while
@@ -149,6 +150,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return err
 	}
 	current.Store(&handler)
+	serving.Store(true)
 
 	// Jobs run in roles all and worker. On shutdown the worker returns
 	// running Jobs to the queue.
@@ -207,6 +209,19 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 		case <-time.After(2 * time.Second):
 		}
 	}
+}
+
+// servingCheck is the readiness check that fails until serving is set,
+// once the Instance's handler is in place. Until then only health
+// answers, so /readyz reports the Instance as starting rather than
+// sending traffic to a process that answers every other route with 404.
+func servingCheck(serving *atomic.Bool) httpx.Check {
+	return httpx.Check{Name: "instance", Run: func(context.Context) error {
+		if !serving.Load() {
+			return errors.New("the Instance is starting")
+		}
+		return nil
+	}}
 }
 
 // openBlobStore opens the configured Blob store with telemetry and writes

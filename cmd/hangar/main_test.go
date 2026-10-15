@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/jamesagarside/hangar/internal/db/dbtest"
+	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -236,6 +240,94 @@ func TestReadyzReportsSchemaAndBlobStore(t *testing.T) {
 	b, err := json.Marshal(failed)
 	require.NoError(t, err)
 	require.NotContains(t, string(b), cfg.Database.DSN, "failures do not reveal the DSN")
+}
+
+// TestReadyzWaitsForTheInstance checks that /readyz is not ready until
+// the Instance's handler is in place, while only health answers.
+func TestReadyzWaitsForTheInstance(t *testing.T) {
+	cfg := testConfig(t)
+	d, err := openDatabase(context.Background(), cfg, true)
+	require.NoError(t, err)
+	defer d.Close()
+	require.NoError(t, d.Migrate(context.Background()))
+	blobs := newEmptyBlobs()
+	require.NoError(t, ensureSentinel(context.Background(), blobs))
+	var serving atomic.Bool
+	h := newHealth(d, blobs, servingCheck(&serving))
+	require.Equal(t, []httpx.CheckResult{{Name: "instance", Error: "the Instance is starting"}}, h.Failures(context.Background()))
+	serving.Store(true)
+	require.Empty(t, h.Failures(context.Background()))
+}
+
+// TestReadyzWhileWaitingForMigrate runs a web process that waits for
+// hangar admin migrate, listening with only health: /readyz is not ready
+// until the migration lets the Instance start. Roles other than all need
+// Postgres, so the test is registered only when Postgres tests are on.
+func TestReadyzWhileWaitingForMigrate(t *testing.T) {
+	if !dbtest.PostgresEnabled() {
+		t.Logf("not registered: set %s=1 or %s to run it", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
+		return
+	}
+	cfg := testConfig(t)
+	cfg.Server.Role = config.RoleWeb
+	cfg.Database.Driver = "postgres"
+	cfg.Database.DSN = dbtest.PostgresDSN(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	cfg.Server.Listen = ln.Addr().String()
+	require.NoError(t, ln.Close())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, io.Discard, ready) }()
+
+	readyz := func() (int, []httpx.CheckResult) {
+		resp, err := http.Get("http://" + cfg.Server.Listen + "/readyz")
+		if err != nil {
+			return 0, nil
+		}
+		defer resp.Body.Close()
+		var body struct {
+			Failed []httpx.CheckResult `json:"failed"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		return resp.StatusCode, body.Failed
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	status, failed := readyz()
+	for status == 0 {
+		select {
+		case err := <-done:
+			t.Fatalf("server exited: %v", err)
+		default:
+		}
+		require.True(t, time.Now().Before(deadline), "the server did not listen")
+		time.Sleep(50 * time.Millisecond)
+		status, failed = readyz()
+	}
+	require.Equal(t, http.StatusServiceUnavailable, status)
+	require.Contains(t, failed, httpx.CheckResult{Name: "instance", Error: "the Instance is starting"})
+
+	out, code := execute(t, "admin", "migrate", "--set", "database.driver=postgres", "--set", "database.dsn="+cfg.Database.DSN)
+	require.Equal(t, 0, code, out)
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("server exited: %v", err)
+	case <-time.After(60 * time.Second):
+		t.Fatal("server did not start after the migration")
+	}
+	status, failed = readyz()
+	require.Equal(t, http.StatusOK, status, "%v", failed)
+	http.DefaultClient.CloseIdleConnections()
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("server did not shut down")
+	}
 }
 
 // TestEveryCommandTakesJSON walks the whole binary's command tree, the

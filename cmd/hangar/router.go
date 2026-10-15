@@ -29,10 +29,11 @@ import (
 )
 
 // newHealth builds the readiness checks: database reachable, migrations at
-// the expected version, and the Blob store sentinel readable.
-func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
-	return httpx.NewHealth(
-		httpx.Check{Name: "database", Run: func(ctx context.Context) error {
+// the expected version, the Blob store sentinel readable, and any extra
+// checks.
+func newHealth(d *db.DB, blobs blob.Store, extra ...httpx.Check) *httpx.Health {
+	return httpx.NewHealth(append([]httpx.Check{
+		{Name: "database", Run: func(ctx context.Context) error {
 			if err := d.PingContext(ctx); err != nil {
 				return fmt.Errorf("database unreachable: %w", err)
 			}
@@ -45,11 +46,11 @@ func newHealth(d *db.DB, blobs blob.Store) *httpx.Health {
 			}
 			return nil
 		}},
-		httpx.Check{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
+		{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
 			_, err := blobs.Stat(ctx, blob.SentinelKey)
 			return err
 		}},
-	)
+	}, extra...)...)
 }
 
 // ensureSentinel writes the Blob store sentinel that /readyz checks.
