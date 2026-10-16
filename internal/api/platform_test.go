@@ -56,6 +56,12 @@ type platformEnv struct {
 	repos   jobRepos
 }
 
+// testCheckTimeout is the budget for doctor checks that do real work. The
+// production default, 10 seconds, is not enough in this package: its tests
+// run in parallel and start git many times, and on a loaded machine
+// starting git --version took over 10 seconds while other tests forked.
+const testCheckTimeout = time.Minute
+
 func newPlatformEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck) *platformEnv {
 	t.Helper()
 	d := dbtest.SQLite(t)
@@ -85,7 +91,7 @@ func newPlatformEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.Syst
 	srv := platformServer{
 		Jobs:         &api.Jobs{Queue: e.queue, Authz: e.authz, Repos: e.repos},
 		AdminStorage: &api.AdminStorage{Authz: authtest.NewAuthz(), Accounting: gc.NewAccounting(d), Queue: e.queue, Audit: e.audit},
-		AdminSystem: &api.AdminSystem{Authz: authtest.NewAuthz(), DB: d, Checks: checks(d, store), Info: api.SystemInfo{
+		AdminSystem: &api.AdminSystem{Authz: authtest.NewAuthz(), DB: d, Checks: checks(d, store), CheckTimeout: testCheckTimeout, Info: api.SystemInfo{
 			Version: "1.2.3", Commit: "abc123", Role: "all", BlobBackend: "fs", Telemetry: map[string]string{"traces": "none"},
 		}},
 	}
@@ -349,7 +355,7 @@ func TestDoctorClockCheck(t *testing.T) {
 		run := func(opts api.DoctorOptions) gen.CheckResult {
 			t.Helper()
 			opts.GitBinary = "-"
-			for _, r := range api.RunChecks(ctx, api.DoctorChecks(d, opts), 10*time.Second) {
+			for _, r := range api.RunChecks(ctx, api.DoctorChecks(d, opts), testCheckTimeout) {
 				if *r.Name == "clock" {
 					return r
 				}
@@ -410,7 +416,7 @@ func TestDoctorConfigCheck(t *testing.T) {
 	t.Parallel()
 	d := dbtest.SQLite(t)
 	cfg := config.Default()
-	results := api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), 10*time.Second)
+	results := api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), testCheckTimeout)
 	require.Equal(t, "config", *results[0].Name, "the config check runs first")
 	require.False(t, results[0].Ok)
 	require.Contains(t, results[0].Message, "server.public_url is required")
@@ -418,7 +424,7 @@ func TestDoctorConfigCheck(t *testing.T) {
 	cfg.Server.PublicURL = "https://hangar.example.com"
 	cfg.Server.DataDir = t.TempDir()
 	cfg.Security.InstanceKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
-	results = api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), 10*time.Second)
+	results = api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), testCheckTimeout)
 	require.True(t, results[0].Ok, results[0].Message)
 	require.Equal(t, "The configuration is valid.", results[0].Message)
 }
@@ -433,13 +439,14 @@ func TestDoctorChecksReportProblems(t *testing.T) {
 	fake := blobtest.NewFake()
 	fake.PresignBaseURL = "http://127.0.0.1:1/bucket"
 	checks := api.DoctorChecks(d, api.DoctorOptions{Store: fake, Downloads: blob.Downloads{Mode: blob.DownloadRedirect}, GitBinary: filepath.Join(t.TempDir(), "no-git")})
-	checks = append(checks,
-		api.SystemCheck{Name: "slow", Run: func(ctx context.Context) (string, error) { <-ctx.Done(); return "", ctx.Err() }},
-		api.SystemCheck{Name: "broken", Run: func(context.Context) (string, error) { panic("oops") }},
-	)
-	// The budget applies to every check, and the real ones must finish
-	// within it while the other tests in this package run alongside.
-	results := api.RunChecks(ctx, checks, 2*time.Second)
+	results := api.RunChecks(ctx, checks, testCheckTimeout)
+	// A check that runs past the budget, and one that panics. They run on
+	// their own so the budget can be short without cutting off the real
+	// checks above.
+	results = append(results, api.RunChecks(ctx, []api.SystemCheck{
+		{Name: "slow", Run: func(ctx context.Context) (string, error) { <-ctx.Done(); return "", ctx.Err() }},
+		{Name: "broken", Run: func(context.Context) (string, error) { panic("oops") }},
+	}, 200*time.Millisecond)...)
 	byName := map[string]gen.CheckResult{}
 	for _, r := range results {
 		byName[*r.Name] = r
@@ -454,7 +461,7 @@ func TestDoctorChecksReportProblems(t *testing.T) {
 	require.False(t, byName["git"].Ok)
 	require.Contains(t, byName["git"].Message, "Install git 2.39 or later")
 	require.False(t, byName["slow"].Ok)
-	require.Equal(t, "The check did not finish within 2s.", byName["slow"].Message)
+	require.Equal(t, "The check did not finish within 200ms.", byName["slow"].Message)
 	require.False(t, byName["broken"].Ok)
 	require.Contains(t, byName["broken"].Message, "oops")
 }
@@ -468,7 +475,7 @@ func TestPresignCheckAgainstMinIO(t *testing.T) {
 	d := dbtest.SQLite(t)
 	s := blobtest.S3(t)
 	checks := api.DoctorChecks(d, api.DoctorOptions{Store: s, Downloads: blob.Downloads{Mode: blob.DownloadRedirect}, GitBinary: "-"})
-	for _, r := range api.RunChecks(context.Background(), checks, 30*time.Second) {
+	for _, r := range api.RunChecks(context.Background(), checks, testCheckTimeout) {
 		require.True(t, r.Ok, "%s: %s", *r.Name, r.Message)
 		if *r.Name == "presigned_downloads" {
 			require.Equal(t, "Presigned download URLs work from this server.", r.Message)
