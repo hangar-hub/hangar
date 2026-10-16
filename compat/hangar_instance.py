@@ -2,11 +2,13 @@
 
 The launcher mirrors compat/harness in Go: a random port, a temporary SQLite
 database and Blob store, and a wait for /readyz. Set HANGAR_BINARY to use a
-prebuilt binary; otherwise the launcher runs `go build ./cmd/hangar` once.
+prebuilt binary; otherwise the launcher runs `go build ./cmd/hangar` once and
+removes the binary when the Python process exits.
 """
 
 from __future__ import annotations
 
+import atexit
 import os
 import shutil
 import signal
@@ -36,7 +38,9 @@ def hangar_binary() -> str:
     if os.environ.get("HANGAR_BINARY"):
         return os.environ["HANGAR_BINARY"]
     if _built is None:
-        out = Path(tempfile.mkdtemp(prefix="hangar-compat-bin-")) / "hangar"
+        build_dir = tempfile.mkdtemp(prefix="hangar-compat-bin-")
+        atexit.register(shutil.rmtree, build_dir, ignore_errors=True)
+        out = Path(build_dir) / "hangar"
         subprocess.run(["go", "build", "-o", str(out), "./cmd/hangar"], cwd=REPO_ROOT, check=True)
         _built = str(out)
     return _built
