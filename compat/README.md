@@ -18,7 +18,11 @@ Real clients against a real Hangar Instance (docs/spec/13-testing.md). Run them 
 
 - Go suites use the `compat` build tag: `go test -tags compat ./compat/...`.
 - Python suites run with uv: `uv run --project compat pytest compat`. `compat/.python-version` pins Python 3.11 for `compat/.venv`; the client matrix in `hf/README.md` runs the other Python versions in their own environments.
-- Set `HANGAR_BINARY` to test a prebuilt binary; otherwise the launchers build `./cmd/hangar` once per run.
+- Set `HANGAR_BINARY` to test a prebuilt binary; otherwise the launchers build `./cmd/hangar` once per run into a temporary directory and remove it when the run ends. A Go package that calls `harness.Start` or `harness.Binary` must call `harness.Main` from `TestMain`:
+
+  ```go
+  func TestMain(m *testing.M) { os.Exit(harness.Main(m)) }
+  ```
 
 ## Fixtures
 

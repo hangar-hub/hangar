@@ -1,7 +1,8 @@
 // Package harness starts a real Hangar binary for compatibility tests: on a
 // random port, with a temporary SQLite database and Blob store, and waits
-// until /readyz answers. compat suites in Go use Start; the pytest suites
-// use compat/hangar_instance.py, which does the same.
+// until /readyz answers. compat suites in Go use Start, and call Main from
+// TestMain so the binary built for them is removed afterwards; the pytest
+// suites use compat/hangar_instance.py, which does the same.
 package harness
 
 import (
@@ -67,11 +68,83 @@ func (s *syncBuffer) String() string {
 // Logs returns everything the process wrote to stdout and stderr.
 func (i *Instance) Logs() string { return i.logs.String() }
 
-var (
-	buildOnce sync.Once
-	buildPath string
-	buildErr  error
-)
+// builder builds the hangar binary once into a temporary directory and
+// removes that directory again when the test process ends.
+type builder struct {
+	once  sync.Once
+	build func(out string) error
+	dir   string
+	path  string
+	err   error
+
+	mu     sync.Mutex
+	inMain bool
+}
+
+func (b *builder) binary() (string, error) {
+	b.mu.Lock()
+	inMain := b.inMain
+	b.mu.Unlock()
+	if !inMain {
+		return "", errors.New("call harness.Main from the package's TestMain, so the built binary is removed when the tests end")
+	}
+	b.once.Do(func() {
+		dir, err := os.MkdirTemp("", "hangar-compat-bin-")
+		if err != nil {
+			b.err = err
+			return
+		}
+		b.dir = dir
+		path := filepath.Join(dir, "hangar")
+		if runtime.GOOS == "windows" {
+			path += ".exe"
+		}
+		if err := b.build(path); err != nil {
+			b.err = err
+			return
+		}
+		b.path = path
+	})
+	return b.path, b.err
+}
+
+// run runs the tests with the builder enabled, then removes what it built.
+func (b *builder) run(m interface{ Run() int }) int {
+	b.mu.Lock()
+	b.inMain = true
+	b.mu.Unlock()
+	code := m.Run()
+	b.mu.Lock()
+	b.inMain = false
+	b.mu.Unlock()
+	if b.dir != "" {
+		if err := os.RemoveAll(b.dir); err != nil {
+			fmt.Fprintf(os.Stderr, "harness: remove the built hangar binary: %v\n", err)
+			if code == 0 {
+				code = 1
+			}
+		}
+	}
+	return code
+}
+
+func goBuild(out string) error {
+	cmd := exec.Command("go", "build", "-o", out, "./cmd/hangar")
+	cmd.Dir = RepoRoot()
+	if b, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go build: %w: %s", err, b)
+	}
+	return nil
+}
+
+var defaultBuilder = &builder{build: goBuild}
+
+// Main runs a compat package's tests and then removes the hangar binary that
+// Binary or Start built for them. Every package that uses Binary or Start
+// without HANGAR_BINARY must call it from TestMain:
+//
+//	func TestMain(m *testing.M) { os.Exit(harness.Main(m)) }
+func Main(m *testing.M) int { return defaultBuilder.run(m) }
 
 // RepoRoot returns the repository root, found from this source file.
 func RepoRoot() string {
@@ -80,33 +153,18 @@ func RepoRoot() string {
 }
 
 // Binary returns a hangar binary: HANGAR_BINARY if set, or one built from
-// this checkout once per test process.
+// this checkout once per test process. The built binary is removed when Main
+// returns.
 func Binary(t testing.TB) string {
 	t.Helper()
 	if b := os.Getenv(EnvBinary); b != "" {
 		return b
 	}
-	buildOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "hangar-compat-bin-")
-		if err != nil {
-			buildErr = err
-			return
-		}
-		buildPath = filepath.Join(dir, "hangar")
-		if runtime.GOOS == "windows" {
-			buildPath += ".exe"
-		}
-		cmd := exec.Command("go", "build", "-o", buildPath, "./cmd/hangar")
-		cmd.Dir = RepoRoot()
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			buildErr = fmt.Errorf("go build: %w: %s", err, out)
-		}
-	})
-	if buildErr != nil {
-		t.Fatalf("build hangar: %v", buildErr)
+	path, err := defaultBuilder.binary()
+	if err != nil {
+		t.Fatalf("build hangar: %v", err)
 	}
-	return buildPath
+	return path
 }
 
 // FreePort returns a free TCP port on the loopback interface.

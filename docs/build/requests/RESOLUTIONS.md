@@ -26,6 +26,7 @@ How the integration lead resolved every item in `requests/*.md` in phase 2, on b
 | 7. Hooks | Applied: W7 decodes `CommitJob`; `repoQuota` adapts W1's `gc.Accounting` (a refusal is a `*repo.PolicyError`, so every protocol answers with its own refusal and W1's message); `api.RepoDeps.MirrorStatus` fills `mirror_status` from W6. `gitstore.Sweep` is left to `git.compact`; W1's `gc` collects the same packs. |
 | 8. Test helper clash | Applied: W1's `env` and `newEnv` in `internal/api` are now `platformEnv` and `newPlatformEnv`. |
 | 9. `repotest.Fake` changes | Accepted. |
+| 10. Scan results carry forward to a Commit whose scan is pending (W7) | Accepted in phase 2 round 2 (1622a27, merged from `fix/r2-w2`), although `internal/scan` is W7's package: `scan.Current` and `scan.View` (`internal/scan/current.go`, tested in `current_test.go`) carry a result from the nearest scanned ancestor, up to 16 first parents, to each file whose blob, presence and OpenVINO sibling are unchanged. `scan.Gate.CheckFile` and `CheckTree`, the file scan handler in `internal/api/metadata.go` and the tree listing's `scan_status` in `internal/api/repos.go` read it; a changed file the scan reads stays pending and fails closed. `CheckObjects`, the Hub API's `securityFileStatus` and `securityRepoStatus`, and the Repo summary still read only the Commit's own results. `docs/operate/security.md` describes the carried result. |
 
 ## W3: git server
 
