@@ -88,7 +88,11 @@ type PullThrough interface {
 	// Arsenal, waits for planning and returns the new Repo. It returns
 	// repo.ErrNotFound when Pull-through does not apply (turned off, not in
 	// the allowlist, not allowed for the caller, or missing upstream), and
-	// ErrPullPending when planning has not finished in time.
+	// ErrPullPending when planning has not finished in time. The Hub API
+	// also calls it for a Mirror the caller can read whose Revision does
+	// not resolve, since planning creates the Mirror before it stores the
+	// history; for an existing Repo it waits the same way while the Mirror
+	// has no history, and otherwise returns the Repo as it is.
 	Repo(ctx context.Context, p model.Principal, id model.RepoID) (*repo.Repo, error)
 	// File starts or joins the transfer of a file that is not present in a
 	// Partial mirror and streams its bytes as they arrive. It returns

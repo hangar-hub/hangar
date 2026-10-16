@@ -640,9 +640,24 @@ func (namespaceSearch) SearchNamespaces(context.Context, string, int) ([]org.Nam
 	return nil, nil
 }
 
-// newWithSigner rebuilds the Instance's Service with the public URL its
+// hubOptions change the Instance newLocalWithHubOptions builds.
+type hubOptions struct {
+	// pullThroughWait is the Service's PullThroughWait; zero keeps its
+	// default.
+	pullThroughWait time.Duration
+	// beforeQuotaCheck, when set, gives the Service a quota checker on
+	// W1's quotas that runs it before each check a Pull makes.
+	beforeQuotaCheck func(ctx context.Context)
+}
+
+// newLocalWithHub rebuilds the Instance's Service with the public URL its
 // Pull-through links need.
 func newLocalWithHub(t *testing.T, d *db.DB, upstreamURL string) (*localInstance, *localHub) {
+	t.Helper()
+	return newLocalWithHubOptions(t, d, upstreamURL, hubOptions{})
+}
+
+func newLocalWithHubOptions(t *testing.T, d *db.DB, upstreamURL string, o hubOptions) (*localInstance, *localHub) {
 	t.Helper()
 	ln, base := listen(t)
 	l := newLocal(t, d, upstreamURL, localOptions{partSize: 1 << 20})
@@ -651,12 +666,16 @@ func newLocalWithHub(t *testing.T, d *db.DB, upstreamURL string) (*localInstance
 	l.halt()
 	l.reg = jobs.NewRegistry()
 	l.queue = jobs.NewQueue(d, l.reg, jobs.QueueOptions{})
+	var quota upstream.QuotaChecker
+	if o.beforeQuotaCheck != nil {
+		quota = pullQuota{Accounting: l.quota, before: o.beforeQuotaCheck}
+	}
 	l.svc, err = upstream.New(upstream.Options{DB: d, Registry: l.registry, Client: upstream.NewHTTPClient(upstream.HTTPOptions{Version: "compat"}),
 		Repos: l.real.Store, LFS: l.real.LFS, Orgs: l.orgs, Queue: l.queue, Limiter: l.limiter, Authz: l.authz, Layout: datasetstest.NewLayout(),
 		Webhooks: &webhooktest.Fake{}, MirrorState: l.real.Store, Signer: signer, PublicURL: base,
 		Settings:     func(context.Context) (upstream.Settings, error) { return *l.settings.Load(), nil },
 		ParseWindows: func(specs []string) (upstream.Windows, error) { return jobs.ParseWindows(specs, time.UTC) },
-		Snooze:       jobs.Snooze, PartSize: 1 << 20, PollInterval: 200 * time.Millisecond})
+		Snooze:       jobs.Snooze, PartSize: 1 << 20, PollInterval: 200 * time.Millisecond, PullThroughWait: o.pullThroughWait, Quota: quota})
 	require.NoError(t, err)
 	require.NoError(t, l.svc.RegisterJobs(l.reg))
 	l.limiter = jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "hub-worker", Budget: jobs.StaticBudget(nil)})
@@ -713,6 +732,76 @@ print(hashlib.sha256(open(p, "rb").read()).hexdigest())`
 	require.NoError(t, err)
 	gotSum, wantSum := sha256.Sum256(got), sha256.Sum256(gitWeights)
 	require.Equal(t, hex.EncodeToString(wantSum[:]), hex.EncodeToString(gotSum[:]), "git-lfs fetched the object through Pull-through")
+}
+
+// TestRealPullThroughWaitsForTheHistoryOfANewMirror holds a
+// Pull-through's planning after it has created the Mirror and before it
+// stores the history, past PullThroughWait. A client that retries after
+// the 503 finds the Mirror with no history yet: the Hub API must answer
+// 503 with Retry-After again, not RevisionNotFound, and serve the file
+// once planning ends.
+func TestRealPullThroughWaitsForTheHistoryOfANewMirror(t *testing.T) {
+	up := newSecondInstance(t)
+	release := make(chan struct{})
+	var held atomic.Bool
+	l, hub := newLocalWithHubOptions(t, dbtest.SQLite(t), up.URL, hubOptions{pullThroughWait: time.Second, beforeQuotaCheck: func(ctx context.Context) {
+		// The history pack's check: the Mirror exists, its history does
+		// not yet.
+		held.Store(true)
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+	}})
+	l.settings.Store(&upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"lab/*"}, PullThroughMinRole: "user"})
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "lab", Name: "held"}
+	config := `{"model_type":"bert"}`
+	up.seed(t, id, map[string][]byte{"config.json": []byte(config)})
+	request := func(method, path string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(method, hub.URL+path, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+hub.Token)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		return resp
+	}
+	requirePending := func(method, path string) {
+		t.Helper()
+		resp := request(method, path)
+		require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode, "%s %s: %s", method, path, resp.Header.Get("X-Error-Message"))
+		require.Equal(t, "10", resp.Header.Get("Retry-After"))
+	}
+
+	requirePending(http.MethodHead, "/lab/held/resolve/main/config.json")
+	require.Eventually(t, held.Load, time.Minute, 50*time.Millisecond, "planning reached the history pack")
+	r, err := l.real.Get(l.ctx, id)
+	require.NoError(t, err)
+	require.True(t, r.Mirror, "planning created the Mirror")
+	_, err = l.real.Resolve(l.ctx, id, "main")
+	require.ErrorIs(t, err, repo.ErrRevisionNotFound, "the Mirror has no history yet")
+
+	// Retries find the Mirror without history.
+	requirePending(http.MethodHead, "/lab/held/resolve/main/config.json")
+	requirePending(http.MethodGet, "/lab/held/resolve/main/config.json")
+	requirePending(http.MethodGet, "/api/models/lab/held/revision/main")
+	requirePending(http.MethodGet, "/api/models/lab/held")
+	pulls, _, err := l.queue.List(l.ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPull}})
+	require.NoError(t, err)
+	require.Len(t, pulls, 1, "the retries joined the Pull")
+
+	close(release)
+	deadline := time.Now().Add(time.Minute)
+	for request(http.MethodHead, "/lab/held/resolve/main/config.json").StatusCode != http.StatusOK {
+		require.True(t, time.Now().Before(deadline), "the file was not served once planning ended")
+		time.Sleep(100 * time.Millisecond)
+	}
+	resp := request(http.MethodGet, "/lab/held/resolve/main/config.json")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, config, string(b))
 }
 
 func repoRoot(t *testing.T) string {

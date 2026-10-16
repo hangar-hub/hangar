@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -338,10 +340,30 @@ type pullThrough struct {
 	content string
 	fileErr error
 	created *repo.Repo
+	mu      sync.Mutex
+	// planned runs once, on the next Repo call, before it answers, as a
+	// Pull would store the history.
+	planned func()
+	// asked lists the Repos that Repo was called for.
+	asked []model.RepoID
 }
 
-func (p *pullThrough) Repo(_ context.Context, _ model.Principal, _ model.RepoID) (*repo.Repo, error) {
+func (p *pullThrough) Repo(_ context.Context, _ model.Principal, id model.RepoID) (*repo.Repo, error) {
+	p.mu.Lock()
+	p.asked = append(p.asked, id)
+	planned := p.planned
+	p.planned = nil
+	p.mu.Unlock()
+	if planned != nil {
+		planned()
+	}
 	return p.created, p.repoErr
+}
+
+func (p *pullThrough) calls() []model.RepoID {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.asked)
 }
 
 func (p *pullThrough) File(_ context.Context, _ model.Principal, _ *repo.Repo, _ model.CommitSHA, _ model.Entry) (io.ReadCloser, error) {
@@ -392,4 +414,75 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 	requireHubError(t, e.Request(t, http.MethodGet, "/api/models/upstream/thing", "bob", ""), http.StatusNotFound, "RepoNotFound")
 	pt.repoErr, pt.created = nil, rp
 	require.Equal(t, http.StatusOK, e.Request(t, http.MethodGet, "/api/models/alice/mirror", "", "").StatusCode)
+}
+
+// TestPullThroughWaitsForTheHistoryOfAPlannedMirror covers a Mirror that
+// planning has created but not filled yet: a read that names a Revision
+// asks Pull-through, so it waits for the history or answers 503 with
+// Retry-After instead of RevisionNotFound.
+func TestPullThroughWaitsForTheHistoryOfAPlannedMirror(t *testing.T) {
+	t.Parallel()
+	pt := &pullThrough{repoErr: hfapi.ErrPullPending}
+	e := newEnv(t, func(o *hfapitest.Options) {
+		o.Deps = func(d *hfapi.Deps) { d.PullThrough = pt }
+	})
+	ctx := context.Background()
+	alice := e.Users["alice"].Principal
+	id := modelID("alice", "planned")
+	rp, err := e.Repos.Create(ctx, repo.CreateParams{ID: id, Visibility: model.VisibilityPublic, Actor: alice, Mirror: true})
+	require.NoError(t, err)
+	_, err = e.Repos.Create(ctx, repo.CreateParams{ID: modelID("alice", "hidden"), Visibility: model.VisibilityPrivate, Actor: alice, Mirror: true})
+	require.NoError(t, err)
+	seed(t, e, "alice", modelID("alice", "local"), model.VisibilityPublic, map[string]string{"config.json": "{}"})
+
+	for _, path := range []string{"/alice/planned/resolve/main/config.json", "/api/models/alice/planned", "/api/models/alice/planned/revision/main",
+		"/api/models/alice/planned/tree/main"} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			r := e.Request(t, method, path, "", "")
+			require.Equal(t, http.StatusServiceUnavailable, r.StatusCode, "%s %s", method, path)
+			require.Equal(t, "10", r.Header.Get("Retry-After"), "%s %s", method, path)
+		}
+	}
+	require.NotEmpty(t, pt.calls())
+	for _, asked := range pt.calls() {
+		require.Equal(t, id, asked)
+	}
+
+	// Pull-through is not asked for a Repo the caller cannot read, for a
+	// local Repo, or for a write.
+	before := len(pt.calls())
+	requireHubError(t, e.Request(t, http.MethodGet, "/alice/hidden/resolve/main/config.json", "bob", ""), http.StatusNotFound, "RepoNotFound")
+	requireHubError(t, e.Request(t, http.MethodGet, "/alice/local/resolve/v2/config.json", "", ""), http.StatusNotFound, "RevisionNotFound")
+	r := e.Request(t, http.MethodPost, "/api/models/alice/planned/preupload/main", "alice", `{"files":[]}`)
+	require.NotEqual(t, http.StatusServiceUnavailable, r.StatusCode)
+	require.Len(t, pt.calls(), before)
+
+	// When Pull-through does not apply, the empty Mirror answers as it is.
+	pt.repoErr = repo.ErrNotFound
+	requireHubError(t, e.Request(t, http.MethodGet, "/alice/planned/resolve/main/config.json", "", ""), http.StatusNotFound, "RevisionNotFound")
+	require.Equal(t, http.StatusOK, e.Request(t, http.MethodGet, "/api/models/alice/planned", "", "").StatusCode)
+
+	// A policy refusal is a 403 with its message.
+	pt.repoErr = &repo.PolicyError{Message: "The Namespace is over its storage quota."}
+	r = e.Request(t, http.MethodGet, "/alice/planned/resolve/main/config.json", "", "")
+	require.Equal(t, http.StatusForbidden, r.StatusCode)
+	require.Contains(t, r.Header.Get("X-Error-Message"), "storage quota")
+
+	// Planning stores the history while the request waits.
+	pt.repoErr, pt.created = nil, rp
+	pt.mu.Lock()
+	pt.planned = func() {
+		_, err := e.Repos.Commit(ctx, repo.CommitParams{Repo: id, Revision: "main", Summary: "Mirror", Actor: model.System(), AllowMirror: true,
+			Operations: []repo.Operation{{Kind: repo.OpAdd, Path: "config.json", Content: strings.NewReader(`{"model_type":"bert"}`)}}})
+		if err != nil {
+			t.Errorf("store the Mirror's history: %v", err)
+		}
+	}
+	pt.mu.Unlock()
+	r = e.Request(t, http.MethodGet, "/alice/planned/resolve/main/config.json", "", "")
+	require.Equal(t, http.StatusOK, r.StatusCode)
+	require.JSONEq(t, `{"model_type":"bert"}`, string(readBody(t, r)))
+	asked := len(pt.calls())
+	require.Equal(t, http.StatusOK, e.Request(t, http.MethodGet, "/api/models/alice/planned/revision/main", "", "").StatusCode)
+	require.Len(t, pt.calls(), asked, "a Mirror with history does not ask Pull-through")
 }
