@@ -231,6 +231,8 @@ type localOptions struct {
 	existing *localInstance
 	// beforeQuotaCheck runs before each quota check a Pull makes.
 	beforeQuotaCheck func(ctx context.Context)
+	// logger receives the worker's log; nil discards it.
+	logger *slog.Logger
 }
 
 func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *localInstance {
@@ -279,7 +281,7 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 	require.NoError(t, err)
 	require.NoError(t, l.svc.RegisterJobs(l.reg))
 	l.worker = jobs.NewWorker(d, l.reg, jobs.WorkerOptions{Owner: owner, Concurrency: 4, Lease: 3 * time.Second, PollInterval: 50 * time.Millisecond,
-		InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: 4}})
+		InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: 4}, Logger: o.logger})
 	if !o.noWorker {
 		l.start()
 	}
@@ -890,12 +892,14 @@ func TestRealPullRespectsNamespaceQuota(t *testing.T) {
 // TestRealPullRespectsNamespaceQuota failure on a loaded machine. The
 // worker leases Jobs for 3 seconds and renews every second; a renewal
 // that comes late lets the worker recover the pull Job and start a second
-// run of it while the first is still going. Both runs store the Mirror's
-// history: the second wins, and the first one's ApplyPack fails with
-// repo.ErrRefConflict. The Pull used to take that as a failure and back
-// off for 30 seconds or more, so the Job sat pending past the test's
-// wait. This test makes the lease expire at that point on purpose. The
-// Pull must plan again at once and end with its own quota refusal.
+// run of it while the first is still going. The second run stores the
+// Mirror's history first. W1 fences Job writes on the attempt number, so
+// the first run loses the Job at its next write or lease renewal, its
+// context is cancelled and the worker discards its result: whatever it
+// makes of its pack (repo.ErrRefConflict from ApplyPack, or the cancelled
+// context) cannot back the Job off or end it. This test makes the lease
+// expire at that point on purpose. The Pull must end promptly with the
+// second run's quota refusal.
 func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		up := newSecondInstance(t)
@@ -904,8 +908,14 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 			l     *localInstance
 			jid   jobs.JobID
 			calls atomic.Int32
+			mu    sync.Mutex
+			// stale is the context of the run whose lease the hook
+			// expires, and staleAttempt its attempt number.
+			stale        context.Context
+			staleAttempt int
 		)
 		ready := make(chan struct{})
+		outcomes := &jobOutcomes{}
 		// The hook reads and writes with l.ctx: the run it is called
 		// from can lose its lease, which cancels the run's context.
 		get := func() *jobs.Job {
@@ -926,39 +936,53 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
-		hook := func(context.Context) {
+		historyStored := func() bool {
+			_, err := l.real.Resolve(l.ctx, sel, "main")
+			return err == nil
+		}
+		// Runs are told apart by their context, not by the order of the
+		// calls: a run that loses its lease on its own under load never
+		// reaches the hook, and the next run's first check takes its place.
+		hook := func(ctx context.Context) {
 			<-ready
-			switch calls.Add(1) {
-			case 1:
-				// The first run is about to store the history. Its lease
-				// expires, and the worker starts a second run, which
+			calls.Add(1)
+			mu.Lock()
+			first := stale == nil && ctx.Err() == nil
+			if first {
+				stale = ctx
+				staleAttempt = get().Attempts
+			}
+			own, attempt := ctx == stale, staleAttempt
+			mu.Unlock()
+			switch {
+			case first:
+				// This run is about to store the history. Its lease
+				// expires, and the worker starts another run, which
 				// stores the history first.
-				waitFor("a second run of the Pull stored the history", func() bool {
-					if get().Attempts < 2 {
-						// Only the first run's lease: a second run must
-						// keep its own.
+				waitFor("another run of the Pull stored the history", func() bool {
+					if get().Attempts <= attempt {
+						// Only this run's lease: a later run must keep
+						// its own.
 						_, err := d.NewUpdate().Model((*db.Job)(nil)).Set("lease_expires_at = ?", time.Now().UTC().Add(-time.Minute)).
-							Where("id = ? AND status = ? AND attempts = 1", jid, string(jobs.StatusRunning)).Exec(l.ctx)
+							Where("id = ? AND status = ? AND attempts = ?", jid, string(jobs.StatusRunning), attempt).Exec(l.ctx)
 						if err != nil {
 							t.Errorf("expire the lease: %v", err)
 						}
 						return false
 					}
-					_, err := l.real.Resolve(l.ctx, sel, "main")
-					return err == nil
+					return historyStored()
 				})
-			case 3:
-				// The second run's selection check waits until the first
-				// run has given up on its pack: it either recorded an
-				// error to back off from or planned again, after which
-				// the worker may already have started a third run.
-				waitFor("the first run gave up on its pack", func() bool {
-					j := get()
-					return j.Status != jobs.StatusRunning || j.Error != "" || bytes.Contains(j.Result, []byte(`"ref_conflicts"`))
-				})
+			case own, ctx.Err() != nil, !historyStored():
+				// The stale run, a run that already lost its lease, or a
+				// later run's check of the pack it is about to store.
+			default:
+				// A later run's selection check waits until the stale run
+				// has ended, so the stale run is done with its pack before
+				// this run ends the Job.
+				waitFor("the first run ended", func() bool { return outcomes.count(jid, "lost") > 0 })
 			}
 		}
-		l = newLocal(t, d, up.URL, localOptions{partSize: 1 << 20, beforeQuotaCheck: hook})
+		l = newLocal(t, d, up.URL, localOptions{partSize: 1 << 20, beforeQuotaCheck: hook, logger: slog.New(outcomes)})
 		owner := up.Real.AddUser(t, sel.Namespace)
 		_, err := up.Real.Create(l.ctx, repo.CreateParams{ID: sel, Actor: owner, Visibility: model.VisibilityPublic})
 		require.NoError(t, err)
@@ -970,16 +994,68 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 		jid, _, err = l.svc.StartPull(l.ctx, upstream.PullRequest{Repo: sel, Actor: l.user})
 		require.NoError(t, err)
 		close(ready)
-		// Well under the 30-second backoff the Pull used to wait.
+		// Well under the 30-second backoff a stale run's ref conflict
+		// used to cause.
 		j := l.wait(jid, 20*time.Second)
 		require.GreaterOrEqual(t, calls.Load(), int32(3), "the lease expired mid-run")
+		mu.Lock()
+		attempt := staleAttempt
+		mu.Unlock()
+		require.Greater(t, j.Attempts, attempt, "another run took the Job over")
+		require.Positive(t, outcomes.count(jid, "lost"), "the worker discarded the stale run's result")
+		require.Equal(t, 1, outcomes.count(jid, "failed"), "only the run holding the Job ended it")
 		require.Equal(t, jobs.StatusFailed, j.Status, j.Error)
 		var st map[string]any
 		require.NoError(t, json.Unmarshal(j.Result, &st))
 		require.Equal(t, "quota_exceeded", st["reason"])
+		require.NotContains(t, st, "ref_conflicts", "the stale run recorded nothing")
 		require.Contains(t, j.Error, "storage quota. Delete files or ask an admin to raise the quota.")
 		require.Equal(t, "Storage quota exceeded", j.Progress.Message)
 	})
+}
+
+// jobOutcomes is a slog handler that keeps the Job ID and outcome of every
+// "job finished" record a worker logs.
+type jobOutcomes struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (*jobOutcomes) Enabled(context.Context, slog.Level) bool { return true }
+func (h *jobOutcomes) WithAttrs([]slog.Attr) slog.Handler     { return h }
+func (h *jobOutcomes) WithGroup(string) slog.Handler          { return h }
+
+func (h *jobOutcomes) Handle(_ context.Context, r slog.Record) error {
+	if r.Message != "job finished" {
+		return nil
+	}
+	var id, outcome string
+	r.Attrs(func(a slog.Attr) bool {
+		switch a.Key {
+		case "job_id":
+			id = a.Value.String()
+		case "outcome":
+			outcome = a.Value.String()
+		}
+		return true
+	})
+	h.mu.Lock()
+	h.seen = append(h.seen, id+" "+outcome)
+	h.mu.Unlock()
+	return nil
+}
+
+// count returns how many runs of the Job ended with outcome.
+func (h *jobOutcomes) count(id jobs.JobID, outcome string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, s := range h.seen {
+		if s == id.String()+" "+outcome {
+			n++
+		}
+	}
+	return n
 }
 
 // The interfaces the integration lead wires W6 through, checked against
