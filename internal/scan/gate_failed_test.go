@@ -40,12 +40,14 @@ func (b *brokenFileRepos) OpenFile(ctx context.Context, id model.RepoID, commit 
 	return b.Fake.OpenFile(ctx, id, commit, p, rng)
 }
 
-// TestGateAfterAFailedScanJob checks the gate for a scan Job that fails
-// after it has read some files: the files it read before the failure get
-// no result, so with blocking on every file that can run code stays
-// refused, and accept_risk=1 still downloads it. A failed rescan of a
-// scanned Commit keeps the results of the scan before it.
-func TestGateAfterAFailedScanJob(t *testing.T) {
+// TestGateOverHTTPAfterAFailedScanJob checks the gate, directly and through
+// the resolve handler, for a scan Job that fails after it has read some
+// files: the files it read before the failure get no result, so with
+// blocking on every file that can run code stays refused, and
+// accept_risk=1 still downloads it. A failed rescan of a scanned Commit
+// keeps the results of the scan before it. TestGateAfterAFailedScanJob
+// covers the same failure on both drivers and a failure while storing.
+func TestGateOverHTTPAfterAFailedScanJob(t *testing.T) {
 	d := dbtest.SQLite(t)
 	ctx := t.Context()
 	fake := repotest.NewFake(t)
