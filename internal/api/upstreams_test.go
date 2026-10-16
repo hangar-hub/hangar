@@ -96,6 +96,7 @@ func (e *upstreamsEnv) do(t *testing.T, token, method, path string, body any) (i
 }
 
 func TestUpstreamsAPI(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		e := newUpstreamsEnv(t, d)
 		h := e.h
@@ -282,6 +283,7 @@ func (c *stallingInfo) RepoInfo(ctx context.Context, u upstream.Upstream, cred u
 // within the update check budget, GET .../mirror still answers, without
 // update_available, and logs why.
 func TestGetMirrorWithoutUpdateCheck(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		client := &stallingInfo{Client: upstream.NewHTTPClient(upstream.HTTPOptions{Version: "test", BaseBackoff: time.Millisecond,
 			Sleep: func(context.Context, time.Duration) error { return nil }}), ended: make(chan stalledCall, 1)}

@@ -37,6 +37,7 @@ func configsRequest(t *testing.T, a *api.DatasetsAPI, ns, name string, rev *stri
 // TestListDatasetConfigs runs on SQLite and, with HANGAR_TEST_POSTGRES=1,
 // on Postgres.
 func TestListDatasetConfigs(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		s := viewertest.New(t, viewertest.Options{DB: d})
 		a, err := api.NewDatasetsAPI(api.DatasetsDeps{Repos: s.Repos, Authz: s.Authz, Layout: &layout.Service{Repos: s.Repos},

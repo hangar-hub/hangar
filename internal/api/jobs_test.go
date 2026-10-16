@@ -97,6 +97,7 @@ func newJobAuthzFixture(t *testing.T) *jobAuthzFixture {
 }
 
 func TestJobsCheckRepoAccess(t *testing.T) {
+	t.Parallel()
 	f := newJobAuthzFixture(t)
 	e := f.e
 	jobs := map[string]uuid.UUID{
@@ -161,6 +162,7 @@ func listed(t *testing.T, body []byte, id uuid.UUID) bool {
 }
 
 func TestJobsFollowRevokedRepoAccess(t *testing.T) {
+	t.Parallel()
 	f := newJobAuthzFixture(t)
 	e := f.e
 	alice := e.users["alice"]
@@ -205,6 +207,7 @@ func TestJobsFollowRevokedRepoAccess(t *testing.T) {
 }
 
 func TestJobsListPagesPastHiddenJobs(t *testing.T) {
+	t.Parallel()
 	f := newJobAuthzFixture(t)
 	e := f.e
 	// Twenty-five newer Jobs on the private Repo, which the restricted
@@ -235,6 +238,7 @@ func TestJobsListPagesPastHiddenJobs(t *testing.T) {
 // handler that queued them put only the Repo UUID in the payload, and that
 // a payload's own repo is kept.
 func TestJobsNameTheirRepo(t *testing.T) {
+	t.Parallel()
 	f := newJobAuthzFixture(t)
 	e := f.e
 	payloadRepo := func(user string, id uuid.UUID) any {

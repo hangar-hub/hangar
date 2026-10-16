@@ -16,6 +16,7 @@ import (
 )
 
 func TestUpstreamsAPIErrors(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		e := newUpstreamsEnv(t, d)
 		h := e.h
@@ -136,6 +137,7 @@ func TestUpstreamsAPIErrors(t *testing.T) {
 }
 
 func TestUpstreamMirrorSummary(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		e := newUpstreamsEnv(t, d)
 		h := e.h

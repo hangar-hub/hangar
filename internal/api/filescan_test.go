@@ -16,6 +16,7 @@ import (
 // TestFileScan checks GET .../files/{rev}/{path}/scan, which lists the
 // imports the pickle scanner found in one file for the file page.
 func TestFileScan(t *testing.T) {
+	t.Parallel()
 	e := newMetaEnv(t)
 	ctx := context.Background()
 	sha := indextest.Commit(t, e.repos, e.model.ID, map[string][]byte{"evil.pkl": scantest.OSSystemProtocol0()})
