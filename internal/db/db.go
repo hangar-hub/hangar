@@ -175,6 +175,16 @@ func migrationsFS(driver string) (fs.FS, error) {
 	return fs.Sub(migrationFiles, "migrations/"+driver)
 }
 
+// MigrationFiles returns the SQL migration files Migrate applies for driver.
+// Test helpers hash them to tell whether a migrated template database is
+// still current.
+func MigrationFiles(driver string) (fs.FS, error) {
+	if driver != SQLite && driver != Postgres {
+		return nil, fmt.Errorf("unknown database driver %q", driver)
+	}
+	return migrationsFS(driver)
+}
+
 func (d *DB) migrator() (*migrate.Migrator, *migrate.Migrations, error) {
 	sub, err := migrationsFS(d.driver)
 	if err != nil {
