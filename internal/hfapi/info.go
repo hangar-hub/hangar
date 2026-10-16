@@ -66,11 +66,18 @@ func (h *Handler) repoInfo(w http.ResponseWriter, r *http.Request, ref repoRef, 
 		}
 	} else {
 		s, err := h.d.Repos.Resolve(r.Context(), rp.ID, rp.DefaultBranch)
+		if errors.Is(err, repo.ErrRevisionNotFound) && h.awaitsHistory(r, rp) {
+			s, err = h.resolveAfterHistory(r, rp, rp.DefaultBranch)
+		}
 		switch {
 		case err == nil:
 			sha = s
 		case errors.Is(err, repo.ErrRevisionNotFound):
-			// A Mirror being planned has no Commits yet.
+			// A Mirror being planned without Pull-through, or one that is
+			// empty on the Upstream, has no Commits yet.
+		case errors.Is(err, ErrPullPending):
+			pullPending(w, r, rp.ID)
+			return
 		default:
 			h.serviceError(w, r, rp.ID, err)
 			return

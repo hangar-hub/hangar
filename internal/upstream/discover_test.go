@@ -373,6 +373,70 @@ func TestPullThroughPendingWhilePlanning(t *testing.T) {
 	})
 }
 
+// TestPullThroughWaitsForAMirrorWithoutHistory holds planning after it
+// has created the Mirror and before it stores the history. Repo for the
+// Mirror joins that Pull and waits as for a missing Repo; a Mirror with
+// history, or one Pull-through does not apply to, comes back as it is.
+func TestPullThroughWaitsForAMirrorWithoutHistory(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{PullThroughWait: 100 * time.Millisecond})
+		alice := e.User("alice")
+		commit := e.Seed(tiny, map[string][]byte{"config.json": []byte(`{}`)}, nil)
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"acme/*"}, PullThroughMinRole: "user"})
+		pt := e.Service.PullThrough()
+		pulls := func() []*jobs.Job {
+			js, _, err := e.Queue.List(e.Ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPull}})
+			require.NoError(t, err)
+			return js
+		}
+		_, err := pt.Repo(e.Ctx, alice, tiny)
+		require.ErrorIs(t, err, upstream.ErrPullPending)
+
+		held, release := make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		e.Repos.BeforeApplyPack(func(ctx context.Context, p repo.ApplyPackParams) error {
+			if p.Pack != nil {
+				once.Do(func() { close(held) })
+				<-release
+			}
+			return nil
+		})
+		planned := make(chan struct{})
+		go func() {
+			defer close(planned)
+			e.Queue.RunPending(e.Ctx)
+		}()
+		<-held
+		r, err := e.Repos.Get(e.Ctx, tiny)
+		require.NoError(t, err)
+		require.True(t, r.Mirror, "planning created the Mirror")
+
+		_, err = pt.Repo(e.Ctx, alice, tiny)
+		require.ErrorIs(t, err, upstream.ErrPullPending, "the Mirror has no history yet")
+		require.Len(t, pulls(), 1, "Repo joined the Pull that is planning")
+		// Outside the allowlist, Repo returns the Mirror as it is.
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"other/*"}, PullThroughMinRole: "user"})
+		got, err := pt.Repo(e.Ctx, alice, tiny)
+		require.NoError(t, err)
+		require.Equal(t, r.UUID, got.UUID)
+		e.SetSettings(upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"acme/*"}, PullThroughMinRole: "user"})
+
+		close(release)
+		<-planned
+		got, err = pt.Repo(e.Ctx, alice, tiny)
+		require.NoError(t, err)
+		require.Equal(t, r.UUID, got.UUID)
+		head, err := e.Repos.Resolve(e.Ctx, tiny, "main")
+		require.NoError(t, err)
+		require.Equal(t, commit, head)
+		e.Run(10)
+		n := len(pulls())
+		_, err = pt.Repo(e.Ctx, alice, tiny)
+		require.NoError(t, err)
+		require.Len(t, pulls(), n, "a Mirror with history starts no Pull")
+	})
+}
+
 func TestPullThroughGitLFSURL(t *testing.T) {
 	forEachDB(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d, upstreamtest.HarnessOptions{})
