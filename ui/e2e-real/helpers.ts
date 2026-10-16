@@ -123,6 +123,61 @@ export async function signIn(page: Page, username = user.username, password = us
   expect(res.ok(), await res.text()).toBe(true);
 }
 
+/**
+ * How long one git write can take on a loaded host. At a load average of 60
+ * to 70 on 12 CPUs, a Commit of a tiny Repo took up to 28.6 seconds and
+ * making a Repo up to 13 seconds, both well within a second once the load
+ * dropped. A flow that waits on git writes gets this much more time for each.
+ */
+export const gitWriteTail = 30_000;
+
+/**
+ * Adds time for `writes` git writes to the timeout of the running test or
+ * hook, so a slow Commit on a loaded host does not use up the time the rest
+ * of the flow needs.
+ */
+export function allowForGitWrites(writes: number): void {
+  const info = test.info();
+  if (info.timeout > 0) info.setTimeout(info.timeout + writes * gitWriteTail);
+}
+
+/**
+ * Makes a public Repo of the user's named `name`, with one Commit that adds
+ * `files` (path to content), and returns its ID. It makes two git writes, so
+ * call it from a hook, outside the flow's own timeout, after
+ * allowForGitWrites(2).
+ */
+export async function ownRepo(
+  type: "model" | "dataset",
+  name: string,
+  summary: string,
+  files: Record<string, string>,
+): Promise<string> {
+  const id = `${user.username}/${name}`;
+  const ada = await session(env("HANGAR_URL"), user.username, user.password);
+  try {
+    const created = await ada.call("POST", "/repos", {
+      type,
+      namespace: user.username,
+      name,
+      visibility: "public",
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const commit = await ada.call("POST", `/repos/${type}s/${id}/commits`, {
+      summary,
+      operations: Object.entries(files).map(([path, content]) => ({
+        op: "add",
+        path,
+        content_base64: Buffer.from(content).toString("base64"),
+      })),
+    });
+    expect(commit.status(), await commit.text()).toBe(201);
+  } finally {
+    await ada.dispose();
+  }
+  return id;
+}
+
 /** Polls `check` until it is true, for work the Instance does in Jobs. */
 export async function waitFor(what: string, check: () => Promise<boolean>, timeout = 120_000) {
   const deadline = Date.now() + timeout;

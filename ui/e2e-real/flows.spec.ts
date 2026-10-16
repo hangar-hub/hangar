@@ -9,8 +9,10 @@ import {
   watchConsole,
 } from "../e2e/helpers";
 import {
+  allowForGitWrites,
   api,
   env,
+  ownRepo,
   session,
   signIn,
   signInLock,
@@ -135,6 +137,7 @@ test("creates a Token that is shown once, then revokes it", async ({ page }) => 
 });
 
 test("uploads a file in the browser and commits it", async ({ page }) => {
+  allowForGitWrites(1);
   const problems = watchConsole(page);
   await signIn(page);
   await page.goto(`/${modelRepo}/tree/main`);
@@ -213,6 +216,7 @@ test("creates an Organisation and lists it for admins", async ({ page }) => {
 });
 
 test("opens a pull request from an upload and shows its diff", async ({ page }) => {
+  allowForGitWrites(1);
   const problems = watchConsole(page);
   await signIn(page);
   await page.goto(`/${modelRepo}/tree/main`);
@@ -315,29 +319,22 @@ test("Discover a model on the Upstream, pull one quant and open it in the GGUF v
   expect(problems).toEqual([]);
 });
 
-test("edits a dataset card with the form", async ({ page }) => {
-  const problems = watchConsole(page);
-  // A dataset of its own, so no other flow or width commits to it meanwhile.
-  const id = `${user.username}/card-${unique()}`;
-  const ada = await session(env("HANGAR_URL"), user.username, user.password);
-  try {
-    const created = await ada.call("POST", "/repos", {
-      type: "dataset",
-      namespace: user.username,
-      name: id.split("/")[1],
-      visibility: "public",
+// The card editor and file editor flows each start from a Repo of their own,
+// made in a hook so its two git writes do not use up the flow's time.
+test.describe(() => {
+  let id = "";
+  test.beforeAll(async () => {
+    allowForGitWrites(2);
+    // A dataset of its own, so no other flow or width commits to it meanwhile.
+    id = await ownRepo("dataset", `card-${unique()}`, "Add the card", {
+      "README.md":
+        "---\nlicense: cc-by-4.0\nsize_categories:\n- n<1K\n---\n# Animals\n\nLegs per animal.\n",
     });
-    expect(created.status(), await created.text()).toBe(201);
-    const card =
-      "---\nlicense: cc-by-4.0\nsize_categories:\n- n<1K\n---\n# Animals\n\nLegs per animal.\n";
-    const commit = await ada.call("POST", `/repos/datasets/${id}/commits`, {
-      summary: "Add the card",
-      operations: [
-        { op: "add", path: "README.md", content_base64: Buffer.from(card).toString("base64") },
-      ],
-    });
-    expect(commit.status(), await commit.text()).toBe(201);
+  });
 
+  test("edits a dataset card with the form", async ({ page }) => {
+    allowForGitWrites(1);
+    const problems = watchConsole(page);
     await signIn(page);
     await page.goto(`/datasets/${id}`);
     await page.getByRole("button", { name: "Edit card" }).click();
@@ -367,53 +364,39 @@ test("edits a dataset card with the form", async ({ page }) => {
     expect(text).toContain("license: cc-by-4.0");
     expect(text).toContain("n<1K");
     expect(text).toContain("Legs per animal.");
-  } finally {
-    await ada.dispose();
-  }
-  expect(problems).toEqual([]);
+    expect(problems).toEqual([]);
+  });
 });
 
-test("edits a text file in the browser", async ({ page }) => {
-  // A Repo of its own: editing sends the Commit the page opened as
-  // parent_commit, so a Commit to the same branch by another flow would
-  // rightly be refused with 412.
-  const name = `edit-${unique()}`;
-  const id = `${user.username}/${name}`;
-  const ada = await session(env("HANGAR_URL"), user.username, user.password);
-  try {
-    const created = await ada.call("POST", "/repos", {
-      type: "model",
-      namespace: user.username,
-      name,
-      visibility: "public",
+test.describe(() => {
+  let id = "";
+  test.beforeAll(async () => {
+    allowForGitWrites(2);
+    // A Repo of its own: editing sends the Commit the page opened as
+    // parent_commit, so a Commit to the same branch by another flow would
+    // rightly be refused with 412.
+    id = await ownRepo("model", `edit-${unique()}`, "Add the tokenizer config", {
+      "tokenizer_config.json": '{\n  "do_lower_case": true\n}\n',
     });
-    expect(created.status(), await created.text()).toBe(201);
-    const commit = await ada.call("POST", `/repos/models/${id}/commits`, {
-      summary: "Add the tokenizer config",
-      operations: [
-        {
-          op: "add",
-          path: "tokenizer_config.json",
-          content_base64: Buffer.from('{\n  "do_lower_case": true\n}\n').toString("base64"),
-        },
-      ],
-    });
-    expect(commit.status(), await commit.text()).toBe(201);
-  } finally {
-    await ada.dispose();
-  }
-  await signIn(page);
-  await page.goto(`/${id}/blob/main/tokenizer_config.json`);
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
-  await page.getByLabel("Edit tokenizer_config.json").fill('{\n  "do_lower_case": false\n}\n');
-  const committed = commitResponse(page, `models/${id}`);
-  await page.getByRole("button", { name: "Commit to main" }).click();
-  expect((await committed).status()).toBe(201);
-  await expect(
-    page.getByRole("status").filter({ hasText: "Saved tokenizer_config.json." }),
-  ).toBeVisible();
-  await page.getByRole("tab", { name: "Source" }).click();
-  await expect(page.getByRole("region", { name: "Code" })).toContainText('"do_lower_case": false');
+  });
+
+  test("edits a text file in the browser", async ({ page }) => {
+    allowForGitWrites(1);
+    await signIn(page);
+    await page.goto(`/${id}/blob/main/tokenizer_config.json`);
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Edit tokenizer_config.json").fill('{\n  "do_lower_case": false\n}\n');
+    const committed = commitResponse(page, `models/${id}`);
+    await page.getByRole("button", { name: "Commit to main" }).click();
+    expect((await committed).status()).toBe(201);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Saved tokenizer_config.json." }),
+    ).toBeVisible();
+    await page.getByRole("tab", { name: "Source" }).click();
+    await expect(page.getByRole("region", { name: "Code" })).toContainText(
+      '"do_lower_case": false',
+    );
+  });
 });
 
 test("reorders a Collection with the keyboard", async ({ page }) => {
