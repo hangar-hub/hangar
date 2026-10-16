@@ -79,8 +79,10 @@ func infoFrom(ctx context.Context) *RequestInfo {
 func Info(ctx context.Context) *RequestInfo { return infoFrom(ctx) }
 
 // WithInfo returns a context with a fresh RequestInfo. The request ID
-// middleware calls it; tests can call it directly.
+// middleware calls it; tests can call it directly. Log records written
+// with the context carry the ID as request_id.
 func WithInfo(ctx context.Context, requestID string) context.Context {
+	ctx = telemetry.WithRequestID(ctx, requestID)
 	return context.WithValue(ctx, keyInfo, &RequestInfo{id: requestID, protocol: telemetry.ProtocolUnknown})
 }
 
@@ -90,6 +92,16 @@ func RequestID(ctx context.Context) string {
 		return i.ID()
 	}
 	return ""
+}
+
+// InternalErrorMessage is the message of a 500 response. It names the
+// request ID, which every log line written for the request carries as
+// request_id, so the caller can quote it and an operator can find the cause.
+func InternalErrorMessage(ctx context.Context) string {
+	if id := RequestID(ctx); id != "" {
+		return "Internal server error. The request ID is " + id + "."
+	}
+	return "Internal server error."
 }
 
 // SetRoute records the route template, for example `/{ns}/{name}/resolve/{rev}/{path}`.

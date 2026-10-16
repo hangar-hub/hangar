@@ -129,7 +129,7 @@ func (d *MetaDeps) metaProblem(w http.ResponseWriter, r *http.Request, err error
 	}
 	if status == http.StatusInternalServerError {
 		d.Log.ErrorContext(r.Context(), "native api request failed", "error", err.Error())
-		detail = "Internal server error. The request ID identifies it in the server log."
+		detail = httpx.InternalErrorMessage(r.Context())
 	}
 	httpx.WriteProblem(w, r, &httpx.Problem{Status: status, Detail: detail})
 }

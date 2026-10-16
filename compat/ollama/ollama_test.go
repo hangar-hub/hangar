@@ -214,10 +214,10 @@ func startLocal(t *testing.T, bin string) *localRunner {
 	cmd.Env = l.env()
 	var logs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &logs, &logs
+	prepareServe(cmd)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		stopServe(t, cmd, l.home)
 		if t.Failed() {
 			t.Logf("ollama serve output:\n%s", logs.String())
 		}

@@ -68,7 +68,7 @@ func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 					"panic", fmt.Sprint(v), "stack", string(debug.Stack()),
 					"method", r.Method, "route", routeOf(r))
 				if !rw.wroteHeader {
-					WriteError(rw, r, http.StatusInternalServerError, "", "Internal server error. The request ID is "+RequestID(r.Context())+".")
+					WriteError(rw, r, http.StatusInternalServerError, "", InternalErrorMessage(r.Context()))
 				}
 			}()
 			next.ServeHTTP(rw, r)

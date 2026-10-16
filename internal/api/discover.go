@@ -92,10 +92,10 @@ func (h *Upstreams) upFail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, upstream.ErrNotFound):
 		upProblem(w, r, http.StatusNotFound, "Not found on the Upstream, or the Upstream does not show it to your credentials.")
 	case errors.Is(err, upstream.ErrUnavailable):
-		h.log().WarnContext(r.Context(), "upstream unavailable", "error", err.Error(), "request_id", httpx.RequestID(r.Context()))
+		h.log().WarnContext(r.Context(), "upstream unavailable", "error", err.Error())
 		upProblem(w, r, http.StatusBadGateway, "The Upstream is not answering. Try again later.")
 	default:
-		h.log().ErrorContext(r.Context(), "upstream request failed", "error", err.Error(), "request_id", httpx.RequestID(r.Context()))
+		h.log().ErrorContext(r.Context(), "upstream request failed", "error", err.Error())
 		upProblem(w, r, http.StatusInternalServerError, "The request failed.")
 	}
 }

@@ -28,7 +28,8 @@ func ParseLevel(s string) (slog.Level, error) {
 }
 
 // NewStdoutHandler returns a JSON or text handler that also adds trace_id
-// and span_id to every record logged with a context that carries a span.
+// and span_id to every record logged with a context that carries a span,
+// and request_id to every record logged with a context from WithRequestID.
 func NewStdoutHandler(w io.Writer, format string, level slog.Level) slog.Handler {
 	opts := &slog.HandlerOptions{Level: level}
 	var h slog.Handler
@@ -37,26 +38,59 @@ func NewStdoutHandler(w io.Writer, format string, level slog.Level) slog.Handler
 	} else {
 		h = slog.NewJSONHandler(w, opts)
 	}
-	return traceHandler{Handler: h}
+	return contextHandler{Handler: h, traceIDs: true}
 }
 
-// traceHandler adds the current span's IDs to each record.
-type traceHandler struct{ slog.Handler }
+// LogRequestIDs wraps h so it adds request_id to every record logged with
+// a context from WithRequestID. The OpenTelemetry log bridge needs it: it
+// takes the trace and span IDs from the context itself, but not the
+// request ID.
+func LogRequestIDs(h slog.Handler) slog.Handler { return contextHandler{Handler: h} }
 
-func (h traceHandler) Handle(ctx context.Context, r slog.Record) error {
-	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+type requestIDKey struct{}
+
+// WithRequestID returns a context whose log records carry id as
+// request_id. httpx calls it for every request, so a log line can be
+// matched to the request ID an error response shows.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestIDKey{}, id)
+}
+
+// RequestIDFromContext returns the request ID WithRequestID stored, or "".
+func RequestIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDKey{}).(string)
+	return id
+}
+
+// contextHandler adds the request ID and, with traceIDs, the current
+// span's IDs to each record.
+type contextHandler struct {
+	slog.Handler
+	traceIDs bool
+}
+
+func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
+	id := RequestIDFromContext(ctx)
+	sc := trace.SpanContextFromContext(ctx)
+	withTrace := h.traceIDs && sc.IsValid()
+	if id != "" || withTrace {
 		r = r.Clone()
+	}
+	if withTrace {
 		r.AddAttrs(slog.String("trace_id", sc.TraceID().String()), slog.String("span_id", sc.SpanID().String()))
+	}
+	if id != "" {
+		r.AddAttrs(slog.String("request_id", id))
 	}
 	return h.Handler.Handle(ctx, r)
 }
 
-func (h traceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return traceHandler{Handler: h.Handler.WithAttrs(attrs)}
+func (h contextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return contextHandler{Handler: h.Handler.WithAttrs(attrs), traceIDs: h.traceIDs}
 }
 
-func (h traceHandler) WithGroup(name string) slog.Handler {
-	return traceHandler{Handler: h.Handler.WithGroup(name)}
+func (h contextHandler) WithGroup(name string) slog.Handler {
+	return contextHandler{Handler: h.Handler.WithGroup(name), traceIDs: h.traceIDs}
 }
 
 // levelHandler drops records below a minimum level before passing them on.

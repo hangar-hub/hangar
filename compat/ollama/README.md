@@ -36,6 +36,8 @@ For the binary targets, Ollama connects through a reverse proxy in the test proc
 
 With a local binary, Ollama runs with its own temporary `HOME` and `OLLAMA_MODELS`, so it never touches your models or keys.
 
+When a target finishes, the suite stops `ollama serve` with `SIGTERM` and then kills its process group, so the `llama-server` runners it started for the generations stop too. On Windows, it ends the process tree with `taskkill /T`. On Linux and macOS, the suite fails if any process that references the temporary `HOME` is still running afterwards.
+
 ## Ollama limits
 
 - Ollama 0.31.1 loads one model file per model, so Hangar refuses to serve a quant that is split into several GGUF files (`*-00001-of-0000N.gguf`) and says so in the error.

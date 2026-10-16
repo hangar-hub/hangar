@@ -216,3 +216,27 @@ func TestBlobKeyPrefix(t *testing.T) {
 		require.Equal(t, want, telemetry.BlobKeyPrefix(in), in)
 	}
 }
+
+func TestHandlersAddTheRequestID(t *testing.T) {
+	var stdout, bridged bytes.Buffer
+	l := slog.New(telemetry.NewFanout(
+		telemetry.NewStdoutHandler(&stdout, "json", slog.LevelInfo),
+		telemetry.LogRequestIDs(slog.NewJSONHandler(&bridged, nil)),
+	)).With("svc", "x")
+	ctx := telemetry.WithRequestID(context.Background(), "req-1")
+	require.Equal(t, "req-1", telemetry.RequestIDFromContext(ctx))
+	require.Empty(t, telemetry.RequestIDFromContext(context.Background()))
+
+	l.InfoContext(ctx, "with")
+	l.InfoContext(context.Background(), "without")
+	for _, out := range []*bytes.Buffer{&stdout, &bridged} {
+		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		require.Len(t, lines, 2)
+		var with, without map[string]any
+		require.NoError(t, json.Unmarshal([]byte(lines[0]), &with))
+		require.NoError(t, json.Unmarshal([]byte(lines[1]), &without))
+		require.Equal(t, "req-1", with["request_id"])
+		require.Equal(t, "x", with["svc"])
+		require.NotContains(t, without, "request_id")
+	}
+}

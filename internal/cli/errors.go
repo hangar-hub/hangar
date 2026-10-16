@@ -57,10 +57,13 @@ func authf(format string, a ...any) error {
 }
 
 // APIError is an error answer from an Instance, from the native API's
-// problem details or the Hub API's X-Error-Message header.
+// problem details or the Hub API's X-Error-Message header. RequestID is the
+// Instance's ID for the request, from the X-Request-Id header or the
+// problem's request_id; the Instance's log lines for the request carry it.
 type APIError struct {
-	Status  int
-	Message string
+	Status    int
+	Message   string
+	RequestID string
 	// Retryable is true for a 503 with a Retry-After header, which the
 	// native API sends when it kept the request's state and the same
 	// request may be sent again after RetryAfter.
@@ -69,8 +72,17 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
+	// A server error is only explained in the Instance's log, so name the
+	// request ID unless the message already does.
+	showID := e.Status >= 500 && e.RequestID != "" && !strings.Contains(e.Message, e.RequestID)
 	if e.Message == "" {
+		if showID {
+			return fmt.Sprintf("the Instance answered %d %s (request ID %s)", e.Status, http.StatusText(e.Status), e.RequestID)
+		}
 		return fmt.Sprintf("the Instance answered %d %s", e.Status, http.StatusText(e.Status))
+	}
+	if showID {
+		return fmt.Sprintf("%s (HTTP %d, request ID %s)", e.Message, e.Status, e.RequestID)
 	}
 	return fmt.Sprintf("%s (HTTP %d)", e.Message, e.Status)
 }
@@ -84,7 +96,7 @@ func IsNotFound(err error) bool {
 // apiError builds an error from a failed response and maps its status to an
 // exit code: 401 and 403 exit with 4, 404 with 3, everything else with 1.
 func apiError(status int, header http.Header, body []byte) error {
-	ae := &APIError{Status: status, Message: errorMessage(header, body)}
+	ae := &APIError{Status: status, Message: errorMessage(header, body), RequestID: requestID(header, body)}
 	if status == http.StatusServiceUnavailable {
 		ae.RetryAfter, ae.Retryable = parseRetryAfter(header.Get("Retry-After"), time.Now())
 	}
@@ -160,4 +172,19 @@ func errorMessage(header http.Header, body []byte) string {
 		return ""
 	}
 	return s
+}
+
+// requestID returns the Instance's ID for a failed request: the
+// X-Request-Id header, or the request_id of a problem or git-lfs error body.
+func requestID(header http.Header, body []byte) string {
+	if id := header.Get("X-Request-Id"); id != "" {
+		return id
+	}
+	var p struct {
+		RequestID string `json:"request_id"`
+	}
+	if json.Unmarshal(body, &p) == nil {
+		return p.RequestID
+	}
+	return ""
 }

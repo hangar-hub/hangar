@@ -57,7 +57,7 @@ func TestRecoverWritesErrorInProtocolFormat(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/models", nil))
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.Contains(t, rec.Header().Get("X-Error-Message"), "Internal server error")
+	require.Equal(t, "Internal server error. The request ID is "+rec.Header().Get("X-Request-Id")+".", rec.Header().Get("X-Error-Message"))
 	require.Contains(t, logs.String(), "boom")
 
 	abort := httpx.Recover(log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic(http.ErrAbortHandler) }))
@@ -493,4 +493,33 @@ func (s *syncBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
+}
+
+// The access log line and every other line logged with the request's
+// context carry the request ID the response names, with the trace IDs.
+func TestLogLinesCarryTheRequestID(t *testing.T) {
+	var logs bytes.Buffer
+	log := slog.New(telemetry.NewStdoutHandler(&logs, "json", slog.LevelInfo))
+	tp := sdktrace.NewTracerProvider()
+	h := httpx.RequestIDs(httpx.AccessLog(log)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.ErrorContext(r.Context(), "handler failed")
+		httpx.WriteError(w, r, http.StatusInternalServerError, "", httpx.InternalErrorMessage(r.Context()))
+	})))
+	ctx, span := tp.Tracer("t").Start(context.Background(), "raw")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/hangar/v1/x", nil).WithContext(ctx))
+	span.End()
+
+	id := rec.Header().Get("X-Request-Id")
+	require.Len(t, id, 32)
+	require.Contains(t, rec.Body.String(), "Internal server error. The request ID is "+id+".")
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	require.Len(t, lines, 2)
+	for _, l := range lines {
+		var line map[string]any
+		require.NoError(t, json.Unmarshal([]byte(l), &line))
+		require.Equal(t, id, line["request_id"], l)
+		require.Equal(t, span.SpanContext().TraceID().String(), line["trace_id"], l)
+	}
+	require.Equal(t, "Internal server error.", httpx.InternalErrorMessage(context.Background()))
 }

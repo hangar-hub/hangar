@@ -49,4 +49,4 @@ It exits with 1 if any check fails, so you can use it in scripts.
 
 ## Logs
 
-Set `telemetry.log_level: debug` for more detail, and `telemetry.log_format: text` to read logs in a terminal. Every log line inside a request has `trace_id` and `span_id`, which match the trace in your tracing backend.
+Set `telemetry.log_level: debug` for more detail, and `telemetry.log_format: text` to read logs in a terminal. Every log line inside a request has `trace_id` and `span_id`, which match the trace in your tracing backend, and `request_id`. A server error names its request ID, in the message and the `X-Request-Id` response header, and the `hangar` CLI prints it: search the logs for that `request_id` to find the cause.

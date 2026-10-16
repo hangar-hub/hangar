@@ -19,7 +19,7 @@ What Hangar sends:
 
 - **Traces:** one span per request, named after the route template (such as `GET /{ns}/{name}/resolve/{rev}/{path}`), with child spans for database queries, Blob store operations, Upstream requests, git work and Jobs. Spans carry `hangar.protocol`, `hangar.repo.id` and the user ID when signed in.
 - **Metrics:** HTTP server metrics by `hangar.protocol`, Go runtime metrics, and Hangar's own, listed in the [metrics reference](../reference/metrics.md).
-- **Logs:** every log line, with `trace_id` and `span_id` inside a request or Job; one access log line per request; and audit events as `hangar.audit.<action>` records.
+- **Logs:** every log line, with `trace_id` and `span_id` inside a request or Job and `request_id` inside a request; one access log line per request; and audit events as `hangar.audit.<action>` records.
 
 Hangar never records tokens, passwords, cookies, presigned URLs or `Authorization` headers on spans or logs. Repo IDs are on spans and logs, never metric attributes.
 
