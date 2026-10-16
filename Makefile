@@ -92,7 +92,8 @@ lint-go:
 lint-ui: ui-deps
 	cd ui && $(PNPM) run lint && $(PNPM) run typecheck
 
-# House style: no em dashes in code, UI copy or docs we write.
+# House style: no em dashes in code, UI copy or docs we write, and British
+# spellings in the docs (scripts/check-spelling.sh).
 .PHONY: lint-style
 lint-style:
 	@if grep -rn --binary-files=without-match $$'\xe2\x80\x94' \
@@ -102,6 +103,7 @@ lint-style:
 	    --exclude-dir=spec --exclude-dir=research \
 	    cmd internal ui/src api compat docs deploy loadtest scripts .github README.md CLAUDE.md CONTEXT.md CONTRIBUTING.md SECURITY.md 2>/dev/null; then \
 	  echo "House style: replace the em dashes above."; exit 1; fi
+	@./scripts/check-spelling.sh
 
 ## Test ------------------------------------------------------------------------------
 
