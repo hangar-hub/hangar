@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Exit codes from docs/spec/08-local-tools.md.
@@ -59,6 +61,11 @@ func authf(format string, a ...any) error {
 type APIError struct {
 	Status  int
 	Message string
+	// Retryable is true for a 503 with a Retry-After header, which the
+	// native API sends when it kept the request's state and the same
+	// request may be sent again after RetryAfter.
+	Retryable  bool
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -78,6 +85,9 @@ func IsNotFound(err error) bool {
 // exit code: 401 and 403 exit with 4, 404 with 3, everything else with 1.
 func apiError(status int, header http.Header, body []byte) error {
 	ae := &APIError{Status: status, Message: errorMessage(header, body)}
+	if status == http.StatusServiceUnavailable {
+		ae.RetryAfter, ae.Retryable = parseRetryAfter(header.Get("Retry-After"), time.Now())
+	}
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		if status == http.StatusUnauthorized && ae.Message == "" {
@@ -90,6 +100,30 @@ func apiError(status int, header http.Header, body []byte) error {
 		return &ExitError{Code: ExitFailure, Err: ae}
 	}
 }
+
+// parseRetryAfter reads a Retry-After value, in seconds or as an HTTP date,
+// as a wait from now. It reports false for a missing or malformed value.
+func parseRetryAfter(v string, now time.Time) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	if secs, err := strconv.ParseInt(v, 10, 64); err == nil {
+		if secs < 0 {
+			return 0, false
+		}
+		return time.Duration(min(secs, int64(maxRetryAfter/time.Second))) * time.Second, true
+	}
+	t, err := http.ParseTime(v)
+	if err != nil {
+		return 0, false
+	}
+	return min(max(t.Sub(now), 0), maxRetryAfter), true
+}
+
+// maxRetryAfter bounds how long the CLI waits for one Retry-After, so an
+// Instance or proxy cannot stall a command for days.
+const maxRetryAfter = 10 * time.Minute
 
 // errorMessage extracts a human-readable message from an error response.
 func errorMessage(header http.Header, body []byte) string {

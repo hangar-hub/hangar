@@ -149,6 +149,8 @@ type Instance struct {
 	ollamaKeys  []gen.OllamaKey
 	devices     map[string]*device
 	failedParts map[string]partFailure
+	// failedCompletes holds injected completion failures by SHA-256.
+	failedCompletes map[string]completeFailure
 	// partStored is closed, and replaced, each time a part is stored.
 	partStored chan struct{}
 	// Requests counts requests by "METHOD path-template".
@@ -167,20 +169,21 @@ type device struct {
 func New(t testing.TB) *Instance {
 	t.Helper()
 	i := &Instance{
-		Users:        map[string]string{Token: "alice"},
-		LFSThreshold: 1 << 10,
-		InlineMax:    10 << 20,
-		PartSize:     64 << 10,
-		JobPolls:     2,
-		repos:        map[string]*Repo{},
-		upstream:     map[string]*UpstreamRepo{},
-		objects:      map[string][]byte{},
-		uploads:      map[uuid.UUID]*upload{},
-		jobs:         map[uuid.UUID]*job{},
-		devices:      map[string]*device{},
-		failedParts:  map[string]partFailure{},
-		partStored:   make(chan struct{}),
-		Requests:     map[string]int{},
+		Users:           map[string]string{Token: "alice"},
+		LFSThreshold:    1 << 10,
+		InlineMax:       10 << 20,
+		PartSize:        64 << 10,
+		JobPolls:        2,
+		repos:           map[string]*Repo{},
+		upstream:        map[string]*UpstreamRepo{},
+		objects:         map[string][]byte{},
+		uploads:         map[uuid.UUID]*upload{},
+		jobs:            map[uuid.UUID]*job{},
+		devices:         map[string]*device{},
+		failedParts:     map[string]partFailure{},
+		failedCompletes: map[string]completeFailure{},
+		partStored:      make(chan struct{}),
+		Requests:        map[string]int{},
 	}
 	r := chi.NewRouter()
 	r.Use(i.count)
@@ -383,6 +386,23 @@ func (i *Instance) FailPartLast(sha string, part, times int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = partFailure{times: times, afterOthers: true}
+}
+
+// completeFailure is an injected failure of an upload completion.
+type completeFailure struct {
+	times      int
+	retryAfter string
+}
+
+// FailComplete makes the next times completions of the upload of the file
+// with this SHA-256 answer 503 and keep the upload and its parts, as the
+// native API does when assembling or reading the parts back fails for a
+// reason that may pass. retryAfter is the Retry-After header; empty sends
+// none.
+func (i *Instance) FailComplete(sha string, times int, retryAfter string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.failedCompletes[sha] = completeFailure{times: times, retryAfter: retryAfter}
 }
 
 // PartFailureWait is how long FailPartLast holds a failure for the other
