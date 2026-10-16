@@ -80,7 +80,8 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 |---|---|---|
 | `mkdocs`, `mkdocs-material`, `mike` (`docs/requirements.txt`) | 1.6.1, 9.7.7, 2.2.0 | The documentation site and its versions on GitHub Pages. |
 | GoReleaser | v2 | Release archives, checksums, SBOMs, signatures and the Homebrew cask (`.goreleaser.yaml`). |
-| cosign, syft | latest at release time | Keyless signing and SPDX SBOMs in `release.yml`. |
+| cosign | 3.0.6 | Keyless signing in `release.yml`, into Sigstore bundles. `make release-rehearsal` runs the same steps with a throwaway key. |
+| syft | latest at release time | SPDX SBOMs for the release archives and the image. |
 | Helm, chart-testing, kind | Helm v4.1.3 | Chart lint and install tests in CI. |
 | k6 (`grafana/k6` image) | 1.4.2 | The load tests in `loadtest/`. |
 | Redoc (loaded from jsDelivr on the native API page) | 2.5.4 | Renders `api/openapi.yaml` in the documentation. |

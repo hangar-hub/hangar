@@ -161,6 +161,11 @@ KUBECONFORM = $(GO) run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 \
 	-strict -summary -kubernetes-version 1.33.0 -schema-location default \
 	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
+.PHONY: release-rehearsal
+release-rehearsal: image ## Rehearse the release's signing and SBOM steps with a throwaway key (needs cosign 3, syft, yq)
+	./scripts/release-rehearsal.sh binaries
+	./scripts/release-rehearsal.sh image $(IMAGE)
+
 .PHONY: lint-deploy
 lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Compose files, the workflows' action refs and that jobs needing uv install it
 	helm lint deploy/helm/hangar -f deploy/helm/hangar/ci/default-values.yaml
