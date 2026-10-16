@@ -3,6 +3,7 @@ package hfapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,8 +49,7 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, ref repoRef, acti
 		case errors.Is(err, repo.ErrNotFound), errors.Is(err, repo.ErrInvalid):
 			httpx.HubRepoNotFound(w, r, ref.id)
 		case errors.Is(err, ErrPullPending):
-			w.Header().Set("Retry-After", "10")
-			httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusServiceUnavailable, Message: "Hangar is pulling " + ref.id.Path() + " into the arsenal. Try again shortly."})
+			pullPending(w, r, ref.id)
 		default:
 			// A Pull-through refused by policy, such as the Namespace's
 			// storage quota, is a *repo.PolicyError: 403 with its message.
@@ -130,15 +130,50 @@ func (h *Handler) resolveRevision(w http.ResponseWriter, r *http.Request, rp *re
 		rev = rp.DefaultBranch
 	}
 	sha, err := h.d.Repos.Resolve(r.Context(), rp.ID, rev)
+	if errors.Is(err, repo.ErrRevisionNotFound) && h.awaitsHistory(r, rp) {
+		sha, err = h.resolveAfterHistory(r, rp, rev)
+	}
 	if err != nil {
-		if errors.Is(err, repo.ErrRevisionNotFound) || errors.Is(err, repo.ErrInvalid) {
+		switch {
+		case errors.Is(err, repo.ErrRevisionNotFound), errors.Is(err, repo.ErrInvalid):
 			httpx.HubRevisionNotFound(w, r, rev)
-			return "", false
+		case errors.Is(err, ErrPullPending):
+			pullPending(w, r, rp.ID)
+		default:
+			h.serviceError(w, r, rp.ID, err)
 		}
-		h.serviceError(w, r, rp.ID, err)
 		return "", false
 	}
 	return sha, true
+}
+
+// awaitsHistory reports whether a Revision that does not resolve in rp
+// may be history that a Pull has not stored yet: rp is a Mirror, which
+// planning creates before it stores the history, and Pull-through is on
+// for this read.
+func (h *Handler) awaitsHistory(r *http.Request, rp *repo.Repo) bool {
+	return rp.Mirror && h.d.PullThrough != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead)
+}
+
+// resolveAfterHistory asks Pull-through to wait for the history of a
+// Mirror that has none yet, then resolves rev again. It returns
+// ErrPullPending while planning goes on, and repo.ErrRevisionNotFound
+// when Pull-through does not apply or rev still names nothing.
+func (h *Handler) resolveAfterHistory(r *http.Request, rp *repo.Repo, rev string) (model.CommitSHA, error) {
+	ctx := r.Context()
+	if _, err := h.d.PullThrough.Repo(ctx, httpx.Principal(ctx), rp.ID); errors.Is(err, repo.ErrNotFound) {
+		return "", fmt.Errorf("%w: %s", repo.ErrRevisionNotFound, rev)
+	} else if err != nil {
+		return "", err
+	}
+	return h.d.Repos.Resolve(ctx, rp.ID, rev)
+}
+
+// pullPending answers 503 with Retry-After for a Repo that a Pull-through
+// is still planning.
+func pullPending(w http.ResponseWriter, r *http.Request, id model.RepoID) {
+	w.Header().Set("Retry-After", "10")
+	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusServiceUnavailable, Message: "Hangar is pulling " + id.Path() + " into the arsenal. Try again shortly."})
 }
 
 // serviceError maps a repo.Service error to the Hub's response.

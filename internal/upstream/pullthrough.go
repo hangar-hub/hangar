@@ -62,8 +62,20 @@ func (pt *PullThrough) allowed(ctx context.Context, p model.Principal, upID mode
 // Arsenal and waits for planning (at most PullThroughWait). It returns
 // repo.ErrNotFound when Pull-through does not apply and ErrPullPending
 // when planning takes longer.
+//
+// A Mirror that exists but has no history yet is not in the Arsenal
+// either: planning creates the Mirror before it stores the history, and a
+// request can arrive in between, such as a client retrying after
+// ErrPullPending. For it, Repo joins the Pull (or starts one) and waits
+// the same way. Repo returns any other existing Repo as it is; the caller
+// checks that p can read it.
 func (pt *PullThrough) Repo(ctx context.Context, p model.Principal, id model.RepoID) (*repo.Repo, error) {
 	s := pt.s
+	if r, err := s.opts.Repos.Get(ctx, id); err == nil {
+		return pt.awaitHistory(ctx, p, r)
+	} else if !errors.Is(err, repo.ErrNotFound) {
+		return nil, err
+	}
 	ups, err := s.opts.Registry.List(ctx, true)
 	if err != nil {
 		return nil, err
@@ -95,6 +107,48 @@ func (pt *PullThrough) Repo(ctx context.Context, p model.Principal, id model.Rep
 }
 
 var errPullThroughMiss = errors.New("not on this upstream")
+
+// awaitHistory waits for the history of r when r is an attached Mirror of
+// an enabled Upstream with no branches yet and Pull-through applies to p:
+// it starts or joins the history-only Pull that Pull-through queues for a
+// missing Repo, which has the same dedupe key. Otherwise it returns r.
+func (pt *PullThrough) awaitHistory(ctx context.Context, p model.Principal, r *repo.Repo) (*repo.Repo, error) {
+	s := pt.s
+	if !r.Mirror {
+		return r, nil
+	}
+	m, up, err := s.Mirror(ctx, r)
+	if errors.Is(err, ErrNotMirror) || (err == nil && (m.DetachedAt != nil || !up.Enabled)) {
+		return r, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	refs, err := s.opts.Repos.Refs(ctx, r.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(refs.Branches) > 0 {
+		return r, nil
+	}
+	if ok, err := pt.allowed(ctx, p, m.UpstreamRepo); err != nil {
+		return nil, err
+	} else if !ok {
+		return r, nil
+	}
+	pl := pullPayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: m.UpstreamRepo.String(), Type: r.ID.Type, Repo: r.ID.String(),
+		Selection: Selection{None: true}, RequestedBy: p.UserID, PullThrough: true}
+	jobID, err := s.enqueuePull(ctx, pl, uuid.Nil, jobs.PriorityHigh)
+	if err != nil {
+		return nil, err
+	}
+	planned, err := pt.waitPlanned(ctx, jobID, r.ID)
+	if errors.Is(err, errPullThroughMiss) {
+		// The Upstream no longer has the Repo: the Mirror stays as it is.
+		return r, nil
+	}
+	return planned, err
+}
 
 func (pt *PullThrough) waitPlanned(ctx context.Context, jobID jobs.JobID, local model.RepoID) (*repo.Repo, error) {
 	s := pt.s

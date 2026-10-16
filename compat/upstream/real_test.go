@@ -231,6 +231,8 @@ type localOptions struct {
 	existing *localInstance
 	// beforeQuotaCheck runs before each quota check a Pull makes.
 	beforeQuotaCheck func(ctx context.Context)
+	// logger receives the worker's log; nil discards it.
+	logger *slog.Logger
 }
 
 func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *localInstance {
@@ -279,7 +281,7 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 	require.NoError(t, err)
 	require.NoError(t, l.svc.RegisterJobs(l.reg))
 	l.worker = jobs.NewWorker(d, l.reg, jobs.WorkerOptions{Owner: owner, Concurrency: 4, Lease: 3 * time.Second, PollInterval: 50 * time.Millisecond,
-		InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: 4}})
+		InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: 4}, Logger: o.logger})
 	if !o.noWorker {
 		l.start()
 	}
@@ -640,9 +642,24 @@ func (namespaceSearch) SearchNamespaces(context.Context, string, int) ([]org.Nam
 	return nil, nil
 }
 
-// newWithSigner rebuilds the Instance's Service with the public URL its
+// hubOptions change the Instance newLocalWithHubOptions builds.
+type hubOptions struct {
+	// pullThroughWait is the Service's PullThroughWait; zero keeps its
+	// default.
+	pullThroughWait time.Duration
+	// beforeQuotaCheck, when set, gives the Service a quota checker on
+	// W1's quotas that runs it before each check a Pull makes.
+	beforeQuotaCheck func(ctx context.Context)
+}
+
+// newLocalWithHub rebuilds the Instance's Service with the public URL its
 // Pull-through links need.
 func newLocalWithHub(t *testing.T, d *db.DB, upstreamURL string) (*localInstance, *localHub) {
+	t.Helper()
+	return newLocalWithHubOptions(t, d, upstreamURL, hubOptions{})
+}
+
+func newLocalWithHubOptions(t *testing.T, d *db.DB, upstreamURL string, o hubOptions) (*localInstance, *localHub) {
 	t.Helper()
 	ln, base := listen(t)
 	l := newLocal(t, d, upstreamURL, localOptions{partSize: 1 << 20})
@@ -651,12 +668,16 @@ func newLocalWithHub(t *testing.T, d *db.DB, upstreamURL string) (*localInstance
 	l.halt()
 	l.reg = jobs.NewRegistry()
 	l.queue = jobs.NewQueue(d, l.reg, jobs.QueueOptions{})
+	var quota upstream.QuotaChecker
+	if o.beforeQuotaCheck != nil {
+		quota = pullQuota{Accounting: l.quota, before: o.beforeQuotaCheck}
+	}
 	l.svc, err = upstream.New(upstream.Options{DB: d, Registry: l.registry, Client: upstream.NewHTTPClient(upstream.HTTPOptions{Version: "compat"}),
 		Repos: l.real.Store, LFS: l.real.LFS, Orgs: l.orgs, Queue: l.queue, Limiter: l.limiter, Authz: l.authz, Layout: datasetstest.NewLayout(),
 		Webhooks: &webhooktest.Fake{}, MirrorState: l.real.Store, Signer: signer, PublicURL: base,
 		Settings:     func(context.Context) (upstream.Settings, error) { return *l.settings.Load(), nil },
 		ParseWindows: func(specs []string) (upstream.Windows, error) { return jobs.ParseWindows(specs, time.UTC) },
-		Snooze:       jobs.Snooze, PartSize: 1 << 20, PollInterval: 200 * time.Millisecond})
+		Snooze:       jobs.Snooze, PartSize: 1 << 20, PollInterval: 200 * time.Millisecond, PullThroughWait: o.pullThroughWait, Quota: quota})
 	require.NoError(t, err)
 	require.NoError(t, l.svc.RegisterJobs(l.reg))
 	l.limiter = jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "hub-worker", Budget: jobs.StaticBudget(nil)})
@@ -713,6 +734,76 @@ print(hashlib.sha256(open(p, "rb").read()).hexdigest())`
 	require.NoError(t, err)
 	gotSum, wantSum := sha256.Sum256(got), sha256.Sum256(gitWeights)
 	require.Equal(t, hex.EncodeToString(wantSum[:]), hex.EncodeToString(gotSum[:]), "git-lfs fetched the object through Pull-through")
+}
+
+// TestRealPullThroughWaitsForTheHistoryOfANewMirror holds a
+// Pull-through's planning after it has created the Mirror and before it
+// stores the history, past PullThroughWait. A client that retries after
+// the 503 finds the Mirror with no history yet: the Hub API must answer
+// 503 with Retry-After again, not RevisionNotFound, and serve the file
+// once planning ends.
+func TestRealPullThroughWaitsForTheHistoryOfANewMirror(t *testing.T) {
+	up := newSecondInstance(t)
+	release := make(chan struct{})
+	var held atomic.Bool
+	l, hub := newLocalWithHubOptions(t, dbtest.SQLite(t), up.URL, hubOptions{pullThroughWait: time.Second, beforeQuotaCheck: func(ctx context.Context) {
+		// The history pack's check: the Mirror exists, its history does
+		// not yet.
+		held.Store(true)
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+	}})
+	l.settings.Store(&upstream.Settings{PullThroughEnabled: true, PullThroughAllow: []string{"lab/*"}, PullThroughMinRole: "user"})
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "lab", Name: "held"}
+	config := `{"model_type":"bert"}`
+	up.seed(t, id, map[string][]byte{"config.json": []byte(config)})
+	request := func(method, path string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(method, hub.URL+path, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+hub.Token)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		return resp
+	}
+	requirePending := func(method, path string) {
+		t.Helper()
+		resp := request(method, path)
+		require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode, "%s %s: %s", method, path, resp.Header.Get("X-Error-Message"))
+		require.Equal(t, "10", resp.Header.Get("Retry-After"))
+	}
+
+	requirePending(http.MethodHead, "/lab/held/resolve/main/config.json")
+	require.Eventually(t, held.Load, time.Minute, 50*time.Millisecond, "planning reached the history pack")
+	r, err := l.real.Get(l.ctx, id)
+	require.NoError(t, err)
+	require.True(t, r.Mirror, "planning created the Mirror")
+	_, err = l.real.Resolve(l.ctx, id, "main")
+	require.ErrorIs(t, err, repo.ErrRevisionNotFound, "the Mirror has no history yet")
+
+	// Retries find the Mirror without history.
+	requirePending(http.MethodHead, "/lab/held/resolve/main/config.json")
+	requirePending(http.MethodGet, "/lab/held/resolve/main/config.json")
+	requirePending(http.MethodGet, "/api/models/lab/held/revision/main")
+	requirePending(http.MethodGet, "/api/models/lab/held")
+	pulls, _, err := l.queue.List(l.ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPull}})
+	require.NoError(t, err)
+	require.Len(t, pulls, 1, "the retries joined the Pull")
+
+	close(release)
+	deadline := time.Now().Add(time.Minute)
+	for request(http.MethodHead, "/lab/held/resolve/main/config.json").StatusCode != http.StatusOK {
+		require.True(t, time.Now().Before(deadline), "the file was not served once planning ended")
+		time.Sleep(100 * time.Millisecond)
+	}
+	resp := request(http.MethodGet, "/lab/held/resolve/main/config.json")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, config, string(b))
 }
 
 func repoRoot(t *testing.T) string {
@@ -890,12 +981,14 @@ func TestRealPullRespectsNamespaceQuota(t *testing.T) {
 // TestRealPullRespectsNamespaceQuota failure on a loaded machine. The
 // worker leases Jobs for 3 seconds and renews every second; a renewal
 // that comes late lets the worker recover the pull Job and start a second
-// run of it while the first is still going. Both runs store the Mirror's
-// history: the second wins, and the first one's ApplyPack fails with
-// repo.ErrRefConflict. The Pull used to take that as a failure and back
-// off for 30 seconds or more, so the Job sat pending past the test's
-// wait. This test makes the lease expire at that point on purpose. The
-// Pull must plan again at once and end with its own quota refusal.
+// run of it while the first is still going. The second run stores the
+// Mirror's history first. W1 fences Job writes on the attempt number, so
+// the first run loses the Job at its next write or lease renewal, its
+// context is cancelled and the worker discards its result: whatever it
+// makes of its pack (repo.ErrRefConflict from ApplyPack, or the cancelled
+// context) cannot back the Job off or end it. This test makes the lease
+// expire at that point on purpose. The Pull must end promptly with the
+// second run's quota refusal.
 func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		up := newSecondInstance(t)
@@ -904,8 +997,14 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 			l     *localInstance
 			jid   jobs.JobID
 			calls atomic.Int32
+			mu    sync.Mutex
+			// stale is the context of the run whose lease the hook
+			// expires, and staleAttempt its attempt number.
+			stale        context.Context
+			staleAttempt int
 		)
 		ready := make(chan struct{})
+		outcomes := &jobOutcomes{}
 		// The hook reads and writes with l.ctx: the run it is called
 		// from can lose its lease, which cancels the run's context.
 		get := func() *jobs.Job {
@@ -926,39 +1025,53 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
-		hook := func(context.Context) {
+		historyStored := func() bool {
+			_, err := l.real.Resolve(l.ctx, sel, "main")
+			return err == nil
+		}
+		// Runs are told apart by their context, not by the order of the
+		// calls: a run that loses its lease on its own under load never
+		// reaches the hook, and the next run's first check takes its place.
+		hook := func(ctx context.Context) {
 			<-ready
-			switch calls.Add(1) {
-			case 1:
-				// The first run is about to store the history. Its lease
-				// expires, and the worker starts a second run, which
+			calls.Add(1)
+			mu.Lock()
+			first := stale == nil && ctx.Err() == nil
+			if first {
+				stale = ctx
+				staleAttempt = get().Attempts
+			}
+			own, attempt := ctx == stale, staleAttempt
+			mu.Unlock()
+			switch {
+			case first:
+				// This run is about to store the history. Its lease
+				// expires, and the worker starts another run, which
 				// stores the history first.
-				waitFor("a second run of the Pull stored the history", func() bool {
-					if get().Attempts < 2 {
-						// Only the first run's lease: a second run must
-						// keep its own.
+				waitFor("another run of the Pull stored the history", func() bool {
+					if get().Attempts <= attempt {
+						// Only this run's lease: a later run must keep
+						// its own.
 						_, err := d.NewUpdate().Model((*db.Job)(nil)).Set("lease_expires_at = ?", time.Now().UTC().Add(-time.Minute)).
-							Where("id = ? AND status = ? AND attempts = 1", jid, string(jobs.StatusRunning)).Exec(l.ctx)
+							Where("id = ? AND status = ? AND attempts = ?", jid, string(jobs.StatusRunning), attempt).Exec(l.ctx)
 						if err != nil {
 							t.Errorf("expire the lease: %v", err)
 						}
 						return false
 					}
-					_, err := l.real.Resolve(l.ctx, sel, "main")
-					return err == nil
+					return historyStored()
 				})
-			case 3:
-				// The second run's selection check waits until the first
-				// run has given up on its pack: it either recorded an
-				// error to back off from or planned again, after which
-				// the worker may already have started a third run.
-				waitFor("the first run gave up on its pack", func() bool {
-					j := get()
-					return j.Status != jobs.StatusRunning || j.Error != "" || bytes.Contains(j.Result, []byte(`"ref_conflicts"`))
-				})
+			case own, ctx.Err() != nil, !historyStored():
+				// The stale run, a run that already lost its lease, or a
+				// later run's check of the pack it is about to store.
+			default:
+				// A later run's selection check waits until the stale run
+				// has ended, so the stale run is done with its pack before
+				// this run ends the Job.
+				waitFor("the first run ended", func() bool { return outcomes.count(jid, "lost") > 0 })
 			}
 		}
-		l = newLocal(t, d, up.URL, localOptions{partSize: 1 << 20, beforeQuotaCheck: hook})
+		l = newLocal(t, d, up.URL, localOptions{partSize: 1 << 20, beforeQuotaCheck: hook, logger: slog.New(outcomes)})
 		owner := up.Real.AddUser(t, sel.Namespace)
 		_, err := up.Real.Create(l.ctx, repo.CreateParams{ID: sel, Actor: owner, Visibility: model.VisibilityPublic})
 		require.NoError(t, err)
@@ -970,16 +1083,68 @@ func TestRealPullEndsPromptlyAfterALostLease(t *testing.T) {
 		jid, _, err = l.svc.StartPull(l.ctx, upstream.PullRequest{Repo: sel, Actor: l.user})
 		require.NoError(t, err)
 		close(ready)
-		// Well under the 30-second backoff the Pull used to wait.
+		// Well under the 30-second backoff a stale run's ref conflict
+		// used to cause.
 		j := l.wait(jid, 20*time.Second)
 		require.GreaterOrEqual(t, calls.Load(), int32(3), "the lease expired mid-run")
+		mu.Lock()
+		attempt := staleAttempt
+		mu.Unlock()
+		require.Greater(t, j.Attempts, attempt, "another run took the Job over")
+		require.Positive(t, outcomes.count(jid, "lost"), "the worker discarded the stale run's result")
+		require.Equal(t, 1, outcomes.count(jid, "failed"), "only the run holding the Job ended it")
 		require.Equal(t, jobs.StatusFailed, j.Status, j.Error)
 		var st map[string]any
 		require.NoError(t, json.Unmarshal(j.Result, &st))
 		require.Equal(t, "quota_exceeded", st["reason"])
+		require.NotContains(t, st, "ref_conflicts", "the stale run recorded nothing")
 		require.Contains(t, j.Error, "storage quota. Delete files or ask an admin to raise the quota.")
 		require.Equal(t, "Storage quota exceeded", j.Progress.Message)
 	})
+}
+
+// jobOutcomes is a slog handler that keeps the Job ID and outcome of every
+// "job finished" record a worker logs.
+type jobOutcomes struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (*jobOutcomes) Enabled(context.Context, slog.Level) bool { return true }
+func (h *jobOutcomes) WithAttrs([]slog.Attr) slog.Handler     { return h }
+func (h *jobOutcomes) WithGroup(string) slog.Handler          { return h }
+
+func (h *jobOutcomes) Handle(_ context.Context, r slog.Record) error {
+	if r.Message != "job finished" {
+		return nil
+	}
+	var id, outcome string
+	r.Attrs(func(a slog.Attr) bool {
+		switch a.Key {
+		case "job_id":
+			id = a.Value.String()
+		case "outcome":
+			outcome = a.Value.String()
+		}
+		return true
+	})
+	h.mu.Lock()
+	h.seen = append(h.seen, id+" "+outcome)
+	h.mu.Unlock()
+	return nil
+}
+
+// count returns how many runs of the Job ended with outcome.
+func (h *jobOutcomes) count(id jobs.JobID, outcome string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, s := range h.seen {
+		if s == id.String()+" "+outcome {
+			n++
+		}
+	}
+	return n
 }
 
 // The interfaces the integration lead wires W6 through, checked against
