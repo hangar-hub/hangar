@@ -1,6 +1,6 @@
 # Integration report
 
-Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the tests that show it works, and the open issues. It describes branch `integration/v1` with the integration lead's round 1 fixes (`fix/r1-lead`). Fixes from the other owners' round 1 branches are listed in their own handoffs once merged.
+Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the tests that show it works, and the open issues. It describes branch `integration/v1` at `5975bec`, after the merges of phase 2 fix rounds 1, 2 and 3, with the integration lead's round 5 fixes (`fix/r5-lead`). Each owner's handoff describes its own fixes in more detail; branches from later rounds are recorded there once merged.
 
 ## How it was checked
 
@@ -19,6 +19,8 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | UI against a real Instance | `make e2e-real` (seeded by `ui/e2e-real/seed.ts`) | 16 passed, desktop and phone |
 | Compose `postgres-minio` and `scale` with S3 proxy uploads | Image built from this branch; `hangar push`, `git lfs push` and `huggingface_hub` 0.36.1 `upload_file` of 12 MiB files, downloads compared byte for byte, a zip export | All round trips identical; the zip URL is Hangar's |
 | Docs Home demo | `scripts/demo.sh` against the binary | `docs/assets/demo.gif` |
+| Compose and Helm smoke, rerun at `fix/r2-lead` | Image built from that branch; `scripts/compose-smoke.sh` on `quickstart`, `postgres-minio`, `scale` and `oidc-keycloak`; on kind, the chart with `ci/default-values.yaml`, `helm test` and `scripts/smoke.sh` through a port-forward, each including the `pull` step | All passed |
+| Compat harness cleanup | `go test -tags compat ./compat/harness ./compat/lmstudio ./compat/viewer ./compat/ollama` and `pytest compat/test_harness.py`, counting `hangar-compat-bin-*` in `$TMPDIR` before and after | No directory left behind |
 
 ## Feature checklist
 
@@ -108,12 +110,30 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 6. `compat/ollama` runs against the binary; Playwright has a real-Instance suite in CI; the Hub client suite has the `hub-binary` job (SQLite and Postgres, with and without Xet uploads, and the floor client).
 7. Requests done this round: W4 6 and 8, W8 2, 3, 5, 7 and 9, W10 4 and 10 (see [`RESOLUTIONS.md`](requests/RESOLUTIONS.md)). Found while doing them: the sign-in throttling message was a raw Go error, and the mock's wrong-password message differed from the server's.
 
+## What rounds 2 and 3 fixed
+
+Round 2 merged `fix/r2-lead`, `fix/r2-w2`, `fix/r2-w4`, `fix/r2-w6`, `fix/r2-w7` and `fix/r2-w8`; round 3 merged `fix/r3-w1`, `fix/r3-w7`, `fix/r3-w8`, `fix/r3-w9` and `fix/r3-w11`.
+
+1. **Unsafe downloads (lead, W7, W2).** The signed Pull-through route and the signed zip export download are gated, and `TestServingSurfaceIsClassified` enumerates every protocol and signed-link route instead of a hand-kept list. `scan.Gate.CheckObjects` fails closed for an object that no scanned file covers, judging every file that holds it in every ref tip and Flagged Commit. W2's request 10 carries scan results from the nearest scanned ancestor to unchanged files while a new Commit's scan is pending, so the file page and downloads stop flickering to unscanned after each Commit (see [`RESOLUTIONS.md`](requests/RESOLUTIONS.md)). After both merges, `414027d` updated `TestCurrentWithoutScannedAncestor` for the combined verdict. Round 3 added tests that a failed scan Job stores nothing and leaves every file that can run code refused, on each driver and end to end.
+2. **Anonymous listing (lead).** `repo.Options.AnonymousRead` is asked on each anonymous List, so `security.anonymous_read` set through `PATCH /admin/settings` applies without a restart and Discover against a Hangar Upstream finds its Repos. Round 3 updated the Xet real backend (W11) to the new signature.
+3. **Job attempt fencing (W1).** Progress, result and finish writes match the attempt number a run was claimed with as well as the lease owner, so a run that `RecoverExpired` requeued gets `ErrLeaseLost` at its next write and cannot finish the Job under the new run.
+4. **Flaky tests (W6, lead).** `TestUpstreamsAPI/sqlite` lost `update_available` under `-race` load because a hidden 10-second limit and a fixed 5-second budget raced the test Upstream's git calls; the budget is now `Upstreams.UpdateCheckTimeout` and a missed check is logged (W6 handoff, item 8). `TestPullThroughRepoAndFile/sqlite` waited 5 seconds for planning instead of the Service's 30 (item 9). `TestFirstReadyAnswerServesEveryRoute` now closes its poll client's idle connections before shutdown.
+5. **Scan and index Jobs on deleted Repos (W7).** They end quietly when the Repo is deleted mid-run instead of failing at `WARN`.
+6. **Compat and CI (lead, W9).** The viewer's `instance-postgres` backend now sets `database.driver=postgres`, so it runs on Postgres; `compat/.python-version` pins Python 3.11 for `compat/.venv`; the git 2.39 job installs uv, and `scripts/check-workflow-uv.sh` fails a job that needs uv without installing it.
+7. **UI (W8).** Markdown headings nest under the page's `h1`, the search palette's listbox stays valid while results load, `e2e-real/` runs the build plan's flows and 51 pages against real Instances with a second Instance as the Upstream, and its sign-in flows wait out sign-in locks so reruns within the hour pass.
+8. **House style (W9).** The Xet upload research uses British spellings.
+
+## What round 5 of the lead fixed
+
+1. **Leaked compat binaries.** The Go harness and the pytest launcher built `./cmd/hangar` into a new `hangar-compat-bin-*` directory on every run and never removed it, about 65 MB each. `harness.Main`, called from `TestMain` in every Go compat package that builds the binary, removes it when the tests end, and `Binary` refuses to build outside `Main`; `hangar_instance.py` removes it with an `atexit` hook. The builder tests in `compat/harness` and `test_built_binary_is_removed_when_the_process_exits` in `compat/test_harness.py` cover both.
+2. **Records.** W2's request 10 has its row in `RESOLUTIONS.md`, and this report covers rounds 2 and 3.
+
 ## Open issues
 
 - **W8 8, self-service profile and password changes.** A product decision for James: there is no `PATCH /me` or `POST /me/password`; admins send reset links.
 - **W11 8 and W3, ownership of LFS and Xet objects at Commit time.** Deferred to the phase 3 security review, as the build plan says: a user who knows an object's SHA-256 can reference it from their own Repo.
 - **git-upload-pack and unsafe files.** `scan.Gate` does not gate `git clone` without LFS, because git sends whole Commits. The Hub's default `.gitattributes` keeps every pickle format in LFS, and [Security](../operate/security.md) says so.
 - **Scan errors are not blocked.** A file the scanner read but could not parse (status `error`) downloads with blocking on, because many `.bin` files are not pickles. The phase 3 review should confirm the trade-off.
-- **A flaky Upstreams test.** `internal/api` `TestUpstreamsAPI/sqlite` failed once (`update_available` was true) in a full `-race` run on a heavily loaded machine and passed three times in a row afterwards. W6 should find the cause.
-- **Compose and Helm smoke, rerun at `fix/r2-lead`.** With an image built from that branch, `scripts/compose-smoke.sh` passed on all four examples (`quickstart`, `postgres-minio`, `scale` and `oidc-keycloak`), and on kind the chart installed with `ci/default-values.yaml`, `helm test` passed and `scripts/smoke.sh` passed through a port-forward, each including the `pull` step. The `hub-binary` Hub cells and real-Instance Playwright step still run locally only, as there is no remote yet.
+- **Package timeouts under load.** In a full `make lint test` on this branch at a load average of about 40 on 12 CPUs, `internal/api` and `internal/upstream` passed go test's 10-minute package timeout. `internal/api` runs its tests one after another, and every package starts its own Postgres container; the round 4 lead branch (`fix/r4-lead`, not merged at `5975bec`) runs `internal/api` in parallel, shares one Postgres container and copies a migrated template database per test.
+- **Local-only checks.** There is no remote yet, so the `hub-binary` Hub cells and the real-Instance Playwright step have run on the development machine only, not in CI.
 - **`/admin/system` does not report `upload_mode`.** It reports `download_mode`; adding `upload_mode` changes the OpenAPI file and is left to the owners.
