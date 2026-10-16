@@ -1,6 +1,6 @@
 # Integration report
 
-Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the tests that show it works, and the open issues. It describes branch `integration/v1` at `5975bec`, after the merges of phase 2 fix rounds 1, 2 and 3, with the integration lead's round 5 fixes (`fix/r5-lead`). Each owner's handoff describes its own fixes in more detail; branches from later rounds are recorded there once merged.
+Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the tests that show it works, and the open issues. It describes branch `integration/v1` at `6fe4b25` with the lead's second round 5 branch merged on top, which also brings in `fix/r4-lead` and `fix/r4-w7`. The rows below were first checked at `5975bec`; [Merges after 5975bec](#merges-after-5975bec) lists what changed since and how it was checked. Each owner's handoff describes its own fixes in more detail.
 
 ## How it was checked
 
@@ -20,6 +20,7 @@ The wired binary is `cmd/hangar` built from this branch. Every row below names t
 | Compose `postgres-minio` and `scale` with S3 proxy uploads | Image built from this branch; `hangar push`, `git lfs push` and `huggingface_hub` 0.36.1 `upload_file` of 12 MiB files, downloads compared byte for byte, a zip export | All round trips identical; the zip URL is Hangar's |
 | Docs Home demo | `scripts/demo.sh` against the binary | `docs/assets/demo.gif` |
 | Compose and Helm smoke, rerun at `fix/r2-lead` | Image built from that branch; `scripts/compose-smoke.sh` on `quickstart`, `postgres-minio`, `scale` and `oidc-keycloak`; on kind, the chart with `ci/default-values.yaml`, `helm test` and `scripts/smoke.sh` through a port-forward, each including the `pull` step | All passed |
+| Full lint and test run after the merges since `5975bec` | `make lint test` on the lead's second round 5 branch | Passed in 16 minutes at a load average of 45 to 58; `internal/api` 459 s, `internal/upstream` 389 s |
 | Compat harness cleanup | `go test -tags compat ./compat/harness ./compat/lmstudio ./compat/viewer ./compat/ollama` and `pytest compat/test_harness.py`, counting `hangar-compat-bin-*` in `$TMPDIR` before and after | No directory left behind |
 
 ## Feature checklist
@@ -128,12 +129,43 @@ Round 2 merged `fix/r2-lead`, `fix/r2-w2`, `fix/r2-w4`, `fix/r2-w6`, `fix/r2-w7`
 1. **Leaked compat binaries.** The Go harness and the pytest launcher built `./cmd/hangar` into a new `hangar-compat-bin-*` directory on every run and never removed it, about 65 MB each. `harness.Main`, called from `TestMain` in every Go compat package that builds the binary, removes it when the tests end, and `Binary` refuses to build outside `Main`; `hangar_instance.py` removes it with an `atexit` hook. The builder tests in `compat/harness` and `test_built_binary_is_removed_when_the_process_exits` in `compat/test_harness.py` cover both.
 2. **Records.** W2's request 10 has its row in `RESOLUTIONS.md`, and this report covers rounds 2 and 3.
 
+## Merges after 5975bec
+
+These branches were merged into `integration/v1` after `5975bec`, in this order. Fix branch names carry the round they were opened in, so some round 3 branches were merged after round 4 and 5 ones.
+
+| Branch | Owner | What it changed |
+|---|---|---|
+| `fix/r5-lead` | Lead | The compat harnesses remove the `hangar` binary they build; the records in this report and `RESOLUTIONS.md` (see [What round 5 of the lead fixed](#what-round-5-of-the-lead-fixed)) |
+| `fix/r5-w6`, with `fix/r4-w6` | W6 | The lost-lease Pull compat test follows attempt fencing; Pull-through waits for the history of a Mirror that planning has just created, instead of answering 404 `Invalid rev id: main` in that window |
+| `fix/r5-w10` | W10 | The viewer fixture downloads retry a stalled read and verify each file, so `TestCroissantValidates` no longer fails on a slow huggingface.co |
+| `fix/r3-lead` | Lead | `internal/api` tests run in parallel, every test package shares one Postgres container, and each test database is a copy of a migrated template; doctor checks that start git or dial get a minute in tests |
+| `fix/r3-w4`, `fix/r3-w11` | W4, W11 | The real compat backends pass `AnonymousRead` as a setting function, and `make lint-go` vets their build tags |
+| `fix/r3-w9` | W9 | `make lint-style` checks docs for American spellings; the git 2.39 compat job installs uv and the compat lock |
+| `fix/r3-w8` | W8 | `e2e-real` sign-in flows wait out sign-in locks |
+| `fix/r3-w6` | W6 | The Pull-through Mirror history fix, as in `fix/r5-w6` |
+| `fix/r3-w7` | W7 | Tests that the gate stays closed after a scan Job fails |
+| `fix/r3-w1` | W1 | Job progress, result and finish writes are fenced on the attempt a run claimed |
+| `fix/r4-w8` | W8 | `e2e-real` waits for slow git-backed reads, and the editor flows create their Repos in hooks |
+| `fix/r4-w2` | W2 | Completing an upload resumes a broken read of the assembled object with ranged reads, and keeps the upload and its parts when it fails, so a retried completion can succeed |
+| `fix/r4-lead` | Lead | The same four commits as `fix/r3-lead`, under the round 4 name; merging it changes no file |
+| `fix/r4-w7` | W7 | `compat/ollama` starts `ollama serve` in its own process group and stops it with its runners, so no `llama-server` is left running |
+
+### What the lead's second round 5 pass fixed
+
+1. **Request IDs for server errors.** A 500 from the native API, the Ollama registry, dataset configs and Repo metadata said "The request ID identifies it in the server log" but named no ID, the log lines carried no `request_id`, and the CLI dropped the ID. Now:
+   - `httpx.WithInfo` stores the request ID where the log handlers read it, and the stdout handler and the OpenTelemetry log bridge add `request_id` to every record logged with the request's context, including the access log line and the `native api request failed` line.
+   - Every 500 message comes from `httpx.InternalErrorMessage`: "Internal server error. The request ID is `<id>`."
+   - The CLI's `APIError` keeps the ID from `X-Request-Id` or the problem's `request_id`, and prints it for 5xx answers whose message does not already name it.
+
+   Tests: `internal/api` `TestInternalErrorNamesTheRequestIDTheLogCarries`, `internal/httpx` `TestLogLinesCarryTheRequestID` and `TestRecoverWritesErrorInProtocolFormat`, `internal/telemetry` `TestHandlersAddTheRequestID`, `internal/cli` `TestAPIErrorNamesTheRequestIDOfServerErrors`. The operator docs ([Observability](../operate/observability.md), [Troubleshooting](../operate/troubleshooting.md)) list the field.
+2. **Branch completeness.** `fix/r4-lead` and `fix/r4-w7` are merged, and this report covers every merge after `5975bec`.
+
 ## Open issues
 
 - **W8 8, self-service profile and password changes.** A product decision for James: there is no `PATCH /me` or `POST /me/password`; admins send reset links.
 - **W11 8 and W3, ownership of LFS and Xet objects at Commit time.** Deferred to the phase 3 security review, as the build plan says: a user who knows an object's SHA-256 can reference it from their own Repo.
 - **git-upload-pack and unsafe files.** `scan.Gate` does not gate `git clone` without LFS, because git sends whole Commits. The Hub's default `.gitattributes` keeps every pickle format in LFS, and [Security](../operate/security.md) says so.
 - **Scan errors are not blocked.** A file the scanner read but could not parse (status `error`) downloads with blocking on, because many `.bin` files are not pickles. The phase 3 review should confirm the trade-off.
-- **Package timeouts under load.** In a full `make lint test` on this branch at a load average of about 40 on 12 CPUs, `internal/api` and `internal/upstream` passed go test's 10-minute package timeout. `internal/api` runs its tests one after another, and every package starts its own Postgres container; the round 4 lead branch (`fix/r4-lead`, not merged at `5975bec`) runs `internal/api` in parallel, shares one Postgres container and copies a migrated template database per test.
+- **Package timeouts under load.** Resolved by `fix/r3-lead` (the same commits as `fix/r4-lead`). A full `make lint test` on the lead's second round 5 branch, at a load average of 45 to 58 on 12 CPUs with other projects running, passed in 16 minutes: `internal/api` in 459 s and `internal/upstream` in 389 s, both inside the 10-minute package timeout.
 - **Local-only checks.** There is no remote yet, so the `hub-binary` Hub cells and the real-Instance Playwright step have run on the development machine only, not in CI.
 - **`/admin/system` does not report `upload_mode`.** It reports `download_mode`; adding `upload_mode` changes the OpenAPI file and is left to the owners.
