@@ -1,10 +1,14 @@
 package httpx_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,4 +44,104 @@ func TestHealth(t *testing.T) {
 	require.Equal(t, 503, get("/healthz").Code)
 	require.Equal(t, 503, get("/readyz").Code)
 	require.Equal(t, 404, get("/other").Code)
+}
+
+// TestReadyzDoesNotCacheAProbeTimeout reproduces the preview outage: a
+// probe gave up (kubelet's 1 second timeout) while the Blob store Stat was
+// slow, the cache kept the probe's "context deadline exceeded", and the
+// next probes answered 503 at once although the store had recovered.
+func TestReadyzDoesNotCacheAProbeTimeout(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	h := httpx.NewHealth(httpx.Check{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
+		if calls.Add(1) == 1 {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	}})
+	h.SetLogger(slog.New(slog.DiscardHandler))
+	probe := func(timeout time.Duration) *httptest.ResponseRecorder {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx))
+		return rec
+	}
+
+	rec := probe(50 * time.Millisecond)
+	require.Equal(t, 503, rec.Code, "the probe that gave up reports the slow check")
+	require.Contains(t, rec.Body.String(), `"name":"blob_store"`)
+
+	close(release)
+	require.Eventually(t, func() bool { return probe(time.Second).Code == 200 }, 5*time.Second, 10*time.Millisecond,
+		"once the store answers, the next probe is ready")
+	require.Equal(t, int32(1), calls.Load(), "the slow run finished and its success was cached")
+	require.Equal(t, 200, probe(time.Second).Code)
+}
+
+// TestReadyzSharesOneRunOfACachedCheck checks that probes arriving while
+// a cached check runs wait for that run instead of starting another.
+func TestReadyzSharesOneRunOfACachedCheck(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	h := httpx.NewHealth(httpx.Check{Name: "blob_store", CacheFor: time.Hour, Run: func(context.Context) error {
+		calls.Add(1)
+		<-release
+		return nil
+	}})
+	results := make(chan []httpx.CheckResult, 3)
+	for range 3 {
+		go func() { results <- h.Failures(context.Background()) }()
+	}
+	require.Eventually(t, func() bool { return calls.Load() == 1 }, time.Second, time.Millisecond)
+	close(release)
+	for range 3 {
+		require.Empty(t, <-results)
+	}
+	require.Equal(t, int32(1), calls.Load())
+}
+
+// TestReadyzRetriesACheckThatHitItsOwnTimeout checks that a run cut off by
+// the check timeout is reported but not cached, so the next probe runs the
+// check again instead of failing for the rest of CacheFor.
+func TestReadyzRetriesACheckThatHitItsOwnTimeout(t *testing.T) {
+	var calls atomic.Int32
+	h := httpx.NewHealth(httpx.Check{Name: "blob_store", CacheFor: time.Hour, Run: func(ctx context.Context) error {
+		if calls.Add(1) == 1 {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}})
+	httpx.SetCheckTimeout(h, 20*time.Millisecond)
+	h.SetLogger(slog.New(slog.DiscardHandler))
+	require.Equal(t, []httpx.CheckResult{{Name: "blob_store", Error: "context deadline exceeded"}}, h.Failures(context.Background()))
+	require.Empty(t, h.Failures(context.Background()))
+	require.Equal(t, int32(2), calls.Load())
+	require.Empty(t, h.Failures(context.Background()), "a success is cached")
+	require.Equal(t, int32(2), calls.Load())
+}
+
+// TestReadyzLogsFailedChecks checks that every failed check is logged
+// with its name, so a 503 in the access log can be explained.
+func TestReadyzLogsFailedChecks(t *testing.T) {
+	var logs bytes.Buffer
+	h := httpx.NewHealth(
+		httpx.Check{Name: "database", Run: func(context.Context) error { return nil }},
+		httpx.Check{Name: "blob_store", CacheFor: time.Hour, Run: func(context.Context) error { return errors.New("sentinel missing") }},
+	)
+	h.SetLogger(slog.New(slog.NewJSONHandler(&logs, nil)))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	require.Equal(t, 503, rec.Code)
+	var line map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &line), logs.String())
+	require.Equal(t, "WARN", line["level"])
+	require.Equal(t, "readiness check failed", line["msg"])
+	require.Equal(t, "blob_store", line["check"])
+	require.Equal(t, "sentinel missing", line["error"])
 }

@@ -26,7 +26,7 @@ Hangar never records tokens, passwords, cookies, presigned URLs or `Authorizatio
 ## Health
 
 - `/healthz` answers 200 while the process is alive.
-- `/readyz` answers 200 when the database is reachable, migrations are at the expected version, the Blob store answers and the server has finished starting, and 503 with the failed checks otherwise. Load balancers and Kubernetes should use it.
+- `/readyz` answers 200 when the database is reachable, migrations are at the expected version, the Blob store answers and the server has finished starting, and 503 with the failed checks otherwise. Load balancers and Kubernetes should use it. The Blob store check runs in the background with its own 5-second timeout and its result is reused for 10 seconds, so a probe that gives up early does not make the next probes fail.
 
 ## Elastic
 

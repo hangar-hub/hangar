@@ -94,6 +94,7 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	// is installed and the worker has started.
 	var started atomic.Bool
 	health := newHealth(d, blobs, startupCheck(&started))
+	health.SetLogger(log)
 	var current atomic.Pointer[http.Handler]
 	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
 	current.Store(&starting)
