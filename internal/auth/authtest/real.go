@@ -3,6 +3,7 @@ package authtest
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -47,6 +48,8 @@ type RealOptions struct {
 	Clock *Clock
 	// Upstreams resolves Upstream names for upstream tokens.
 	Upstreams auth.UpstreamLookup
+	// Log receives the Service's operational messages; nil discards them.
+	Log *slog.Logger
 }
 
 // NewService returns the real, database-backed auth.Service on d, for
@@ -70,7 +73,7 @@ func NewService(t testing.TB, d *db.DB, o RealOptions) (*auth.Service, *org.DBSe
 		rec = audit.NewDB(d, nil)
 	}
 	orgs := org.NewDB(d, rec)
-	opts := auth.Options{DB: d, Config: &cfg, Orgs: orgs, Audit: rec, Upstreams: o.Upstreams}
+	opts := auth.Options{DB: d, Config: &cfg, Orgs: orgs, Audit: rec, Upstreams: o.Upstreams, Log: o.Log}
 	if o.Clock != nil {
 		opts.Now = o.Clock.Now
 	}
