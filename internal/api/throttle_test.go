@@ -16,6 +16,7 @@ import (
 // TestLoginThrottleMessage checks that the sign-in throttle answers 429
 // with Retry-After and a sentence the UI can show as it is.
 func TestLoginThrottleMessage(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t, dbtest.SQLite(t))
 	e.user("alice", false)
 	var last *http.Response

@@ -17,6 +17,7 @@ import (
 // diff over every Commit of a pull request, from where its ref left the
 // base branch, while the base moves on.
 func TestPullRequestFileDiff(t *testing.T) {
+	t.Parallel()
 	e := newMetaEnv(t)
 	ctx := context.Background()
 	base := "/repos/models/alice/tiny/discussions"

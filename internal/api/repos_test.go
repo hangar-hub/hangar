@@ -219,6 +219,7 @@ func (f *fixture) createRepo(as string, body gen.RepoCreate) gen.Repo {
 }
 
 func TestRepoLifecycleEndpoints(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.user("alice")
 	bob := f.user("bob")
@@ -300,6 +301,7 @@ func TestRepoLifecycleEndpoints(t *testing.T) {
 }
 
 func TestListAndSearchEndpoints(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.user("alice")
 	bob := f.user("bob")
@@ -376,6 +378,7 @@ func sum256(b []byte) string {
 }
 
 func TestUploadCommitAndBrowseEndpoints(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.user("alice")
 	f.user("bob")
@@ -551,6 +554,7 @@ func i64(n int64) *int64   { return &n }
 func ptrBool(b bool) *bool { return &b }
 
 func TestRepoMirrorStatus(t *testing.T) {
+	t.Parallel()
 	var asked []string
 	f := newFixture(t, func(d *api.RepoDeps) {
 		d.MirrorStatus = func(_ context.Context, r *repo.Repo) (*gen.MirrorSummary, error) {
@@ -579,6 +583,7 @@ func TestRepoMirrorStatus(t *testing.T) {
 // load, e2e clients gave up on slow requests and the server logged each one
 // as a failed request with status 500.
 func TestClientClosedRequestIsNotAServerError(t *testing.T) {
+	t.Parallel()
 	var logs bytes.Buffer
 	var deps api.RepoDeps
 	f := newFixture(t, func(d *api.RepoDeps) {
