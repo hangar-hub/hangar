@@ -1,5 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
-import { type APIResponse, expect, type Locator, type Page, type Response } from "@playwright/test";
+import {
+  type APIResponse,
+  expect,
+  type Locator,
+  type Page,
+  type Request,
+  type Response,
+} from "@playwright/test";
 
 /**
  * Signs in through the API before the first page load, so the page starts
@@ -131,6 +138,20 @@ export function commitResponse(page: Page, repo: string): Promise<Response> {
   );
 }
 
+/**
+ * Waits for the page's next answer to a pull request's file diff in a Repo,
+ * such as "models/ada/bert-tiny-finetune". The diff runs several git
+ * processes on the server (both heads, their fork point and the diff), which
+ * can take longer than an assertion's 5 seconds on a loaded host, so flows
+ * wait for the diff itself before they look for it on the page.
+ */
+export function pullRequestDiffResponse(page: Page, repo: string): Promise<Response> {
+  const path = new RegExp(`^/api/hangar/v1/repos/${repo}/discussions/\\d+/diff$`);
+  return page.waitForResponse(
+    (r) => r.request().method() === "GET" && path.test(new URL(r.url()).pathname),
+  );
+}
+
 /** Fails the test on Content Security Policy violations and uncaught errors. */
 export function watchConsole(page: Page): string[] {
   const problems: string[] = [];
@@ -168,11 +189,48 @@ export async function expectGlossaryTerms(page: Page): Promise<void> {
   expect(text.match(/\bowners?\b/gi) ?? []).toEqual([]);
 }
 
-/** Waits until no loading placeholder is on the page. */
+/** True for a request the page sent to the Hangar API. */
+function isApiRequest(r: Request): boolean {
+  return new URL(r.url()).pathname.startsWith("/api/");
+}
+
+/**
+ * Resolves once a request has its answer, or has failed. Hangar sends an API
+ * answer's headers when it has worked out the whole answer, so the body
+ * follows at once. Response.finished() would not do: it never resolves for a
+ * response that finished before the test asked for it.
+ */
+async function answered(r: Request): Promise<void> {
+  await r.response();
+}
+
+/**
+ * Waits until no loading placeholder is on the page. A placeholder stands for
+ * an API request the page is waiting on, and on a loaded host the git behind
+ * some reads, such as a Repo's Commits, takes more than 10 seconds. So
+ * settled() first waits for every API request the page has sent to be
+ * answered, for as long as the test's timeout allows, and then gives the
+ * placeholders 10 seconds to clear. A placeholder still there when no request
+ * is left to answer is a page stuck loading, and fails the test.
+ */
 export async function settled(page: Page): Promise<void> {
-  await expect(page.locator('[role="status"][aria-label^="Loading"]')).toHaveCount(0, {
-    timeout: 10_000,
-  });
+  const placeholders = page.locator('[role="status"][aria-label^="Loading"]');
+  const waited = new Set<Request>();
+  const notWaitedFor = async () =>
+    (await page.requests()).filter((r) => isApiRequest(r) && !waited.has(r));
+  for (;;) {
+    const sent = await notWaitedFor();
+    for (const r of sent) waited.add(r);
+    await Promise.all(sent.map(answered));
+    try {
+      await expect(placeholders).toHaveCount(0, { timeout: 10_000 });
+      return;
+    } catch (e) {
+      // The page sent more requests while the placeholders were checked:
+      // wait for those too.
+      if ((await notWaitedFor()).length === 0) throw e;
+    }
+  }
 }
 
 /**
