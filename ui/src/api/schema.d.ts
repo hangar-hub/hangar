@@ -856,7 +856,7 @@ export interface paths {
         put?: never;
         /**
          * Finish an upload
-         * @description Assembles the parts and verifies the SHA-256 and size.
+         * @description Assembles the parts and verifies the SHA-256 and size. A `503` with `Retry-After` means the completion failed for a reason that may pass and kept the upload and its parts; send the same request again.
          */
         post: operations["completeUpload"];
         delete?: never;

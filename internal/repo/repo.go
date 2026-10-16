@@ -527,6 +527,11 @@ type Upload struct {
 // SHA-256 or size; nothing is stored.
 var ErrChecksumMismatch = errors.New("uploaded content does not match its sha256 or size")
 
+// ErrRetryable means a request failed for a reason that may pass, such as
+// a Blob store read that broke part way, and that it kept its state, so
+// the same request can be sent again.
+var ErrRetryable = errors.New("temporary failure, try again")
+
 // LFSStore stores LFS objects once per Instance, addressed by SHA-256, and
 // runs uploads (basic, multipart and presigned). The git-lfs API, the Hub
 // API, native uploads, Xet reassembly and Pulls all store objects through it.
@@ -550,6 +555,8 @@ type LFSStore interface {
 	// PutPart uploads a part through Hangar and returns its ETag.
 	PutPart(ctx context.Context, id uuid.UUID, part int, r io.Reader, size int64) (string, error)
 	// CompleteUpload assembles the parts, verifies the object and records it.
+	// A failure wrapped in ErrRetryable keeps the upload and its assembled
+	// parts, so the same completion can be sent again.
 	CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob.Part) (LFSObject, error)
 	// AbortUpload discards an upload.
 	AbortUpload(ctx context.Context, id uuid.UUID) error

@@ -32,6 +32,10 @@ type LFS struct {
 	// streamThreshold is the size above which Ingest streams straight into
 	// a multipart upload at the final key instead of staging a copy.
 	streamThreshold int64
+	// readRetries and readBackoff tune how reads of whole stored objects
+	// resume after a failure (resumingReader).
+	readRetries int
+	readBackoff time.Duration
 }
 
 var _ LFSStore = (*LFS)(nil)
@@ -41,7 +45,8 @@ const uploadKindLFS = "lfs"
 
 // NewLFS returns the LFS store.
 func NewLFS(d *db.DB, blobs blob.Store) *LFS {
-	return &LFS{db: d, blobs: blobs, now: func() time.Time { return time.Now().UTC() }, streamThreshold: 64 << 20}
+	return &LFS{db: d, blobs: blobs, now: func() time.Time { return time.Now().UTC() }, streamThreshold: 64 << 20,
+		readRetries: defaultReadRetries, readBackoff: defaultReadBackoff}
 }
 
 func toLFSObject(row *db.LFSObject) LFSObject {
@@ -316,14 +321,61 @@ func (l *LFS) GetUpload(ctx context.Context, id uuid.UUID) (*Upload, error) {
 		return nil, err
 	}
 	u := toUpload(row)
-	if row.UploadID != "" {
-		parts, err := l.blobs.ListParts(ctx, row.StorageKey, row.UploadID)
-		if err != nil {
-			return nil, fmt.Errorf("repo: list upload parts: %w", err)
-		}
-		u.Done = parts
+	if row.UploadID == "" {
+		return u, nil
 	}
+	if len(row.Parts) > 0 {
+		// The parts were assembled by a completion that failed after it;
+		// they are all done, and completing again picks up from there.
+		for _, p := range row.Parts {
+			u.Done = append(u.Done, blob.Part{Number: p.Number, ETag: p.ETag, Size: p.Size})
+		}
+		return u, nil
+	}
+	parts, err := l.blobs.ListParts(ctx, row.StorageKey, row.UploadID)
+	if errors.Is(err, blob.ErrNotFound) {
+		if ok, serr := l.assembled(ctx, row); serr != nil {
+			return nil, serr
+		} else if ok {
+			u.Done = assembledParts(row, nil)
+			return u, nil
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("repo: list upload parts: %w", err)
+	}
+	u.Done = parts
 	return u, nil
+}
+
+// assembled reports whether a multipart upload's parts have been assembled
+// at its staging key by an earlier completion. Ingest checks the size and
+// SHA-256 of what is there.
+func (l *LFS) assembled(ctx context.Context, row *db.Upload) (bool, error) {
+	_, err := l.blobs.Stat(ctx, row.StorageKey)
+	if errors.Is(err, blob.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("repo: read upload: %w", err)
+	}
+	return true, nil
+}
+
+// assembledParts returns every part of an upload, with the sizes the
+// upload's part size gives and the ETags in parts where it has them.
+func assembledParts(row *db.Upload, parts []blob.Part) []blob.Part {
+	etags := map[int]string{}
+	for _, p := range parts {
+		etags[p.Number] = p.ETag
+	}
+	count := max(int((row.Size+row.PartSize-1)/row.PartSize), 1)
+	out := make([]blob.Part, 0, count)
+	for n := 1; n <= count; n++ {
+		off := int64(n-1) * row.PartSize
+		out = append(out, blob.Part{Number: n, ETag: etags[n], Size: min(row.PartSize, row.Size-off)})
+	}
+	return out
 }
 
 // PresignPart implements LFSStore.
@@ -381,6 +433,12 @@ func (l *LFS) PutPart(ctx context.Context, id uuid.UUID, part int, r io.Reader, 
 
 // CompleteUpload implements LFSStore: it assembles the parts at the staging
 // key, then ingests the result, which checks the SHA-256 and size.
+//
+// Only content that fails the check discards the upload. Any other failure,
+// such as a Blob store read that breaks part way through a large object,
+// keeps the upload row and the assembled object and returns ErrRetryable,
+// so the client can send the completion again without uploading the parts
+// again. The read itself resumes from where it broke (resumingReader).
 func (l *LFS) CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob.Part) (LFSObject, error) {
 	row, err := l.upload(ctx, id)
 	if err != nil {
@@ -394,20 +452,67 @@ func (l *LFS) CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob.Par
 		_ = l.AbortUpload(ctx, id)
 		return obj, nil
 	}
-	if err := l.blobs.CompleteMultipart(ctx, row.StorageKey, row.UploadID, parts); err != nil {
-		return LFSObject{}, fmt.Errorf("repo: complete upload: %w", err)
-	}
-	defer func() { _ = l.blobs.Delete(context.WithoutCancel(ctx), row.StorageKey) }()
-	rc, _, err := l.blobs.Get(ctx, row.StorageKey, nil)
+	done, err := l.assembled(ctx, row)
 	if err != nil {
-		return LFSObject{}, fmt.Errorf("repo: read upload: %w", err)
+		return LFSObject{}, fmt.Errorf("%w: %w", ErrRetryable, err)
 	}
-	defer rc.Close()
-	obj, err := l.Ingest(ctx, row.OID, row.Size, rc)
-	if _, derr := l.db.NewDelete().Model((*db.Upload)(nil)).Where("id = ?", id).Exec(context.WithoutCancel(ctx)); derr != nil && err == nil {
-		err = derr
+	if !done && len(row.Parts) > 0 {
+		// An earlier completion assembled the parts, and the result has gone
+		// since, so the parts have too.
+		_ = l.discard(context.WithoutCancel(ctx), row)
+		return LFSObject{}, fmt.Errorf("%w: upload %s lost its parts; upload the file again", ErrNotFound, id)
 	}
-	return obj, err
+	if !done {
+		if err := l.blobs.CompleteMultipart(ctx, row.StorageKey, row.UploadID, parts); err != nil {
+			return LFSObject{}, fmt.Errorf("repo: complete upload: %w", err)
+		}
+		// Record the parts, so the upload reports them all done if this
+		// completion fails from here on.
+		recorded := assembledParts(row, parts)
+		row.Parts = make([]db.UploadPart, 0, len(recorded))
+		for _, p := range recorded {
+			row.Parts = append(row.Parts, db.UploadPart{Number: p.Number, ETag: p.ETag, Size: p.Size})
+		}
+		if _, err := l.db.NewUpdate().Model(row).Column("parts").WherePK().Exec(ctx); err != nil {
+			return LFSObject{}, fmt.Errorf("%w: repo: record assembled upload: %w", ErrRetryable, err)
+		}
+	}
+	rr, _, err := openResuming(ctx, l.blobs, row.StorageKey, l.readRetries, l.readBackoff)
+	if errors.Is(err, blob.ErrNotFound) {
+		// The assembled object is gone, so the parts are too.
+		_ = l.discard(context.WithoutCancel(ctx), row)
+		return LFSObject{}, fmt.Errorf("%w: upload %s lost its parts; upload the file again", ErrNotFound, id)
+	}
+	if err != nil {
+		return LFSObject{}, fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
+	}
+	obj, err := l.Ingest(ctx, row.OID, row.Size, rr)
+	_ = rr.Close()
+	if err != nil {
+		if stored, serr := l.Stat(context.WithoutCancel(ctx), row.OID); serr == nil && stored.Size == row.Size {
+			// A concurrent completion of the same object stored it.
+			_ = l.discard(context.WithoutCancel(ctx), row)
+			return stored, nil
+		}
+		if errors.Is(err, ErrChecksumMismatch) && rr.err == nil {
+			_ = l.discard(context.WithoutCancel(ctx), row)
+			return LFSObject{}, err
+		}
+		return LFSObject{}, fmt.Errorf("%w: %w", ErrRetryable, err)
+	}
+	if derr := l.discard(context.WithoutCancel(ctx), row); derr != nil {
+		return obj, fmt.Errorf("repo: remove completed upload: %w", derr)
+	}
+	return obj, nil
+}
+
+// discard removes an upload's row and its assembled object.
+func (l *LFS) discard(ctx context.Context, row *db.Upload) error {
+	if err := l.blobs.Delete(ctx, row.StorageKey); err != nil {
+		return err
+	}
+	_, err := l.db.NewDelete().Model((*db.Upload)(nil)).Where("id = ?", row.ID).Exec(ctx)
+	return err
 }
 
 // AbortUpload implements LFSStore.
@@ -426,6 +531,11 @@ func (l *LFS) AbortUpload(ctx context.Context, id uuid.UUID) error {
 func (l *LFS) abort(ctx context.Context, row *db.Upload) error {
 	if row.UploadID != "" {
 		if err := l.blobs.AbortMultipart(ctx, row.StorageKey, row.UploadID); err != nil && !errors.Is(err, blob.ErrNotFound) {
+			return fmt.Errorf("repo: abort upload: %w", err)
+		}
+		// A completion that failed after assembling the parts leaves them
+		// as one object at the staging key.
+		if err := l.blobs.Delete(ctx, row.StorageKey); err != nil {
 			return fmt.Errorf("repo: abort upload: %w", err)
 		}
 	}
@@ -468,7 +578,7 @@ func (l *LFS) Verify(ctx context.Context, oid string, size int64) (LFSObject, er
 		return obj, nil
 	}
 	key := model.LFSObjectKey(oid)
-	rc, info, err := l.blobs.Get(ctx, key, nil)
+	rc, info, err := openResuming(ctx, l.blobs, key, l.readRetries, l.readBackoff)
 	if err != nil {
 		if errors.Is(err, blob.ErrNotFound) {
 			return LFSObject{}, fmt.Errorf("%w: lfs object %s", ErrNotFound, oid)
