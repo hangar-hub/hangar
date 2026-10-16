@@ -188,6 +188,89 @@ func TestWorkerLeaseExpiryHandsJobToAnotherWorker(t *testing.T) {
 	})
 }
 
+// A worker whose lease renewal is late can have its Job requeued and then
+// claim it again itself, so two runs of the Job hold the same lease owner.
+// Writes are fenced on the attempt, so the stale run stops at its next
+// write and its result is discarded.
+func TestWorkerFencesStaleRunOfSameOwner(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clk := newClock()
+		release := map[int]chan struct{}{1: make(chan struct{}), 2: make(chan struct{})}
+		type outcome struct {
+			setErr error
+			ctxErr error
+		}
+		done := map[int]chan outcome{1: make(chan outcome, 1), 2: make(chan outcome, 1)}
+		var started atomic.Int32
+		reg := jobs.NewRegistry()
+		require.NoError(t, reg.Register(jobs.KindIndex, func(ctx context.Context, j *jobs.Job, p jobs.Progress) error {
+			started.Add(1)
+			<-release[j.Attempts]
+			err := p.SetResult(ctx, map[string]int{"attempt": j.Attempts})
+			done[j.Attempts] <- outcome{setErr: err, ctxErr: context.Cause(ctx)}
+			return nil
+		}, jobs.HandlerOptions{MaxAttempts: 3}))
+		finished := make(chan string, 2)
+		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Owner: "a", Concurrency: 2, Lease: time.Hour, Now: clk.Now,
+			Logger: slog.New(outcomeHandler(finished))})
+		id, err := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex})
+		require.NoError(t, err)
+
+		w.Tick(ctx)
+		require.Eventually(t, func() bool { return started.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+		// The first run's lease runs out; the same worker recovers the Job
+		// and claims it again while the first run is still going.
+		clk.Add(time.Hour + time.Second)
+		w.Tick(ctx)
+		require.Eventually(t, func() bool { return started.Load() == 2 }, 5*time.Second, 10*time.Millisecond)
+		require.Equal(t, 2, mustGet(t, w.Queue(), id).Attempts)
+
+		// The stale first run tries to write: it is told it lost the lease,
+		// its context is cancelled, and nothing it wrote reaches the row.
+		close(release[1])
+		got := <-done[1]
+		require.ErrorIs(t, got.setErr, jobs.ErrLeaseLost)
+		require.ErrorIs(t, got.ctxErr, jobs.ErrLeaseLost)
+		require.Equal(t, "lost", <-finished)
+		j := mustGet(t, w.Queue(), id)
+		require.Equal(t, jobs.StatusRunning, j.Status, "the stale run must not finish the Job")
+		require.Equal(t, 2, j.Attempts)
+		require.NotContains(t, string(j.Result), "attempt", "the stale run's result must not reach the row")
+
+		// The current run writes and finishes normally.
+		close(release[2])
+		got = <-done[2]
+		require.NoError(t, got.setErr)
+		require.Equal(t, "succeeded", <-finished)
+		w.Wait()
+		j = mustGet(t, w.Queue(), id)
+		require.Equal(t, jobs.StatusSucceeded, j.Status)
+		require.JSONEq(t, `{"attempt":2}`, string(j.Result))
+	})
+}
+
+// outcomeHandler is a slog handler that sends the outcome of every
+// "job finished" record to ch.
+type outcomeHandler chan<- string
+
+func (h outcomeHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h outcomeHandler) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h outcomeHandler) WithGroup(string) slog.Handler            { return h }
+func (h outcomeHandler) Handle(_ context.Context, r slog.Record) error {
+	if r.Message != "job finished" {
+		return nil
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == "outcome" {
+			h <- a.Value.String()
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
 func TestWorkerLeaseExpiryOnLastAttemptFails(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()
