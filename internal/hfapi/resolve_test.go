@@ -186,6 +186,71 @@ func TestResolveRedirectMode(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.StatusCode)
 }
 
+// sizedRepos reports chosen sizes for some paths, so a test can serve a
+// file the size of a large checkpoint without storing one. Everything
+// else, the presigned URL included, comes from the wrapped Fake.
+type sizedRepos struct {
+	*repotest.Fake
+	sizes map[string]int64
+}
+
+func (s sizedRepos) Entry(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string) (model.Entry, error) {
+	e, err := s.Fake.Entry(ctx, id, commit, p)
+	if size, ok := s.sizes[p]; ok && err == nil {
+		e.Size = size
+		e.LFS.Size = size
+	}
+	return e, err
+}
+
+// TestResolveRedirectOver50GB covers 03-hf-api.md rule 14: huggingface_hub
+// refuses a plain HTTP download over 50 GB when it knows the
+// size, so in redirect mode a file over the limit gets its 302 without
+// X-Linked-Size and the client learns the size from the GET. A file of
+// exactly 50 GB still gets the header, and proxy mode always sends it.
+func TestResolveRedirectOver50GB(t *testing.T) {
+	t.Parallel()
+	const limit = int64(50_000_000_000) // huggingface_hub MAX_HTTP_DOWNLOAD_SIZE
+	sizes := map[string]int64{"at-limit.safetensors": limit, "over-limit.safetensors": limit + 1}
+	for _, redirect := range []bool{true, false} {
+		store := blobtest.NewFake()
+		store.PresignBaseURL = "https://blobs.example"
+		e := newEnv(t, func(o *hfapitest.Options) {
+			fake := repotest.NewFake(t)
+			fake.LFS = repotest.NewFakeLFS(store)
+			o.Repos, o.LFS = sizedRepos{Fake: fake, sizes: sizes}, fake.LFS
+			o.Settings = func(s *hfapi.Settings) { s.RedirectDownloads = redirect }
+		})
+		files := map[string]string{"config.json": configJSON}
+		for p := range sizes {
+			files[p] = strings.Repeat("x", 300)
+		}
+		seed(t, e, "alice", modelID("alice", "big"), model.VisibilityPublic, files)
+
+		if !redirect {
+			// Proxy mode streams through Hangar and cannot drop the size,
+			// so files over 50 GB need hangar pull or git lfs there.
+			r := e.Request(t, http.MethodHead, "/alice/big/resolve/main/over-limit.safetensors", "", "")
+			require.Equal(t, http.StatusOK, r.StatusCode)
+			require.Equal(t, strconv.FormatInt(limit+1, 10), r.Header.Get("X-Linked-Size"))
+			continue
+		}
+		for _, method := range []string{http.MethodHead, http.MethodGet} {
+			r := e.Request(t, method, "/alice/big/resolve/main/at-limit.safetensors", "", "")
+			require.Equal(t, http.StatusFound, r.StatusCode, method)
+			require.Equal(t, strconv.FormatInt(limit, 10), r.Header.Get("X-Linked-Size"), method)
+
+			r = e.Request(t, method, "/alice/big/resolve/main/over-limit.safetensors", "", "")
+			require.Equal(t, http.StatusFound, r.StatusCode, method)
+			require.True(t, strings.HasPrefix(r.Header.Get("Location"), "https://blobs.example/"), r.Header.Get("Location"))
+			_, sent := r.Header["X-Linked-Size"]
+			require.False(t, sent, "%s sent X-Linked-Size %q over 50 GB", method, r.Header.Get("X-Linked-Size"))
+			// The ETag still lets the client cache and verify the file.
+			require.Equal(t, `"`+sha256hex(strings.Repeat("x", 300))+`"`, r.Header.Get("X-Linked-Etag"), method)
+		}
+	}
+}
+
 func TestResolveErrors(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
