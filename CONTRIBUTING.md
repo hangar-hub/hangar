@@ -44,7 +44,7 @@ Never skip, disable or weaken a test to get a change through. No stubs, placehol
 
 - Go: `gofmt` and `goimports`, checked by golangci-lint.
 - UI: Biome.
-- Prose, UI text, error messages and CLI help: the Google developer documentation style guide, in British English, with no em dashes. `make lint-style` catches the dashes.
+- Prose, UI text, error messages and CLI help: the Google developer documentation style guide, in British English, with no em dashes. `make lint-style` catches the dashes, and common American spellings in the docs (`scripts/check-spelling.sh`); put API names and identifiers in backticks and quotations in double quotes so it leaves them alone.
 - Never log or record on spans: tokens, passwords, cookies, presigned URLs or `Authorization` headers.
 
 ## Commits and pull requests
