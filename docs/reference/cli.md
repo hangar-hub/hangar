@@ -939,6 +939,9 @@ Upload a folder to a Repo as one Commit.
 Uploads every file under a folder as one Commit. Large files go up in parts,
 straight to the Blob store where the Instance allows it, and an interrupted
 upload resumes from the parts already stored when you run the command again.
+When finishing an upload fails for a reason that may pass, the Instance
+answers 503 with Retry-After and the command waits and tries again, up to
+10 times.
 Files the Instance already has anywhere are not sent again.
 
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.

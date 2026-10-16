@@ -630,6 +630,15 @@ func (s *server) CompleteUpload(w http.ResponseWriter, r *http.Request, _ gen.Re
 		problem(w, http.StatusNotFound, "Upload not found.")
 		return
 	}
+	if f := s.i.failedCompletes[up.sha]; f.times > 0 {
+		f.times--
+		s.i.failedCompletes[up.sha] = f
+		if f.retryAfter != "" {
+			w.Header().Set("Retry-After", f.retryAfter)
+		}
+		problem(w, http.StatusServiceUnavailable, "The request failed for a reason that may pass. Nothing was lost; send the same request again.")
+		return
+	}
 	var all bytes.Buffer
 	for k, p := range body.Parts {
 		if p.Number != k+1 || etagOf(up.parts[p.Number]) != p.Etag {

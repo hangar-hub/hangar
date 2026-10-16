@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -27,7 +29,22 @@ const (
 	planBatch = 1000
 	// partConcurrency is how many parts of one file go up at once.
 	partConcurrency = 4
+	// completeAttempts is how many times one upload completion is sent while
+	// the Instance answers 503 with Retry-After. hangar push --help says 10.
+	completeAttempts = 10
 )
+
+// waitRetry waits d or until ctx ends. Tests replace it to skip the wait.
+var waitRetry = func(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
 
 // localFile is a file on disk to upload as a path in a Repo.
 type localFile struct {
@@ -240,7 +257,7 @@ func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadP
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("%w; run the command again to resume the upload", err)
 	}
-	fin, err := u.c.completeUpload(ctx, u.id, *item.UploadId, results)
+	fin, err := u.complete(ctx, *item.UploadId, results)
 	if err != nil {
 		return err
 	}
@@ -248,6 +265,25 @@ func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadP
 		return fmt.Errorf("the Instance did not verify the upload")
 	}
 	return nil
+}
+
+// complete finishes an upload. A 503 with Retry-After means the Instance
+// kept the upload and its parts (api/openapi.yaml), so the same request is
+// sent again after the wait it asks for, up to completeAttempts times.
+func (u *uploader) complete(ctx context.Context, upload gen.ID, parts []gen.UploadedPart) (*gen.UploadStatus, error) {
+	for attempt := 1; ; attempt++ {
+		fin, err := u.c.completeUpload(ctx, u.id, upload, parts)
+		var ae *APIError
+		if err == nil || !errors.As(err, &ae) || !ae.Retryable {
+			return fin, err
+		}
+		if attempt == completeAttempts {
+			return nil, fmt.Errorf("%w; the Instance kept the upload, so run the command again to finish it", err)
+		}
+		if err := waitRetry(ctx, ae.RetryAfter); err != nil {
+			return nil, err
+		}
+	}
 }
 
 // putPart uploads one part and returns its ETag.
