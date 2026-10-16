@@ -2,16 +2,27 @@
 // temporary directory, or a new database on a Postgres server.
 //
 // Postgres runs when HANGAR_TEST_POSTGRES_DSN points at a server (CI uses a
-// service container) or HANGAR_TEST_POSTGRES=1 (dbtest starts a
-// testcontainers Postgres, which needs Docker). `make test` sets
-// HANGAR_TEST_POSTGRES=1. When Postgres is requested but cannot start, the
-// test fails rather than skipping.
+// service container, and `make test` starts one container for every
+// package) or HANGAR_TEST_POSTGRES=1 (dbtest starts a testcontainers
+// Postgres, which needs Docker). When Postgres is requested but cannot
+// start, the test fails rather than skipping.
+//
+// Migrations run once per schema, not once per test. Each test process
+// migrates one SQLite file and copies it for every test. On Postgres, the
+// first process to need a schema migrates a template database named after
+// a hash of the migration files, and every test database is created from
+// it with CREATE DATABASE ... TEMPLATE. Editing a migration changes the
+// hash, so a server shared between runs never serves an old schema.
 package dbtest
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -46,7 +57,15 @@ func PostgresEnabled() bool {
 // closed when the test ends.
 func SQLite(t testing.TB) *db.DB {
 	t.Helper()
-	return open(t, db.SQLite, filepath.Join(t.TempDir(), "hangar.db"))
+	tmpl, err := sqliteTemplate()
+	if err != nil {
+		t.Fatalf("migrate SQLite template: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "hangar.db")
+	if err := os.WriteFile(path, tmpl, 0o600); err != nil {
+		t.Fatalf("copy SQLite template: %v", err)
+	}
+	return open(t, db.SQLite, path)
 }
 
 // SQLiteDSN returns the path of a fresh SQLite database file, without
@@ -61,12 +80,22 @@ func SQLiteDSN(t testing.TB) string {
 // not start.
 func Postgres(t testing.TB) *db.DB {
 	t.Helper()
-	return open(t, db.Postgres, PostgresDSN(t))
+	admin := adminDSN(t)
+	tmpl, err := postgresTemplate(admin)
+	if err != nil {
+		t.Fatalf("migrate Postgres template: %v", err)
+	}
+	return open(t, db.Postgres, createDatabase(t, admin, " TEMPLATE "+tmpl))
 }
 
 // PostgresDSN creates an empty database on the test Postgres server and
 // returns its URL. The database is dropped when the test ends.
 func PostgresDSN(t testing.TB) string {
+	t.Helper()
+	return createDatabase(t, adminDSN(t), "")
+}
+
+func adminDSN(t testing.TB) string {
 	t.Helper()
 	if !PostgresEnabled() {
 		t.Fatalf("Postgres tests are not enabled: set %s=1 (needs Docker) or %s", EnvPostgres, EnvPostgresDSN)
@@ -75,12 +104,19 @@ func PostgresDSN(t testing.TB) string {
 	if err != nil {
 		t.Fatalf("start test Postgres: %v", err)
 	}
+	return admin
+}
+
+// createDatabase creates a database with a new name, dropped when the test
+// ends, and returns its URL. with is appended to CREATE DATABASE.
+func createDatabase(t testing.TB, admin, with string) string {
+	t.Helper()
 	name := "hangar_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	adminDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(admin)))
 	defer adminDB.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if _, err := adminDB.ExecContext(ctx, "CREATE DATABASE "+name); err != nil {
+	if _, err := adminDB.ExecContext(ctx, "CREATE DATABASE "+name+with); err != nil {
 		t.Fatalf("create test database: %v", err)
 	}
 	t.Cleanup(func() {
@@ -90,12 +126,21 @@ func PostgresDSN(t testing.TB) string {
 		defer cancel()
 		_, _ = c.ExecContext(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)")
 	})
-	u, err := url.Parse(admin)
+	dsn, err := databaseDSN(admin, name)
 	if err != nil {
 		t.Fatalf("parse Postgres DSN: %v", err)
 	}
+	return dsn
+}
+
+// databaseDSN returns admin with its database replaced by name.
+func databaseDSN(admin, name string) (string, error) {
+	u, err := url.Parse(admin)
+	if err != nil {
+		return "", err
+	}
 	u.Path = "/" + name
-	return u.String()
+	return u.String(), nil
 }
 
 // Driver names a database to run a test against.
@@ -127,6 +172,7 @@ func ForEachDriver(t *testing.T, fn func(t *testing.T, d *db.DB)) {
 	}
 }
 
+// open opens a database copied from a migrated template.
 func open(t testing.TB, driver, dsn string) *db.DB {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -136,10 +182,152 @@ func open(t testing.TB, driver, dsn string) *db.DB {
 		t.Fatalf("open %s: %v", driver, err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("migrate %s: %v", driver, err)
-	}
 	return d
+}
+
+// migrateAt opens dsn, applies every migration and closes it again.
+func migrateAt(ctx context.Context, driver, dsn string) error {
+	d, err := db.Open(ctx, db.Options{Driver: driver, DSN: dsn, MaxOpenConns: 1})
+	if err != nil {
+		return err
+	}
+	if err := d.Migrate(ctx); err != nil {
+		_ = d.Close()
+		return err
+	}
+	return d.Close()
+}
+
+var (
+	sqliteOnce  sync.Once
+	sqliteBytes []byte
+	sqliteErr   error
+)
+
+// sqliteTemplate returns the bytes of a migrated SQLite database, built
+// once per process in a directory it then removes.
+func sqliteTemplate() ([]byte, error) {
+	sqliteOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "hangar-dbtest-")
+		if err != nil {
+			sqliteErr = err
+			return
+		}
+		defer os.RemoveAll(dir)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		path := filepath.Join(dir, "hangar.db")
+		// Closing the only connection checkpoints the WAL into the file and
+		// removes it, so the file alone holds the schema.
+		if err := migrateAt(ctx, db.SQLite, path); err != nil {
+			sqliteErr = err
+			return
+		}
+		if _, err := os.Stat(path + "-wal"); err == nil {
+			sqliteErr = fmt.Errorf("the WAL of %s was not checkpointed on close", path)
+			return
+		}
+		sqliteBytes, sqliteErr = os.ReadFile(path)
+	})
+	return sqliteBytes, sqliteErr
+}
+
+// templateName returns the name of the Postgres template database for the
+// current migration files: "hangar_template_" and the first 16 hex digits
+// of a SHA-256 over their names and contents.
+func templateName() (string, error) {
+	files, err := db.MigrationFiles(db.Postgres)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	err = fs.WalkDir(files, ".", func(path string, e fs.DirEntry, err error) error {
+		if err != nil || e.IsDir() {
+			return err
+		}
+		b, err := fs.ReadFile(files, path)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00", path, len(b))
+		h.Write(b)
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return "hangar_template_" + hex.EncodeToString(h.Sum(nil))[:16], nil
+}
+
+var (
+	templateMu    sync.Mutex
+	templateReady = map[string]string{}
+)
+
+// postgresTemplate returns the name of a migrated template database on the
+// server at admin, creating it if no process has yet. An advisory lock
+// keeps two processes from building it at once, and the build happens
+// under another name that is renamed only once migrated, so a process
+// killed mid-build leaves nothing another process would use.
+func postgresTemplate(admin string) (string, error) {
+	templateMu.Lock()
+	defer templateMu.Unlock()
+	if name, ok := templateReady[admin]; ok {
+		return name, nil
+	}
+	name, err := templateName()
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if err := ensureTemplate(ctx, admin, name); err != nil {
+		return "", err
+	}
+	templateReady[admin] = name
+	return name, nil
+}
+
+// ensureTemplate creates the migrated database name on the server at admin
+// unless it exists.
+func ensureTemplate(ctx context.Context, admin, name string) error {
+	adminDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(admin)))
+	defer adminDB.Close()
+	conn, err := adminDB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("connect to test Postgres: %w", err)
+	}
+	defer conn.Close()
+	sum := sha256.Sum256([]byte(name))
+	key := int64(binary.BigEndian.Uint64(sum[:8]))
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", key); err != nil {
+		return fmt.Errorf("lock template: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", key) }()
+	var exists bool
+	if err := conn.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", name).Scan(&exists); err != nil {
+		return fmt.Errorf("look up template: %w", err)
+	}
+	if !exists {
+		build := name + "_build"
+		if _, err := conn.ExecContext(ctx, "DROP DATABASE IF EXISTS "+build+" WITH (FORCE)"); err != nil {
+			return fmt.Errorf("drop unfinished template: %w", err)
+		}
+		if _, err := conn.ExecContext(ctx, "CREATE DATABASE "+build); err != nil {
+			return fmt.Errorf("create template: %w", err)
+		}
+		dsn, err := databaseDSN(admin, build)
+		if err != nil {
+			return err
+		}
+		if err := migrateAt(ctx, db.Postgres, dsn); err != nil {
+			return err
+		}
+		if _, err := conn.ExecContext(ctx, "ALTER DATABASE "+build+" RENAME TO "+name); err != nil {
+			return fmt.Errorf("finish template: %w", err)
+		}
+	}
+	return nil
 }
 
 var (

@@ -35,6 +35,7 @@ func scanStatusOf(t *testing.T, l gen.TreeListing, p string) string {
 // result, so the file page shows the scan panel and the risky download
 // that the download gate expects, and a changed pickle is pending.
 func TestTreeScanStatusWhileScanIsPending(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, func(d *api.RepoDeps) {
 		d.Downloads = &scan.Gate{Block: func(context.Context) (bool, error) { return true, nil }, Results: d.Scanner.Results, Repos: d.Repos}
 	})

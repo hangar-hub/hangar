@@ -15,7 +15,8 @@ BIN       := bin/hangar
 IMAGE     ?= ghcr.io/jamesagarside/hangar:dev
 GOTESTFLAGS ?= -race -count=1
 
-# Postgres tests run with testcontainers (Docker). Set
+# Postgres tests need Docker: test-go starts one Postgres container that
+# every package shares (scripts/with-test-postgres.sh). Set
 # HANGAR_TEST_POSTGRES_DSN to use an existing server instead.
 export HANGAR_TEST_POSTGRES ?= 1
 # S3 Blob store tests run against MinIO with testcontainers (Docker). Set
@@ -105,7 +106,7 @@ test: test-go test-ui ## Run unit and integration tests (SQLite and Postgres)
 
 .PHONY: test-go
 test-go:
-	$(GO) test $(GOTESTFLAGS) -tags integration ./...
+	scripts/with-test-postgres.sh $(GO) test $(GOTESTFLAGS) -tags integration ./...
 
 .PHONY: test-ui
 test-ui: ui-deps

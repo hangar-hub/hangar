@@ -176,6 +176,7 @@ func (e *metaEnv) json(method, path, token string, body any, want int, out any) 
 }
 
 func TestDatasetMetadataListsTheModelsTheCallerCanRead(t *testing.T) {
+	t.Parallel()
 	var asked []model.Principal
 	fail := false
 	e := newMetaEnvWith(t, func(d *api.MetaDeps) {
@@ -223,6 +224,7 @@ func TestDatasetMetadataListsTheModelsTheCallerCanRead(t *testing.T) {
 }
 
 func TestMetadataEndpoints(t *testing.T) {
+	t.Parallel()
 	e := newMetaEnv(t)
 	base := "/repos/models/alice/tiny"
 	var md gen.RepoMetadata
@@ -282,6 +284,7 @@ func TestMetadataEndpoints(t *testing.T) {
 }
 
 func TestDiscussionEndpoints(t *testing.T) {
+	t.Parallel()
 	e := newMetaEnv(t)
 	base := "/repos/models/alice/tiny/discussions"
 	status, _ := e.do("POST", base, "", gen.DiscussionCreate{Title: "x"})
@@ -365,6 +368,7 @@ func TestDiscussionEndpoints(t *testing.T) {
 }
 
 func TestCollectionEndpoints(t *testing.T) {
+	t.Parallel()
 	e := newMetaEnv(t)
 	status, _ := e.do("POST", "/collections", "", gen.CollectionCreate{Namespace: "alice", Title: "x"})
 	require.Equal(t, http.StatusUnauthorized, status)
@@ -414,6 +418,7 @@ func TestCollectionEndpoints(t *testing.T) {
 }
 
 func TestWebhookEndpoints(t *testing.T) {
+	t.Parallel()
 	e := newMetaEnv(t)
 	status, _ := e.do("GET", "/webhooks", "", nil)
 	require.Equal(t, http.StatusUnauthorized, status)

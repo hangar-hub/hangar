@@ -190,6 +190,7 @@ func insertRepo(t *testing.T, d *db.DB, nsID uuid.UUID, name string, vis model.V
 }
 
 func TestSessionsTokensAndKeys(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d)
 		e.user("alice", false)
@@ -301,6 +302,7 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 }
 
 func TestOrganisationEndpoints(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d)
 		e.user("alice", false)
@@ -358,6 +360,7 @@ func TestOrganisationEndpoints(t *testing.T) {
 }
 
 func TestRepoAccessEndpoints(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()
 		e := newEnv(t, d)
@@ -419,6 +422,7 @@ func mustPrincipal(t *testing.T, e *env, name string) model.Principal {
 }
 
 func TestAdminEndpoints(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d)
 		e.user("root", true)
@@ -550,6 +554,7 @@ func TestAdminEndpoints(t *testing.T) {
 }
 
 func TestAuthHandlerErrors(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t, dbtest.SQLite(t))
 	e.user("alice", false)
 	anon := e.anon()
@@ -587,6 +592,7 @@ func (u upstreamLookup) UpstreamID(_ context.Context, name string) (uuid.UUID, e
 // log holds each one. Repo, Upstream and webhook events belong to the
 // workstreams that own those actions.
 func TestEveryW5ActionIsAudited(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()
 		hf := db.NewID()

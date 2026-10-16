@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +56,12 @@ type platformEnv struct {
 	repos   jobRepos
 }
 
+// testCheckTimeout is the budget for doctor checks that do real work. The
+// production default, 10 seconds, is not enough in this package: its tests
+// run in parallel and start git many times, and on a loaded machine
+// starting git --version took over 10 seconds while other tests forked.
+const testCheckTimeout = time.Minute
+
 func newPlatformEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.SystemCheck) *platformEnv {
 	t.Helper()
 	d := dbtest.SQLite(t)
@@ -84,7 +91,7 @@ func newPlatformEnv(t *testing.T, checks func(d *db.DB, s blob.Store) []api.Syst
 	srv := platformServer{
 		Jobs:         &api.Jobs{Queue: e.queue, Authz: e.authz, Repos: e.repos},
 		AdminStorage: &api.AdminStorage{Authz: authtest.NewAuthz(), Accounting: gc.NewAccounting(d), Queue: e.queue, Audit: e.audit},
-		AdminSystem: &api.AdminSystem{Authz: authtest.NewAuthz(), DB: d, Checks: checks(d, store), Info: api.SystemInfo{
+		AdminSystem: &api.AdminSystem{Authz: authtest.NewAuthz(), DB: d, Checks: checks(d, store), CheckTimeout: testCheckTimeout, Info: api.SystemInfo{
 			Version: "1.2.3", Commit: "abc123", Role: "all", BlobBackend: "fs", Telemetry: map[string]string{"traces": "none"},
 		}},
 	}
@@ -149,6 +156,7 @@ func (e *platformEnv) enqueue(user string, nj jobs.NewJob) uuid.UUID {
 }
 
 func TestJobsEndpoints(t *testing.T) {
+	t.Parallel()
 	e := newPlatformEnv(t, nil)
 	ctx := context.Background()
 	alicePull := e.enqueue("alice", jobs.NewJob{Kind: jobs.KindPull, Payload: map[string]string{"repo": "a/b"}})
@@ -232,6 +240,7 @@ func TestJobsEndpoints(t *testing.T) {
 }
 
 func TestAdminStorageEndpoints(t *testing.T) {
+	t.Parallel()
 	e := newPlatformEnv(t, nil)
 	ctx := context.Background()
 	// A Repo with one LFS object, as the repo package would record it.
@@ -311,6 +320,7 @@ func TestAdminStorageEndpoints(t *testing.T) {
 }
 
 func TestAdminSystem(t *testing.T) {
+	t.Parallel()
 	e := newPlatformEnv(t, nil)
 	code, _ := e.do("alice", http.MethodGet, "/admin/system", nil)
 	require.Equal(t, http.StatusForbidden, code)
@@ -339,12 +349,13 @@ func TestAdminSystem(t *testing.T) {
 }
 
 func TestDoctorClockCheck(t *testing.T) {
+	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()
 		run := func(opts api.DoctorOptions) gen.CheckResult {
 			t.Helper()
 			opts.GitBinary = "-"
-			for _, r := range api.RunChecks(ctx, api.DoctorChecks(d, opts), 10*time.Second) {
+			for _, r := range api.RunChecks(ctx, api.DoctorChecks(d, opts), testCheckTimeout) {
 				if *r.Name == "clock" {
 					return r
 				}
@@ -365,14 +376,20 @@ func TestDoctorClockCheck(t *testing.T) {
 			require.Equal(t, "This host's clock agrees with the database and the Blob store to within 10s.", r.Message)
 		}
 
-		// This host's clock is two minutes fast.
+		// This host's clock is two minutes fast. The check reads the other
+		// clock some time after it reads this host's, so it reports 2
+		// minutes less that delay, rounded to a second: 2m0s unless the
+		// delay passes half a second, as it can on a loaded machine.
 		fast := func() time.Time { return time.Now().Add(2 * time.Minute) }
+		start := time.Now()
 		r = run(api.DoctorOptions{Store: store, Now: fast})
+		least := (2*time.Minute - time.Since(start)).Round(time.Second)
 		require.False(t, r.Ok)
-		require.Contains(t, r.Message, "the Blob store's clock is 2m0s behind this host's clock")
+		requireBehind(t, r.Message, "the Blob store's clock is ", least, 2*time.Minute)
+		require.Contains(t, r.Message, "behind this host's clock")
 		require.Contains(t, r.Message, "run NTP on every host")
 		if !d.IsSQLite() {
-			require.Contains(t, r.Message, "the database's clock is 2m0s behind")
+			requireBehind(t, r.Message, "the database's clock is ", least, 2*time.Minute)
 		}
 		slow := func() time.Time { return time.Now().Add(-time.Minute) }
 		r = run(api.DoctorOptions{Store: store, Now: slow, MaxClockSkew: 30 * time.Second})
@@ -383,10 +400,23 @@ func TestDoctorClockCheck(t *testing.T) {
 	})
 }
 
+// requireBehind checks that msg says, after prefix, that a clock is
+// between least and most behind.
+func requireBehind(t *testing.T, msg, prefix string, least, most time.Duration) {
+	t.Helper()
+	m := regexp.MustCompile(regexp.QuoteMeta(prefix) + `(\S+) behind`).FindStringSubmatch(msg)
+	require.NotNil(t, m, msg)
+	got, err := time.ParseDuration(m[1])
+	require.NoError(t, err, msg)
+	require.GreaterOrEqual(t, got, least, msg)
+	require.LessOrEqual(t, got, most, msg)
+}
+
 func TestDoctorConfigCheck(t *testing.T) {
+	t.Parallel()
 	d := dbtest.SQLite(t)
 	cfg := config.Default()
-	results := api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), 10*time.Second)
+	results := api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), testCheckTimeout)
 	require.Equal(t, "config", *results[0].Name, "the config check runs first")
 	require.False(t, results[0].Ok)
 	require.Contains(t, results[0].Message, "server.public_url is required")
@@ -394,12 +424,13 @@ func TestDoctorConfigCheck(t *testing.T) {
 	cfg.Server.PublicURL = "https://hangar.example.com"
 	cfg.Server.DataDir = t.TempDir()
 	cfg.Security.InstanceKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
-	results = api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), 10*time.Second)
+	results = api.RunChecks(context.Background(), api.DoctorChecks(d, api.DoctorOptions{Config: &cfg, GitBinary: "-"}), testCheckTimeout)
 	require.True(t, results[0].Ok, results[0].Message)
 	require.Equal(t, "The configuration is valid.", results[0].Message)
 }
 
 func TestDoctorChecksReportProblems(t *testing.T) {
+	t.Parallel()
 	d := dbtest.SQLite(t)
 	ctx := context.Background()
 	// An overdue Job and no worker.
@@ -408,11 +439,14 @@ func TestDoctorChecksReportProblems(t *testing.T) {
 	fake := blobtest.NewFake()
 	fake.PresignBaseURL = "http://127.0.0.1:1/bucket"
 	checks := api.DoctorChecks(d, api.DoctorOptions{Store: fake, Downloads: blob.Downloads{Mode: blob.DownloadRedirect}, GitBinary: filepath.Join(t.TempDir(), "no-git")})
-	checks = append(checks,
-		api.SystemCheck{Name: "slow", Run: func(ctx context.Context) (string, error) { <-ctx.Done(); return "", ctx.Err() }},
-		api.SystemCheck{Name: "broken", Run: func(context.Context) (string, error) { panic("oops") }},
-	)
-	results := api.RunChecks(ctx, checks, 200*time.Millisecond)
+	results := api.RunChecks(ctx, checks, testCheckTimeout)
+	// A check that runs past the budget, and one that panics. They run on
+	// their own so the budget can be short without cutting off the real
+	// checks above.
+	results = append(results, api.RunChecks(ctx, []api.SystemCheck{
+		{Name: "slow", Run: func(ctx context.Context) (string, error) { <-ctx.Done(); return "", ctx.Err() }},
+		{Name: "broken", Run: func(context.Context) (string, error) { panic("oops") }},
+	}, 200*time.Millisecond)...)
 	byName := map[string]gen.CheckResult{}
 	for _, r := range results {
 		byName[*r.Name] = r
@@ -433,6 +467,7 @@ func TestDoctorChecksReportProblems(t *testing.T) {
 }
 
 func TestPresignCheckAgainstMinIO(t *testing.T) {
+	t.Parallel()
 	if !blobtest.S3Enabled() {
 		t.Logf("S3 tests not registered: set %s=1 (needs Docker)", blobtest.EnvMinIO)
 		return
@@ -440,7 +475,7 @@ func TestPresignCheckAgainstMinIO(t *testing.T) {
 	d := dbtest.SQLite(t)
 	s := blobtest.S3(t)
 	checks := api.DoctorChecks(d, api.DoctorOptions{Store: s, Downloads: blob.Downloads{Mode: blob.DownloadRedirect}, GitBinary: "-"})
-	for _, r := range api.RunChecks(context.Background(), checks, 30*time.Second) {
+	for _, r := range api.RunChecks(context.Background(), checks, testCheckTimeout) {
 		require.True(t, r.Ok, "%s: %s", *r.Name, r.Message)
 		if *r.Name == "presigned_downloads" {
 			require.Equal(t, "Presigned download URLs work from this server.", r.Message)

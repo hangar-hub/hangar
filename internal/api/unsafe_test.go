@@ -18,6 +18,7 @@ import (
 // TestZipExportBlocksUnsafeDownloads checks that a zip export cannot carry
 // a file that scan.block_unsafe_downloads refuses.
 func TestZipExportBlocksUnsafeDownloads(t *testing.T) {
+	t.Parallel()
 	block := true
 	f := newFixture(t, func(d *api.RepoDeps) {
 		d.Downloads = &scan.Gate{Block: func(context.Context) (bool, error) { return block, nil }, Results: d.Scanner.Results, Repos: d.Repos}
