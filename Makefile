@@ -83,6 +83,10 @@ lint: lint-go lint-ui lint-style ## Run every linter
 .PHONY: lint-go
 lint-go:
 	golangci-lint run ./...
+	# golangci-lint compiles one tag set; vet the compat backends it skips.
+	$(GO) vet -tags compat,xetserver ./compat/xet
+	$(GO) vet -tags compat,xetserver,xetreal ./compat/xet
+	$(GO) vet -tags compat,w2real ./compat/hf
 
 .PHONY: lint-ui
 lint-ui: ui-deps
