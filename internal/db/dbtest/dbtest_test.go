@@ -43,3 +43,46 @@ func TestPostgresEnabledReadsTheEnvironment(t *testing.T) {
 	require.Len(t, dbtest.Drivers(), 2)
 	_ = os.Unsetenv(dbtest.EnvPostgres)
 }
+
+// TestDatabasesFromTheTemplateAreSeparate checks that every database
+// copied from a template is migrated and that writes to one do not reach
+// another, on each driver.
+func TestDatabasesFromTheTemplateAreSeparate(t *testing.T) {
+	ctx := context.Background()
+	for _, drv := range dbtest.Drivers() {
+		t.Run(drv.Name, func(t *testing.T) {
+			a, b := drv.Open(t), drv.Open(t)
+			for _, d := range []*db.DB{a, b} {
+				st, err := d.Schema(ctx)
+				require.NoError(t, err)
+				require.True(t, st.UpToDate(), "pending migrations: %v", st.Pending)
+			}
+			_, err := a.NewInsert().Model(&db.Setting{Key: "only-in-a", Value: []byte(`1`)}).Exec(ctx)
+			require.NoError(t, err)
+			n, err := b.NewSelect().Model((*db.Setting)(nil)).Where("key = ?", "only-in-a").Count(ctx)
+			require.NoError(t, err)
+			require.Zero(t, n)
+			c := drv.Open(t)
+			n, err = c.NewSelect().Model((*db.Setting)(nil)).Where("key = ?", "only-in-a").Count(ctx)
+			require.NoError(t, err)
+			require.Zero(t, n, "a write reached the template")
+		})
+	}
+}
+
+// TestPostgresDSNIsEmpty checks that PostgresDSN gives an unmigrated
+// database, for tests that run a binary which migrates it.
+func TestPostgresDSNIsEmpty(t *testing.T) {
+	if !dbtest.PostgresEnabled() {
+		t.Logf("Postgres test not registered: set %s=1 or %s", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
+		return
+	}
+	ctx := context.Background()
+	d, err := db.Open(ctx, db.Options{Driver: db.Postgres, DSN: dbtest.PostgresDSN(t)})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = d.Close() })
+	st, err := d.Schema(ctx)
+	require.NoError(t, err)
+	require.Empty(t, st.Current)
+	require.NotEmpty(t, st.Pending)
+}
