@@ -404,3 +404,40 @@ func TestIndexPackAndCompact(t *testing.T) {
 		require.Len(t, bitmaps, 1)
 	})
 }
+
+// TestGitReportsCancellation is the regression test for commit diffs that a
+// client cancelled being answered with 500: git is killed when its context
+// ends, and the read of its stdout failed with a bare EOF ("read cat-file
+// header: EOF") that did not say the request was cancelled. Every way of
+// running git now reports context.Canceled. The git on PATH here starts and
+// then waits, so only the cancellation can end it.
+func TestGitReportsCancellation(t *testing.T) {
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexec sleep 60\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	g := gitstore.Git{Home: t.TempDir(), Timeout: time.Minute}
+	dir := t.TempDir()
+	oid := strings.Repeat("a", 40)
+
+	cancelled := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		time.AfterFunc(50*time.Millisecond, cancel)
+		return ctx
+	}
+
+	err := g.BatchReadHead(cancelled(), dir, []string{oid}, -1, func(gitstore.ObjectInfo, []byte) error { return nil })
+	require.ErrorIs(t, err, context.Canceled)
+
+	rc, err := g.OpenBlob(cancelled(), dir, oid)
+	require.NoError(t, err)
+	_, err = io.ReadAll(rc)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NoError(t, rc.Close())
+
+	err = g.Stream(cancelled(), dir, nil, io.Discard, nil, "cat-file", "blob", oid)
+	require.ErrorIs(t, err, context.Canceled)
+
+	_, err = g.Run(cancelled(), dir, nil, nil, "cat-file", "blob", oid)
+	require.ErrorIs(t, err, context.Canceled)
+}
