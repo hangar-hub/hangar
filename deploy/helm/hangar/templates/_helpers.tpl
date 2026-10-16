@@ -99,6 +99,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Non-empty when the generated Secret also holds the bootstrap admin password,
+that is when the chart generates Secrets and `secrets` does not set the
+password.
+*/}}
+{{- define "hangar.generatePassword" -}}
+{{- if and (include "hangar.generate" .) (not (hasKey .Values.secrets "HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD")) }}true{{ end }}
+{{- end }}
+
+{{/*
 Pod template shared by the all, web and worker Deployments.
 Takes a dict: ctx (the root context), component, role, values (web or worker).
 */}}

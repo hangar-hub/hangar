@@ -1,6 +1,6 @@
 Hangar is starting at {{ .Values.publicURL }}.
 
-{{- if include "hangar.generate" . }}
+{{- if include "hangar.generatePassword" . }}
 
 The first admin is hangar-admin. Read the generated password with:
 
@@ -8,6 +8,14 @@ The first admin is hangar-admin. Read the generated password with:
     -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d; echo
 
 The Instance key is in the same Secret. Back it up: without it, stored
+upstream tokens and webhook secrets cannot be decrypted.
+{{- else if include "hangar.generate" . }}
+
+The first admin is hangar-admin, with the password set in
+secrets.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD.
+
+The chart generated the Instance key and keeps it in the Secret
+{{ include "hangar.fullname" . }}-generated. Back it up: without it, stored
 upstream tokens and webhook secrets cannot be decrypted.
 {{- end }}
 
