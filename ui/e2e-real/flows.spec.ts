@@ -3,6 +3,7 @@ import {
   commitResponse,
   expectAccessible,
   parseBytes,
+  pullRequestDiffResponse,
   settled,
   unique,
   watchConsole,
@@ -227,8 +228,11 @@ test("opens a pull request from an upload and shows its diff", async ({ page }) 
   await page.getByRole("button", { name: "Upload and open pull request" }).click();
   expect((await committed).status()).toBe(201);
   await expect(page).toHaveURL(new RegExp(`/${modelRepo}/discussions/\\d+$`));
+  // The tab loads the diff of each file when it opens.
+  const diffed = pullRequestDiffResponse(page, `models/${modelRepo}`);
   await page.getByRole("tab", { name: /Files changed/ }).click();
   await expect(page.getByRole("list", { name: "Changed files" })).toContainText(name);
+  expect((await diffed).status()).toBe(200);
   await expect(page.getByRole("region", { name: `Diff of ${name}` })).toContainText("# Proposal");
   expect(problems).toEqual([]);
 });
