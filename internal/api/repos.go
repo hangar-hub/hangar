@@ -162,7 +162,7 @@ func (d *RepoDeps) problem(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	if status == http.StatusInternalServerError {
 		d.Log.ErrorContext(r.Context(), "native api request failed", "error", err.Error())
-		detail = "Internal server error. The request ID identifies it in the server log."
+		detail = httpx.InternalErrorMessage(r.Context())
 	}
 	if status == http.StatusServiceUnavailable {
 		// The request kept its state, such as an upload's parts, so the

@@ -226,7 +226,7 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 
 func (h *Handler) internal(w http.ResponseWriter, r *http.Request, err error) {
 	h.o.Log.ErrorContext(r.Context(), "ollama registry request failed", "error", err.Error())
-	registryError(w, r, http.StatusInternalServerError, "UNKNOWN", "Internal server error. The request ID identifies it in the server log.")
+	registryError(w, r, http.StatusInternalServerError, "UNKNOWN", httpx.InternalErrorMessage(r.Context()))
 }
 
 // token serves the realm of Ollama's registry auth: it verifies the

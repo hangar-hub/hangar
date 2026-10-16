@@ -57,7 +57,7 @@ func (a *DatasetsAPI) problem(w http.ResponseWriter, r *http.Request, err error)
 	default:
 		a.d.Log.ErrorContext(r.Context(), "dataset configs request failed", "error", err.Error())
 		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusInternalServerError,
-			Detail: "Internal server error. The request ID identifies it in the server log."})
+			Detail: httpx.InternalErrorMessage(r.Context())})
 	}
 }
 

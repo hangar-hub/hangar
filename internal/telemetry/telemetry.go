@@ -162,7 +162,7 @@ func Setup(ctx context.Context, opts Options) (*Telemetry, error) {
 	}
 	handlers := []slog.Handler{NewStdoutHandler(stdout, cfg.LogFormat, level)}
 	if logExp != nil {
-		handlers = append(handlers, levelHandler{min: level, Handler: otelslog.NewHandler(ScopeName, otelslog.WithLoggerProvider(t.LoggerProvider))})
+		handlers = append(handlers, LogRequestIDs(levelHandler{min: level, Handler: otelslog.NewHandler(ScopeName, otelslog.WithLoggerProvider(t.LoggerProvider))}))
 	}
 	t.Logger = slog.New(NewFanout(handlers...))
 	return t, nil
