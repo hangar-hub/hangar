@@ -83,12 +83,20 @@ func (g Git) Run(ctx context.Context, dir string, stdin io.Reader, env []string,
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			err = errors.Join(err, ctxErr)
-		}
-		return stdout.Bytes(), &Error{Args: args, Stderr: strings.TrimSpace(stderr.String()), Err: err}
+		return stdout.Bytes(), &Error{Args: args, Stderr: strings.TrimSpace(stderr.String()), Err: withCtxErr(ctx, err)}
 	}
 	return stdout.Bytes(), nil
+}
+
+// withCtxErr adds ctx's error to err when ctx has ended. A git process is
+// killed when its context ends, and what the caller then sees ("signal:
+// killed", or EOF on its stdout) does not say why; joining the context's
+// error lets callers tell a cancelled request from a failed command.
+func withCtxErr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil && !errors.Is(err, ctxErr) {
+		return errors.Join(err, ctxErr)
+	}
+	return err
 }
 
 // Output runs git and returns stdout with surrounding whitespace trimmed.
@@ -107,7 +115,7 @@ func (g Git) Stream(ctx context.Context, dir string, stdin io.Reader, w io.Write
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return &Error{Args: args, Stderr: strings.TrimSpace(stderr.String()), Err: err}
+		return &Error{Args: args, Stderr: strings.TrimSpace(stderr.String()), Err: withCtxErr(ctx, err)}
 	}
 	return nil
 }
@@ -224,10 +232,12 @@ func (g Git) BatchReadHead(ctx context.Context, dir string, oids []string, limit
 		_ = cmd.Process.Kill()
 		_, _ = io.Copy(io.Discard, stdout)
 		_ = cmd.Wait()
-		return readErr
+		// When ctx ends, git is killed and the read fails with EOF, which
+		// would otherwise hide that the request was cancelled.
+		return withCtxErr(ctx, readErr)
 	}
 	if err := cmd.Wait(); err != nil {
-		return &Error{Args: []string{"cat-file", "--batch"}, Stderr: strings.TrimSpace(stderr.String()), Err: err}
+		return &Error{Args: []string{"cat-file", "--batch"}, Stderr: strings.TrimSpace(stderr.String()), Err: withCtxErr(ctx, err)}
 	}
 	return nil
 }
@@ -248,10 +258,11 @@ func (g Git) OpenBlob(ctx context.Context, dir, oid string) (io.ReadCloser, erro
 		cancel()
 		return nil, err
 	}
-	return &cmdReader{r: stdout, cmd: cmd, cancel: cancel, stderr: &stderr, args: []string{"cat-file", "blob", oid}}, nil
+	return &cmdReader{ctx: ctx, r: stdout, cmd: cmd, cancel: cancel, stderr: &stderr, args: []string{"cat-file", "blob", oid}}, nil
 }
 
 type cmdReader struct {
+	ctx    context.Context
 	r      io.Reader
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
@@ -265,6 +276,7 @@ func (c *cmdReader) Read(p []byte) (int, error) {
 	if errors.Is(err, io.EOF) && !c.done {
 		c.done = true
 		if werr := c.cmd.Wait(); werr != nil {
+			werr = withCtxErr(c.ctx, werr)
 			c.cancel()
 			return n, &Error{Args: c.args, Stderr: strings.TrimSpace(c.stderr.String()), Err: werr}
 		}
