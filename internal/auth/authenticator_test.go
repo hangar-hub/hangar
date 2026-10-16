@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -286,4 +287,28 @@ func TestWriteAuthError(t *testing.T) {
 	r = r.WithContext(httpx.WithInfo(r.Context(), "req-2"))
 	write(rec, r, auth.ErrInvalidCredentials)
 	require.Equal(t, httpx.MsgInvalidCredentials, rec.Header().Get("X-Error-Message"), "Hub clients get the Hub's message")
+
+	// The client closed the request: 499 in every protocol, and a bad
+	// credential is still a bad credential.
+	closed := []struct {
+		path   string
+		err    error
+		status int
+	}{
+		{"/api/hangar/v1/me", context.Canceled, 499},
+		{"/ada/x/edit/main/README.md", errors.New("sql: interrupted"), 499},
+		{"/api/models/a/b", context.Canceled, 499},
+		{"/a/b.git/info/refs", context.DeadlineExceeded, 499},
+		{"/api/models/a/b", auth.ErrInvalidCredentials, http.StatusUnauthorized},
+	}
+	for _, c := range closed {
+		ctx, cancel := context.WithCancel(httpx.WithInfo(context.Background(), "req-3"))
+		cancel()
+		rec := httptest.NewRecorder()
+		write(rec, httptest.NewRequest(http.MethodGet, "http://hangar.test"+c.path, nil).WithContext(ctx), c.err)
+		require.Equal(t, c.status, rec.Code, c.path)
+		if c.status == 499 {
+			require.Contains(t, rec.Body.String(), "The client closed the request.", c.path)
+		}
+	}
 }

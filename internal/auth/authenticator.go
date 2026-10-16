@@ -13,6 +13,7 @@ import (
 
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
 // ErrCSRF means a session-authenticated, state-changing request did not
@@ -32,15 +33,29 @@ var ErrCSRF = fmt.Errorf("%w: missing or wrong %s header", ErrInvalidCredentials
 // With no credentials, or only a stale session cookie, it returns an
 // anonymous Principal and no error. A bad Authorization header returns an
 // error wrapping ErrInvalidCredentials, and also httpx.ErrInvalidCredentials.
+//
+// Any other error means the credentials could not be checked. When the
+// request context has ended (the client closed the request) it is logged at
+// DEBUG; otherwise it is a failure of the authentication store and is
+// logged at ERROR with the request ID, because WriteAuthError answers it
+// with a 500 that names only that ID.
 func (s *Service) Authenticate(r *http.Request) (model.Principal, error) {
 	p, err := s.authenticate(r)
-	if err != nil {
-		if errors.Is(err, ErrInvalidCredentials) {
-			return model.Principal{}, fmt.Errorf("%w (%w)", err, httpx.ErrInvalidCredentials)
-		}
-		return model.Principal{}, err
+	if err == nil {
+		return p, nil
 	}
-	return p, nil
+	if errors.Is(err, ErrInvalidCredentials) {
+		return model.Principal{}, fmt.Errorf("%w (%w)", err, httpx.ErrInvalidCredentials)
+	}
+	ctx := r.Context()
+	if ctx.Err() != nil {
+		s.log.DebugContext(ctx, "client closed the request during authentication",
+			"error", err.Error(), "request_id", httpx.RequestID(ctx))
+	} else {
+		s.log.ErrorContext(ctx, "authentication store unavailable",
+			"error", err.Error(), "method", r.Method, "request_id", httpx.RequestID(ctx))
+	}
+	return model.Principal{}, err
 }
 
 func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
@@ -199,10 +214,17 @@ func (s *Service) registryPrincipal(ctx context.Context, token string) (model.Pr
 	return p, nil
 }
 
+// statusClientClosedRequest is the status recorded when the client went
+// away before the answer (499, as nginx and the API handlers use), so a
+// cancelled request is not counted or logged as a server error.
+const statusClientClosedRequest = 499
+
 // WriteAuthError writes the response for an Authenticate error: 403 for a
-// missing CSRF token, and the protocol's 401 otherwise. Pass it to
-// httpx.Authenticate as onError. It classifies the request first, because
-// authentication runs before the protocol dispatcher.
+// missing CSRF token, the protocol's 401 for a bad credential, 499 when the
+// client closed the request before its credentials were checked, and 500
+// when the authentication store failed. Pass it to httpx.Authenticate as
+// onError. It classifies the request first, because authentication runs
+// before the protocol dispatcher.
 func WriteAuthError(publicURL string) func(w http.ResponseWriter, r *http.Request, err error) {
 	viewerHost := ""
 	if u, perr := url.Parse(publicURL); perr == nil && u.Host != "" {
@@ -214,10 +236,28 @@ func WriteAuthError(publicURL string) func(w http.ResponseWriter, r *http.Reques
 			httpx.WriteError(w, r, http.StatusForbidden, "", "The request needs the X-CSRF-Token header from your session. Reload the page and try again.")
 			return
 		}
+		if !errors.Is(err, ErrInvalidCredentials) && r.Context().Err() != nil {
+			// Nobody reads this answer; it is written for access logs and
+			// metrics.
+			writeClientClosed(w, r)
+			return
+		}
 		if !errors.Is(err, ErrInvalidCredentials) {
 			httpx.WriteError(w, r, http.StatusInternalServerError, "", "Authentication is unavailable. The request ID is "+httpx.RequestID(r.Context())+".")
 			return
 		}
 		httpx.WriteUnauthorized(w, r)
+	}
+}
+
+// writeClientClosed answers a request the client closed, in the format of
+// the request's protocol.
+func writeClientClosed(w http.ResponseWriter, r *http.Request) {
+	const msg = "The client closed the request."
+	switch httpx.ProtocolOf(r.Context()) {
+	case telemetry.ProtocolNative, telemetry.ProtocolUI, telemetry.ProtocolUnknown, telemetry.ProtocolHealth:
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: statusClientClosedRequest, Title: "Client Closed Request", Detail: msg})
+	default:
+		httpx.WriteError(w, r, statusClientClosedRequest, "", msg)
 	}
 }
