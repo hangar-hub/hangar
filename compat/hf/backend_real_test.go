@@ -43,7 +43,7 @@ func repoBackend(t *testing.T, o *hfapitest.Options) string {
 	if os.Getenv("HANGAR_HF_DB") == "postgres" {
 		open, name = func(t testing.TB) *db.DB { return dbtest.Postgres(t) }, "postgres"
 	}
-	real := repotest.NewReal(t, open(t), repotest.RealOptions{Tweak: func(ro *repo.Options) { ro.AnonymousRead = true }})
+	real := repotest.NewReal(t, open(t), repotest.RealOptions{Tweak: func(ro *repo.Options) { ro.AnonymousRead = func(context.Context) (bool, error) { return true, nil } }})
 	o.Repos, o.LFS = real.Store, real.LFS
 	o.Orgs = dbOrgs{Fake: orgtest.NewFake(), ns: real.Namespaces}
 	o.AddUser = func(t testing.TB, name string) model.Principal { return real.AddUser(t, name) }
