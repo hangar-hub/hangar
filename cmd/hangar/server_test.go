@@ -145,3 +145,12 @@ func TestServerCommandRefusesInvalidConfig(t *testing.T) {
 		require.Contains(t, out, "storage.backend", use)
 	}
 }
+
+// TestHealthcheckOutwaitsReadyz checks that hangar healthcheck waits longer
+// than /readyz may take, so a slow but healthy dependency is not reported
+// as not ready.
+func TestHealthcheckOutwaitsReadyz(t *testing.T) {
+	if readyzWait <= httpx.ReadyTimeout {
+		t.Fatalf("readyzWait %s must be longer than httpx.ReadyTimeout %s", readyzWait, httpx.ReadyTimeout)
+	}
+}

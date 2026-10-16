@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -17,10 +18,25 @@ type Check struct {
 	CacheFor time.Duration
 }
 
+// CheckTimeout bounds one readiness check.
+const CheckTimeout = 5 * time.Second
+
+// ReadyTimeout bounds one /readyz answer: the checks run one after another,
+// and a check that starts after this budget is spent fails at once. Probes
+// that call /readyz (the Helm chart, the image HEALTHCHECK, hangar
+// healthcheck) must wait longer than this, or a slow but healthy dependency
+// marks the process unready.
+const ReadyTimeout = 2 * CheckTimeout
+
 // Health serves /healthz and /readyz (docs/spec/11-observability.md "Health").
 type Health struct {
 	checks   []Check
 	draining atomic.Bool
+
+	// checkTimeout and readyTimeout default to CheckTimeout and
+	// ReadyTimeout; tests shorten them.
+	checkTimeout time.Duration
+	readyTimeout time.Duration
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -34,7 +50,13 @@ type cached struct {
 
 // NewHealth returns a Health with the given readiness checks.
 func NewHealth(checks ...Check) *Health {
-	return &Health{checks: checks, cache: map[string]cached{}, now: time.Now}
+	return &Health{
+		checks:       checks,
+		cache:        map[string]cached{},
+		now:          time.Now,
+		checkTimeout: CheckTimeout,
+		readyTimeout: ReadyTimeout,
+	}
 }
 
 // SetDraining marks the process as shutting down: /healthz and /readyz
@@ -56,7 +78,12 @@ func (h *Health) run(ctx context.Context, c Check) error {
 		}
 		h.mu.Unlock()
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	if err := ctx.Err(); err != nil {
+		// The /readyz budget is spent: do not start another check, and do
+		// not cache a result the check never produced.
+		return fmt.Errorf("not run: the readiness budget of %s is spent: %w", h.readyTimeout, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, h.checkTimeout)
 	defer cancel()
 	err := c.Run(ctx)
 	if c.CacheFor > 0 {
@@ -67,8 +94,11 @@ func (h *Health) run(ctx context.Context, c Check) error {
 	return err
 }
 
-// Failures runs every check and returns the failures.
+// Failures runs every check, within ReadyTimeout in all, and returns the
+// failures.
 func (h *Health) Failures(ctx context.Context) []CheckResult {
+	ctx, cancel := context.WithTimeout(ctx, h.readyTimeout)
+	defer cancel()
 	failed := []CheckResult{}
 	for _, c := range h.checks {
 		if err := h.run(ctx, c); err != nil {

@@ -176,9 +176,14 @@ spec:
         failureThreshold: 3
       readinessProbe:
         # Ready once the database is reachable, migrations are at the
-        # expected version and the Blob store answers.
+        # expected version and the Blob store answers. /readyz runs its checks
+        # one after another and answers within 10 seconds
+        # (httpx.ReadyTimeout), so wait longer than that: the default of
+        # 1 second marks the pod unready whenever a healthy database or Blob
+        # store is slow.
         httpGet: {path: /readyz, port: http}
         periodSeconds: 5
+        timeoutSeconds: 15
         failureThreshold: 3
       resources:
         {{- toYaml $v.resources | nindent 8 }}

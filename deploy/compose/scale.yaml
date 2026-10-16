@@ -145,6 +145,8 @@ services:
       traefik.http.services.hangar.loadbalancer.server.port: "8080"
       traefik.http.services.hangar.loadbalancer.healthcheck.path: /readyz
       traefik.http.services.hangar.loadbalancer.healthcheck.interval: 5s
+      # /readyz answers within 10 seconds; Traefik's default is 5.
+      traefik.http.services.hangar.loadbalancer.healthcheck.timeout: 15s
 
   worker:
     <<: *hangar

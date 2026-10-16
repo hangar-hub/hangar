@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/jamesagarside/hangar/internal/httpx"
 )
 
 // readiness is the --json output of hangar healthcheck.
@@ -47,6 +49,12 @@ func newHealthcheckCommand() *cobra.Command {
 	return cmd
 }
 
+// readyzWait is how long hangar healthcheck waits for /readyz. It is longer
+// than httpx.ReadyTimeout, so a slow but healthy dependency still answers,
+// and shorter than the image HEALTHCHECK --timeout, so the command reports
+// rather than being killed.
+const readyzWait = httpx.ReadyTimeout + 2*time.Second
+
 // checkReady calls /readyz on the loopback address of listen.
 func checkReady(ctx context.Context, listen string) error {
 	host, port, err := net.SplitHostPort(listen)
@@ -59,7 +67,7 @@ func checkReady(ctx context.Context, listen string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, readyzWait)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(host, port)+"/readyz", nil)
 	if err != nil {
