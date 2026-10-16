@@ -44,3 +44,31 @@ func TestIngestStreamsLargeObjects(t *testing.T) {
 	_, err = l.Ingest(ctx, wrong, 20, strings.NewReader("short"))
 	require.ErrorIs(t, err, ErrChecksumMismatch)
 }
+
+// TestBlobCacheEvictsLeastRecentlyUsed checks the blob cache's bound: a blob
+// larger than the cache is not kept, a repeated add changes nothing, and
+// adding past the limit drops the blobs read longest ago.
+func TestBlobCacheEvictsLeastRecentlyUsed(t *testing.T) {
+	t.Parallel()
+	c := newBlobCache(10)
+	c.add("huge", make([]byte, 11))
+	_, ok := c.get("huge")
+	require.False(t, ok)
+
+	c.add("a", []byte("aaaa"))
+	c.add("b", []byte("bbbb"))
+	c.add("a", []byte("AAAA"))
+	got, ok := c.get("a")
+	require.True(t, ok)
+	require.Equal(t, "aaaa", string(got))
+
+	// a was read after b, so b goes first.
+	c.add("c", []byte("cccc"))
+	_, ok = c.get("b")
+	require.False(t, ok)
+	for _, oid := range []string{"a", "c"} {
+		_, ok = c.get(oid)
+		require.True(t, ok, oid)
+	}
+	require.Equal(t, int64(8), c.size)
+}

@@ -514,3 +514,39 @@ func TestCommitBatchesOperationsInOrder(t *testing.T) {
 		require.Empty(t, initial[0].OldOID)
 	})
 }
+
+// TestOpenFileStreamsLargeGitBlobs covers regular files too large for the
+// blob cache: they stream from git, ranges skip to their start, and Close
+// releases the repository's objects.
+func TestOpenFileStreamsLargeGitBlobs(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "large"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		var sb strings.Builder
+		for i := 0; sb.Len() < 100<<10; i++ {
+			fmt.Fprintf(&sb, "line %06d\n", i)
+		}
+		content := sb.String()
+		res := e.commit(id, alice, add("big.txt", content))
+
+		rc, en, err := e.svc.OpenFile(e.ctx, id, res.SHA, "big.txt", nil)
+		require.NoError(t, err)
+		require.Nil(t, en.LFS)
+		require.Equal(t, int64(len(content)), en.Size)
+		b, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+		require.Equal(t, content, string(b))
+
+		rc, _, err = e.svc.OpenFile(e.ctx, id, res.SHA, "big.txt", &blob.Range{Start: 77000, End: 77010})
+		require.NoError(t, err)
+		b, err = io.ReadAll(rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+		require.Equal(t, content[77000:77011], string(b))
+
+		_, _, err = e.svc.OpenFile(e.ctx, id, res.SHA, "big.txt", &blob.Range{Start: int64(len(content)) + 1, End: -1})
+		require.ErrorIs(t, err, blob.ErrInvalidRange)
+	})
+}

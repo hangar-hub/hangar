@@ -24,7 +24,8 @@ import (
 // way an S3 GET body does when the connection drops: after `after` bytes
 // the body returns io.ErrUnexpectedEOF, or ends early with a clean io.EOF
 // when short is set. Only the first `breaks` Gets break; the rest read
-// normally.
+// normally. The next `fails` ranged Gets of the key fail outright with
+// errTransient, the way a reopen does when the store is unreachable.
 type breakingStore struct {
 	*blobtest.Fake
 	key   string
@@ -33,7 +34,16 @@ type breakingStore struct {
 
 	mu     sync.Mutex
 	breaks int
+	fails  int
 	gets   []*blob.Range
+}
+
+var errTransient = errors.New("connection reset by peer")
+
+func (s *breakingStore) setFails(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fails = n
 }
 
 func (s *breakingStore) setBreaks(n int) {
@@ -56,6 +66,11 @@ func (s *breakingStore) Get(ctx context.Context, key string, rng *blob.Range) (i
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gets = append(s.gets, rng)
+	if rng != nil && s.fails > 0 {
+		s.fails--
+		_ = rc.Close()
+		return nil, blob.Info{}, errTransient
+	}
 	if s.breaks == 0 {
 		return rc, info, nil
 	}
@@ -320,4 +335,97 @@ func TestResumingReader(t *testing.T) {
 	require.NoError(t, bs.Delete(ctx, "k"))
 	_, _, err = openResuming(ctx, bs, "k", 5, time.Millisecond)
 	require.True(t, errors.Is(err, blob.ErrNotFound))
+}
+
+// TestResumingReaderReopen covers a reopen that fails: it is retried until
+// it works or the retries run out, it stops when the context ends while it
+// waits, and it does not retry an object that is gone or has a new size.
+func TestResumingReaderReopen(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	content := []byte("0123456789")
+	newStore := func(t *testing.T) *breakingStore {
+		t.Helper()
+		bs := &breakingStore{Fake: blobtest.NewFake(), key: "k", after: 4}
+		require.NoError(t, bs.Put(ctx, "k", bytes.NewReader(content), 10))
+		bs.setBreaks(1)
+		return bs
+	}
+	// readHead opens k and reads the 4 bytes before the break.
+	readHead := func(t *testing.T, ctx context.Context, bs *breakingStore, retries int, backoff time.Duration) *resumingReader {
+		t.Helper()
+		rr, _, err := openResuming(ctx, bs, "k", retries, backoff)
+		require.NoError(t, err)
+		buf := make([]byte, 4)
+		_, err = io.ReadFull(rr, buf)
+		require.NoError(t, err)
+		require.Equal(t, content[:4], buf)
+		return rr
+	}
+
+	t.Run("failed reopens are retried", func(t *testing.T) {
+		t.Parallel()
+		bs := newStore(t)
+		bs.setFails(2)
+		rr, _, err := openResuming(ctx, bs, "k", 3, time.Millisecond)
+		require.NoError(t, err)
+		got, err := io.ReadAll(rr)
+		require.NoError(t, err)
+		require.Equal(t, content, got)
+		require.NoError(t, rr.Close())
+		require.NoError(t, rr.Close())
+		// The first Get, then three reopens from byte 4: two fail, one works.
+		rngs := bs.ranges()
+		require.Len(t, rngs, 4)
+		require.Nil(t, rngs[0])
+		for _, rng := range rngs[1:] {
+			require.Equal(t, blob.Range{Start: 4, End: -1}, *rng)
+		}
+	})
+
+	t.Run("reopens that keep failing give up", func(t *testing.T) {
+		t.Parallel()
+		bs := newStore(t)
+		bs.setFails(100)
+		rr := readHead(t, ctx, bs, 2, time.Millisecond)
+		_, err := io.ReadAll(rr)
+		require.ErrorIs(t, err, errTransient)
+		require.ErrorContains(t, err, "reopen blob k at byte 4 of 10")
+		// The broken read and two failed reopens use up the two retries.
+		require.Len(t, bs.ranges(), 3)
+		_, err = rr.Read(make([]byte, 1))
+		require.ErrorIs(t, err, errTransient)
+		require.NoError(t, rr.Close())
+	})
+
+	t.Run("a cancelled context stops the wait", func(t *testing.T) {
+		t.Parallel()
+		bs := newStore(t)
+		cctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		rr := readHead(t, cctx, bs, 5, time.Hour)
+		time.AfterFunc(20*time.Millisecond, cancel)
+		_, err := io.ReadAll(rr)
+		require.ErrorIs(t, err, context.Canceled)
+		// Only the first Get: it never reopened.
+		require.Len(t, bs.ranges(), 1)
+	})
+
+	t.Run("an object that is gone is not retried", func(t *testing.T) {
+		t.Parallel()
+		bs := newStore(t)
+		rr := readHead(t, ctx, bs, 5, time.Millisecond)
+		require.NoError(t, bs.Delete(ctx, "k"))
+		_, err := io.ReadAll(rr)
+		require.ErrorIs(t, err, blob.ErrNotFound)
+	})
+
+	t.Run("an object with a new size is refused", func(t *testing.T) {
+		t.Parallel()
+		bs := newStore(t)
+		rr := readHead(t, ctx, bs, 5, time.Millisecond)
+		require.NoError(t, bs.Put(ctx, "k", bytes.NewReader([]byte("0123456789ab")), 12))
+		_, err := io.ReadAll(rr)
+		require.ErrorContains(t, err, "blob k changed while it was being read")
+	})
 }
