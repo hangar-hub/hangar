@@ -86,6 +86,6 @@ USER 65532:65532
 WORKDIR /var/lib/hangar
 VOLUME ["/var/lib/hangar"]
 EXPOSE 8080
-HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 CMD ["hangar", "healthcheck"]
+HEALTHCHECK --interval=10s --timeout=15s --start-period=20s --retries=3 CMD ["hangar", "healthcheck"]
 ENTRYPOINT ["hangar"]
 CMD ["server"]

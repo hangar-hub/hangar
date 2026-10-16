@@ -2,15 +2,13 @@ package httpx
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 )
-
-// checkTimeout bounds one run of a readiness check.
-const checkTimeout = 5 * time.Second
 
 // Check is one readiness check. It returns nil when healthy.
 type Check struct {
@@ -20,6 +18,16 @@ type Check struct {
 	// check does (every 10 seconds). Zero runs the check every time.
 	CacheFor time.Duration
 }
+
+// CheckTimeout bounds one readiness check.
+const CheckTimeout = 5 * time.Second
+
+// ReadyTimeout bounds one /readyz answer: the checks run one after another,
+// and a check that starts after this budget is spent fails at once. Probes
+// that call /readyz (the Helm chart, the image HEALTHCHECK, hangar
+// healthcheck) must wait longer than this, or a slow but healthy dependency
+// marks the process unready.
+const ReadyTimeout = 2 * CheckTimeout
 
 // Health serves /healthz and /readyz (docs/spec/11-observability.md "Health").
 type Health struct {
@@ -31,7 +39,11 @@ type Health struct {
 	cache    map[string]cached
 	inflight map[string]*flight
 	now      func() time.Time
-	timeout  time.Duration
+
+	// checkTimeout and readyTimeout default to CheckTimeout and
+	// ReadyTimeout; tests shorten them.
+	checkTimeout time.Duration
+	readyTimeout time.Duration
 }
 
 type cached struct {
@@ -49,7 +61,14 @@ type flight struct {
 // NewHealth returns a Health with the given readiness checks. Failed
 // checks are logged to slog.Default until SetLogger names another logger.
 func NewHealth(checks ...Check) *Health {
-	return &Health{checks: checks, cache: map[string]cached{}, inflight: map[string]*flight{}, now: time.Now, timeout: checkTimeout}
+	return &Health{
+		checks:       checks,
+		cache:        map[string]cached{},
+		inflight:     map[string]*flight{},
+		now:          time.Now,
+		checkTimeout: CheckTimeout,
+		readyTimeout: ReadyTimeout,
+	}
 }
 
 // SetLogger sets the logger that failed readiness checks are written to.
@@ -74,11 +93,23 @@ type CheckResult struct {
 
 func (h *Health) run(ctx context.Context, c Check) error {
 	if c.CacheFor <= 0 {
-		ctx, cancel := context.WithTimeout(ctx, h.timeout)
+		if err := h.budgetSpent(ctx); err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(ctx, h.checkTimeout)
 		defer cancel()
 		return c.Run(ctx)
 	}
 	return h.runCached(ctx, c)
+}
+
+// budgetSpent reports whether the /readyz budget in ctx has run out. A
+// check is not started then, and no result is cached for it.
+func (h *Health) budgetSpent(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("not run: the readiness budget of %s is spent: %w", h.readyTimeout, err)
+	}
+	return nil
 }
 
 // runCached answers from the cache while the last result is fresh.
@@ -88,11 +119,17 @@ func (h *Health) run(ctx context.Context, c Check) error {
 // the run to finish on its own timeout and cache a result for the next
 // probe, instead of caching the probe's own context error. A run that
 // hits its own timeout is not cached either, so the next probe tries again.
+// Once the /readyz budget in ctx is spent, a stale or missing result is
+// reported as not run, and no run is started or joined.
 func (h *Health) runCached(ctx context.Context, c Check) error {
 	h.mu.Lock()
 	if r, ok := h.cache[c.Name]; ok && h.now().Sub(r.at) < c.CacheFor {
 		h.mu.Unlock()
 		return r.err
+	}
+	if err := h.budgetSpent(ctx); err != nil {
+		h.mu.Unlock()
+		return err
 	}
 	f, ok := h.inflight[c.Name]
 	if !ok {
@@ -111,7 +148,7 @@ func (h *Health) runCached(ctx context.Context, c Check) error {
 }
 
 func (h *Health) fly(ctx context.Context, c Check, f *flight) {
-	ctx, cancel := context.WithTimeout(ctx, h.timeout)
+	ctx, cancel := context.WithTimeout(ctx, h.checkTimeout)
 	defer cancel()
 	err := c.Run(ctx)
 
@@ -125,8 +162,11 @@ func (h *Health) fly(ctx context.Context, c Check, f *flight) {
 	h.mu.Unlock()
 }
 
-// Failures runs every check and returns the failures, logging each one.
+// Failures runs every check, within ReadyTimeout in all, and returns the
+// failures, logging each one.
 func (h *Health) Failures(ctx context.Context) []CheckResult {
+	ctx, cancel := context.WithTimeout(ctx, h.readyTimeout)
+	defer cancel()
 	failed := []CheckResult{}
 	for _, c := range h.checks {
 		if err := h.run(ctx, c); err != nil {

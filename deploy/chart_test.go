@@ -8,8 +8,11 @@ import (
 	"io"
 	"os/exec"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/jamesagarside/hangar/internal/httpx"
 )
 
 // releaseName is the release name the README and docs/get-started/helm.md
@@ -89,5 +92,46 @@ func TestChartPodsHaveNoServiceLinks(t *testing.T) {
 		if !kinds[k] {
 			t.Errorf("rendered no %s; the check no longer covers it", k)
 		}
+	}
+}
+
+// TestChartReadinessProbeOutwaitsReadyz checks that the readiness probe of
+// every Hangar container waits longer than /readyz may take to answer.
+// Kubernetes' default timeoutSeconds of 1 marks the pod unready whenever a
+// healthy database or Blob store answers slowly.
+func TestChartReadinessProbeOutwaitsReadyz(t *testing.T) {
+	probes := 0
+	for _, values := range []string{"helm/hangar/ci/default-values.yaml", "helm/examples/scale-values.yaml"} {
+		for _, doc := range renderChart(t, "-f", values) {
+			spec := podSpec(doc)
+			if spec == nil {
+				continue
+			}
+			md, _ := doc["metadata"].(map[string]any)
+			containers, _ := spec["containers"].([]any)
+			for _, c := range containers {
+				cm, _ := c.(map[string]any)
+				probe, ok := cm["readinessProbe"].(map[string]any)
+				if !ok {
+					continue
+				}
+				httpGet, _ := probe["httpGet"].(map[string]any)
+				if httpGet["path"] != "/readyz" {
+					continue
+				}
+				probes++
+				secs, _ := probe["timeoutSeconds"].(int)
+				if time.Duration(secs)*time.Second <= httpx.ReadyTimeout {
+					t.Errorf("%s: %s %v container %v: readinessProbe.timeoutSeconds is %d; /readyz may take up to %s",
+						values, doc["kind"], md["name"], cm["name"], secs, httpx.ReadyTimeout)
+				}
+				if period, _ := probe["periodSeconds"].(int); period == 0 {
+					t.Errorf("%s: %s %v: readinessProbe has no periodSeconds", values, doc["kind"], md["name"])
+				}
+			}
+		}
+	}
+	if probes == 0 {
+		t.Fatal("rendered no readiness probe on /readyz; the check no longer covers it")
 	}
 }

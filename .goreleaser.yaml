@@ -3,7 +3,9 @@
 # The container image and the Helm chart are built by .github/workflows/release.yml.
 #
 # Check the file with `goreleaser check`; try a local build with
-# `goreleaser release --snapshot --clean --skip=sign,sbom,publish`.
+# `goreleaser release --snapshot --clean --skip=sign,sbom,publish`, or run
+# the whole pipeline, SBOMs and signing included, with
+# `make release-rehearsal`.
 version: 2
 
 project_name: hangar
@@ -53,14 +55,19 @@ sboms:
     args: ["$artifact", "--output", "spdx-json=$document"]
 
 signs:
-  # Keyless signing with the workflow's GitHub OIDC identity.
+  # Keyless signing with the workflow's GitHub OIDC identity. cosign 3 (what
+  # sigstore/cosign-installer installs) writes the signature, certificate and
+  # transparency log entry into one Sigstore bundle; it ignores
+  # --output-certificate and fails without --bundle. Verify a release with:
+  #   cosign verify-blob --bundle checksums.txt.sigstore.json \
+  #     --certificate-identity-regexp '^https://github.com/jamesagarside/hangar/.github/workflows/release.yml@' \
+  #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+  # scripts/release-rehearsal.sh runs this block with a throwaway key.
   - cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
     artifacts: checksum
