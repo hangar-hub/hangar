@@ -149,6 +149,8 @@ func (d *RepoDeps) problem(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusForbidden
 	case errors.Is(err, repo.ErrLFSObjectMissing), errors.Is(err, repo.ErrChecksumMismatch):
 		status = http.StatusUnprocessableEntity
+	case errors.Is(err, repo.ErrRetryable):
+		status = http.StatusServiceUnavailable
 	case errors.Is(err, repo.ErrInvalid), errors.Is(err, model.ErrInvalidRepoID), errors.Is(err, model.ErrInvalidRepoType),
 		errors.Is(err, model.ErrInvalidPath), errors.Is(err, model.ErrInvalidNamespace), errors.Is(err, blob.ErrInvalidRange),
 		errors.Is(err, community.ErrInvalid), errors.Is(err, collections.ErrInvalid):
@@ -161,6 +163,13 @@ func (d *RepoDeps) problem(w http.ResponseWriter, r *http.Request, err error) {
 	if status == http.StatusInternalServerError {
 		d.Log.ErrorContext(r.Context(), "native api request failed", "error", err.Error())
 		detail = "Internal server error. The request ID identifies it in the server log."
+	}
+	if status == http.StatusServiceUnavailable {
+		// The request kept its state, such as an upload's parts, so the
+		// caller can send it again.
+		d.Log.WarnContext(r.Context(), "native api request failed and can be retried", "error", err.Error())
+		detail = "The request failed for a reason that may pass. Nothing was lost; send the same request again."
+		w.Header().Set("Retry-After", "5")
 	}
 	// Anonymous callers get 401 for any missing Repo, so a private Repo
 	// looks the same as one that does not exist.

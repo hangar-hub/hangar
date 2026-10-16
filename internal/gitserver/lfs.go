@@ -785,6 +785,10 @@ func (s *Server) complete(w http.ResponseWriter, r *http.Request, rp repoPath, r
 			lfsError(w, r, http.StatusNotFound, "The upload does not exist or has expired.")
 		case errors.Is(err, repo.ErrInvalid):
 			lfsError(w, r, http.StatusUnprocessableEntity, "The parts were refused: "+err.Error())
+		case errors.Is(err, repo.ErrRetryable):
+			s.log.WarnContext(r.Context(), "git-lfs upload completion failed and can be retried", "error", err)
+			w.Header().Set("Retry-After", "5")
+			lfsError(w, r, http.StatusServiceUnavailable, "Completing the upload failed for a reason that may pass. The parts are kept; send the completion again.")
 		default:
 			s.lfsFailure(w, r, err)
 		}
