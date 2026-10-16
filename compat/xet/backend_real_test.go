@@ -56,7 +56,7 @@ func currentBackend(t *testing.T) backend {
 	return backend{
 		name: name,
 		opts: func(o *hfapitest.Options) {
-			real := repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs, Tweak: func(ro *repo.Options) { ro.AnonymousRead = true }})
+			real := repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs, Tweak: func(ro *repo.Options) { ro.AnonymousRead = func(context.Context) (bool, error) { return true, nil } }})
 			o.Repos, o.LFS = real.Store, real.LFS
 			o.Orgs = dbOrgs{Fake: orgtest.NewFake(), ns: real.Namespaces}
 			o.AddUser = func(t testing.TB, name string) model.Principal { return real.AddUser(t, name) }
