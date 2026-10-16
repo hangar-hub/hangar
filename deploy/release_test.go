@@ -23,7 +23,6 @@ func TestGoReleaserSignsWithACosign3Bundle(t *testing.T) {
 			Signature   string   `yaml:"signature"`
 			Certificate string   `yaml:"certificate"`
 			Args        []string `yaml:"args"`
-			Artifacts   string   `yaml:"artifacts"`
 		} `yaml:"signs"`
 	}
 	if err := yaml.Unmarshal(b, &cfg); err != nil {
@@ -37,7 +36,7 @@ func TestGoReleaserSignsWithACosign3Bundle(t *testing.T) {
 			continue
 		}
 		if !strings.HasSuffix(s.Signature, ".sigstore.json") {
-			t.Errorf("signs[%d].signature %q: cosign 3 writes a Sigstore bundle; name it ${artifact}.sigstore.json", i, s.Signature)
+			t.Errorf("signs[%d].signature %q: cosign 3 writes a Sigstore bundle; end the name in .sigstore.json", i, s.Signature)
 		}
 		if s.Certificate != "" {
 			t.Errorf("signs[%d].certificate %q: cosign 3 puts the certificate in the bundle and writes no .pem", i, s.Certificate)
