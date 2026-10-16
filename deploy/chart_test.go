@@ -6,7 +6,11 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,5 +137,98 @@ func TestChartReadinessProbeOutwaitsReadyz(t *testing.T) {
 	}
 	if probes == 0 {
 		t.Fatal("rendered no readiness probe on /readyz; the check no longer covers it")
+	}
+}
+
+// renderNotes runs a client-side dry-run install with the documented release
+// name and returns the NOTES it prints. It reads no kubeconfig, so it needs
+// no cluster.
+func renderNotes(t *testing.T, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("helm", append([]string{"install", releaseName, "helm/hangar",
+		"--dry-run=client", "--namespace", releaseName}, args...)...)
+	cmd.Env = append(os.Environ(), "KUBECONFIG="+filepath.Join(t.TempDir(), "none"))
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("helm install --dry-run=client %v: %v\n%s", args, err, errb.String())
+	}
+	_, notes, ok := strings.Cut(out.String(), "\nNOTES:\n")
+	if !ok {
+		t.Fatalf("helm install --dry-run=client %v printed no NOTES", args)
+	}
+	return notes
+}
+
+// secretKeys returns the keys of each rendered Secret, by name.
+func secretKeys(docs []map[string]any) map[string]map[string]bool {
+	secrets := map[string]map[string]bool{}
+	for _, doc := range docs {
+		if doc["kind"] != "Secret" {
+			continue
+		}
+		md, _ := doc["metadata"].(map[string]any)
+		keys := map[string]bool{}
+		for _, field := range []string{"data", "stringData"} {
+			m, _ := doc[field].(map[string]any)
+			for k := range m {
+				keys[k] = true
+			}
+		}
+		secrets[md["name"].(string)] = keys
+	}
+	return secrets
+}
+
+// notesSecretRead matches a kubectl command in NOTES that reads one key of a
+// Secret.
+var notesSecretRead = regexp.MustCompile(`kubectl get secret --namespace \S+ (\S+) \\\s+-o jsonpath='\{\.data\.(\w+)\}'`)
+
+// TestChartNotesReadOnlyRenderedSecretKeys checks that every Secret key the
+// install NOTES tell the user to read exists in the Secret the chart renders
+// with the same values, and that the NOTES name the generated Secret exactly
+// when the chart renders it. When `secrets` sets the bootstrap admin
+// password but not the Instance key, the generated Secret holds only the
+// Instance key, so pointing the user at a generated password there prints an
+// empty string.
+func TestChartNotesReadOnlyRenderedSecretKeys(t *testing.T) {
+	const generated = releaseName + "-generated"
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"generated", nil},
+		{"password set", []string{"--set-string", "secrets.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD=set"}},
+		{"instance key set", []string{"--set-string", "secrets.HANGAR_SECURITY_INSTANCE_KEY=set"}},
+		{"both set", []string{"--set-string", "secrets.HANGAR_SECURITY_INSTANCE_KEY=set",
+			"--set-string", "secrets.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD=set"}},
+		{"existing secret", []string{"--set", "existingSecret=hangar-env"}},
+		{"generation off", []string{"--set", "generateSecrets=false"}},
+	}
+	reads := 0
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"-f", "helm/hangar/ci/default-values.yaml"}, tc.args...)
+			secrets := secretKeys(renderChart(t, args...))
+			notes := renderNotes(t, args...)
+			for _, m := range notesSecretRead.FindAllStringSubmatch(notes, -1) {
+				reads++
+				keys, ok := secrets[m[1]]
+				if !ok {
+					t.Errorf("NOTES read Secret %s, which the chart does not render\n%s", m[1], notes)
+					continue
+				}
+				if !keys[m[2]] {
+					t.Errorf("NOTES read %s from Secret %s, which holds only %v\n%s", m[2], m[1], keys, notes)
+				}
+			}
+			_, rendered := secrets[generated]
+			if mentioned := strings.Contains(notes, generated); mentioned != rendered {
+				t.Errorf("NOTES mention %s: %v; chart renders it: %v\n%s", generated, mentioned, rendered, notes)
+			}
+		})
+	}
+	if reads == 0 {
+		t.Fatal("NOTES read no Secret key in any case; the check no longer covers the password command")
 	}
 }
