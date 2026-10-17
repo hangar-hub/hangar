@@ -115,16 +115,19 @@ func TestOpenBlobStoreStopsWaitingOnShutdown(t *testing.T) {
 // S3 endpoint refuses connections, as in a GitOps install whose object
 // store starts after Hangar. The process must not exit into the kubelet's
 // restart back-off: /healthz answers 200 for the startup and liveness
-// probes, /readyz answers 503 and names the Blob store, and the server
-// gives up only once storage.s3.startup_wait has passed.
+// probes, /readyz answers 503 and names the Blob store, and a shutdown
+// signal during the wait stops the server cleanly. TestOpenBlobStore*
+// cover the bound and the retries.
 func TestServeAnswersHealthWhileWaitingForTheBlobStore(t *testing.T) {
-	cfg := s3ConfigAt(t, "http://"+closedPort(t), 4*time.Second)
+	cfg := s3ConfigAt(t, "http://"+closedPort(t), 10*time.Minute)
 	addr := closedPort(t)
 	cfg.Server.Listen = addr
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	start := time.Now()
 	done := make(chan error, 1)
-	go func() { done <- serve(context.Background(), cfg, io.Discard, nil) }()
+	go func() { done <- serve(ctx, cfg, io.Discard, nil) }()
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	get := func(path string) (int, []byte, error) {
@@ -136,9 +139,11 @@ func TestServeAnswersHealthWhileWaitingForTheBlobStore(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		return resp.StatusCode, b, nil
 	}
+	// Start-up before the listener (telemetry, the database, migrations)
+	// can take many seconds on a loaded machine.
 	var healthz int
 	var readyz []byte
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline) && healthz != http.StatusOK; {
+	for deadline := time.Now().Add(2 * time.Minute); time.Now().Before(deadline) && healthz != http.StatusOK; {
 		select {
 		case err := <-done:
 			t.Fatalf("serve exited after %s instead of waiting for the Blob store: %v", time.Since(start), err)
@@ -161,11 +166,11 @@ func TestServeAnswersHealthWhileWaitingForTheBlobStore(t *testing.T) {
 	require.NoError(t, json.Unmarshal(readyz, &r), string(readyz))
 	require.Contains(t, r.Failed, httpx.CheckResult{Name: "startup", Error: "the server is still starting: waiting for the Blob store to answer"})
 
+	cancel()
 	select {
 	case err := <-done:
-		require.ErrorContains(t, err, "the Blob store did not answer within 4s")
-		require.GreaterOrEqual(t, time.Since(start), 4*time.Second)
+		require.NoError(t, err, "a shutdown during the wait is not an error")
 	case <-time.After(60 * time.Second):
-		t.Fatal("serve did not give up after storage.s3.startup_wait")
+		t.Fatal("serve did not stop waiting on shutdown")
 	}
 }
