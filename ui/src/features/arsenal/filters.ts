@@ -1,6 +1,11 @@
-/** The Arsenal's filter state, as it appears in the query string. */
-export type ArsenalSearch = {
-  type?: string;
+import type { RepoKind } from "@/lib/repo";
+
+/**
+ * A Models or Datasets list's filter state, as it appears in the query
+ * string. The kind of Repo is the page, not a filter, so the two lists
+ * never mix.
+ */
+export type ListSearch = {
   q?: string;
   ns?: string;
   format?: string;
@@ -48,15 +53,20 @@ export const sortOptions = [
   { value: "updated", label: "Recently updated" },
   { value: "name", label: "Name" },
   { value: "size", label: "Size" },
-  { value: "parameters", label: "Parameters" },
+  { value: "parameters", label: "Parameters", modelsOnly: true },
   { value: "downloads", label: "Downloads" },
   { value: "likes", label: "Likes" },
 ] as const;
 
+/** The sort options that apply to a kind of Repo. */
+export function sortOptionsFor(kind: RepoKind) {
+  return sortOptions.filter((o) => kind === "model" || !("modelsOnly" in o));
+}
+
 /** The facet groups shown in the sidebar, with the query parameter each sets. */
 export const facetGroups: {
   facet: string;
-  param: keyof ArsenalSearch;
+  param: keyof ListSearch;
   label: string;
   datasetsOnly?: boolean;
   modelsOnly?: boolean;
@@ -71,6 +81,11 @@ export const facetGroups: {
   { facet: "licence", param: "licence", label: "Licence" },
   { facet: "namespace", param: "ns", label: "Namespace" },
 ];
+
+/** The facet groups that apply to a kind of Repo. */
+export function facetGroupsFor(kind: RepoKind) {
+  return facetGroups.filter((g) => (kind === "model" ? !g.datasetsOnly : !g.modelsOnly));
+}
 
 export type ListQuery = {
   type?: "models" | "datasets";
@@ -98,27 +113,34 @@ function num(v: string | undefined): number | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
-/** Converts the query string state into GET /repos parameters. */
-export function toListQuery(s: ArsenalSearch): ListQuery {
-  const bucket = paramBuckets.find((b) => b.id === s.params);
-  const sort = sortOptions.find((o) => o.value === s.sort)?.value;
+/**
+ * Converts the query string state into GET /repos parameters for one kind
+ * of Repo. Filters that do not apply to the kind, such as parameters on
+ * the Datasets list, are left out.
+ */
+export function toListQuery(s: ListSearch, kind: RepoKind): ListQuery {
+  const models = kind === "model";
+  const bucket = models ? paramBuckets.find((b) => b.id === s.params) : undefined;
+  const sort = sortOptionsFor(kind).find((o) => o.value === s.sort)?.value;
+  const only = (forModels: boolean, v: string | undefined) =>
+    forModels === models ? v || undefined : undefined;
   return {
-    type: s.type === "models" || s.type === "datasets" ? s.type : undefined,
+    type: models ? "models" : "datasets",
     q: s.q || undefined,
     ns: s.ns || undefined,
     format: s.format ? s.format.split(",").filter(Boolean) : undefined,
     task: s.task || undefined,
-    library: s.library || undefined,
-    quant: s.quant || undefined,
+    library: only(true, s.library),
+    quant: only(true, s.quant),
     params_min: bucket?.min,
     params_max: bucket?.max,
-    context_min: num(s.context_min),
+    context_min: models ? num(s.context_min) : undefined,
     size_max: num(s.size_max),
     licence: s.licence || undefined,
     mirror: s.mirror === "true" ? true : s.mirror === "false" ? false : undefined,
-    modality: s.modality || undefined,
-    language: s.language || undefined,
-    size_category: s.size_category || undefined,
+    modality: only(false, s.modality),
+    language: only(false, s.language),
+    size_category: only(false, s.size_category),
     sort,
   };
 }
@@ -132,9 +154,9 @@ export function toggleListValue(list: string | undefined, value: string): string
 }
 
 /** How many filters are set, for the phone filter button. */
-export function activeFilterCount(s: ArsenalSearch): number {
-  const keys: (keyof ArsenalSearch)[] = [
-    "type",
+export function activeFilterCount(s: ListSearch, kind: RepoKind): number {
+  const q = toListQuery(s, kind);
+  const keys: (keyof ListSearch)[] = [
     "ns",
     "format",
     "task",
@@ -149,5 +171,32 @@ export function activeFilterCount(s: ArsenalSearch): number {
     "language",
     "size_category",
   ];
-  return keys.filter((k) => s[k]).length;
+  const applies: Partial<Record<keyof ListSearch, unknown>> = {
+    ...s,
+    library: q.library,
+    quant: q.quant,
+    params: q.params_min ?? q.params_max,
+    context_min: q.context_min,
+    modality: q.modality,
+    language: q.language,
+    size_category: q.size_category,
+  };
+  return keys.filter((k) => applies[k] !== undefined && applies[k] !== "").length;
+}
+
+/**
+ * Where an old `/arsenal` link goes now: the Datasets list for
+ * `type=datasets`, the Models list otherwise, with the other query
+ * parameters kept.
+ */
+export function arsenalRedirect(search: Record<string, unknown>): {
+  to: "/models" | "/datasets";
+  search: Record<string, string>;
+} {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(search)) {
+    if (k === "type" || v === undefined || v === null || v === "") continue;
+    out[k] = String(v);
+  }
+  return { to: search.type === "datasets" ? "/datasets" : "/models", search: out };
 }

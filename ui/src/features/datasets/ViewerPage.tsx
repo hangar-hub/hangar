@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown, ArrowUp, ArrowUpDown, Filter, Plus, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileSearch, Filter, Plus, Search, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { api } from "@/api/client";
 import type { DatasetSplit } from "@/api/types";
@@ -14,7 +14,7 @@ import {
   type RowsResponse,
   ViewerError,
 } from "@/api/viewer";
-import { useGo } from "@/components/AppLink";
+import { AppLink, useGo } from "@/components/AppLink";
 import { ScrollRegion } from "@/components/ScrollRegion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ import { Input, Select, Textarea } from "@/components/ui/form";
 import { ProgressBar } from "@/components/ui/progress";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { formatBytes, formatCount } from "@/lib/format";
-import { unwrap } from "@/lib/problem";
-import { repoPath } from "@/lib/repo";
+import { errorMessage, errorStatus, unwrap } from "@/lib/problem";
+import { repoPath, treePath } from "@/lib/repo";
 import { useSearchState } from "@/lib/use-search-state";
 import { cn } from "@/lib/utils";
 import {
@@ -392,6 +392,33 @@ export function ViewerPage({
     retry: false,
   });
   if (configs.isPending) return <LoadingRows rows={5} label="Loading Configs" />;
+  if (configs.isError && errorStatus(configs.error) === 422) {
+    // Not a failure: the dataset holds files the Viewer does not read, such
+    // as sample data for another project. Say so and point at the files.
+    return (
+      <EmptyState
+        icon={<FileSearch />}
+        title="Nothing to preview"
+        action={
+          repo.data ? (
+            <Button asChild>
+              <AppLink href={treePath("dataset", ns, name, repo.data.default_branch)}>
+                Browse the files
+              </AppLink>
+            </Button>
+          ) : null
+        }
+      >
+        <p>
+          The Viewer previews rows from data files that the datasets library reads, such as Parquet,
+          CSV, JSON Lines, text and Arrow files, WebDataset archives, and folders of images or
+          audio. This dataset has none it can read, which is normal for a dataset that holds other
+          files. Download them from the Files tab, or with the snippets under Use this dataset.
+        </p>
+        <p className="mt-2 text-xs">{errorMessage(configs.error)}</p>
+      </EmptyState>
+    );
+  }
   if (configs.isError)
     return <ErrorState error={configs.error} onRetry={() => configs.refetch()} />;
   if (!cfg || !sp) {

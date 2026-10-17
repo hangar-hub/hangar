@@ -37,7 +37,7 @@ test.describe("sign-in", () => {
     await expect(page.getByRole("alert")).toHaveText("Wrong username or password.");
     await page.getByLabel("Password").fill("correct-horse-battery");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
     await page.getByRole("button", { name: "Account menu for ada" }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -74,7 +74,7 @@ test.describe("sign-in", () => {
     await page.getByLabel("Password", { exact: true }).fill("a-long-enough-password");
     await page.getByLabel("Confirm password").fill("a-long-enough-password");
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
   });
 });
 
@@ -549,11 +549,30 @@ test.describe("datasets", () => {
 
 test("searches from anywhere with the keyboard", async ({ page }) => {
   await signIn(page);
-  await page.goto("/arsenal");
+  await page.goto("/models");
   await settled(page);
   const dialog = await searchWithKeyboard(page, "imdb");
   await dialog.getByRole("option", { name: /datasets\/ada\/imdb-mini/ }).click();
   await expect(page).toHaveURL(/\/datasets\/ada\/imdb-mini$/);
+});
+
+test("the search palette keeps models and datasets in separate groups", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/models");
+  await settled(page);
+  // "ada" matches models and datasets in ada's Namespace.
+  const dialog = await searchWithKeyboard(page, "ada");
+  const models = dialog.getByRole("group", { name: "Models" });
+  const datasets = dialog.getByRole("group", { name: "Datasets" });
+  await expect(models.getByRole("option", { name: "ada/bert-tiny-finetune" })).toBeVisible();
+  await expect(datasets.getByRole("option", { name: "datasets/ada/imdb-mini" })).toBeVisible();
+  await expect(models.getByRole("option", { name: /^datasets\// })).toHaveCount(0);
+  await expect(datasets.getByRole("option", { name: /^ada\// })).toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("datasets");
+  await dialog.getByRole("option", { name: "Datasets", exact: true }).click();
+  await expect(page).toHaveURL(/\/datasets$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Datasets" })).toBeVisible();
 });
 
 test("reorders a Collection with the keyboard", async ({ page }) => {
@@ -607,25 +626,39 @@ test("creates a Repo and a Collection in an Organisation's Namespace", async ({ 
   expect(problems).toEqual([]);
 });
 
-test("shows the empty arsenal and virtualises long lists", async ({ page }) => {
+test("shows the empty Models and Datasets lists and virtualises long lists", async ({ page }) => {
   // The mock makes the 260 Repos for this session, which takes a few seconds.
   test.setTimeout(60_000);
   const csrf = await signIn(page);
   // An Instance with Repos in it cannot have an empty arsenal, so answer the
-  // arsenal's list call with an empty page.
+  // lists' calls with an empty page.
   const isList = (url: URL) => url.pathname === "/api/hangar/v1/repos";
   await page.route(isList, (route) =>
     route.request().method() === "GET"
       ? route.fulfill({ json: { items: [], facets: {} } })
       : route.fallback(),
   );
-  await page.goto("/arsenal");
-  await expect(page.getByText("Your arsenal is empty.")).toBeVisible();
+  await page.goto("/models");
+  await expect(page.getByText("Your arsenal has no models yet.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Discover a model" })).toHaveAttribute(
+    "href",
+    "/discover",
+  );
+  await page.goto("/datasets");
+  await expect(page.getByText("Your arsenal has no datasets yet.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Discover a dataset" })).toHaveAttribute(
+    "href",
+    "/discover?type=datasets",
+  );
+  await expect(page.getByRole("link", { name: "Upload your own" })).toHaveAttribute(
+    "href",
+    "/new-dataset",
+  );
   await page.unroute(isList);
 
   await seedBulkRepos(page, csrf);
-  await page.goto("/arsenal?ns=bulk&view=list&sort=name");
-  const list = page.getByRole("list", { name: "Repos" });
+  await page.goto("/models?ns=bulk&view=list&sort=name");
+  const list = page.getByRole("list", { name: "Models" });
   await expect(list.getByRole("link", { name: "bulk/bulk-model-000" })).toBeVisible();
   // Load every page: by button, or by scrolling to the end of the list.
   const last = list.getByRole("link", { name: "bulk/bulk-model-259" });

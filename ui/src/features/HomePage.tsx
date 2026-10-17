@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/states";
 import { unwrap } from "@/lib/problem";
 import { useMe } from "@/lib/session";
-import { ArsenalPage } from "./arsenal/ArsenalPage";
+import { RepoListPage } from "./arsenal/RepoListPage";
 
 const clients = [
   "huggingface_hub",
@@ -68,21 +68,21 @@ function Landing() {
           >
             <span className="size-2.5 rounded-full bg-steel-600" />
             <span className="size-2.5 rounded-full bg-steel-600" />
-            <span className="size-2.5 rounded-full bg-amber-400" />
+            <span className="size-2.5 rounded-full bg-taxiway-400" />
           </div>
           <ScrollRegion label="Example commands" className="overflow-y-hidden">
             <pre className="px-4 py-4 font-mono text-[13px] leading-6">
               <code>
                 <span className="text-steel-400"># Point any Hugging Face client at Hangar</span>
                 {"\n"}
-                <span className="text-amber-300">$</span> export HF_ENDPOINT={origin}
+                <span className="text-taxiway-300">$</span> export HF_ENDPOINT={origin}
                 {"\n"}
-                <span className="text-amber-300">$</span> hf download
+                <span className="text-taxiway-300">$</span> hf download
                 TinyLlama/TinyLlama-1.1B-Chat-GGUF
                 {"\n\n"}
                 <span className="text-steel-400"># Or pull one quant straight into Ollama</span>
                 {"\n"}
-                <span className="text-amber-300">$</span> ollama pull {host}
+                <span className="text-taxiway-300">$</span> ollama pull {host}
                 /TinyLlama/TinyLlama-1.1B-Chat-GGUF:Q4_K_M
               </code>
             </pre>
@@ -101,9 +101,9 @@ function Landing() {
   );
 }
 
-/** `/`: the landing page when signed out, the Arsenal when signed in. */
+/** `/`: the landing page when signed out, the Models list when signed in. */
 export function HomePage() {
   const me = useMe();
   if (me.isPending) return <Skeleton className="h-64 w-full" />;
-  return me.data ? <ArsenalPage /> : <Landing />;
+  return me.data ? <RepoListPage kind="model" /> : <Landing />;
 }

@@ -18,17 +18,23 @@ export function sizeText(
   return formatBytes(total);
 }
 
+/** Quant chips a grid card shows before the "+N" chip. */
+export const cardQuants = 3;
+
 /**
- * A Repo in the Arsenal: ID, format badges, parameters, quant chips, size
- * present of total, Mirror and scan badges, and when it changed
- * (09-web-ui.md "/arsenal").
+ * A Repo in the Models or Datasets list: ID, format badges, parameters,
+ * quant chips, size present of total, Mirror and scan badges, and when it
+ * changed (09-web-ui.md "/models and /datasets"). In a grid the card fills
+ * its cell, so cards in a row are the same height, with the stats row at
+ * the bottom.
  */
 export function RepoCard({ repo, layout = "grid" }: { repo: Repo; layout?: "grid" | "list" }) {
   const s = repo.summary ?? {};
   return (
     <article
       className={cn(
-        "group relative rounded-lg border border-line bg-surface p-3.5 hover:border-line-strong",
+        "group relative min-w-0 rounded-lg border border-line bg-surface p-3.5 hover:border-line-strong",
+        layout === "grid" && "flex h-full flex-col",
         layout === "list" && "sm:flex sm:items-center sm:gap-4",
       )}
     >
@@ -47,7 +53,7 @@ export function RepoCard({ repo, layout = "grid" }: { repo: Repo; layout?: "grid
         <div className="mt-2 flex flex-wrap gap-1">
           {s.parameters ? <Badge mono>{formatParams(s.parameters)}</Badge> : null}
           <FormatBadges formats={s.formats} />
-          <QuantChips quants={s.quants} />
+          <QuantChips quants={s.quants} max={cardQuants} />
           {repo.mirror ? (
             <MirrorBadge
               upstream={repo.mirror_status?.upstream}

@@ -41,10 +41,11 @@ The arsenal theme appears in the README tagline, the landing page, empty states 
 | Place | Copy |
 |---|---|
 | Tagline | Hangar: a self-hosted home for your arsenal of models. |
-| Main library view | **Arsenal** |
+| Main library views | **Models** and **Datasets**, two separate lists of what is in the arsenal |
 | Upstream search view | **Discover** |
 | Pull button | **Pull into arsenal** |
-| Empty Arsenal | Your arsenal is empty. Discover a model to pull, or upload your own. |
+| Empty Models list | Your arsenal has no models yet. Discover a model to pull, or upload your own. |
+| Empty Datasets list | Your arsenal has no datasets yet. Discover a dataset to pull, or upload your own files. |
 | Repo badge for a Mirror | **Mirrored from huggingface.co** |
 | Dataset preview not ready | Preparing preview. Hangar is converting this dataset to Parquet. |
 | Partial mirror file | **Not in arsenal** (with a Pull action) |
@@ -100,7 +101,7 @@ Every feature below is in scope for v1.0. IDs are referenced from the build plan
 
 ### Browsing (BROWSE)
 
-- **BROWSE-1** Arsenal view: everything you can see, as a grid or list, with search and filters for type, task, library, format (GGUF, safetensors, MLX, ONNX, PyTorch), quantisation, parameter count, context length, size, licence, Namespace, and Mirror or local.
+- **BROWSE-1** Models and Datasets views: everything you can see, as two separate lists that never mix the types, each a grid or list with search and filters: for models task, library, format (GGUF, safetensors, MLX, ONNX, PyTorch), quantisation, parameter count, context length, size, licence, Namespace, and Mirror or local; for datasets the facets in [14](14-datasets.md) DATA-11. A model can name the datasets it uses, and a dataset lists the models that use it; these links are optional.
 - **BROWSE-2** Discover view: search Upstreams with the same filters, with each result marked **In arsenal**, **Partly in arsenal** or not, as LM Studio does.
 - **BROWSE-3** Repo page: rendered Model card, metadata sidebar, Files tab, Commits tab, branches and tags, Community tab, Dependencies panel and a **Use this model** panel with snippets for every client.
 - **BROWSE-4** File views: text and code with highlighting, rendered Markdown, JSON, images, and header viewers for GGUF and safetensors files that never download the whole file.

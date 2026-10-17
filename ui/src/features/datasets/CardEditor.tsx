@@ -138,7 +138,7 @@ export function CardEditor({
                         : [...form.taskCategories, t],
                     })
                   }
-                  className={`rounded-sm border px-2 py-0.5 text-xs ${on ? "border-amber-700/40 bg-accent-soft font-medium text-accent" : "border-line text-muted hover:bg-raised"}`}
+                  className={`rounded-sm border px-2 py-0.5 text-xs ${on ? "border-accent/40 bg-accent-soft font-medium text-accent" : "border-line text-muted hover:bg-raised"}`}
                 >
                   {t}
                 </button>

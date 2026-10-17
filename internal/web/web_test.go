@@ -34,7 +34,7 @@ func TestServesIndexForUIRoutesWithCSP(t *testing.T) {
 		},
 	})
 	seen := map[string]bool{}
-	for _, p := range []string{"/", "/arsenal", "/ns/name/tree/main/a/b", "/datasets/ns/d/viewer/default/train"} {
+	for _, p := range []string{"/", "/arsenal", "/models", "/datasets", "/ns/name/tree/main/a/b", "/datasets/ns/d/viewer/default/train"} {
 		rec := serve(h, http.MethodGet, p)
 		require.Equal(t, 200, rec.Code, p)
 		body := rec.Body.String()

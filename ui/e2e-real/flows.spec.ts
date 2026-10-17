@@ -78,7 +78,7 @@ test("signs in with a password, shows errors, and signs out", async ({ page }) =
   await expect(page.getByRole("alert")).toHaveText("Wrong username or password.");
   await page.getByLabel("Password").fill(user.password);
   await submitSignIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Arsenal" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
   await expect(page.getByRole("link", { name: modelRepo })).toBeVisible();
   await page.getByRole("button", { name: `Account menu for ${user.username}` }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
@@ -317,6 +317,109 @@ test("Discover a model on the Upstream, pull one quant and open it in the GGUF v
   await page.goto(`/${repo.id}/blob/main/${repo.file.Q4_K_M}`);
   await expect(page.getByText("This file is not in the arsenal")).toBeVisible();
   expect(problems).toEqual([]);
+});
+
+// Models and Datasets are separate sections with optional links between them
+// (docs/build/decisions.md, 2026-10-16).
+test("the Models and Datasets lists keep to their kind, and old Arsenal links still work", async ({
+  page,
+}) => {
+  const problems = watchConsole(page);
+  await signIn(page);
+  await page.goto("/arsenal?view=list");
+  await expect(page).toHaveURL(/\/models\?view=list$/);
+  const models = page.getByRole("list", { name: "Models" });
+  await expect(models.getByRole("link", { name: modelRepo })).toBeVisible();
+  await expect(models.getByRole("link", { name: /^datasets\// })).toHaveCount(0);
+  await page.goto("/arsenal?type=datasets");
+  await expect(page).toHaveURL(/\/datasets$/);
+  const datasets = page.getByRole("list", { name: "Datasets" });
+  await expect(datasets.getByRole("link", { name: `datasets/${datasetRepo}` })).toBeVisible();
+  await expect(datasets.getByRole("link", { name: modelRepo })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New dataset" })).toHaveAttribute(
+    "href",
+    "/new-dataset",
+  );
+  expect(problems).toEqual([]);
+});
+
+test.describe(() => {
+  let model = "";
+  let dataset = "";
+  let samples = "";
+  test.beforeAll(async () => {
+    allowForGitWrites(6);
+    const id = unique();
+    // Repos of their own: the picker commits with the head it read as
+    // parent_commit, and the dataset's Used by must list only this model.
+    model = await ownRepo("model", `uses-data-${id}`, "Add the card", {
+      "README.md": "---\nlicense: mit\n---\n\n# Classifier\n\nSorts reviews.\n",
+    });
+    dataset = await ownRepo("dataset", `used-data-${id}`, "Add the data", {
+      "data/train.csv": "text,label\ngood,1\nbad,0\n",
+    });
+    // Files the Dataset Viewer does not read, as sample data for another
+    // project holds.
+    samples = await ownRepo("dataset", `samples-${id}`, "Add sample inputs", {
+      "README.md": "# Samples\n\nInputs for another project's tests.\n",
+      "fixtures/firmware.bin": "not a data file\n",
+    });
+  });
+
+  test("links a model to the datasets it uses, and the dataset lists it under Used by", async ({
+    page,
+  }) => {
+    allowForGitWrites(1);
+    const problems = watchConsole(page);
+    await signIn(page);
+    await page.goto(`/${model}/settings`);
+    const section = page.getByRole("region", { name: "Datasets used" });
+    await section.getByLabel("Find a dataset").fill(dataset.split("/")[1] ?? "");
+    await section.getByRole("button", { name: `Add datasets/${dataset}` }).click();
+    await settled(page);
+    await expectAccessible(page);
+    const committed = commitResponse(page, `models/${model}`);
+    await section.getByRole("button", { name: "Commit to the Model card" }).click();
+    expect((await committed).status()).toBe(201);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Datasets used saved." }),
+    ).toBeVisible();
+    const raw = await page.request.get(`/${model}/resolve/main/README.md`);
+    expect(await raw.text()).toBe(
+      `---\nlicense: mit\ndatasets:\n  - ${dataset}\n---\n\n# Classifier\n\nSorts reviews.\n`,
+    );
+    await page.goto(`/datasets/${dataset}`);
+    const usedBy = page
+      .getByRole("complementary", { name: "About this Repo" })
+      .getByRole("region", { name: "Used by" });
+    await expect(usedBy.getByRole("link", { name: model })).toBeVisible();
+    await page.goto(`/${model}`);
+    await expect(
+      page
+        .getByRole("complementary", { name: "About this Repo" })
+        .getByRole("region", { name: "Datasets used" })
+        .getByRole("link", { name: dataset }),
+    ).toBeVisible();
+    expect(problems).toEqual([]);
+  });
+
+  test("a dataset of files the Viewer cannot read explains itself", async ({ page }) => {
+    const problems = watchConsole(page);
+    await signIn(page);
+    await page.goto(`/datasets/${samples}/viewer`);
+    await expect(page.getByText("Nothing to preview")).toBeVisible();
+    await expect(page.getByText("This dataset has none it can read")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Use this dataset" }).click();
+    const dialog = page.getByRole("dialog", { name: "Use this dataset" });
+    await expect(dialog.getByRole("tab")).toHaveText(["hf CLI", "huggingface_hub", "git"]);
+    await settled(page);
+    await expectAccessible(page);
+    await page.keyboard.press("Escape");
+    await page.getByRole("link", { name: "Browse the files" }).click();
+    await expect(page.getByRole("link", { name: "fixtures" })).toBeVisible();
+    expect(problems).toEqual([]);
+  });
 });
 
 // The card editor and file editor flows each start from a Repo of their own,

@@ -13,9 +13,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   ),
   notFoundComponent: () => (
     <PageShell title="Page not found">
-      <p className="text-sm text-muted">Check the address, or go back to your arsenal.</p>
+      <p className="text-sm text-muted">Check the address, or go back to your models.</p>
       <Button asChild variant="primary">
-        <Link to="/arsenal">Open your arsenal</Link>
+        <Link to="/models">Open your models</Link>
       </Button>
     </PageShell>
   ),

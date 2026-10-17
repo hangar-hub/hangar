@@ -10,7 +10,8 @@ const budget = 250 * 1024;
 
 for (const [name, path, auth] of [
   ["landing page", "/", false],
-  ["Arsenal", "/arsenal", true],
+  ["Models list", "/models", true],
+  ["Datasets list", "/datasets", true],
   ["Repo page", "/ada/bert-tiny-finetune", true],
   ["dataset Viewer", "/datasets/ada/imdb-mini/viewer/default/train", true],
 ] as const) {

@@ -22,8 +22,10 @@ const commitSha = (repo: string, title: string) =>
 
 const signedIn = [
   "/",
-  "/arsenal",
-  "/arsenal?type=datasets&view=list",
+  "/models",
+  "/models?view=list&sort=parameters",
+  "/datasets",
+  "/datasets?view=list",
   "/discover",
   "/discover?type=datasets",
   "/discover?repo=TinyLlama/TinyLlama-1.1B-Chat-GGUF",
@@ -51,6 +53,9 @@ const signedIn = [
   `/datasets/ada/imdb-mini/commit/${commitSha("ada/imdb-mini", "Add train and test splits")}`,
   "/datasets/ada/imdb-mini/discussions",
   "/datasets/ada/imdb-mini/settings",
+  "/datasets/ada/ingest-samples",
+  "/datasets/ada/ingest-samples/viewer",
+  "/datasets/ada/ingest-samples/tree/main/fixtures",
   "/new",
   "/new-dataset",
   "/ada",
@@ -153,20 +158,109 @@ test("a wide Markdown table scrolls in a region keyboard users can focus", async
 
 test("the main navigation works on every width", async ({ page, isMobile }) => {
   await signIn(page);
-  await page.goto("/arsenal");
-  if (isMobile) {
-    await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.goto("/models");
+  const go = async (name: string) => {
+    if (isMobile) await page.getByRole("button", { name: "Open navigation" }).click();
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name }).click();
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  };
+  await go("Datasets");
+  await expect(page).toHaveURL(/\/datasets$/);
+  await go("Models");
+  await expect(page).toHaveURL(/\/models$/);
+  await go("Discover");
+  if (isMobile) await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Arsenal" }),
+  ).toHaveCount(0);
+});
+
+// Taxiway teal, decided by James on 2026-10-16 (docs/build/decisions.md).
+const accents = {
+  light: { accent: "#0b6e64", fill: "#0b7a6e", ink: "#ffffff", soft: "#dff3ef" },
+  dark: { accent: "#5fd4c2", fill: "#2bb3a0", ink: "#021a17", soft: "#12332e" },
+};
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`the accent is Taxiway teal in the ${scheme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await signIn(page);
+    await page.goto("/models");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await settled(page);
+    const tokens = await page.evaluate(() => {
+      const css = getComputedStyle(document.documentElement);
+      // The build may shorten #ffffff to #fff.
+      const v = (n: string) =>
+        css
+          .getPropertyValue(n)
+          .trim()
+          .toLowerCase()
+          .replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/, "#$1$1$2$2$3$3");
+      return {
+        accent: v("--hg-accent"),
+        fill: v("--hg-accent-fill"),
+        ink: v("--hg-accent-ink"),
+        soft: v("--hg-accent-soft"),
+      };
+    });
+    expect(tokens).toEqual(accents[scheme]);
+    // The logo's bay line and the primary button use the filled accent.
+    const toRgb = (hex: string) =>
+      `rgb(${[1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+    const bay = page.getByRole("link", { name: "Hangar home" }).locator("svg rect").first();
+    expect(await bay.evaluate((el) => getComputedStyle(el).fill)).toBe(toRgb(accents[scheme].fill));
+    const discover = page.getByRole("main").getByRole("link", { name: "Discover" });
+    expect(await discover.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      toRgb(accents[scheme].fill),
+    );
+    expect(await discover.evaluate((el) => getComputedStyle(el).color)).toBe(
+      toRgb(accents[scheme].ink),
+    );
+    await expectAccessible(page);
+  });
+}
+
+test("cards in a grid row are the same height, with the stats at the bottom", async ({
+  page,
+}, info) => {
+  test.skip(info.project.name === "phone", "Phones show one card per row.");
+  await signIn(page);
+  // By name: the GGUF model with five quants and Mirror badges shares a row
+  // with models that have one or two badges.
+  await page.goto("/models?sort=name");
+  await settled(page);
+  const cards = page.getByRole("list", { name: "Models" }).locator("article");
+  await expect(cards.first()).toBeVisible();
+  const boxes = await cards.evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      const stats = el.querySelector("dl")?.getBoundingClientRect();
+      return { top: r.top, height: r.height, bottom: r.bottom, statsBottom: stats?.bottom ?? 0 };
+    }),
+  );
+  const rows = new Map<number, typeof boxes>();
+  for (const b of boxes) rows.set(Math.round(b.top), [...(rows.get(Math.round(b.top)) ?? []), b]);
+  const full = [...rows.values()].filter((r) => r.length > 1);
+  expect(full.length).toBeGreaterThan(0);
+  for (const row of full) {
+    const heights = row.map((b) => Math.round(b.height));
+    expect(new Set(heights).size, `card heights in a row: ${heights.join(", ")}`).toBe(1);
+    // The stats row sits at the bottom of every card, so the rows line up.
+    const gaps = row.map((b) => Math.round(b.bottom - b.statsBottom));
+    expect(new Set(gaps).size, `space under the stats: ${gaps.join(", ")}`).toBe(1);
   }
-  await page
-    .getByRole("navigation", { name: "Main" })
-    .getByRole("link", { name: "Discover" })
-    .click();
-  await expect(page.getByRole("heading", { level: 1, name: "Discover" })).toBeVisible();
+  // Quant chips past the cap fold into a +N chip that names the rest.
+  await expect(
+    cards.getByRole("img", { name: /^\d+ more quants?: Q\w+(, Q\w+)*$/ }).first(),
+  ).toBeVisible();
 });
 
 // The dark theme on a page of each kind.
 const darkPages = [
-  "/arsenal",
+  "/models",
+  "/datasets",
+  "/datasets/ada/ingest-samples/viewer",
   "/ada/bert-tiny-finetune",
   "/ada/bert-tiny-finetune/blob/main/config.json",
   "/datasets/ada/imdb-mini/viewer/default/train",
@@ -219,7 +313,7 @@ test("the Use this model dialog passes axe", async ({ page }) => {
 
 test("the search palette passes axe while results load and once they arrive", async ({ page }) => {
   await signIn(page);
-  await page.goto("/arsenal");
+  await page.goto("/models");
   await settled(page);
   const dialog = await searchWithKeyboard(page, "imd");
   const status = dialog.getByRole("status");

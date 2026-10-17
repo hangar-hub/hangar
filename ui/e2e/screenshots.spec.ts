@@ -11,7 +11,8 @@ const out = fileURLToPath(new URL("../../docs/assets/screenshots/", import.meta.
 
 const shots: { name: string; path: string; signedIn: boolean }[] = [
   { name: "landing", path: "/", signedIn: false },
-  { name: "arsenal", path: "/arsenal", signedIn: true },
+  { name: "models", path: "/models", signedIn: true },
+  { name: "datasets", path: "/datasets", signedIn: true },
   { name: "discover", path: "/discover?repo=TinyLlama/TinyLlama-1.1B-Chat-GGUF", signedIn: true },
   { name: "model-card", path: "/ada/bert-tiny-finetune", signedIn: true },
   { name: "files-mirror", path: "/TinyLlama/TinyLlama-1.1B-Chat-GGUF/tree/main", signedIn: true },

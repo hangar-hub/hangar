@@ -17,6 +17,12 @@ export type SnippetInput = {
   split?: string;
   /** A Parquet file path for DuckDB, such as data/train-00000.parquet. */
   dataFile?: string;
+  /**
+   * False for a dataset with no data files the datasets library reads,
+   * such as one that holds sample files for another project: only the
+   * download snippets apply to it.
+   */
+  readable?: boolean;
   defaultBranch?: string;
 };
 
@@ -38,6 +44,9 @@ export function snippets(i: SnippetInput): Snippet[] {
   const env = `HF_ENDPOINT=${i.origin}`;
   const revArg = i.revision ? `, revision=${q(i.revision)}` : "";
   const out: Snippet[] = [];
+  if (i.kind === "dataset" && i.readable === false) {
+    return [cliSnippet(i, env), hubSnippet(i, env, revArg), gitSnippet(i)];
+  }
   if (i.kind === "dataset") {
     const cfg = i.config && i.config !== "default" ? `, ${q(i.config)}` : "";
     const split = i.split ? `, split=${q(i.split)}` : "";

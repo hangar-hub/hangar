@@ -419,6 +419,8 @@ func TestClassify(t *testing.T) {
 		"/assets/index.js":                                  httpx.TargetUI,
 		"/":                                                 httpx.TargetUI,
 		"/arsenal":                                          httpx.TargetUI,
+		"/models":                                           httpx.TargetUI,
+		"/datasets":                                         httpx.TargetUI,
 		"/ns":                                               httpx.TargetUI,
 		"/ns/n":                                             httpx.TargetUI,
 		"/ns/n/tree/main/sub":                               httpx.TargetUI,

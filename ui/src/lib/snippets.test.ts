@@ -99,4 +99,21 @@ describe("Use this model snippets", () => {
       "https://hangar.example.com/datasets/ada/imdb",
     );
   });
+
+  it("gives only download snippets for a dataset of files the datasets library cannot read", () => {
+    const s = snippets({
+      kind: "dataset",
+      id: "ada/sample-files",
+      origin,
+      readable: false,
+      defaultBranch: "main",
+    });
+    expect(s.map((x) => x.id)).toEqual(["hf", "huggingface_hub", "git"]);
+    expect(s[0]?.code).toBe(
+      "export HF_ENDPOINT=https://hangar.example.com\nhf download ada/sample-files --repo-type dataset",
+    );
+    expect(s.some((x) => x.code.includes("load_dataset") || x.code.includes("parquet"))).toBe(
+      false,
+    );
+  });
 });
