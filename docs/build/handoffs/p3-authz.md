@@ -75,6 +75,12 @@ Signatures are HMAC-SHA256 with a key derived from the Instance key by HKDF, com
 - The `nosniff` header on Ollama blobs (residual risk 7) is in `internal/ollama`, another area.
 - `TestScanLimitsMakeResultsPartial` (`internal/datasets/viewer`) failed once in `make test` on a host with a load average near 50, with `partial: true` and 0 rows. It passed three times alone and in a full `-race` run of the package. The cause is in `scan.go`: the scanner checks `MaxScanTime` when `scanned % 4096 == 0`, which is already true before the first row, so a slow start ends the scan with no rows. It is a timing flake in another area, not caused by this branch, and is reported here for the Viewer owner.
 
+## Audit round 3: probe race in the route matrix
+
+The round 2 audit saw `TestRouteAuthorisationMatrix` fail once in about 41 runs on a loaded host. The probe read the route template for its request as soon as it had read the response, but `httpx.AccessLog` records the route only after the handler returns. A response the handler flushes (git `info/refs`, file streams) or one larger than the server's write buffer reaches the client first, so under load the probe could see no route and report `reached route ""`.
+
+The probe now closes the response body and then waits, up to 30 seconds, for the access log line of its request ID (`routeLog` in `cmd/hangar/routes_authz_test.go`). Closing first matters: a handler still writing a large body returns only once the client stops reading. The server code is unchanged; the race was in the test. `TestProbeWaitsForLateAccessLog` reproduces it with a handler that flushes 8 KiB and logs only after the client hangs up: with the old probe it fails every time with an empty route, and it passes with the fix. `TestRouteLogWait` covers the wait itself.
+
 ## Tests run
 
 All in `/Users/jamesgarside/Github/jamesagarside/hangar-wt/p3-authz` at the branch head.
