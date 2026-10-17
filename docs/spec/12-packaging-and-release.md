@@ -34,7 +34,7 @@ CI starts each one and runs the smoke test ([13](13-testing.md)).
 
 - Published as an OCI chart at `oci://ghcr.io/jamesagarside/charts/hangar`.
 - Values: image, `config` (rendered to a ConfigMap), `secrets` (or `existingSecret`), `web.replicas`, `worker.replicas`, autoscaling (HPA on CPU for both), resources, PodDisruptionBudgets, topology spread, `persistence` (for SQLite and filesystem mode; forces `web.replicas: 1` and `worker.replicas: 0` with role `all`, and the chart fails to render otherwise), Ingress and Gateway API `HTTPRoute`, Service, ServiceAccount (with annotations for IRSA or Workload Identity), NetworkPolicy (optional), ServiceMonitor (optional, for the Prometheus exporter), extra env and volumes.
-- Migrations run in a pre-install and pre-upgrade Job (`hangar admin migrate`); `web` and `worker` pods wait for the expected schema version in `/readyz`.
+- Migrations run in a pre-install and pre-upgrade Job (`hangar admin migrate`), or, with `migrations.mode: initContainer` for GitOps tools that run Helm hooks before the rest of a sync, in an init container of each `web` and `worker` pod; `web` and `worker` pods wait for the expected schema version in `/readyz`.
 - Security context: non-root, read-only root filesystem, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp.
 - `helm lint`, `kubeconform` and `ct install` against kind in CI.
 

@@ -35,6 +35,7 @@ Hangar serves plain HTTP; put a reverse proxy in front of it for TLS. Whatever p
         client_max_body_size 0;
         proxy_request_buffering off;
         proxy_buffering off;
+        proxy_max_temp_file_size 0;
         proxy_read_timeout 1h;
         proxy_send_timeout 1h;
 
@@ -80,4 +81,66 @@ Hangar serves plain HTTP; put a reverse proxy in front of it for TLS. Whatever p
 
     Cloudflare limits request bodies to 100 MB on the Free and Pro plans. Large files still upload, because they go up in parts of 16 MiB or more, each its own request, but a git push sends its pack in one request, so a push with more than 100 MB of non-LFS data fails through the tunnel; push it over your LAN or a direct HTTPS address. Cloudflare Access in front of Hangar also blocks clients that cannot sign in through a browser, such as `huggingface_hub`, git and Ollama, unless you add service tokens or bypass rules for them.
 
-For Kubernetes, the Helm chart's Ingress and HTTPRoute do the routing; set the controller's body size and timeout annotations as above.
+For Kubernetes, the Helm chart's Ingress and HTTPRoute do the routing; set the controller's body size, buffering and timeout options as above. With the ingress-nginx controller:
+
+```yaml
+# Helm values
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+```
+
+## Large files through nginx
+
+nginx's defaults break large transfers, both in front of Hangar and in front of an S3-compatible store such as MinIO. Every nginx in the path, including Nginx Proxy Manager, needs these settings:
+
+| Setting | Why |
+|---|---|
+| `proxy_buffering off` | Streams responses to the client as they arrive, instead of buffering them. |
+| `proxy_max_temp_file_size 0` | Stops nginx spooling a response to disk when the client reads more slowly than the upstream sends. |
+| `proxy_request_buffering off` | Streams uploads to the upstream instead of storing the whole body first. |
+| `client_max_body_size 0` | Removes the request size limit (1 MiB by default), which rejects upload parts with `413`. |
+| `proxy_read_timeout 1h`, `proxy_send_timeout 1h` | Keeps a slow transfer open; the default of 60 seconds cuts a stalled read or a slow upload part. |
+
+With buffering on, nginx writes a response it cannot pass on fast enough to a temporary file, up to `proxy_max_temp_file_size`, which is 1024 MiB by default. When the file is full, nginx stops reading from the upstream until the client catches up. If the upstream gives up waiting first, it closes the connection, and the client gets a body that ends early. Hangar reads whole objects back from the store when it verifies an upload, so a large file whose read was cut short after about 1 GiB fails with an error such as `upload part 65/66: unexpected EOF` (64 parts of 16 MiB are 1 GiB), and the client uploads it again. `proxy_buffering off` and `proxy_max_temp_file_size 0` prevent that.
+
+### MinIO behind nginx
+
+When clients or Hangar reach MinIO through nginx, for example on `https://minio.example.com` to get a trusted certificate, give the MinIO server block the same settings:
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name minio.example.com;
+    ssl_certificate     /etc/ssl/minio.crt;
+    ssl_certificate_key /etc/ssl/minio.key;
+
+    client_max_body_size 0;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    proxy_max_temp_file_size 0;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+
+    location / {
+        proxy_pass http://127.0.0.1:9000;
+        proxy_http_version 1.1;
+        # Presigned URLs and request signatures cover the Host header, so
+        # pass it through unchanged.
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }
+}
+```
+
+In Nginx Proxy Manager, open the proxy host, select **Advanced** and add the directives from the table, one per line, ending each with a semicolon. Set `storage.s3.endpoint` to the nginx address and `region` to the region MinIO is configured with (see [Storage backends](storage.md#s3-compatible-stores)).

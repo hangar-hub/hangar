@@ -40,7 +40,7 @@ storage:
 | Provider | Settings | Notes |
 |---|---|---|
 | AWS S3 | `endpoint: s3.<region>.amazonaws.com`, `region`, `bucket`; credentials from the environment, the shared file, the instance profile or IRSA | Add a lifecycle rule that aborts incomplete multipart uploads after a few days. |
-| MinIO | `endpoint: minio.example.com:9000` (or `http://...`), `use_path_style: true`, `region: us-east-1` | Tested in CI. MinIO expires stale multipart uploads itself (24 hours by default). |
+| MinIO | `endpoint: minio.example.com:9000` (or `http://...`), `use_path_style: true`, `region:` the region your MinIO is configured with | Tested in CI. Use MinIO's own region: `us-east-1` only when MinIO has none set, which is its default. If it has one, such as `eu-west-2` set with `MINIO_SITE_REGION`, requests signed for another region fail. `mc admin config get <alias> site` shows it. Behind nginx, see [MinIO behind nginx](proxies.md#minio-behind-nginx). MinIO expires stale multipart uploads itself (24 hours by default). |
 | Ceph RGW | `endpoint` of the gateway, `use_path_style: true` | |
 | Cloudflare R2 | `endpoint: <account-id>.r2.cloudflarestorage.com`, `region: auto` | R2 has no egress charges, which suits `redirect` mode. |
 | Backblaze B2 | `endpoint: s3.<region>.backblazeb2.com`, `region: <region>` | Use an application key limited to the bucket. |

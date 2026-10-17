@@ -17,7 +17,7 @@ A process in role `all` applies migrations when it starts.
 1. Run the new version's `hangar admin migrate` once. Migrations only add to the schema within a major version, so processes of the previous version keep working while it runs.
 2. Roll the `worker` processes, then the `web` processes. New processes report ready once the schema matches.
 
-The Helm chart runs the migration in a pre-upgrade Job and rolls the Deployments for you:
+The Helm chart runs the migration in a pre-upgrade Job, or in an init container in each Pod with `migrations.mode: initContainer` (for Argo CD; see [Run with Argo CD](../get-started/helm.md#run-with-argo-cd)), and rolls the Deployments for you:
 
 ```sh
 helm upgrade hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml

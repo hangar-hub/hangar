@@ -539,3 +539,98 @@ func TestSmokeCloneSkipsCredentialHelpers(t *testing.T) {
 		t.Fatal("found no git clone in scripts/smoke.sh; is the pattern still right?")
 	}
 }
+
+// nginxBlock matches an nginx code block in the docs.
+var nginxBlock = regexp.MustCompile("(?s)```nginx\n(.*?)```")
+
+// nginxStreaming are the directives every nginx proxy in the docs needs for
+// large files, with the value each must have. Without proxy_buffering off and
+// proxy_max_temp_file_size 0, nginx spools a response for a slow reader to a
+// temporary file of at most 1 GiB, and a large read from the Blob store can
+// end early: on a home cluster, completing 1 GiB+ uploads failed with
+// "upload part 65/66: unexpected EOF".
+var nginxStreaming = map[string]string{
+	"proxy_buffering":          "off",
+	"proxy_request_buffering":  "off",
+	"proxy_max_temp_file_size": "0",
+	"client_max_body_size":     "0",
+	"proxy_read_timeout":       "1h",
+}
+
+// nginxProblems returns the streaming directives a config lacks.
+func nginxProblems(conf string) []string {
+	got := map[string]string{}
+	for _, line := range strings.Split(conf, "\n") {
+		f := strings.Fields(strings.TrimSuffix(strings.TrimSpace(line), ";"))
+		if len(f) == 2 {
+			got[f[0]] = f[1]
+		}
+	}
+	var problems []string
+	for k, want := range nginxStreaming {
+		if got[k] != want {
+			problems = append(problems, fmt.Sprintf("%s %s", k, want))
+		}
+	}
+	return problems
+}
+
+// TestProxyDocsNginxStreamsLargeFiles checks every nginx example in the
+// proxy docs, for Hangar and for MinIO, sets the directives large files need.
+func TestProxyDocsNginxStreamsLargeFiles(t *testing.T) {
+	b, err := os.ReadFile("../docs/operate/proxies.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := nginxBlock.FindAllStringSubmatch(string(b), -1)
+	upstreams := map[string]bool{}
+	for _, m := range blocks {
+		for _, p := range nginxProblems(m[1]) {
+			t.Errorf("nginx example without %s:\n%s", p, m[1])
+		}
+		for _, port := range []string{"8080", "9000"} {
+			if strings.Contains(m[1], "proxy_pass http://127.0.0.1:"+port) {
+				upstreams[port] = true
+			}
+		}
+	}
+	if !upstreams["8080"] || !upstreams["9000"] {
+		t.Errorf("want nginx examples for Hangar (:8080) and MinIO (:9000), found %v", upstreams)
+	}
+	if !strings.Contains(string(b), "nginx.ingress.kubernetes.io/proxy-max-temp-file-size") {
+		t.Error("the ingress-nginx example does not turn off the temporary file limit")
+	}
+}
+
+func TestNginxProblems(t *testing.T) {
+	if p := nginxProblems("client_max_body_size 0;\nproxy_buffering off;\n"); len(p) != 3 {
+		t.Errorf("nginxProblems found %v, want the three missing directives", p)
+	}
+	if p := nginxProblems("proxy_buffering on;\nproxy_request_buffering off;\nproxy_max_temp_file_size 0;\nclient_max_body_size 0;\nproxy_read_timeout 1h;"); len(p) != 1 {
+		t.Errorf("nginxProblems found %v, want proxy_buffering off", p)
+	}
+}
+
+// TestStorageDocsMinIORegion checks that the storage docs tell MinIO users to
+// use their MinIO's region. A MinIO with a region set rejects requests signed
+// for us-east-1, which the docs used to prescribe.
+func TestStorageDocsMinIORegion(t *testing.T) {
+	b, err := os.ReadFile("../docs/operate/storage.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(line, "| MinIO |") {
+			continue
+		}
+		cells := strings.Split(line, "|")
+		if strings.Contains(cells[2], "region: us-east-1") {
+			t.Errorf("the MinIO settings prescribe us-east-1: %s", cells[2])
+		}
+		if !strings.Contains(line, "configured with") {
+			t.Errorf("the MinIO row does not say to use MinIO's configured region: %s", line)
+		}
+		return
+	}
+	t.Fatal("no MinIO row in docs/operate/storage.md")
+}
