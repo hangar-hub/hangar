@@ -80,6 +80,11 @@ func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 // template, status, duration, bytes, user ID, protocol and Repo ID, and
 // renames the current span to `{method} {route}`. It never logs the raw
 // path, the query string or headers, which can carry secrets.
+//
+// Health probes that pass (/healthz and /readyz answering 200) are logged
+// at DEBUG: orchestrators call them every few seconds per process, and an
+// INFO line for each buries the requests people look for. A probe that
+// fails stays at INFO.
 func AccessLog(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +110,11 @@ func AccessLog(log *slog.Logger) func(http.Handler) http.Handler {
 					attrs = append(attrs, "repo_id", repo.String(), "repo_type", string(repo.Type))
 				}
 			}
-			log.InfoContext(r.Context(), "request", attrs...)
+			level := slog.LevelInfo
+			if Classify(r, "") == TargetHealth && rw.Status() == http.StatusOK {
+				level = slog.LevelDebug
+			}
+			log.Log(r.Context(), level, "request", attrs...)
 
 			span := trace.SpanFromContext(r.Context())
 			if span.IsRecording() {

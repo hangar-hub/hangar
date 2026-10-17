@@ -5,10 +5,13 @@ import { ApiError, unwrap } from "./problem";
 
 export const meKey = ["me"] as const;
 
-/** Loads the signed-in user, or null when signed out. */
+/**
+ * Loads the signed-in user, or null when signed out. The server answers 204
+ * when nobody is signed in, and 401 for a session that has ended.
+ */
 export async function fetchMe(): Promise<Me | null> {
   const res = await api.GET("/me");
-  if (res.response.status === 401) {
+  if (res.response.status === 204 || res.response.status === 401) {
     setCsrfToken(undefined);
     return null;
   }

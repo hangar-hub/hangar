@@ -16,7 +16,7 @@ import { viewer } from "./viewer.ts";
 
 type Next = (err?: unknown) => void;
 
-const publicOps = new Set<keyof operations>(["login", "listAuthProviders"]);
+const publicOps = new Set<keyof operations>(["login", "listAuthProviders", "getMe"]);
 
 /** The Content Security Policy internal/web sets on UI pages (web.CSP). */
 export function csp(nonce: string): string {

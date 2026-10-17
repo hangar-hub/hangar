@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the signed-in user */
+        /**
+         * Get the signed-in user
+         * @description Answers 204 with no body when nobody is signed in, so the web UI can ask before sign-in without an error in the browser console. Bad or expired credentials still get 401.
+         */
         get: operations["getMe"];
         put?: never;
         post?: never;
@@ -2981,6 +2984,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Me"];
                 };
+            };
+            /** @description Nobody is signed in. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

@@ -73,12 +73,25 @@ func (s *Store) Create(ctx context.Context, p CreateParams) (*Repo, error) {
 		Tags: []string{}, Settings: settings, Gating: map[string]any{}, CreatedBy: userRef(p.Actor),
 		LastModifiedAt: &now, Timestamps: db.Timestamps{CreatedAt: now, UpdatedAt: now},
 	}
+	// ON CONFLICT DO NOTHING, rather than a unique violation, tells that
+	// the Repo exists: huggingface_hub's create_repo(exist_ok=True) asks
+	// for an existing Repo every time, and each violation is an ERROR line
+	// in the Postgres log (bellatrix finding 6).
 	err = s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewInsert().Model(row).Exec(ctx); err != nil {
+		res, err := tx.NewInsert().Model(row).On("CONFLICT DO NOTHING").Exec(ctx)
+		if err != nil {
 			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return fmt.Errorf("%w: %s", ErrExists, p.ID.Path())
 		}
 		return deleteRedirect(ctx, tx, p.ID.Type, ns.Name, p.ID.Name)
 	})
+	if errors.Is(err, ErrExists) {
+		return nil, err
+	}
 	if db.IsUniqueViolation(err) {
 		return nil, fmt.Errorf("%w: %s", ErrExists, p.ID.Path())
 	}

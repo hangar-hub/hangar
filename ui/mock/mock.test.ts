@@ -77,7 +77,9 @@ describe("mock server", () => {
   });
 
   it("answers 401 until signed in and refuses unknown paths", async () => {
-    expect((await call("GET", `${api}/me`)).status).toBe(401);
+    // Nobody signed in is not an error for /me, as on Hangar.
+    expect((await call("GET", `${api}/me`)).status).toBe(204);
+    expect((await call("GET", `${api}/me/tokens`)).status).toBe(401);
     expect((await call("GET", `${api}/auth/providers`)).status).toBe(200);
     const wrong = await call("POST", `${api}/auth/login`, {
       username: "ada",

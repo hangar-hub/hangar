@@ -100,6 +100,33 @@ func TestAccessLogUsesRouteTemplateAndRenamesSpan(t *testing.T) {
 	require.Equal(t, "GET /{ns}/{name}/resolve/{rev}/{path}", spans[0].Name())
 }
 
+// TestAccessLogPutsPassingHealthProbesAtDebug is the regression test for
+// bellatrix finding 6: Kubernetes probes every few seconds per pod filled
+// the INFO log with access lines.
+func TestAccessLogPutsPassingHealthProbesAtDebug(t *testing.T) {
+	var logs bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	status := http.StatusOK
+	h := httpx.AccessLog(log)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpx.SetRoute(r.Context(), r.URL.Path)
+		w.WriteHeader(status)
+	}))
+	levelOf := func(path string) string {
+		logs.Reset()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req = req.WithContext(httpx.WithInfo(req.Context(), "req-1"))
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		var line map[string]any
+		require.NoError(t, json.Unmarshal(logs.Bytes(), &line), logs.String())
+		return line["level"].(string)
+	}
+	require.Equal(t, "DEBUG", levelOf("/healthz"))
+	require.Equal(t, "DEBUG", levelOf("/readyz"))
+	require.Equal(t, "INFO", levelOf("/api/hangar/v1/me"))
+	status = http.StatusServiceUnavailable
+	require.Equal(t, "INFO", levelOf("/readyz"), "a failing probe stays visible")
+}
+
 type fakeAuthn struct {
 	p   model.Principal
 	err error

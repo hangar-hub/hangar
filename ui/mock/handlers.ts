@@ -350,7 +350,7 @@ function newLink(state: MockState, kind: "invite" | "reset"): string {
 
 export const handlers: Partial<Record<keyof operations, Handler>> = {
   // Session
-  getMe: ({ state }) => ok(state.me),
+  getMe: ({ state }) => (state.signedIn ? ok(state.me) : noContent),
   login: ({ state, body }) => {
     const { username, password } = body as { username: string; password: string };
     if (password === "wrong-password" || !password) {

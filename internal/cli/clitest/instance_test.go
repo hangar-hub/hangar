@@ -268,7 +268,7 @@ func TestMeKeysAndDeviceLogin(t *testing.T) {
 	me, _ := c.GetMeWithResponse(ctx)
 	require.Equal(t, "alice", me.JSON200.Username)
 	anon, _ := client(t, i, "").GetMeWithResponse(ctx)
-	require.Equal(t, http.StatusUnauthorized, anon.StatusCode())
+	require.Equal(t, http.StatusNoContent, anon.StatusCode())
 
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
 	sp, _ := ssh.NewPublicKey(pub)

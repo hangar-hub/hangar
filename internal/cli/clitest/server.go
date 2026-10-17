@@ -118,7 +118,8 @@ func (s *server) apiRepo(repo *Repo) gen.Repo {
 func (s *server) GetMe(w http.ResponseWriter, r *http.Request) {
 	u := s.i.user(r)
 	if u == "" {
-		problem(w, http.StatusUnauthorized, "Sign in or send a Token.")
+		// As Hangar does: nobody signed in is not an error.
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	writeJSON(w, http.StatusOK, gen.Me{Id: uuid.New(), Username: u, DisplayName: strings.ToUpper(u[:1]) + u[1:],
