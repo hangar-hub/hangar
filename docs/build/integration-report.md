@@ -2,7 +2,7 @@
 
 Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the test that proves it, the Hub API contract MUSTs, the suite results, the request resolutions and the open issues.
 
-It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every suite in [Suite results](#suite-results) ran in round 8 on detached worktrees at that commit. Phase 2 is **not finished**: the suites are green, but a user's 20 GB import failed on the preview Instance, which runs an older build (see [Open issues](#open-issues)). `main` is unchanged. [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) describes the fixes for the preview findings and the verification round at `9f08db7`; the sections after it still describe round 8.
+It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every suite in [Suite results](#suite-results) ran in round 8 on detached worktrees at that commit. Phase 2 is **not finished**: the suites are green, but a user's 20 GB import failed on the preview Instance, which runs an older build (see [Open issues](#open-issues)). `main` was fast-forwarded to `integration/v1` after the final check at `cd42d2b`. [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) describes the fixes for the preview findings and the verification round at `9f08db7`; the sections after it still describe round 8.
 
 ## Summary
 
@@ -15,7 +15,7 @@ It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every su
 
 ## Preview feedback round (2026-10-17)
 
-James deployed image `preview-5975bec` on bellatrix (Raspberry Pis, MinIO on a NAS behind Nginx Proxy Manager) on 2026-10-16 and reported 13 findings. This round fixed them on `integration/v1` from `c79363e`. The suites first ran in round 6 at `3a16ea0`. The results in [Suite results](#suite-results-at-9f08db7) come from the verification round, which ran on detached worktrees at `9f08db7` (`merge: fix/pf8-lead`), the branch head when it started. The verification round found a migration race in the chart, and round 9 fixed it and merged as `cd42d2b`, the current head. Round 9 has targeted checks only (see [After the verification round](#after-the-verification-round)). `main` is unchanged, and nothing was pushed or published.
+James deployed image `preview-5975bec` on bellatrix (Raspberry Pis, MinIO on a NAS behind Nginx Proxy Manager) on 2026-10-16 and reported 13 findings. This round fixed them on `integration/v1` from `c79363e`. The suites first ran in round 6 at `3a16ea0`. The results in [Suite results](#suite-results-at-9f08db7) come from the verification round, which ran on detached worktrees at `9f08db7` (`merge: fix/pf8-lead`), the branch head when it started. The verification round found a migration race in the chart, and round 9 fixed it and merged as `cd42d2b`, the current head. Round 9 has targeted checks, and [Final check at `cd42d2b`](#final-check-at-cd42d2b) ran every suite again at that commit. `main` was fast-forwarded to this branch after it, and nothing was pushed or published.
 
 `a73486e` reverted `d1141f6`, a script that ran Go packages again when files vanished from the Go build cache mid-run. The files vanished because the orchestrator's disk trimmer deleted them while tests were building; the trimmer now removes only cache entries untouched for 3 hours, so the script was treating a symptom. `make test`, `make test-compat` and `scripts/coverage.sh` call `go test` directly again.
 
@@ -78,14 +78,32 @@ Round 9 merged as `cd42d2b` after the verification round, so no suite at `9f08db
 
 Earlier fixes in this round that the verification round covers: `b27da7d` (the flaky `TestCompleteUploadCarriesOnWhenTheCallerGoesAway`), `c76ce22` (the signed-out page tests fail on any failed request, so the `/me` 401 cannot come back unnoticed), `a73486e` (the revert above; the lead's `make lint test` at `8daab65`, which has the same code as `9f08db7`, exited 0 with 77 Go packages ok and Vitest 107 of 107) and `8daab65` (the Compose and CI Postgres health checks use TCP, so `pg_isready` no longer passes while the image's init server is still running; `TestPostgresHealthchecksUseTCP`, `TestPgIsReadyTCPCheck`, and `scale` first start 10 of 10).
 
+### Final check at `cd42d2b`
+
+The lead ran every suite again at `cd42d2b`, the round 9 merge, on one detached worktree with no other test runners on the machine, Go 1.27.2 and Node 24.19.0. Commits after it change only this report.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `make lint` | Exit 0 |
+| Unit and integration | `make test` (`-race`, SQLite, Postgres 18 and MinIO) | Exit 0 in 6 min 27 s. Every Go package ok; Vitest 107 of 107 |
+| Coverage | `make cover` | Exit 0: every package at or above its floor |
+| Generated files | `make check-generate` | Exit 0 |
+| Chart, static | `make lint-deploy` | Exit 0 |
+| Image | `make image` | Built |
+| Compose | `scripts/compose-smoke.sh <example> --skip pull` | Passed on `quickstart`, `postgres-minio`, `scale` and `oidc-keycloak` |
+| Helm on kind | `make test-kind` | `TestKindGeneratedSecretsSurviveRenders`, `TestKindNotesReadOnlyRenderedSecretKeys` and `TestKindGitOpsInstall` passed. `TestKindGitOpsInstall` took 44 s, against 351 s before round 9 |
+| UI against the mock | `pnpm exec playwright test` | 356 passed, 43 skipped by design |
+| UI against a real Instance | `pnpm exec playwright test -c playwright.real.config.ts` against two `make build` binaries | 210 passed |
+| Client compatibility | `make test-compat` | `compat/git`, `harness`, `hf`, `lmstudio`, `ollama`, `upstream` and `viewer` ok; pytest 69 passed, 2 skipped. `TestHubBasicUploadToMinIOWithoutXet` passed in 8.5 s against real MinIO |
+
+The first attempt at the unit run failed in `ui-deps` because the shell had Node 20, which lacks `node:sqlite` for pnpm 11; the first image build failed on a DNS lookup of `apk.cgr.dev`. Both were environment problems, and both passed on the rerun shown here.
+
 ### Still open
 
-- **`make test`, `make cover` and `make check-generate` at the head.** The verification runner did not finish them. The lead's `make lint test` at `8daab65` passed on the same code, but coverage and generated files have not run since round 6, and nothing full has run since round 9. Rerun the unit runner at `cd42d2b` with at least 30 minutes and no other Go suites on the machine.
-- **Full suites after round 9.** Round 9 has targeted checks only; rerun the deploy suite (Compose, Helm on kind) and `make test` at `cd42d2b`.
 - **Hangar exits when the Blob store does not answer at start.** In one round 9 kind run, MinIO took about 5 minutes to pull; with migrations no longer holding the Pods back, the `hangar` containers started first, exited with `reach bucket "hangar": ... connection refused`, and went into the kubelet's restart back-off past the 6-minute rollout wait. `0f6e751` removed the delay from the test, but a GitOps install whose object store starts late still waits on that back-off. Waiting for the Blob store at start, as `--wait-for-database` does for migrations, is not done.
 - **`scripts/kind-chart-test.sh` skips a Hangar image that is not local.** It loads only images it finds, so a missing `HANGAR_KIND_IMAGE` makes each `TestKind` test wait 5 to 6 minutes and fail with `ErrImageNeverPull` instead of failing at once. The audit hit this when another runner deleted the image it was using.
 - **Datasets without data files log a `WARN`.** `internal/datasets/pipeline/convert.go:211` logs "the dataset has no Configs" for every dataset with no Viewer files (29 lines in one `e2e-real` run). Since datasets may hold any file types (decision 11a), this is a normal state; the Viewer already logs it at `DEBUG`. Low priority, in the spirit of finding 6.
-- **Rerun the import on the preview (needs James).** Nothing here has moved a multi-GB file through Nginx Proxy Manager, and no Compose or kind setup exercises presigned single-PUT uploads (only `compat/hf` against MinIO does). James rebuilds the preview and the CLI from `integration/v1`, runs `hangar admin doctor --large-read` against Aquila's MinIO, and reruns the `Qwen2.5-Coder-32B-Instruct-GGUF` import. This closes the red item in [Open issues](#open-issues).
+- **Rerun the import on the preview.** James approved the lead running it on 2026-10-17. Nothing here has moved a multi-GB file through Nginx Proxy Manager, and no Compose or kind setup exercises presigned single-PUT uploads (only `compat/hf` against MinIO does). The lead rebuilds the preview and the CLI from `integration/v1`, runs `hangar admin doctor --large-read` against Aquila's MinIO, and reruns the `Qwen2.5-Coder-32B-Instruct-GGUF` import. This closes the red item in [Open issues](#open-issues).
 - **Local `govulncheck`.** `~/go/bin/govulncheck` was built with Go 1.26 and cannot load this module; rebuild it with Go 1.27. `go run ...@v1.9.0` works.
 - **Not run this round.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, fuzz, LM Studio against a real server, and `make release-rehearsal`.
 - **Release on hold.** Nothing is published until James says go.
