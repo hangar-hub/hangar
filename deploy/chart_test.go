@@ -514,3 +514,39 @@ func TestChartCacheVolumeOutgrowsGitCache(t *testing.T) {
 	renderChart(t, append(slices.Clone(gitops), "--set", "cacheSizeLimit=40G", "--set", "config.git.cache_size=30000MiB")...)
 	renderChart(t, append(slices.Clone(gitops), "--set", "config.git.cache_size=40GiB", "--set", "config.git.cache_dir=/mnt/git")...)
 }
+
+// TestChartGuideReadsTheGeneratedSecret checks that the Helm guide reads the
+// generated Secret by the name the chart gives it: the full name of the
+// release followed by -generated, which is hangar-generated for the release
+// hangar the guide installs, not hangar-hangar-generated. The chart only
+// renders that Secret with cluster access, so the name comes from the full
+// name of the resources it renders offline; deploy/kind_test.go checks the
+// rendered Secret itself.
+func TestChartGuideReadsTheGeneratedSecret(t *testing.T) {
+	guide, err := os.ReadFile("../docs/get-started/helm.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fullname string
+	for _, doc := range renderChart(t, "-f", "helm/hangar/ci/default-values.yaml", "--set", "generateSecrets=false") {
+		if doc["kind"] == "ConfigMap" {
+			md, _ := doc["metadata"].(map[string]any)
+			fullname, _ = md["name"].(string)
+		}
+	}
+	if fullname == "" {
+		t.Fatal("the chart rendered no ConfigMap to take the full name from")
+	}
+	reads := notesSecretRead.FindAllStringSubmatch(string(guide), -1)
+	if len(reads) == 0 {
+		t.Fatal("docs/get-started/helm.md reads no Secret key; the check no longer covers the password command")
+	}
+	for _, m := range reads {
+		if want := fullname + "-generated"; m[1] != want {
+			t.Errorf("docs/get-started/helm.md reads Secret %s; the chart names the generated Secret %s", m[1], want)
+		}
+		if m[2] != "HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD" {
+			t.Errorf("docs/get-started/helm.md reads %s from the generated Secret, which holds the Instance key and the admin password", m[2])
+		}
+	}
+}

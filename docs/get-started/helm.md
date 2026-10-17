@@ -14,10 +14,10 @@ helm install hangar oci://ghcr.io/jamesagarside/charts/hangar \
   --set 'ingress.hosts[0].host=hangar.example.com'
 ```
 
-The chart generates the Instance key and the first admin password into the Secret `<release>-hangar-generated` and keeps them across upgrades by reading the Secret back from the cluster. Read the password:
+The chart generates the Instance key and the first admin password into a Secret named after the release with `-generated` added, `hangar-generated` for the release `hangar`, and keeps them across upgrades by reading the Secret back from the cluster. (A release whose name does not contain `hangar`, such as `models`, gets `models-hangar-generated`.) Read the password:
 
 ```sh
-kubectl get secret --namespace hangar hangar-hangar-generated \
+kubectl get secret --namespace hangar hangar-generated \
   -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d; echo
 ```
 
@@ -143,7 +143,7 @@ With persistence on (SQLite in one Pod), you can instead set `generateSecrets: f
 | `migrations.mode` | `hook` (default): a pre-install and pre-upgrade Job. `initContainer`: an init container in each `web` and `worker` Pod, for GitOps tools. |
 | `migrations.waitForDatabase` | With `migrations.mode: initContainer`, how long the init container waits for the database to answer before it fails. Default `5m`. |
 | `persistence.*` | SQLite and filesystem mode on a PersistentVolumeClaim (default on). |
-| `web.*`, `worker.*` | Replicas, resources, autoscaling (HPA on CPU), PodDisruptionBudget, node selection and topology spread. |
+| `web.*`, `worker.*` | Replicas, resources, autoscaling (HPA on CPU, which needs the metrics server in the cluster), PodDisruptionBudget, node selection and topology spread. |
 | `ingress.*` | An Ingress; `datasetsServerHost: true` also routes `datasets-server.<host>`, which the `datasets` library calls. |
 | `httpRoute.*` | A Gateway API HTTPRoute instead of the Ingress. |
 | `serviceAccount.annotations` | For IRSA or Workload Identity. |
