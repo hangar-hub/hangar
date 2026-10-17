@@ -48,6 +48,9 @@ part URLs that expired are renewed. When finishing an upload fails for a
 reason that may pass, the Instance answers 503 with Retry-After, or a proxy
 cuts the request off, and the command waits and tries again, up to 10
 times.
+A file that still fails does not stop the others: the command uploads the
+rest, names the files that failed and makes no Commit, so running it again
+sends only those files.
 Files the Instance already has anywhere are not sent again.
 
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,

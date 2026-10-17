@@ -114,6 +114,14 @@ Runs the same kind of checks as the readiness endpoint, with more detail:
 the configuration, the database connection and schema version, the clock
 against the database, a write, read and delete in the Blob store, presigned
 downloads on S3, and the git version. Exits with 1 if any check fails.
+
+With --large-read, it also writes an object of that size (1100 MiB if no
+size is given) to the Blob store and reads it back in one request at
+16 MiB/s, more slowly than the store sends, as Hangar does when it checks
+a large upload on a small server. A proxy in front of the store that cuts
+long reads, such as nginx with its default proxy_max_temp_file_size of
+1024 MiB, fails this check. It takes over a minute at the default size
+and deletes the object afterwards.
 ```
 
 Usage:
@@ -122,12 +130,21 @@ Usage:
 hangar admin doctor [flags]
 ```
 
+Examples:
+
+```sh
+hangar admin doctor --config /etc/hangar/hangar.yaml
+hangar admin doctor --config /etc/hangar/hangar.yaml --large-read
+hangar admin doctor --config /etc/hangar/hangar.yaml --large-read=3GiB
+```
+
 Flags:
 
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
 | `--json` | print JSON instead of text |  |
+| `--large-read` | also write an object of this size and read it back slowly in one request, to find a proxy that cuts long reads |  |
 | `--set` | set a configuration key, such as --set database.dsn=... (repeatable) |  |
 
 ## hangar admin gc
@@ -454,7 +471,10 @@ Adds content that is already on this machine to the Arsenal. Choose one source:
                            file and its template, system and params files.
 
 Uploads go through the Instance's API, so you need write access to the
-Namespaces involved. Use --dry-run to see what would be imported.
+Namespaces involved. A file that fails to upload does not stop the other
+files or Repos: files that went up into a Mirror are added to it, and the
+results name what failed, so running the command again sends only that.
+Use --dry-run to see what would be imported.
 ```
 
 Usage:
@@ -945,6 +965,9 @@ part URLs that expired are renewed. When finishing an upload fails for a
 reason that may pass, the Instance answers 503 with Retry-After, or a proxy
 cuts the request off, and the command waits and tries again, up to 10
 times.
+A file that still fails does not stop the others: the command uploads the
+rest, names the files that failed and makes no Commit, so running it again
+sends only those files.
 Files the Instance already has anywhere are not sent again.
 
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.

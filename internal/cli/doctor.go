@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -34,23 +36,43 @@ type checkResult struct {
 
 func (a *app) doctorCommand() *cobra.Command {
 	var f adminFlags
+	var largeRead string
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check the configuration, database, Blob store, presigned URLs, clock and git",
 		Long: `Runs the same kind of checks as the readiness endpoint, with more detail:
 the configuration, the database connection and schema version, the clock
 against the database, a write, read and delete in the Blob store, presigned
-downloads on S3, and the git version. Exits with 1 if any check fails.`,
+downloads on S3, and the git version. Exits with 1 if any check fails.
+
+With --large-read, it also writes an object of that size (1100 MiB if no
+size is given) to the Blob store and reads it back in one request at
+16 MiB/s, more slowly than the store sends, as Hangar does when it checks
+a large upload on a small server. A proxy in front of the store that cuts
+long reads, such as nginx with its default proxy_max_temp_file_size of
+1024 MiB, fails this check. It takes over a minute at the default size
+and deletes the object afterwards.`,
+		Example: `  hangar admin doctor --config /etc/hangar/hangar.yaml
+  hangar admin doctor --config /etc/hangar/hangar.yaml --large-read
+  hangar admin doctor --config /etc/hangar/hangar.yaml --large-read=3GiB`,
 		Args: args(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			a := a.with(cmd)
+			var large int64
+			if largeRead != "" {
+				n, err := config.ParseByteSize(largeRead)
+				if err != nil || n <= 0 {
+					return usagef("--large-read takes a size such as 1100MiB or 3GiB")
+				}
+				large = n.Int64()
+			}
 			cfg, err := config.Load(config.LoadOptions{File: f.file, Set: f.set})
 			if err == nil {
 				// The Instance key generated on first start lives in
 				// server.data_dir, as the server reads it.
 				err = config.LoadStoredSecrets(cfg)
 			}
-			results := a.doctor(cmd.Context(), cfg, err)
+			results := a.doctor(cmd.Context(), cfg, err, large)
 			failed := 0
 			for _, r := range results {
 				if !r.OK {
@@ -81,12 +103,19 @@ downloads on S3, and the git version. Exits with 1 if any check fails.`,
 		},
 	}
 	f.register(cmd, a)
+	cmd.Flags().StringVar(&largeRead, "large-read", "", "also write an object of this size and read it back slowly in one request, to find a proxy that cuts long reads")
+	cmd.Flags().Lookup("large-read").NoOptDefVal = defaultLargeRead
 	return cmd
 }
 
+// defaultLargeRead is the size --large-read uses without a value: just
+// over nginx's default proxy_max_temp_file_size of 1024 MiB.
+const defaultLargeRead = "1100MiB"
+
 // doctor runs every check it can. A failed check that later checks depend
-// on stops them.
-func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error) []checkResult {
+// on stops them. largeRead is the size of the large read check's object,
+// or 0 to skip it.
+func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error, largeRead int64) []checkResult {
 	var out []checkResult
 	run := func(name string, fn func() (string, error)) bool {
 		start := time.Now()
@@ -172,6 +201,11 @@ func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error) []c
 	}) {
 		return append(out, a.gitCheck())
 	}
+	if largeRead > 0 {
+		run("large reads", func() (string, error) {
+			return largeReadCheck(ctx, store, largeRead, largeReadRate)
+		})
+	}
 	if cfg.Storage.Backend == "s3" && cfg.Storage.S3.DownloadMode == "redirect" {
 		run("presigned downloads", func() (string, error) {
 			key := "tmp/doctor-presign-" + uuid.NewString()
@@ -243,4 +277,102 @@ func (a *app) gitCheck() checkResult {
 	}
 	r.OK, r.Message = true, v
 	return r
+}
+
+// largeReadRate is how fast the large read check reads, in bytes per
+// second: more slowly than a store usually sends, so a proxy that buffers
+// the response fills its temporary file, as it does when Hangar checks a
+// large upload on a small server (bellatrix finding 13). Tests set it to
+// 0, which reads as fast as the store sends.
+var largeReadRate int64 = 16 << 20
+
+// largeReadCheck writes size bytes of random content to the Blob store,
+// reads them back in one unranged request at rate bytes per second and
+// checks every byte arrived. A read that ends early means something
+// between this host and the store cuts long reads. Hangar resumes such
+// reads, so uploads still complete, but each cut costs a request and a
+// wait, and the proxy should be fixed.
+func largeReadCheck(ctx context.Context, store blob.Store, size, rate int64) (string, error) {
+	block := make([]byte, 1<<20+7)
+	if _, err := rand.Read(block); err != nil {
+		return "", err
+	}
+	content := io.NewSectionReader(repeatReader(block), 0, size)
+	want := sha256.New()
+	if _, err := io.Copy(want, content); err != nil {
+		return "", err
+	}
+	if _, err := content.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	key := "tmp/doctor-large-" + uuid.NewString()
+	if err := store.Put(ctx, key, content, size); err != nil {
+		return "", fmt.Errorf("write %s: %w", formatBytes(size), err)
+	}
+	defer func() { _ = store.Delete(context.WithoutCancel(ctx), key) }()
+	start := time.Now()
+	rc, _, err := store.Get(ctx, key, nil)
+	if err != nil {
+		return "", fmt.Errorf("read: %w", err)
+	}
+	got := sha256.New()
+	n, err := io.Copy(got, &pacedReader{ctx: ctx, r: rc, rate: rate, start: start})
+	_ = rc.Close()
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	if n < size {
+		cause := "the response ended early"
+		if err != nil {
+			cause = err.Error()
+		}
+		return "", fmt.Errorf("a read of %s stopped after %s (%s): a proxy between Hangar and the Blob store cuts long reads; "+
+			"for nginx, set proxy_buffering off and proxy_max_temp_file_size 0 (see Large files through nginx in the proxies guide)",
+			formatBytes(size), formatBytes(n), cause)
+	}
+	if err != nil {
+		return "", fmt.Errorf("read: %w", err)
+	}
+	if n != size || !bytes.Equal(got.Sum(nil), want.Sum(nil)) {
+		return "", fmt.Errorf("read back different content")
+	}
+	return fmt.Sprintf("read %s back in one request in %s", formatBytes(size), time.Since(start).Round(time.Second)), nil
+}
+
+// repeatReader reads as its block repeated without end.
+type repeatReader []byte
+
+func (r repeatReader) ReadAt(p []byte, off int64) (int, error) {
+	n := 0
+	for n < len(p) {
+		n += copy(p[n:], r[(off+int64(n))%int64(len(r)):])
+	}
+	return n, nil
+}
+
+// pacedReader reads from r no faster than rate bytes per second since
+// start; rate 0 does not limit it.
+type pacedReader struct {
+	ctx   context.Context
+	r     io.Reader
+	rate  int64
+	start time.Time
+	n     int64
+}
+
+func (p *pacedReader) Read(b []byte) (int, error) {
+	if len(b) > 1<<20 {
+		b = b[:1<<20]
+	}
+	n, err := p.r.Read(b)
+	p.n += int64(n)
+	if p.rate > 0 && n > 0 {
+		due := p.start.Add(time.Duration(float64(p.n) / float64(p.rate) * float64(time.Second)))
+		if wait := time.Until(due); wait > 0 {
+			if werr := waitRetry(p.ctx, wait); werr != nil {
+				return n, werr
+			}
+		}
+	}
+	return n, err
 }

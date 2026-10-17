@@ -18,8 +18,11 @@ docker exec hangar hangar admin doctor     # Postgres setups; with SQLite, stop 
 | blob store | A write, read and delete work, and the clock agrees with the store. |
 | presigned downloads | On S3 in `redirect` mode, a presigned URL works from this host. |
 | git | git 2.39 or later is installed. |
+| large reads | With `--large-read`, an object of 1100 MiB (or the size you give, such as `--large-read=3GiB`) is read back whole in one slow request. |
 
 It exits with 1 if any check fails, so you can use it in scripts.
+
+`--large-read` finds a proxy in front of the Blob store that cuts long reads, such as nginx with its default `proxy_max_temp_file_size`. The doctor writes the object, reads it back at 16 MiB/s, more slowly than the store sends, and deletes it. At the default size this takes over a minute. Run it after putting a proxy in front of MinIO, or when large uploads take many retries to complete. See [Large files through nginx](proxies.md#large-files-through-nginx).
 
 ## Common problems
 

@@ -88,6 +88,7 @@ var fileByteReaders = map[string]byteUse{
 	"internal/api.checkBlobStore":                      {reason: "the admin storage check reads the Blob store sentinel"},
 	"internal/cli.(*app).doctor":                       {reason: "hangar doctor checks the Blob store from the command line"},
 	"internal/cli.copyBlobsOut":                        {reason: "hangar admin backup copies the Blob store from the command line"},
+	"internal/cli.largeReadCheck":                      {reason: "hangar admin doctor --large-read reads back an object of random bytes it wrote itself"},
 }
 
 // checkUse fails when u neither names checked download routes nor gives
