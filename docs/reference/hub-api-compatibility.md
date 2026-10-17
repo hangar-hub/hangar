@@ -4,7 +4,7 @@
 
 Every Hugging Face Hub endpoint that `huggingface_hub` and the libraries built on it call, and whether Hangar serves it. The compatibility suite in `compat/hf` writes this table from its own results, so every row marked supported is covered by a passing test against real clients.
 
-Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
+Tested with `huggingface_hub` 2.2.0. 4 not supported, 65 supported.
 
 | Endpoint | Status | Covered by | Notes |
 |---|---|---|---|
@@ -22,7 +22,7 @@ Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
 | `GET /api/models/{repo}` | Supported | `test_create_repo_variants`, `test_model_info_shape` |  |
 | `GET /api/models/{repo}/revision/{rev}` | Supported | `test_exists_checks` |  |
 | `POST /api/repos/create` | Supported | `test_create_repo_variants` |  |
-| `DELETE /api/repos/delete` | Supported | `test_delete_repo` |  |
+| `DELETE /api/repos/delete` | Supported | `test_delete_repo`, `test_write_token_administers_own_repos` |  |
 | `POST /api/repos/move` | Supported | `test_move_repo_redirects` |  |
 | `/api/spaces/...` | Not supported | - | Spaces are out of scope. |
 | `GET /api/users/{user}/likes` | Supported | `test_likers_and_liked_repos` |  |
@@ -51,13 +51,14 @@ Tested with `huggingface_hub` 2.2.0. 4 not supported, 64 supported.
 | `POST /api/{type}s/{repo}/preupload/{rev}` | Supported | `test_upload_file_and_folder`, `test_upload_many_files`, `test_upload_over_multipart_threshold` |  |
 | `GET /api/{type}s/{repo}/refs` | Supported | `test_branches_and_tags` |  |
 | `GET /api/{type}s/{repo}/revision/{rev}` | Supported | `test_exists_checks`, `test_snapshot_download_and_offline` |  |
-| `PUT /api/{type}s/{repo}/settings` | Supported | `test_update_repo_settings` |  |
+| `PUT /api/{type}s/{repo}/settings` | Supported | `test_update_repo_settings`, `test_write_token_administers_own_repos` |  |
 | `POST /api/{type}s/{repo}/tag/{rev}` | Supported | `test_branches_and_tags` |  |
 | `DELETE /api/{type}s/{repo}/tag/{tag}` | Supported | `test_branches_and_tags` |  |
 | `GET /api/{type}s/{repo}/tree/{rev}/{path}` | Supported | `test_snapshot_download_and_offline`, `test_tree_and_paths_info` |  |
 | `GET /api/{type}s/{repo}/xet-read-token/{rev}` | Not supported | - | Hangar never offers Xet downloads; downloads use plain HTTP. |
 | `GET /api/{type}s/{repo}/xet-write-token/{rev}` | Supported | `test_upload_large_file_round_trip`, `test_xet_write_token` |  |
 | `POST /{repo}.git/info/lfs/objects/batch` | Supported | `test_upload_file_and_folder` |  |
+| `POST /{repo}.git/info/lfs/objects/batch (basic, presigned MinIO URL, no Xet)` | Supported | `TestHubBasicUploadToMinIOWithoutXet` |  |
 | `POST /{repo}.git/info/lfs/objects/batch (multipart)` | Supported | `test_upload_over_multipart_threshold` |  |
 | `GET /{repo}/resolve/{rev}/{path}` | Supported | `test_hf_hub_download_by_revision` |  |
 | `HEAD /{repo}/resolve/{rev}/{path}` | Supported | `test_hf_hub_download_by_revision` |  |

@@ -14,6 +14,11 @@ LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.d
 BIN       := bin/hangar
 IMAGE     ?= ghcr.io/jamesagarside/hangar:dev
 GOTESTFLAGS ?= -race -count=1
+# The compat suites run real git, git-lfs and Python clients. On a busy host
+# one package can pass but take longer than go test's 10-minute default
+# (compat/git took 168 s on a quiet host and over 600 s on a loaded one).
+# scripts/check-compat-timeout.sh checks that every compat run sets one.
+COMPAT_TIMEOUT ?= 30m
 
 # Postgres tests need Docker: test-go starts one Postgres container that
 # every package shares (scripts/with-test-postgres.sh). Set
@@ -104,6 +109,8 @@ lint-style:
 	    cmd internal ui/src api compat docs deploy loadtest scripts .github README.md CLAUDE.md CONTEXT.md CONTRIBUTING.md SECURITY.md 2>/dev/null; then \
 	  echo "House style: replace the em dashes above."; exit 1; fi
 	@./scripts/check-spelling.sh
+	@./scripts/check-compat-timeout.sh
+	@python3 scripts/check-hub-matrix.py
 
 ## Test ------------------------------------------------------------------------------
 
@@ -120,7 +127,7 @@ test-ui: ui-deps
 
 .PHONY: test-compat
 test-compat: ## Run the client compatibility suites against a real binary
-	$(GO) test -count=1 -tags compat ./compat/...
+	$(GO) test -count=1 -timeout $(COMPAT_TIMEOUT) -tags compat ./compat/...
 	$(UV) run --project compat pytest compat
 
 .PHONY: fixtures

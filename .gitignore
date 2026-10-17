@@ -25,6 +25,8 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+# Go test outcomes for the Hub compatibility matrix (compat/hf/matrix_test.go)
+/compat/hf/.matrix-go/
 
 # Secrets for the Compose examples (docs/get-started/compose.md)
 .env

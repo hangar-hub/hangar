@@ -24,7 +24,8 @@
     "DELETE /api/repos/delete": {
       "status": "supported",
       "tests": [
-        "test_delete_repo"
+        "test_delete_repo",
+        "test_write_token_administers_own_repos"
       ]
     },
     "DELETE /api/{type}s/{repo}/branch/{branch}": {
@@ -345,6 +346,12 @@
         "test_upload_file_and_folder"
       ]
     },
+    "POST /{repo}.git/info/lfs/objects/batch (basic, presigned MinIO URL, no Xet)": {
+      "status": "supported",
+      "tests": [
+        "TestHubBasicUploadToMinIOWithoutXet"
+      ]
+    },
     "POST /{repo}.git/info/lfs/objects/batch (multipart)": {
       "status": "supported",
       "tests": [
@@ -354,7 +361,8 @@
     "PUT /api/{type}s/{repo}/settings": {
       "status": "supported",
       "tests": [
-        "test_update_repo_settings"
+        "test_update_repo_settings",
+        "test_write_token_administers_own_repos"
       ]
     },
     "bad token": {
@@ -420,6 +428,6 @@
       ]
     }
   },
-  "generated_by": "compat/hf (HANGAR_HF_INSTANCE=binary HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf)",
+  "generated_by": "compat/hf (HANGAR_HF_WRITE_MATRIX=1 go test -tags compat ./compat/hf, then HANGAR_HF_INSTANCE=binary HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf)",
   "huggingface_hub": "2.2.0"
 }

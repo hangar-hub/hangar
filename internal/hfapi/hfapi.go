@@ -297,8 +297,14 @@ func (h *Handler) writeForbidden(w http.ResponseWriter, r *http.Request, msg str
 	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusForbidden, Message: msg})
 }
 
-// internalError logs err and answers 500 without details.
+// internalError logs err and answers 500 without details. A request the
+// client closed is answered 499 and logged at debug level instead.
 func (h *Handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
+	if httpx.ClientGone(r, err) {
+		h.log.DebugContext(r.Context(), "client closed the request", "error", err.Error(), "route", routeOf(r))
+		httpx.WriteHubError(w, r, &httpx.HubError{Status: httpx.StatusClientClosedRequest, Message: httpx.ClientClosedMessage})
+		return
+	}
 	h.log.ErrorContext(r.Context(), "hub api request failed", "error", err, "route", routeOf(r))
 	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusInternalServerError, Message: "Internal server error. The request ID is " + httpx.RequestID(r.Context()) + "."})
 }

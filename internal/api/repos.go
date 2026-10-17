@@ -107,23 +107,16 @@ func NewReposAPI(d RepoDeps) (*ReposAPI, error) {
 	return &ReposAPI{d: d}, nil
 }
 
-// statusClientClosedRequest is the status recorded when the client went
-// away before the answer (499, as nginx and the Hub API handlers use), so a
-// cancelled request is not counted or logged as a server error.
-const statusClientClosedRequest = 499
-
 // clientGone reports whether err is the result of the client closing the
-// request: the request context ended and the error says so.
-func clientGone(r *http.Request, err error) bool {
-	return r.Context().Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded))
-}
+// request.
+func clientGone(r *http.Request, err error) bool { return httpx.ClientGone(r, err) }
 
 // writeClientGone answers a request the client closed. Nobody reads the
 // answer; it is written for access logs and metrics.
 func writeClientGone(w http.ResponseWriter, r *http.Request, log *slog.Logger, err error) {
 	log.DebugContext(r.Context(), "client closed the request", "error", err.Error())
-	httpx.WriteProblem(w, r, &httpx.Problem{Status: statusClientClosedRequest, Title: "Client Closed Request",
-		Detail: "The client closed the request."})
+	httpx.WriteProblem(w, r, &httpx.Problem{Status: httpx.StatusClientClosedRequest, Title: "Client Closed Request",
+		Detail: httpx.ClientClosedMessage})
 }
 
 // problem writes err as a problem detail. Errors the caller cannot act on

@@ -200,7 +200,7 @@ func (h *Handler) serviceError(w http.ResponseWriter, r *http.Request, id model.
 		errors.Is(err, model.ErrInvalidRefName), errors.Is(err, repo.ErrChecksumMismatch):
 		httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusBadRequest, Message: errMessage(err)})
 	case errors.Is(err, context.Canceled):
-		httpx.WriteHubError(w, r, &httpx.HubError{Status: 499, Message: "The client closed the request."})
+		httpx.WriteHubError(w, r, &httpx.HubError{Status: httpx.StatusClientClosedRequest, Message: httpx.ClientClosedMessage})
 	default:
 		h.internalError(w, r, err)
 	}

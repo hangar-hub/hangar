@@ -219,6 +219,7 @@ Fixes in earlier rounds are described in the owners' handoffs, in `RESOLUTIONS.m
 - **git-upload-pack and unsafe files.** `scan.Gate` does not gate `git clone` without LFS, because git sends whole Commits. The Hub's default `.gitattributes` keeps every pickle format in LFS, and [Security](../operate/security.md) says so.
 - **Scan errors are not blocked.** A file the scanner read but could not parse (status `error`) downloads with blocking on, because many `.bin` files are not pickles. The phase 3 review should confirm the trade-off.
 - **`/admin/system` does not report `upload_mode`.** It reports `download_mode`; adding `upload_mode` changes the OpenAPI file and is left to the owners.
+- **Release on hold.** James decided on 2026-10-16 that nothing is published until he says go ([decisions](decisions.md), "Release on hold"). Work stops after the release dry run.
 - **Release not exercised.** Multi-arch image publishing, cosign signing and the SBOM run only in `release.yml`; `make release-rehearsal` was not part of round 8, and the first real run is James's release (W9 11).
 - **Local-only checks.** There is no remote, so every result here comes from the development machine, not CI.
 - **Not covered in round 8.** BROWSE-6 and the mock flows for UP-3 and BROWSE-1 last ran in the `ui/e2e` mock suite during the `5975bec` checks. The `diffusers` cell and the 6 GiB file are nightly.

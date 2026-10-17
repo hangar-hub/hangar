@@ -43,6 +43,8 @@ func NewDatasetsAPI(d DatasetsDeps) (*DatasetsAPI, error) {
 
 func (a *DatasetsAPI) problem(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case clientGone(r, err):
+		writeClientGone(w, r, a.d.Log, err)
 	case errors.Is(err, repo.ErrNotFound), errors.Is(err, auth.ErrNotFound), errors.Is(err, auth.ErrForbidden), errors.Is(err, auth.ErrGated):
 		status, detail := http.StatusNotFound, "Dataset not found. If it is private, make sure you are signed in and have access to it."
 		if httpx.Principal(r.Context()).IsAnonymous() {
