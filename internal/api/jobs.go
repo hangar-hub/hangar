@@ -141,8 +141,13 @@ func platformProblem(w http.ResponseWriter, r *http.Request, status int, detail 
 }
 
 // platformFail logs err and writes a 500 with detail, which must not
-// include err: it may name internal paths or hosts.
+// include err: it may name internal paths or hosts. A request the client
+// closed is answered 499 and logged at debug level instead.
 func platformFail(w http.ResponseWriter, r *http.Request, detail string, err error) {
+	if clientGone(r, err) {
+		writeClientGone(w, r, slog.Default(), err)
+		return
+	}
 	slog.ErrorContext(r.Context(), detail, "error", err, "method", r.Method, "request_id", httpx.RequestID(r.Context()))
 	platformProblem(w, r, http.StatusInternalServerError, detail)
 }

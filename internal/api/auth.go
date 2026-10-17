@@ -218,6 +218,10 @@ func (h *Identity) instanceAdmin(w http.ResponseWriter, r *http.Request) (model.
 
 // fail maps service errors to problem details.
 func (h *Identity) fail(w http.ResponseWriter, r *http.Request, err error) {
+	if clientGone(r, err) {
+		writeClientGone(w, r, h.log, err)
+		return
+	}
 	p := httpx.Principal(r.Context())
 	status := http.StatusInternalServerError
 	detail := ""

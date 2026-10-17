@@ -135,6 +135,11 @@ func (s *Server) lfsFailure(w http.ResponseWriter, r *http.Request, err error) {
 		lfsError(w, r, ae.status, ae.message)
 		return
 	}
+	if httpx.ClientGone(r, err) {
+		s.log.DebugContext(r.Context(), "client closed the request", "error", err.Error())
+		lfsError(w, r, httpx.StatusClientClosedRequest, httpx.ClientClosedMessage)
+		return
+	}
 	s.log.ErrorContext(r.Context(), "git-lfs request failed", "error", err)
 	lfsError(w, r, http.StatusInternalServerError, "Internal server error.")
 }

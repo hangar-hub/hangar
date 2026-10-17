@@ -93,6 +93,11 @@ func (s *Server) gitFailure(w http.ResponseWriter, r *http.Request, err error) {
 		s.gitError(w, r, ae.status, ae.message)
 		return
 	}
+	if httpx.ClientGone(r, err) {
+		s.log.DebugContext(r.Context(), "client closed the request", "error", err.Error())
+		s.gitError(w, r, httpx.StatusClientClosedRequest, httpx.ClientClosedMessage)
+		return
+	}
 	s.log.ErrorContext(r.Context(), "git request failed", "error", err)
 	s.gitError(w, r, http.StatusInternalServerError, "Internal server error. The request ID is "+httpx.RequestID(r.Context())+".")
 }

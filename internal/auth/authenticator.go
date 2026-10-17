@@ -214,11 +214,6 @@ func (s *Service) registryPrincipal(ctx context.Context, token string) (model.Pr
 	return p, nil
 }
 
-// statusClientClosedRequest is the status recorded when the client went
-// away before the answer (499, as nginx and the API handlers use), so a
-// cancelled request is not counted or logged as a server error.
-const statusClientClosedRequest = 499
-
 // WriteAuthError writes the response for an Authenticate error: 403 for a
 // missing CSRF token, the protocol's 401 for a bad credential, 499 when the
 // client closed the request before its credentials were checked, and 500
@@ -253,11 +248,11 @@ func WriteAuthError(publicURL string) func(w http.ResponseWriter, r *http.Reques
 // writeClientClosed answers a request the client closed, in the format of
 // the request's protocol.
 func writeClientClosed(w http.ResponseWriter, r *http.Request) {
-	const msg = "The client closed the request."
+	const msg = httpx.ClientClosedMessage
 	switch httpx.ProtocolOf(r.Context()) {
 	case telemetry.ProtocolNative, telemetry.ProtocolUI, telemetry.ProtocolUnknown, telemetry.ProtocolHealth:
-		httpx.WriteProblem(w, r, &httpx.Problem{Status: statusClientClosedRequest, Title: "Client Closed Request", Detail: msg})
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: httpx.StatusClientClosedRequest, Title: "Client Closed Request", Detail: msg})
 	default:
-		httpx.WriteError(w, r, statusClientClosedRequest, "", msg)
+		httpx.WriteError(w, r, httpx.StatusClientClosedRequest, "", msg)
 	}
 }
