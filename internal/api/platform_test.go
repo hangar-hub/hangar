@@ -333,6 +333,8 @@ func TestAdminSystem(t *testing.T) {
 	require.Equal(t, "sqlite", s.Database.Driver)
 	require.NotEmpty(t, s.Database.SchemaVersion)
 	require.Equal(t, "fs", s.BlobStore.Backend)
+	require.Nil(t, s.BlobStore.DownloadMode, "the filesystem has no download mode")
+	require.Nil(t, s.BlobStore.UploadMode, "the filesystem has no upload mode")
 	require.Equal(t, "none", s.Telemetry["traces"])
 	names := map[string]gen.CheckResult{}
 	for _, c := range s.Checks {
@@ -481,4 +483,27 @@ func TestPresignCheckAgainstMinIO(t *testing.T) {
 			require.Equal(t, "Presigned download URLs work from this server.", r.Message)
 		}
 	}
+}
+
+// TestAdminSystemReportsS3TransferModes checks that an S3 Instance reports
+// both storage.s3.download_mode and storage.s3.upload_mode, so an admin can
+// see from the System page whether clients reach the bucket directly.
+func TestAdminSystemReportsS3TransferModes(t *testing.T) {
+	t.Parallel()
+	e := newPlatformEnv(t, func(*db.DB, blob.Store) []api.SystemCheck { return nil })
+	h := &api.AdminSystem{Authz: authtest.NewAuthz(), DB: e.db, Info: api.SystemInfo{
+		Version: "1.2.3", Role: "web", BlobBackend: "s3", DownloadMode: "redirect", UploadMode: "proxy",
+	}}
+	req := httptest.NewRequest(http.MethodGet, "/api/hangar/v1/admin/system", nil)
+	ctx := httpx.WithInfo(req.Context(), "req-1")
+	httpx.SetPrincipal(ctx, e.users["root"])
+	rec := httptest.NewRecorder()
+	h.AdminGetSystem(rec, req.WithContext(ctx))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	s := decode[gen.SystemInfo](t, rec.Body.Bytes())
+	require.Equal(t, "s3", s.BlobStore.Backend)
+	require.NotNil(t, s.BlobStore.DownloadMode)
+	require.Equal(t, "redirect", *s.BlobStore.DownloadMode)
+	require.NotNil(t, s.BlobStore.UploadMode)
+	require.Equal(t, "proxy", *s.BlobStore.UploadMode)
 }

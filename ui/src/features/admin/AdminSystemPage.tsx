@@ -1,10 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { api } from "@/api/client";
+import type { Schemas } from "@/api/types";
 import { PageShell } from "@/components/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState, LoadingRows } from "@/components/ui/states";
 import { unwrap } from "@/lib/problem";
+
+/**
+ * The Blob store backend and, on S3, how downloads and uploads reach the
+ * bucket, for example "s3, redirect downloads, proxy uploads".
+ */
+export function blobStoreSummary(store: Schemas["SystemInfo"]["blob_store"]): string {
+  const parts = [store.backend];
+  if (store.download_mode) parts.push(`${store.download_mode} downloads`);
+  if (store.upload_mode) parts.push(`${store.upload_mode} uploads`);
+  return parts.join(", ");
+}
 
 /** Version, backends, telemetry and `doctor` results. */
 export function AdminSystemPage() {
@@ -28,10 +40,7 @@ export function AdminSystemPage() {
                 "Database",
                 `${sys.data.database.driver}, schema ${sys.data.database.schema_version}`,
               ],
-              [
-                "Blob store",
-                `${sys.data.blob_store.backend}${sys.data.blob_store.download_mode ? `, ${sys.data.blob_store.download_mode} downloads` : ""}`,
-              ],
+              ["Blob store", blobStoreSummary(sys.data.blob_store)],
             ].map(([k, v]) => (
               <div key={k} className="rounded-lg border border-line bg-surface px-4 py-3">
                 <dt className="text-xs text-muted">{k}</dt>

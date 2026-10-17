@@ -330,6 +330,16 @@ func TestBlobBackendAndDownloadMode(t *testing.T) {
 	require.Equal(t, config.DownloadProxy, downloadMode(cfg))
 }
 
+func TestUploadModeIsReportedOnlyForS3(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Storage.S3.UploadMode = config.UploadProxy
+	require.Empty(t, uploadMode(cfg), "the filesystem always takes uploads through Hangar")
+	cfg.Storage.Backend = config.BackendS3
+	require.Equal(t, config.UploadProxy, uploadMode(cfg))
+	cfg.Storage.S3.UploadMode = config.UploadDirect
+	require.Equal(t, config.UploadDirect, uploadMode(cfg))
+}
+
 // TestS3ProxyModesKeepTransfersOnHangar checks the wiring of
 // storage.s3.upload_mode and download_mode proxy against MinIO: every
 // git-lfs action, basic and multipart, points at Hangar and never at the

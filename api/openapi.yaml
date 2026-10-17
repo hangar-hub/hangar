@@ -2409,6 +2409,12 @@ components:
         commit: {type: string}
         role: {type: string}
         database: {type: object, required: [driver, schema_version], properties: {driver: {type: string}, schema_version: {type: string}}}
-        blob_store: {type: object, required: [backend], properties: {backend: {type: string}, download_mode: {type: string}}}
+        blob_store:
+          type: object
+          required: [backend]
+          properties:
+            backend: {type: string, description: fs or s3.}
+            download_mode: {type: string, description: "storage.s3.download_mode: redirect or proxy. Absent on the filesystem backend."}
+            upload_mode: {type: string, description: "storage.s3.upload_mode: direct or proxy. Absent on the filesystem backend."}
         telemetry: {type: object, additionalProperties: {type: string}, description: Exporter per signal.}
         checks: {type: array, items: {$ref: "#/components/schemas/CheckResult"}}

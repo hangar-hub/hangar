@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { auditQuery, dayBound } from "./admin/AdminAuditPage";
 import { bandwidthBytes, parseWindows } from "./admin/AdminPullsPage";
 import { quotaBytes } from "./admin/AdminStoragePage";
+import { blobStoreSummary } from "./admin/AdminSystemPage";
 import { oidcErrors, safeRedirect } from "./auth/LoginPage";
 import { validRepoName } from "./repos/NewRepoPage";
 import { normaliseUserCode } from "./settings/DevicePage";
@@ -55,5 +56,13 @@ describe("form helpers", () => {
       actor: "ada",
       since: "2026-10-01T00:00:00Z",
     });
+  });
+
+  it("names the Blob store's download and upload modes", () => {
+    expect(blobStoreSummary({ backend: "fs" })).toBe("fs");
+    expect(
+      blobStoreSummary({ backend: "s3", download_mode: "redirect", upload_mode: "proxy" }),
+    ).toBe("s3, redirect downloads, proxy uploads");
+    expect(blobStoreSummary({ backend: "s3", upload_mode: "direct" })).toBe("s3, direct uploads");
   });
 });
