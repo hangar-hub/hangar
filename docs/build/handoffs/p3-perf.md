@@ -1,0 +1,38 @@
+# Phase 3 handoff: performance
+
+Branch `ws/p3-perf`, from `382cc88`. Results are in `docs/benchmarks.md`.
+
+## What I reviewed
+
+- Every `loadtest/` scenario against the reference setup (`deploy/compose/scale.yaml`, two web replicas at 2 CPUs and 1 GiB, one worker, Postgres, MinIO), seeded with `loadtest/seed.sh` (100,000 files, 10,000 Commits), repeated to separate host noise from regressions.
+- Every target in 02 "Scale targets", the targets in `loadtest/README.md`, and the `/rows` target in 14, plus web replica start to ready and replica memory under uploads, downloads, clones and a sign-in burst (cgroup `memory.current`, `memory.peak`, `memory.stat` and `docker stats`).
+- CPU profiles (pprof, from a throwaway build that was never committed) of a web replica under `resolve.js` and `tree.js`, the SQL every `HEAD /resolve` runs (Postgres statement log), and CPU per request per container from cgroup `cpu.stat`.
+- The upload path in `proxy` mode (`internal/api/uploads.go`, `internal/repo/lfs.go`, `internal/blob/s3`), the download path (`internal/hfapi/resolve.go`), the git upload-pack path (`internal/gitserver/smart.go`), password hashing (`internal/auth/passwords.go`, `login.go`) and per-request authentication (`internal/auth/authenticator.go`, `tokens.go`).
+
+## Findings
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| 1 | High | Unbounded concurrent argon2id. Each password check holds 64 MiB and runs for unauthenticated `POST /auth/login`, including the dummy check for unknown usernames. 40 parallel failed sign-ins took one 1 GiB replica to its limit and got the other OOM-killed. A remote, unauthenticated memory exhaustion of every web replica. | `89631fa`: at most 2 hashes per process (one per 2 CPUs), waiting with the request's context; the dummy hash is a fixed constant, so no request waits to create it. Same burst afterwards: 5 s, 209 MiB peak per replica, no restarts. | `auth.TestPasswordHashingIsBounded` (fails without the fix: 32 at once against a bound of 2), `TestPasswordHashingWaitEndsWithContext`, `TestMaxHashes`, `TestDummyHash` |
+| 2 | Medium | `loadtest/upload.js` never passed: every chunk header was written over one reused buffer with different lengths, so the first part carried the tail of the last header from the hashing pass and every completion failed its SHA-256 check (422). The memory target for uploads was never measured. A 409 from the setup request also counted as a failed request. | `1044d4c`: fixed-width headers, payload code in `loadtest/lib/payload.js`, `http.expectedStatuses(201, 409)` | `loadtest/lib/payload.test.js` (`make test-loadtest`, also in `make test` and CI): "the parts hash to the planned SHA-256" fails with the old variable-width headers |
+| 3 | Medium | A second `upload.js` run planned `exists` for every file (deduplication), so it uploaded nothing; four VUs committing to one branch got 409 when their bounded retries ran out. | `2581fd6`: every chunk names the run; one Repo per VU (decision recorded) | `payload.test.js` "objects of different runs, VUs and iterations differ" |
+| 4 | Low | Every Hub request with an action other than read asked Authz twice (two queries each). | `7857795`: one check; `ErrForbidden` or `ErrGated` still redirects a moved Repo the caller can read. The contract it relies on is now stated on `auth.Authz`. | `hfapi.TestResolveChecksPermissionOnce` (fails without the fix: 2 checks), existing moved, gated and private Repo tests |
+| 5 | Low | `repo.Store.Entry` ran a tree-cache `EXISTS` before every tree row lookup. | `8ae082e`: row first, fill only on a miss | `repo.TestEntryOnACachedTreeIsTwoQueries` (fails without: 3 queries), `TestEntryFillsAMissingTreeCache` |
+| 6 | Low | Every authenticated request loaded the user's linked OIDC providers, which a Principal does not use. | `39d739b` | `auth.TestAuthenticateLooksUpOnlyWhatAPrincipalNeeds` (fails without: 3 queries) |
+| 7 | Low | A Hub download looked the Repo up by name in Get, Resolve, Entry and OpenFile. | `ed2ef92`: `repo.WithReadCache`, set by the Hub API for GET and HEAD | `repo.TestReadCache`, `cmd/hangar.TestHubDownloadQueries` (fails without: 3 Repo lookups) |
+
+Together, 4 to 7 take a Token-authenticated `HEAD /resolve` from 14 queries to 8, and Postgres CPU per resolve request from 2.7 to 3.0 ms to 1.8 to 1.9 ms on the busy host. The `HEAD /resolve` p99 target is met by both the baseline and the branch when the host is quiet (p99 7 to 28 ms) and by neither when other workloads saturate it, so these are efficiency gains, not fixes for a regression in Hangar.
+
+New scenarios, not findings: `loadtest/download.js` (download memory and throughput) and `loadtest/viewer_rows.js` (`/rows` on 10 million rows), listed in 13 and `loadtest/README.md`.
+
+## Residual risks
+
+- **Sign-in floods still cost CPU.** Finding 1 bounds memory, not work: a burst of sign-ins queues behind one or two hashes per replica, so legitimate sign-ins on that replica wait. Throttling counts failures only after a check, so parallel attempts all pass the throttle first. Rate limiting by IP at the proxy is the mitigation; Hangar has no per-IP limit in front of the hash. Not changed because a pre-hash limit is a product decision (05 defines throttling by failures).
+- **The read cache trusts the caller.** `repo.WithReadCache` must only wrap requests that change no Repo; the Hub API sets it for GET and HEAD only. A future GET handler that renames or changes a Repo and then reads it under the same context would see the old row.
+- **Clones closed early.** One busy clone run had 2 of 904 pack responses cut short (`context canceled` on the replica, `unexpected EOF` in k6), 0.07 % of about 4,800 clones in all. Nothing in Hangar's logs explains it; it looks like Traefik or the overloaded Docker VM closing connections, but that is not proven.
+- **Clone memory.** A replica's cgroup peaked at 496 MiB during four parallel clones of a 10,000-Commit Repo, mostly git child processes. Large Repos or more parallel clones could reach the 1 GiB limit; `git.timeout` and the CPU limit bound time, not memory. Not changed because it is git's memory and the target covers file transfers.
+- **Concurrent Commits to one branch.** Without `parent_commit`, four concurrent Commits to one branch can exhaust the 3 retries in 04 and get 409, because each retry re-packs and re-uploads before its compare-and-swap. How huggingface.co handles the same case was not checked. Options for James: keep the bounded retries (current spec); serialise server-side Commits per ref (an advisory lock around build and compare-and-swap, so they queue instead of failing); or retry with jittered backoff (fewer collisions, still bounded). Not changed: it needs a spec decision.
+- **The conflict message repeats itself.** A 409 reads `reference has changed concurrently, fetch first: reference has changed concurrently, fetch first: refs/heads/main` because `internal/repo/write.go` wraps `gitstore.ErrRefConflict` in `repo.ErrRefConflict`, which have the same text. Cosmetic; left to the repo owner.
+- **Idle Job polling.** An idle worker runs about 10 claim transactions a second against Postgres (2.7 % of a CPU on this host). Harmless at this scale; worth a look if many workers share one database.
+- **Not measured.** 100,000 Repos per Instance, a 50 GiB upload (disk space: 4 × 1 GiB instead) and `/filter` on 1 million rows against the stack (the in-process load test covers it).
+- **One shared laptop.** All numbers come from one host with other projects' workloads (load average 8 to 144). A run on dedicated hardware with k6 on a second machine, as the reference setup asks, should precede publishing capacity figures.
