@@ -144,6 +144,7 @@ func TestHubBasicUploadToMinIOWithoutXet(t *testing.T) {
 		t.Logf("MinIO test not registered: set %s=1 (needs Docker) or %s; make test-compat sets it", blobtest.EnvMinIO, blobtest.EnvS3Endpoint)
 		return
 	}
+	recordMatrix(t, "POST /{repo}.git/info/lfs/objects/batch (basic, presigned MinIO URL, no Xet)")
 	m := startMinIOInstance(t)
 	dir := t.TempDir()
 	weights := make([]byte, 20<<20)

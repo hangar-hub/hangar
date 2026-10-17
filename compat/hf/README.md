@@ -25,13 +25,23 @@ HANGAR_HF_INSTANCE=binary uv run --project compat pytest compat/hf
 | `HANGAR_HF_GO_TAGS=w2real` | Build the test server with a `compat && w2real` backend file that uses the real `internal/repo`. See [`docs/build/handoffs/w4.md`](../../docs/build/handoffs/w4.md) for the file. |
 | `HANGAR_HF_DB=postgres` | With `HANGAR_HF_GO_TAGS=w2real`, run the real `internal/repo` on Postgres instead of SQLite. `conftest.py` sets `HANGAR_TEST_POSTGRES=1` for the test server (a Postgres container, so Docker must be running) unless `HANGAR_TEST_POSTGRES_DSN` names a server. With `HANGAR_HF_INSTANCE=binary`, run the binary on the database in `HANGAR_HF_DATABASE_DSN`. |
 | `HANGAR_HF_DATABASE_DSN` | With `HANGAR_HF_INSTANCE=binary` and `HANGAR_HF_DB=postgres`, a `postgres://` URL of an empty database for the binary. |
-| `HANGAR_HF_WRITE_MATRIX=1` | Write `compatibility-matrix.json` from the results. |
+| `HANGAR_HF_WRITE_MATRIX=1` | Write `compatibility-matrix.json` from the results. Set it for `go test -tags compat ./compat/hf` first as well: the Go tests that cover matrix rows, such as `TestHubBasicUploadToMinIOWithoutXet`, record their outcomes for pytest to merge. See [Keep the matrix current](#keep-the-matrix-current). |
 | `HANGAR_HF_MULTIPART_THRESHOLD` | The tested Instance's `lfs.multipart_threshold`, with `HANGAR_HF_ENDPOINT` (default 64 MiB). The Go test server lowers it to 5 MiB, the smallest the setting allows. |
 | `HANGAR_HF_MULTIPART_FILE_SIZE` | Size in bytes of the file `test_upload_over_multipart_threshold` uploads. The default is twice the larger of the threshold and 16 MiB, plus one byte: `internal/gitserver` makes parts of at least 16 MiB ([`04-git.md`](../../docs/spec/04-git.md)), so the file always has more than one part. 13-testing.md asks for 200 MB on pull requests and a 6 GiB sparse file nightly. |
 | `HANGAR_HF_XET_UPLOADS=1` | Leave Xet on, so the upload tests go through `hf_xet`, except `test_upload_over_multipart_threshold`, which tests the LFS multipart transfer and always turns Xet off. Needs an Instance that serves the Xet CAS endpoints (W11), such as the binary; the Go test server does not. |
 | `HANGAR_HF_WITHOUT_XET=1` | Tell the suite `hf_xet` is not installed, for the matrix cell without it. |
 
 `go test -tags compat ./compat/hf` checks the test server starts and answers.
+
+## Keep the matrix current
+
+`compatibility-matrix.json`, and `docs/reference/hub-api-compatibility.md`, which `make generate` renders from it, list every endpoint and the tests that cover it. A test covers an endpoint through `@pytest.mark.endpoint(...)` in Python, or `recordMatrix(t, ...)` in a Go test in this directory. `make lint` runs `scripts/check-hub-matrix.py`, which fails when a test covers an endpoint the matrix does not list it under, or the matrix lists a test that no longer exists. To regenerate the matrix after adding or changing such a test:
+
+```sh
+HANGAR_TEST_MINIO=1 HANGAR_HF_WRITE_MATRIX=1 go test -count=1 -tags compat ./compat/hf
+HANGAR_HF_INSTANCE=binary HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf
+make generate
+```
 
 ## Client matrix
 

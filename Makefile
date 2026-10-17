@@ -110,6 +110,7 @@ lint-style:
 	  echo "House style: replace the em dashes above."; exit 1; fi
 	@./scripts/check-spelling.sh
 	@./scripts/check-compat-timeout.sh
+	@python3 scripts/check-hub-matrix.py
 
 ## Test ------------------------------------------------------------------------------
 

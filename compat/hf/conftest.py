@@ -346,20 +346,41 @@ NOT_SUPPORTED = {
 }
 
 
+# Outcomes of the Go tests in compat/hf that cover matrix rows, written by
+# recordMatrix (matrix_test.go) when `go test -tags compat ./compat/hf` runs
+# with HANGAR_HF_WRITE_MATRIX=1. `make test-compat` runs it before pytest.
+GO_MATRIX_DIR = HF_DIR / ".matrix-go"
+
+
+def _go_results() -> dict[str, list[tuple[str, str]]]:
+    results: dict[str, list[tuple[str, str]]] = {}
+    for path in sorted(GO_MATRIX_DIR.glob("*.json")):
+        r = json.loads(path.read_text())
+        for ep in r["endpoints"]:
+            results.setdefault(ep, []).append((r["test"], r["outcome"]))
+    return results
+
+
 def _write_matrix():
     import huggingface_hub
 
+    merged = {ep: list(runs) for ep, runs in _results.items()}
+    for ep, runs in _go_results().items():
+        merged.setdefault(ep, []).extend(runs)
     endpoints = {}
-    for ep, runs in sorted(_results.items()):
+    for ep, runs in sorted(merged.items()):
         outcomes = {o for _, o in runs}
         status = "supported" if outcomes == {"passed"} else ("not supported" if "passed" not in outcomes else "partial")
         endpoints[ep] = {"status": status, "tests": sorted({n for n, _ in runs})}
     for ep, note in NOT_SUPPORTED.items():
         endpoints[ep] = {"status": "not supported", "note": note}
     doc = {
-        "generated_by": "compat/hf (HANGAR_HF_INSTANCE=binary HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf)",
+        "generated_by": "compat/hf (HANGAR_HF_WRITE_MATRIX=1 go test -tags compat ./compat/hf, then "
+        "HANGAR_HF_INSTANCE=binary HANGAR_HF_WRITE_MATRIX=1 uv run --project compat pytest compat/hf)",
         "huggingface_hub": huggingface_hub.__version__,
         "backend": HUB.backend,
         "endpoints": endpoints,
     }
     MATRIX_PATH.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+    # Each matrix comes from one run: the next needs the Go tests again.
+    shutil.rmtree(GO_MATRIX_DIR, ignore_errors=True)
