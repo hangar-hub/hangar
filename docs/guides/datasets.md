@@ -35,14 +35,23 @@ ds = load_dataset("lhoestq/demo1", split="train")
 stream = load_dataset("lhoestq/demo1", split="train", streaming=True)
 ```
 
-pandas and Polars read the `hf://` file system that `huggingface_hub` provides:
+pandas reads the `hf://` file system that `huggingface_hub` provides:
 
 ```python
 import pandas as pd
-import polars as pl
 
 df = pd.read_parquet("hf://datasets/acme/reviews/data/train-00000-of-00001.parquet")
-lf = pl.scan_parquet("hf://datasets/acme/reviews/**/*.parquet")
+```
+
+Polars has its own `hf://` client, which always talks to huggingface.co and ignores `HF_ENDPOINT`. Open the files through `huggingface_hub` instead:
+
+```python
+import polars as pl
+from huggingface_hub import HfFileSystem
+
+fs = HfFileSystem()
+paths = fs.glob("datasets/acme/reviews/**/*.parquet")
+df = pl.concat([pl.read_parquet(fs.open(p, "rb")) for p in paths])
 ```
 
 DuckDB reads files over HTTPS from `resolve` URLs. Its own `hf://` scheme talks to huggingface.co, so use HTTPS URLs for Hangar:
@@ -65,9 +74,11 @@ A Config is a named subset of a dataset, from the card's `configs:` YAML or infe
 
 Hangar converts every Config and Split to Parquet, on the `refs/convert/parquet` branch, as huggingface.co does. The Dataset Viewer reads it, and you can load it directly.
 
+A Mirror keeps the Upstream's own Parquet export instead of converting. A Pull of the dataset's files does not always bring the export's files with it; until they are in the Arsenal, the **Viewer** tab says to pull them, which `hangar pull datasets/<namespace>/<name> --parquet-only --server-only` does.
+
 ## Partial and Parquet-only Pulls
 
-Pull just the Configs and Splits you need, or only their Parquet export, which can turn a very large raw dataset into a few GB:
+Pull only the Configs and Splits you need, or only their Parquet export, which can turn a very large raw dataset into a few GB:
 
 ```sh
 hangar pull datasets/HuggingFaceFW/fineweb-edu --config sample-10BT --split train --parquet-only --to ./fineweb

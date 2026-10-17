@@ -53,6 +53,9 @@ rest, names the files that failed and makes no Commit, so running it again
 sends only those files.
 Files the Instance already has anywhere are not sent again.
 
+With --branch, a branch that does not exist yet is created from the default
+branch before the upload starts.
+
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,
 		Example: `  hangar push ./my-finetune acme/my-finetune --create --private
   hangar push ./data datasets/acme/reviews --message "Add the March export"
@@ -84,7 +87,7 @@ The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,
 	}
 	a.clientFlags(cmd)
 	f := cmd.Flags()
-	f.StringVar(&o.Branch, "branch", "", "branch to commit to (default: the default branch)")
+	f.StringVar(&o.Branch, "branch", "", "branch to commit to, created from the default branch if it does not exist (default: the default branch)")
 	f.StringVarP(&o.Message, "message", "m", "Upload with hangar push", "Commit message")
 	f.StringVar(&o.Description, "description", "", "longer Commit description")
 	f.BoolVar(&o.Create, "create", false, "create the Repo if it does not exist")
@@ -112,6 +115,17 @@ func (a *app) push(ctx context.Context, dir string, id model.RepoID, o pushOptio
 	}
 	if err := a.ensureRepo(ctx, c, id, o.Create, o.Private); err != nil {
 		return nil, err
+	}
+	// A branch that does not exist yet is created from the default branch
+	// before anything is uploaded, so the Commit has somewhere to go.
+	if o.Branch != "" {
+		created, err := c.ensureBranch(ctx, id, o.Branch)
+		if err != nil {
+			return nil, fmt.Errorf("create branch %s: %w", o.Branch, err)
+		}
+		if created {
+			a.logf("Created branch %s from the default branch.\n", o.Branch)
+		}
 	}
 	return a.commitFiles(ctx, c, id, files, o)
 }

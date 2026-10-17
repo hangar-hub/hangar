@@ -36,10 +36,14 @@ function list(s: string): string[] {
     .filter(Boolean);
 }
 
+// What each scope allows on top of the user's own permissions, as
+// docs/concepts/permissions.md says: a write Token also administers the
+// Repos the user is an admin of, as on huggingface.co, and the admin scope
+// adds Organisation Members and the Instance.
 export const scopeHelp: Record<Scope, string> = {
   read: "Download and clone.",
-  write: "Also upload, push and open pull requests.",
-  admin: "Also change settings, members and webhooks.",
+  write: "Also upload, push, start Pulls and change the Repos you administer.",
+  admin: "Also manage Organisation Members and, for Instance admins, the Instance.",
 };
 
 function CreateToken({ onCreated }: { onCreated: (t: TokenCreated) => void }) {

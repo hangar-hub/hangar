@@ -343,6 +343,10 @@ func TestMirrorAdoptsUpstreamExport(t *testing.T) {
 	require.Equal(t, pipeline.StatusReady, rows[0].Status)
 	require.Equal(t, tip, rows[0].ConvertedCommit)
 	require.EqualValues(t, 3, rows[0].NumRows)
+	// The source size comes from the Mirror's own data files, as when Hangar
+	// converts, so hangar info and the Viewer's /info and /size do not
+	// report 0 bytes for a Mirror.
+	require.EqualValues(t, len(demoCSV), rows[0].NumBytesSource)
 	after, err := e.repos.Resolve(e.ctx, r.ID, pipeline.ExportRef)
 	require.NoError(t, err)
 	require.Equal(t, tip, after, "a Mirror's export is used, not rewritten")
@@ -350,4 +354,31 @@ func TestMirrorAdoptsUpstreamExport(t *testing.T) {
 	require.NoError(t, err)
 	b, _ := json.Marshal(info.Features)
 	require.Contains(t, string(b), "review")
+	require.Equal(t, []pipeline.SourceFile{{Path: "data/train.csv", Size: int64(len(demoCSV))}}, info.SourceFiles)
+}
+
+// TestMirrorExportPulledLater follows docs/guides/datasets.md on a Mirror
+// whose Parquet export was not pulled with the dataset: the Splits fail with
+// FailureNotPulled, and the Viewer says to pull the export. Once it is
+// pulled, the Pull's index Job queues dataset.convert again, which must
+// adopt the export instead of skipping the Commit as done; before, the
+// Splits stayed failed after `hangar pull --parquet-only`.
+func TestMirrorExportPulledLater(t *testing.T) {
+	d := dbtest.SQLite(t)
+	e := newEnv(t, d, 0)
+	r, sha := e.dataset(t, "later", map[string][]byte{"data/train.csv": []byte(demoCSV)})
+	e.run(t, r, sha)
+	require.NoError(t, e.repos.SetMirror(r.ID, true))
+	r, err := e.repos.Get(e.ctx, r.ID)
+	require.NoError(t, err)
+	// What the first conversion stored while the export was not pulled.
+	require.NoError(t, e.p.Store().ReplaceSplits(e.ctx, r.UUID, sha, []pipeline.SplitRow{
+		{Config: "default", Split: "train", Status: pipeline.StatusFailed, Error: pipeline.FailureNotPulled}}))
+
+	e.run(t, r, sha)
+	rows, err := e.p.Store().Splits(e.ctx, r.UUID, sha)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, pipeline.StatusReady, rows[0].Status, rows[0].Error)
+	require.EqualValues(t, 3, rows[0].NumRows)
 }

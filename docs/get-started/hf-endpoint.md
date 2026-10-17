@@ -16,7 +16,7 @@ eval "$(hangar env)"
 
 `DISABLE_SAFETENSORS_CONVERSION=1` matters for models that only have pickle weights (`pytorch_model.bin`). Without it, `transformers` may send the Repo ID, and a Token you passed to it, to a conversion service on huggingface.co. Hangar also refuses the request `transformers` makes before that call, so the leak cannot happen, but setting the variable avoids the attempt.
 
-Now every Hub call goes to Hangar:
+Now every Hub call goes to Hangar. The Repo must be in the Arsenal, so pull it first, as in [Pull your first model](first-pull.md); a Repo that is not there answers as if it did not exist, unless an admin turned on Pull-through:
 
 ```python
 from transformers import AutoModel, AutoTokenizer

@@ -9,6 +9,16 @@ import { unwrap } from "@/lib/problem";
 import { useMe } from "@/lib/session";
 import { RepoListPage } from "./arsenal/RepoListPage";
 
+/**
+ * Repos the landing page's example commands name. They exist on
+ * huggingface.co and are the ones the docs use, so the commands work as
+ * shown once the Repos are in the Arsenal.
+ */
+export const homeExamples = {
+  download: "Qwen/Qwen3-0.6B",
+  ollama: "bartowski/Llama-3.2-3B-Instruct-GGUF",
+} as const;
+
 const clients = [
   "huggingface_hub",
   "transformers",
@@ -77,13 +87,12 @@ function Landing() {
                 {"\n"}
                 <span className="text-taxiway-300">$</span> export HF_ENDPOINT={origin}
                 {"\n"}
-                <span className="text-taxiway-300">$</span> hf download
-                TinyLlama/TinyLlama-1.1B-Chat-GGUF
+                <span className="text-taxiway-300">$</span> hf download {homeExamples.download}
                 {"\n\n"}
                 <span className="text-steel-400"># Or pull one quant straight into Ollama</span>
                 {"\n"}
-                <span className="text-taxiway-300">$</span> ollama pull {host}
-                /TinyLlama/TinyLlama-1.1B-Chat-GGUF:Q4_K_M
+                <span className="text-taxiway-300">$</span> ollama pull {host}/{homeExamples.ollama}
+                :Q4_K_M
               </code>
             </pre>
           </ScrollRegion>

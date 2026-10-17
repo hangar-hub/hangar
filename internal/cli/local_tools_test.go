@@ -148,6 +148,10 @@ func TestOllamaKeyRegisterAndInstall(t *testing.T) {
 	r = e.runIn("n\n", "ollama", "install", "bartowski/Tiny-GGUF:Q4_K_M")
 	require.NoError(t, r.err, r.stderr)
 	require.Contains(t, r.stderr, "Register it now?")
+	// Anonymous reads are off by default, so without the key only public
+	// Repos on an Instance that allows them work (docs/guides/ollama.md).
+	require.Contains(t, r.stderr, "Only public Repos on an Instance that allows anonymous reads will work.")
+	require.NotContains(t, r.stderr, "Public Repos still work")
 	require.Empty(t, e.inst.OllamaKeys())
 	host := strings.TrimPrefix(e.inst.URL, "http://")
 	require.Equal(t, []string{"pull", "--insecure", host + "/bartowski/Tiny-GGUF:Q4_K_M"}, ran[0])

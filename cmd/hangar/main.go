@@ -50,6 +50,12 @@ func run(args []string) int {
 	return exitOK
 }
 
+// Help groups for the commands this package adds.
+const (
+	groupServer = "server"
+	groupOther  = "other"
+)
+
 func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "hangar",
@@ -59,14 +65,24 @@ func newRootCommand() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
-	root.AddCommand(
+	// Every command has a help group, so none falls under cobra's
+	// "Additional Commands" heading. The groups are added after the client
+	// commands' group (internal/cli), which help lists first.
+	for _, c := range []*cobra.Command{
 		newServerCommand("server", "Run the Instance: web UI, APIs and Jobs, as set by server.role", ""),
 		newServerCommand("worker", "Run a worker that only runs Jobs, with health and metrics endpoints", "worker"),
 		newConfigCommand(),
 		newHealthcheckCommand(),
 		newAdminCommand(),
-		newVersionCommand(),
-	)
+	} {
+		c.GroupID = groupServer
+		root.AddCommand(c)
+	}
+	versionCmd := newVersionCommand()
+	versionCmd.GroupID = groupOther
+	root.AddCommand(versionCmd)
+	root.SetHelpCommandGroupID(groupOther)
+	root.SetCompletionCommandGroupID(groupOther)
 	// Client commands, the backup, restore, doctor and rotate-key admin
 	// commands, and the hidden reference generators (internal/cli, W9).
 	cli.Register(root, cli.Options{Version: version, Admin: cli.AdminDeps{
@@ -74,6 +90,7 @@ func newRootCommand() *cobra.Command {
 			return backends.Open(ctx, cfg.Storage)
 		},
 	}})
+	root.AddGroup(&cobra.Group{ID: groupServer, Title: "Server commands:"}, &cobra.Group{ID: groupOther, Title: "Other commands:"})
 	return root
 }
 

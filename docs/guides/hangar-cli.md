@@ -11,7 +11,7 @@ hangar whoami
 hangar logout
 ```
 
-The URL and username are saved in `~/.config/hangar/config.yaml`; the Token goes in the OS keychain (macOS Keychain, Windows Credential Manager or the Secret Service on Linux) where one is available, otherwise in that file with mode 0600. In scripts and CI, set `HANGAR_CLI_URL` and `HANGAR_CLI_TOKEN` instead, or pass `--url` and `--token`.
+The URL and username are saved in `~/.config/hangar/config.yaml`; the Token goes in the OS keychain (macOS Keychain, Windows Credential Manager or the Secret Service on Linux) where one is available, otherwise in that file with mode 0600. In scripts and CI, set `HANGAR_CLI_URL` and `HANGAR_CLI_TOKEN` instead, or pass `--url` and `--token`. `HANGAR_CLI_CONFIG` points the CLI at another configuration file, and `HANGAR_CLI_NO_KEYCHAIN=1` keeps the Token in that file instead of the OS keychain.
 
 ## Find and inspect
 

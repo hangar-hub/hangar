@@ -835,8 +835,9 @@ Pull a GGUF model into Ollama from the Instance.
 ```text
 Runs ollama pull <host>/<namespace>/<name>:<quant> against the Instance, adding
 --insecure for an http:// Instance. Before that, checks that your Ollama key
-(~/.ollama/id_ed25519.pub) is registered with the Instance, which Ollama needs
-for Repos that are not public, and offers to register it.
+(~/.ollama/id_ed25519.pub) is registered with the Instance, and offers to
+register it. Ollama needs the key for every Repo unless the Repo is public and
+the Instance allows anonymous reads (security.anonymous_read, off by default).
 ```
 
 Usage:
@@ -856,7 +857,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--skip-key-check` | do not check the Ollama key, for public Repos |  |
+| `--skip-key-check` | do not check the Ollama key, for public Repos on an Instance that allows anonymous reads |  |
 | `-y`, `--yes` | register the Ollama key without asking |  |
 
 Inherited flags:
@@ -971,6 +972,9 @@ rest, names the files that failed and makes no Commit, so running it again
 sends only those files.
 Files the Instance already has anywhere are not sent again.
 
+With --branch, a branch that does not exist yet is created from the default
+branch before the upload starts.
+
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.
 ```
 
@@ -992,7 +996,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--branch` | branch to commit to (default: the default branch) |  |
+| `--branch` | branch to commit to, created from the default branch if it does not exist (default: the default branch) |  |
 | `--create` | create the Repo if it does not exist |  |
 | `--create-pr` | open a pull request instead of committing to the branch |  |
 | `--description` | longer Commit description |  |

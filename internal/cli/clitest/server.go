@@ -767,6 +767,13 @@ func (s *server) CreateCommit(w http.ResponseWriter, r *http.Request, t gen.Repo
 	if body.Branch != nil && *body.Branch != "" {
 		branch = *body.Branch
 	}
+	// Like the real Commit endpoint, a Commit goes only to a branch that
+	// exists; the default branch of a Repo with no Commits yet is the
+	// exception.
+	if _, ok := repo.refs[branch]; !ok && branch != repo.DefaultBranch {
+		problem(w, http.StatusNotFound, "revision not found: "+branch)
+		return
+	}
 	files := map[string]File{}
 	parent := repo.commits[repo.refs[branch]]
 	if parent == nil {

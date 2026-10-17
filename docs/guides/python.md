@@ -41,12 +41,12 @@ Models with remote code (`trust_remote_code=True`) load offline as soon as their
 ```python
 from diffusers import DiffusionPipeline
 
-pipe = DiffusionPipeline.from_pretrained("hf-internal-testing/tiny-stable-diffusion-pipe")
+pipe = DiffusionPipeline.from_pretrained("hf-internal-testing/tiny-stable-diffusion-torch")
 ```
 
 ## Files that are not in the Arsenal
 
-A file of a Partial mirror that was not pulled answers like a missing file (`EntryNotFoundError`), unless the admin turned on Pull-through, in which case the download starts its Pull and streams it as it arrives. Pull it first with `hangar pull <repo> --include <file>` or from the Repo page.
+A file of a Partial mirror that was not pulled is listed with its size, but downloading it fails with HTTP 409 (`HfHubHTTPError` in `huggingface_hub`), and the message names the `hangar pull` command to run. If the admin turned on Pull-through, the download starts the file's Pull instead and streams it as it arrives. Pull it first with `hangar pull <repo> --include <file>` or from the Repo page.
 
 ## Large downloads
 

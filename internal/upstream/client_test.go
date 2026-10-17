@@ -304,3 +304,27 @@ func TestHTTPClientViewer(t *testing.T) {
 	_, err = newClient().Viewer(ctx, srv.Upstream("test"), upstream.Credentials{}, "/../admin", nil)
 	require.Error(t, err)
 }
+
+// TestHTTPClientAnonymous401IsNotFound follows huggingface.co, which answers
+// an anonymous request for a Repo that does not exist with a bare 401
+// "Invalid username or password." and no X-Error-Code. Without credentials
+// that is not found: `hangar info nope/nope` said the Upstream rejected the
+// credentials of a user who had saved none. With a token sent, a 401 still
+// means the token was rejected.
+func TestHTTPClientAnonymous401IsNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Error-Message", "Invalid username or password.")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"Invalid username or password."}`))
+	}))
+	t.Cleanup(srv.Close)
+	up := upstream.Upstream{Name: "hf", BaseURL: srv.URL, Enabled: true}
+	ctx := context.Background()
+	c := newClient()
+	_, err := c.RepoInfo(ctx, up, upstream.Credentials{}, tiny, "")
+	require.ErrorIs(t, err, upstream.ErrNotFound)
+	require.NotErrorIs(t, err, upstream.ErrUnauthorized)
+	_, err = c.RepoInfo(ctx, up, upstream.Credentials{Token: "hf_wrong"}, tiny, "")
+	require.ErrorIs(t, err, upstream.ErrUnauthorized)
+}

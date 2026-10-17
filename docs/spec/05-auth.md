@@ -58,7 +58,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 ## Tokens
 
 - Format: `hgr_` followed by 40 base62 characters. Stored as SHA-256; shown once.
-- Scopes: `read`, `write`, `admin` (admin includes write, write includes read).
+- Scopes: `read`, `write`, `admin` (admin includes write, write includes read). A `write` Token also does the `admin` action on a Repo (settings, rename, transfer, delete, webhooks, access requests) when the user's Role allows it, as on huggingface.co; the `admin` scope is needed only to manage an Organisation's Members and the Instance ([decisions](../build/decisions.md), "A write Token administers Repos").
 - Optional restrictions: a list of Namespaces and/or Repos.
 - Optional expiry; `last_used_at` updated at most once a minute.
 - Accepted as:

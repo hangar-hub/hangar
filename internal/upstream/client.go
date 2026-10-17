@@ -300,6 +300,13 @@ func (c *HTTPClient) statusError(resp *http.Response) error {
 		return fmt.Errorf("%w (%s)", ErrGated, detail)
 	case code == "RepoNotFound" || code == "RevisionNotFound" || code == "EntryNotFound":
 		return fmt.Errorf("%w (%s)", ErrNotFound, detail)
+	case resp.StatusCode == http.StatusUnauthorized && !sentCredentials(resp):
+		// huggingface.co answers a Repo that does not exist, or that it
+		// will not show anonymous callers, with a bare 401 "Invalid
+		// username or password." and no X-Error-Code. With no credentials
+		// sent, none were rejected, so it is not found, as huggingface_hub
+		// reads it.
+		return fmt.Errorf("%w (%s)", ErrNotFound, detail)
 	case resp.StatusCode == http.StatusUnauthorized:
 		return fmt.Errorf("%w (%s)", ErrUnauthorized, detail)
 	case resp.StatusCode == http.StatusForbidden:
@@ -317,6 +324,12 @@ func (c *HTTPClient) statusError(resp *http.Response) error {
 	default:
 		return errors.New(detail)
 	}
+}
+
+// sentCredentials reports whether the request that got resp carried an
+// Authorization header.
+func sentCredentials(resp *http.Response) bool {
+	return resp.Request != nil && resp.Request.Header.Get("Authorization") != ""
 }
 
 func apiBase(u Upstream) string { return strings.TrimRight(u.BaseURL, "/") }

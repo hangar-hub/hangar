@@ -64,8 +64,9 @@ func (a *app) ollamaCommand() *cobra.Command {
 		Short: "Pull a GGUF model into Ollama from the Instance",
 		Long: `Runs ollama pull <host>/<namespace>/<name>:<quant> against the Instance, adding
 --insecure for an http:// Instance. Before that, checks that your Ollama key
-(~/.ollama/id_ed25519.pub) is registered with the Instance, which Ollama needs
-for Repos that are not public, and offers to register it.`,
+(~/.ollama/id_ed25519.pub) is registered with the Instance, and offers to
+register it. Ollama needs the key for every Repo unless the Repo is public and
+the Instance allows anonymous reads (security.anonymous_read, off by default).`,
 		Example: `  hangar ollama install bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
   hangar ollama install acme/private-model --yes`,
 		Args: args(cobra.ExactArgs(1)),
@@ -111,7 +112,7 @@ for Repos that are not public, and offers to register it.`,
 		},
 	}
 	install.Flags().BoolVarP(&yes, "yes", "y", false, "register the Ollama key without asking")
-	install.Flags().BoolVar(&skipKey, "skip-key-check", false, "do not check the Ollama key, for public Repos")
+	install.Flags().BoolVar(&skipKey, "skip-key-check", false, "do not check the Ollama key, for public Repos on an Instance that allows anonymous reads")
 
 	key := &cobra.Command{Use: "key", Short: "Manage your Ollama key on the Instance", Args: args(cobra.NoArgs)}
 	register := &cobra.Command{
@@ -183,10 +184,10 @@ func (a *app) ensureOllamaKey(ctx context.Context, c *client, stdin io.Reader, y
 		}
 	}
 	if !yes {
-		a.logf("Your Ollama key %s is not registered with %s. Ollama needs it for Repos that are not public.\nRegister it now? [y/N] ", fp, c.base.Host)
+		a.logf("Your Ollama key %s is not registered with %s. Ollama needs it unless the Repo is public and the Instance allows anonymous reads.\nRegister it now? [y/N] ", fp, c.base.Host)
 		line, _ := bufio.NewReader(stdin).ReadString('\n')
 		if ans := strings.ToLower(strings.TrimSpace(line)); ans != "y" && ans != "yes" {
-			a.logf("Not registering the key. Public Repos still work.\n")
+			a.logf("Not registering the key. Only public Repos on an Instance that allows anonymous reads will work.\n")
 			return nil
 		}
 	}

@@ -40,8 +40,9 @@ existingSecret: ""
 # upgrades by reading the Secret back from the cluster, so this works only
 # with helm install and helm upgrade: helm template, --dry-run=client and
 # Argo CD fail with a message instead of generating new ones on every
-# render. Read the password with:
-#   kubectl get secret <release>-hangar-generated -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d
+# render. The install notes print the command that reads the password; for
+# a release named hangar it is:
+#   kubectl get secret hangar-generated -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d
 generateSecrets: true
 
 # SQLite and filesystem mode. With persistence on, the chart runs one Pod in

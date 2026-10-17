@@ -10,7 +10,7 @@ Hangar keeps your machine learning models and datasets on your own storage, with
 - **LM Studio.** `hangar lmstudio install org/model:Q4_K_M`.
 - **Datasets.** `load_dataset`, pandas and Polars over `hf://`, DuckDB over HTTPS, and a Dataset Viewer in the browser.
 
-Pull models and datasets from huggingface.co once, including just the quantisation, Config or Split you want and any code they depend on, then load them from fast local storage as often as you like. Upload models that exist nowhere else. Browse everything you have, and everything you could pull, in one place.
+Pull models and datasets from huggingface.co once, including only the quantisation, Config or Split you want and any code they depend on, then load them from fast local storage as often as you like. Upload models that exist nowhere else. Browse everything you have, and everything you could pull, in one place.
 
 ![Hangar in 30 seconds in a terminal: check the sign-in, pull a model from huggingface.co, download it with the hf CLI and show its details](assets/demo.gif)
 

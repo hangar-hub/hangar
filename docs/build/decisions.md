@@ -57,8 +57,17 @@ Made by the phase 3 scan agent on 2026-10-17 from the security inputs for `scan.
 - **git clone and fetch are gated.** git-upload-pack is refused while a reachable Commit holds a refused file stored in git rather than LFS, or the history is too long to check.
 - **Scanner version 2.** The rescan of every ref tip runs when workers start.
 
+## Decisions from the phase 3 docs walk-through
+
+Made on 2026-10-17 where a page under `docs/get-started` or `docs/guides` and the product disagreed; the log is in [docs-walkthrough.md](docs-walkthrough.md).
+
+- **Discover opens a Repo by ID.** huggingface.co search leaves some organisations out, such as `hf-internal-testing`, so the first-pull guide's Repo could not be found by searching. A Discover search of the form `namespace/name` also offers **Open** for that Repo ([09](../spec/09-web-ui.md)).
+- **A gating update keeps the keys it does not send.** `PATCH /repos/{type}/{ns}/{name}` with `gating` changes only the gating keys in the body, so saving the mode in the UI no longer clears request form fields set through the API.
+- **`hangar push --branch` creates a missing branch** from the default branch, as `hf upload --revision` does.
+- **An anonymous 401 from an Upstream is not found.** huggingface.co answers an anonymous request for a Repo that does not exist with a bare 401; with no credentials sent, Hangar reads it as not found, as `huggingface_hub` does, instead of saying the Upstream rejected the user's credentials.
+
 ## Open questions for James
 
 - **Should `scan.block_unsafe_downloads` also refuse suspicious files that can run code?** The setting blocks only imports on the deny list, which cannot be complete: a function that runs code and is on neither list is suspicious and downloads. Options: keep it (model classes from `transformers` and `sklearn` are suspicious, so blocking them would refuse most sklearn and full-model pickles); block suspicious pickles too, which matches `torch.load(weights_only=True)`; or make the level a setting (`unsafe` or `suspicious`). Raised by the phase 3 scan review; not changed.
-
+- **Ollama and a quant that is not pulled.** Spec 08 answers 404 `MANIFEST_UNKNOWN` with a message naming the Pull to run, but Ollama 0.31 shows only `file does not exist` for any manifest 404. Keep 404 (the docs now explain it), answer another status so Ollama prints the message, or have `hangar ollama install` check the quant first? See [handoffs/p3-docs.md](handoffs/p3-docs.md).
 - **When to release.** The release is on hold (see "Release on hold" above). After the release dry run passes, ask James whether to go ahead with phase 4.

@@ -4,8 +4,8 @@ A Pull fetches a Repo, or some of its files, from an Upstream such as huggingfac
 
 ## From the web UI
 
-1. Open **Discover** and search, for example for `tiny-random-bert`.
-2. Open a result. Hangar shows the files, their sizes, any GGUF quants and the Dependencies it would pull.
+1. Open **Discover** and search by name, or enter a full Repo ID such as `hf-internal-testing/tiny-random-bert`.
+2. Open a result, or for a Repo ID select **Open hf-internal-testing/tiny-random-bert**. huggingface.co search does not list every Repo (it leaves out `hf-internal-testing`, for example), so a Repo ID opens the Repo directly. Hangar shows the files, their sizes, any GGUF quants and the Dependencies it would pull.
 3. Select **Pull into arsenal**. The Pull runs as a Job; follow it under **Jobs**.
 
 For a GGUF Repo, the quant picker lets you pull one quantisation, such as `Q4_K_M`, instead of every file. The Repo then becomes a Partial mirror: the full history is there, and files you did not pull show as **Not in arsenal** with a Pull action.
