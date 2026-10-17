@@ -5,6 +5,7 @@ import {
   expectNoHorizontalOverflow,
   settled,
   watchConsole,
+  watchFailedLoads,
 } from "../e2e/helpers";
 import { env, type Session, session, signIn, upstreamName, user } from "./helpers";
 import { collection, datasetRepo, modelRepo } from "./seed";
@@ -143,6 +144,7 @@ for (const route of signedIn) {
 for (const path of signedOut) {
   test(`${path} renders, fits the width and is accessible when signed out`, async ({ page }) => {
     const problems = watchConsole(page);
+    const failedLoads = watchFailedLoads(page);
     await page.goto(path);
     await expect(page.locator("h1")).toHaveCount(1);
     await settled(page);
@@ -151,5 +153,7 @@ for (const path of signedOut) {
     await expectAccessible(page);
     await expectGlossaryTerms(page);
     expect(problems).toEqual([]);
+    // No request fails before sign-in, so the console stays clean.
+    expect(failedLoads).toEqual([]);
   });
 }
