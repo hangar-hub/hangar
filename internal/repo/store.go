@@ -72,6 +72,11 @@ type Options struct {
 	// MaxPackSize is the largest pack a push may send (git.max_pack_size).
 	// Zero means 2 GiB.
 	MaxPackSize int64
+	// MaxTreePaths is the most files and folders one Commit may hold, so a
+	// tree that names the same subtree many times cannot expand into
+	// millions of paths from a pack of a few hundred bytes. Zero means
+	// DefaultMaxTreePaths.
+	MaxTreePaths int64
 	// AllowForcePush lets anyone with write access force-push the default
 	// branch (git.allow_force_push).
 	AllowForcePush bool
@@ -121,6 +126,9 @@ func NewStore(opts Options) (*Store, error) {
 	}
 	if opts.MaxPackSize <= 0 {
 		opts.MaxPackSize = 2 << 30
+	}
+	if opts.MaxTreePaths <= 0 {
+		opts.MaxTreePaths = DefaultMaxTreePaths
 	}
 	if opts.CompactThreshold <= 0 {
 		opts.CompactThreshold = 20

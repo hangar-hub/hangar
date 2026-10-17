@@ -49,3 +49,6 @@ Rules for pushes:
 - Mirrors are read-only, so pushes to them are refused. Detach a Mirror first to make it an ordinary Repo.
 - If two pushes to the same branch race, one wins and the other gets git's usual non-fast-forward rejection.
 - `git push --atomic` fails with "the receiving end does not support --atomic push", because Hangar does not advertise the capability. Every push is applied all or nothing anyway, so push without `--atomic`.
+- A push may update at most 10,000 branches and tags, and no object in it may be larger than 64 MiB (or `git.max_blob_size`, if that is larger) when unpacked.
+- A Commit may hold at most 1,000,000 files and folders, and no path may be longer than 4,096 bytes.
+- Names that a client could check out as `.git` (such as `.GIT` or `git~1`), the names `.` and `..`, and names with a backslash are refused.

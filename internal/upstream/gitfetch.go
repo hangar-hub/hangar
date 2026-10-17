@@ -17,6 +17,17 @@ import (
 	"github.com/jamesagarside/hangar/internal/model"
 )
 
+// MaxUpstreamRefs is the most refs Hangar reads from an Upstream's ref
+// advertisement. Each becomes a ref update and a row in the Mirror, so an
+// Upstream that advertises refs without end would otherwise use memory
+// without end. The Hub's busiest Repos have a few thousand.
+var MaxUpstreamRefs = 100_000
+
+// errTooManyRefs is an advertisement over MaxUpstreamRefs.
+func errTooManyRefs() error {
+	return fmt.Errorf("the upstream advertises more than %d refs, the most Hangar mirrors", MaxUpstreamRefs)
+}
+
 // mirrorRefPrefixes are the refs a Mirror fetches (04-git.md "Mirrors").
 var mirrorRefPrefixes = []string{"refs/heads/", "refs/tags/", "refs/pr/", "refs/convert/"}
 
@@ -192,6 +203,9 @@ func readAdvertisement(r io.Reader) (bool, []advertisedRef, error) {
 				refs[i].peeled = sha
 			}
 		} else if name != "capabilities^{}" {
+			if len(refs) >= MaxUpstreamRefs {
+				return false, nil, errTooManyRefs()
+			}
 			byName[name] = len(refs)
 			refs = append(refs, advertisedRef{name: name, oid: sha})
 		}
@@ -234,6 +248,9 @@ func (c *HTTPClient) lsRefs(ctx context.Context, u Upstream, cred Credentials, b
 		if err != nil {
 			// Unborn refs ("unborn HEAD") have no object.
 			continue
+		}
+		if len(refs) >= MaxUpstreamRefs {
+			return nil, fmt.Errorf("%w: %w", ErrUnavailable, errTooManyRefs())
 		}
 		ref := advertisedRef{name: fields[1], oid: sha}
 		for _, attr := range fields[2:] {

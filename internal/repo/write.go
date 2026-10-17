@@ -766,6 +766,13 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 			return nil, err
 		}
 		sha := model.CommitSHA(strings.TrimSpace(string(out)))
+		// The paths added were checked one by one; this bounds the whole
+		// Commit, as for pushes. Names already in the parent are not
+		// checked again, so a Repo that holds one from before the check
+		// still takes Commits.
+		if err := s.checkCommitSize(ctx, st, row.ID, parent, ops, sha); err != nil {
+			return nil, err
+		}
 		pack, _, err := st.PackLoose(ctx)
 		if err != nil {
 			return nil, err
@@ -800,6 +807,41 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 		}
 		tip, parent = newTip, newTip
 	}
+}
+
+// checkCommitSize bounds a server-side Commit by the tree limits. When the
+// parent's path count is in the tree cache and the Commit cannot take it
+// past Options.MaxTreePaths (each added path adds at most one entry per
+// component), it starts no git process; otherwise it runs checkTrees.
+func (s *Store) checkCommitSize(ctx context.Context, st *gitstore.Staging, repoID uuid.UUID, parent model.CommitSHA, ops []preparedOp, sha model.CommitSHA) error {
+	var bound int64
+	if parent != "" {
+		cached, err := s.treeCached(ctx, s.db, repoID, parent)
+		if err != nil {
+			return err
+		}
+		if !cached {
+			return s.checkTrees(ctx, st.Dir, []string{string(sha)}, false)
+		}
+		n, err := s.db.NewSelect().Model((*db.TreeEntry)(nil)).Where("repo_id = ?", repoID).Where("commit_sha = ?", string(parent)).Count(ctx)
+		if err != nil {
+			return err
+		}
+		bound = n
+	}
+	for _, op := range ops {
+		if op.kind == OpCopy {
+			// A copy can bring a whole folder.
+			return s.checkTrees(ctx, st.Dir, []string{string(sha)}, false)
+		}
+		if op.kind != OpDelete {
+			bound += int64(strings.Count(op.path, "/") + 1)
+		}
+	}
+	if bound <= s.opts.MaxTreePaths {
+		return nil
+	}
+	return s.checkTrees(ctx, st.Dir, []string{string(sha)}, false)
 }
 
 // commitTree returns the tree of a Commit, from the commits cache when it

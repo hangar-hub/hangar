@@ -215,9 +215,30 @@ func TestCleanRepoPath(t *testing.T) {
 		require.NoError(t, err, in)
 		require.Equal(t, want, got, in)
 	}
-	for _, bad := range []string{"/etc/passwd", "../x", "a/../b", "a//b", ".git/config", "a/.git/x", "a\\b", "a\x00b", "./a"} {
+	for _, bad := range []string{"/etc/passwd", "../x", "a/../b", "a//b", ".git/config", "a/.git/x", "a\\b", "a\x00b", "./a",
+		// Names a case-insensitive, NTFS or HFS+ client checks out as .git.
+		".GIT/config", ".Git/hooks/post-checkout", "a/GIT~1/config", ".git./config", ".git \u0020/x", ".git::$INDEX_ALLOCATION/x",
+		".g\u200cit/config", "\ufeff.GIT/config", "x/.gi\u200dt",
+		strings.Repeat("a", model.MaxPathLength+1)} {
 		_, err := model.CleanRepoPath(bad)
-		require.ErrorIs(t, err, model.ErrInvalidPath, bad)
+		require.ErrorIs(t, err, model.ErrInvalidPath, "%q", bad)
+	}
+	long := strings.Repeat("a/", model.MaxPathLength/2-1) + "b"
+	got, err := model.CleanRepoPath(long)
+	require.NoError(t, err, "a path of MaxPathLength bytes is allowed")
+	require.Len(t, got, model.MaxPathLength-1)
+	for _, ok := range []string{".gitattributes", ".github/workflows/ci.yml", "git", ".gitx/a", "a.git", "my.git/x", "gi\u200ct/x", ".g\u00eft"} {
+		_, err := model.CleanRepoPath(ok)
+		require.NoError(t, err, "%q", ok)
+	}
+}
+
+func TestValidPathComponent(t *testing.T) {
+	for _, bad := range []string{"", ".", "..", "a/b", "a\\b", "a\x00", ".git", ".GiT", "GIT~1", "git~1.", ".git. . ", ".git:x", ".\u200cg\u200di\u200et\u200f", ".\u202agit", ".git\u206a", "\ufeff.git"} {
+		require.Error(t, model.ValidPathComponent(bad), "%q", bad)
+	}
+	for _, ok := range []string{"a", ".gitignore", ".gitmodules", "git~2", ".git~1", "..a", "...", ".git-x", ".gi", "\u00e9"} {
+		require.NoError(t, model.ValidPathComponent(ok), "%q", ok)
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/jamesagarside/hangar/internal/auth"
+	"github.com/jamesagarside/hangar/internal/gitstore"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
@@ -165,7 +166,11 @@ func (s *Server) receivePack(w http.ResponseWriter, r *http.Request, rp repoPath
 	noCache(h)
 	h.Set("Content-Type", "application/x-git-receive-pack-result")
 	out := &lazyHeaderWriter{w: w}
-	err = transport.ReceivePack(ctx, st, io.NopCloser(&limitReader{r: body, max: s.cfg.MaxPackSize}), nopWriteCloser{out}, &transport.ReceivePackRequest{
+	// go-git rebuilds every delta in memory before the pre-receive hook
+	// runs, so the pack is checked against the limits as it streams in.
+	in := gitstore.LimitReceivePack(&limitReader{r: body, max: s.cfg.MaxPackSize}, gitstore.PackLimitsFor(s.cfg.MaxBlobSize, s.cfg.MaxPackSize))
+	defer func() { _ = in.Close() }()
+	err = transport.ReceivePack(ctx, st, in, nopWriteCloser{out}, &transport.ReceivePackRequest{
 		GitProtocol:  gitProtocol(r),
 		StatelessRPC: true,
 		Hooks:        transport.ReceivePackHooks{PreReceive: hook.preReceive},
@@ -173,8 +178,11 @@ func (s *Server) receivePack(w http.ResponseWriter, r *http.Request, rp repoPath
 	outcome := hook.outcome
 	if err != nil && outcome == outcomeOK {
 		outcome = outcomeRejected
-		var tooLarge errPackTooLarge
-		if !errors.As(err, &tooLarge) && !hook.ran {
+		var (
+			tooLarge errPackTooLarge
+			limit    *gitstore.PackLimitError
+		)
+		if !errors.As(err, &tooLarge) && !errors.As(err, &limit) && !errors.Is(err, gitstore.ErrMalformedPack) && !hook.ran {
 			outcome = outcomeError
 		}
 	}
@@ -186,7 +194,16 @@ func (s *Server) receivePack(w http.ResponseWriter, r *http.Request, rp repoPath
 			s.log.WarnContext(ctx, "git receive-pack failed", "error", err)
 		}
 		if !out.started {
-			s.gitError(w, r, http.StatusBadRequest, "The push request could not be read.")
+			_ = in.Close()
+			var limit *gitstore.PackLimitError
+			switch checked := in.Err(); {
+			case errors.As(checked, &limit):
+				s.gitError(w, r, http.StatusRequestEntityTooLarge, "Push refused: "+limit.Message+".")
+			case errors.Is(checked, gitstore.ErrMalformedPack):
+				s.gitError(w, r, http.StatusBadRequest, "Push refused: the pack is not valid.")
+			default:
+				s.gitError(w, r, http.StatusBadRequest, "The push request could not be read.")
+			}
 		}
 	}
 }

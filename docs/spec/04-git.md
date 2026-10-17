@@ -47,6 +47,7 @@ For every git request, and for any `repo.Service` read that needs git objects:
 
 - `GET /{repo}[.git]/info/refs?service=git-receive-pack` without credentials returns `401` with `WWW-Authenticate: Basic realm="Hangar"`, so git asks the credential helper. With credentials and no `write` access: 403 for Repos the caller can read, 404 otherwise.
 - `POST /{repo}[.git]/git-receive-pack` runs go-git `ReceivePack` on a filesystem storer over the view, with alternates to the cache and refs from an in-memory snapshot.
+- go-git and `git index-pack` rebuild every delta in memory, so the request body passes through `gitstore.LimitReceivePack` first, which reads the pack as it streams and holds back its trailer until every object passes ([Pack and tree limits](#pack-and-tree-limits)).
 - The `PreReceive` hook, in order:
   1. **Policy:**
      - the token has `write` scope and passes its restrictions
@@ -54,7 +55,7 @@ For every git request, and for any `repo.Service` read that needs git objects:
      - ref names are valid and live under `refs/heads/` or `refs/tags/`; `refs/pr/*` is writable only through the pull request flow
      - force-push and delete rules: the default branch cannot be deleted, and force-pushing it is allowed only for Namespace admins unless the setting `git.allow_force_push` is true
      - non-LFS blobs are under `git.max_blob_size` (default 10 MiB, as on the Hub), with an error message that explains how to track the file with LFS
-     - the pack is under `git.max_pack_size` (default 2 GiB)
+     - the pack is under `git.max_pack_size` (default 2 GiB) and within the [pack and tree limits](#pack-and-tree-limits)
      - the push fits the Namespace quota
      - every LFS pointer in the new Commits refers to an LFS object that exists and is verified
   2. Upload `.pack`, `.idx` and `.rev` to the Blob store, then insert `packs(state = 'pending')`.
@@ -91,6 +92,24 @@ New Repos get an initial Commit on `main` with `.gitattributes` (the Hub's defau
 - Plan step ([06](06-upstreams-and-pulls.md)): fetch from `<upstream>/<repo>` (or `/datasets/<repo>`) with go-git v6 as a client, with these refspecs: `refs/heads/*`, `refs/tags/*`, `refs/pr/*` and `refs/convert/*`. Fetch full blobs, not `blob:none`, because Hangar must serve complete packs. Later syncs fetch with `have`s, so only new objects come down.
 - Store each received pack verbatim, then update refs with the same compare-and-swap. Upstream force-pushes are applied, keeping a `refs/hangar/previous/<timestamp>` ref for any tip that disappears.
 - LFS pointers in the fetched history become `repo_lfs` rows with `present = false`, unless the object is already stored or selected.
+- Fetched packs and their Commits pass the same [pack and tree limits](#pack-and-tree-limits) as pushes, except the limits on objects that are not deltas and on the number of objects, which Mirrors take from the Upstream as they are. Hangar reads at most 100,000 refs from an Upstream's advertisement.
+
+## Pack and tree limits
+
+Decided in Phase 3 (see [decisions](../build/decisions.md), "Git input limits"). Every pushed or fetched pack, and every Commit in it, must stay within these limits, or the push or Pull is refused with a message that names the limit:
+
+| Limit | Value | Why |
+|---|---|---|
+| Unpacked size of one object, and of a delta's own instructions | the larger of `git.max_blob_size` and 64 MiB (pushes only) | Saves unpacking a compressed object that the blob policy would refuse anyway. |
+| Base and result size a delta declares | the larger of `git.max_blob_size` and 64 MiB | go-git and `git index-pack` hold both in memory: a 16 KiB delta can copy a 16 MiB base 64 times into 1 GiB. |
+| Objects in one pack | 2,000,000 (pushes only) | Both keep a record of every object while indexing. |
+| Unpacked size of the whole pack | four times `git.max_pack_size`, and at least 1 GiB | Bounds the work of unpacking. |
+| Ref updates in one push | 10,000 | Each is a compare-and-swap in one transaction. |
+| Files and folders in one Commit | 1,000,000 (`repo.Options.MaxTreePaths`) | git stores a folder once however often a tree names it, so a few hundred bytes can describe billions of paths, which the tree cache, indexing and zip export would list. |
+| Length of a path | 4,096 bytes (`model.MaxPathLength`) | Also bounds how deep folders nest. |
+| Names | every name `model.ValidPathComponent` accepts: not empty, `.` or `..`; no `/`, `\` or NUL; and nothing a client could check out as `.git` (any case, `git~1`, trailing dots or spaces, HFS+ ignorable code points) | Names like these escape a download folder or write into a client's `.git` folder (CVE-2014-9390). git's fsck refuses most of them on push; Hangar refuses them on Pulls too. |
+
+The tree check reads each tree once however often it is named, so it costs what the distinct trees cost, not what they expand to. The tree cache stops listing at the same limits, so a Commit stored before them fails to list instead of filling memory, and zip export refuses a path that would extract outside its folder.
 
 ## git-lfs
 

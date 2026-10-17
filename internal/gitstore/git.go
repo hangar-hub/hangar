@@ -294,3 +294,86 @@ func (c *cmdReader) Close() error {
 	_ = c.cmd.Wait()
 	return nil
 }
+
+// Batch is one `git cat-file --batch` process that reads objects one at a
+// time, for walks that only know the next object after reading the last.
+type Batch struct {
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
+	in     io.WriteCloser
+	out    *bufio.Reader
+	stderr bytes.Buffer
+}
+
+// OpenBatch starts a Batch in dir. Close it when done.
+func (g Git) OpenBatch(ctx context.Context, dir string) (*Batch, error) {
+	ctx, cancel := g.WithTimeout(ctx)
+	b := &Batch{cancel: cancel}
+	b.cmd = g.Command(ctx, dir, nil, "cat-file", "--batch")
+	b.cmd.Stderr = &b.stderr
+	in, err := b.cmd.StdinPipe()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	out, err := b.cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	if err := b.cmd.Start(); err != nil {
+		cancel()
+		return nil, err
+	}
+	b.in, b.out = in, bufio.NewReader(out)
+	return b, nil
+}
+
+// ErrObjectTooLarge is an object over the limit given to Batch.Read.
+var ErrObjectTooLarge = errors.New("the object is too large to read")
+
+// Read returns one object's type, size and content, or ErrObjectTooLarge
+// (after which the Batch cannot be used) for an object over limit bytes.
+func (b *Batch) Read(oid string, limit int64) (ObjectInfo, []byte, error) {
+	if _, err := io.WriteString(b.in, oid+"\n"); err != nil {
+		return ObjectInfo{}, nil, b.fail(err)
+	}
+	header, err := b.out.ReadString('\n')
+	if err != nil {
+		return ObjectInfo{}, nil, b.fail(fmt.Errorf("read cat-file header: %w", err))
+	}
+	fields := strings.Fields(header)
+	if len(fields) == 2 && fields[1] == "missing" {
+		return ObjectInfo{OID: fields[0], Missing: true}, nil, nil
+	}
+	if len(fields) != 3 {
+		return ObjectInfo{}, nil, fmt.Errorf("unexpected cat-file header %q", header)
+	}
+	var size int64
+	if _, err := fmt.Sscan(fields[2], &size); err != nil || size < 0 {
+		return ObjectInfo{}, nil, fmt.Errorf("unexpected cat-file header %q", header)
+	}
+	if size > limit {
+		return ObjectInfo{OID: fields[0], Type: fields[1], Size: size}, nil, fmt.Errorf("%w: %s is %d bytes", ErrObjectTooLarge, fields[0], size)
+	}
+	buf := make([]byte, size+1) // the content and the newline that ends it
+	if _, err := io.ReadFull(b.out, buf); err != nil {
+		return ObjectInfo{}, nil, b.fail(fmt.Errorf("read cat-file body: %w", err))
+	}
+	return ObjectInfo{OID: fields[0], Type: fields[1], Size: size}, buf[:size], nil
+}
+
+func (b *Batch) fail(err error) error {
+	if s := strings.TrimSpace(b.stderr.String()); s != "" {
+		return &Error{Args: []string{"cat-file", "--batch"}, Stderr: s, Err: err}
+	}
+	return err
+}
+
+// Close stops the process.
+func (b *Batch) Close() error {
+	_ = b.in.Close()
+	err := b.cmd.Wait()
+	b.cancel()
+	return err
+}

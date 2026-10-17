@@ -38,6 +38,10 @@ hangar import --from-ollama --namespace acme
 
 Each model and tag in Ollama's store (`~/.ollama/models`, or `$OLLAMA_MODELS`) becomes a local Repo, such as `acme/llama3.2` for `llama3.2:latest` and `acme/llama3.2-1b` for `llama3.2:1b`, with the GGUF file and Ollama's `template`, `system`, `params` and `LICENSE` files. Hangar's Ollama endpoint then serves it back with the same template.
 
+## Symbolic links
+
+Every source follows symbolic links only to files inside the folder it reads, or to files in a Hugging Face cache. Other links are skipped and named on stderr, as `hangar push` does.
+
 ## Check first
 
 Every source takes `--dry-run`, which lists what would be imported, and `--json`.

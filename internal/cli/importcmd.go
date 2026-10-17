@@ -189,10 +189,11 @@ func (a *app) importDir(ctx context.Context, o importOptions) ([]importResult, e
 	if err != nil {
 		return nil, err
 	}
-	files, err := walkFolder(o.FromDir, nil, nil)
+	files, outside, err := walkFolder(o.FromDir, nil, nil)
 	if err != nil {
 		return nil, err
 	}
+	a.warnOutside(o.FromDir, outside)
 	res := importResult{Repo: display(ref.ID), Source: o.FromDir, Mode: "local", Uploaded: paths(files)}
 	if o.DryRun {
 		return []importResult{res}, nil
@@ -267,6 +268,7 @@ func (a *app) importHFCache(ctx context.Context, o importOptions) ([]importResul
 		}
 		sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 		src := filepath.Join(root, repoFolderName(s.ID), "snapshots", shortSHA(s.Commit))
+		a.warnOutside(filepath.Join(root, repoFolderName(s.ID)), s.Outside)
 		out = append(out, a.importSnapshot(ctx, c, s.ID, s.Commit, files, src, o))
 	}
 	return out, nil
@@ -512,10 +514,11 @@ func (a *app) importLMStudio(ctx context.Context, o importOptions) ([]importResu
 				out = append(out, importResult{Repo: p.Name() + "/" + r.Name(), Source: dir, Error: err.Error()})
 				continue
 			}
-			files, err := walkFolder(dir, nil, nil)
+			files, outside, err := walkFolder(dir, nil, nil)
 			if err != nil {
 				return nil, err
 			}
+			a.warnOutside(dir, outside)
 			if len(files) == 0 {
 				continue
 			}

@@ -25,3 +25,5 @@ A delivery that does not answer 2xx within 10 seconds is retried after 1 minute,
 ## Private addresses
 
 Webhooks may target private addresses (for example a service on your LAN) while the Instance setting `webhooks.allow_private_targets` is on, which is the default for self-hosting. Turn it off on Instances shared by people who should not reach your internal network through Hangar.
+
+Whatever the setting, Hangar never delivers to link-local addresses (which include the cloud metadata service at 169.254.169.254), other cloud metadata addresses, `0.0.0.0` or multicast addresses. Hangar checks the address it connects to after resolving the host name, and does not follow redirects.

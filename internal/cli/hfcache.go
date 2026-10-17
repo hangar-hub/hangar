@@ -156,6 +156,9 @@ type cachedSnapshot struct {
 	Refs []string
 	// Files maps paths in the Repo to their resolved blob files.
 	Files map[string]string
+	// Outside lists files that are symbolic links out of the Repo's cache
+	// folder, which are not read.
+	Outside []string
 }
 
 // snapshots lists every complete snapshot in the cache.
@@ -190,6 +193,11 @@ func (h hfCache) snapshots() ([]cachedSnapshot, error) {
 		if err != nil {
 			continue
 		}
+		// Snapshot files may only link into this Repo's cache folder.
+		scope, err := linkScope(h.repoDir(id))
+		if err != nil {
+			continue
+		}
 		for _, c := range commits {
 			if !c.IsDir() || !fullSHA.MatchString(c.Name()) {
 				continue
@@ -203,11 +211,15 @@ func (h hfCache) snapshots() ([]cachedSnapshot, error) {
 				if e.IsDir() {
 					return nil
 				}
-				real, err := filepath.EvalSymlinks(p)
-				if err != nil {
+				rel, _ := filepath.Rel(root, p)
+				if _, err := os.Stat(p); err != nil {
 					return nil //nolint:nilerr // a dangling link: the blob was deleted, so skip the file.
 				}
-				rel, _ := filepath.Rel(root, p)
+				real, ok := resolveInScope(p, scope)
+				if !ok {
+					s.Outside = append(s.Outside, filepath.ToSlash(rel))
+					return nil
+				}
 				s.Files[filepath.ToSlash(rel)] = real
 				return nil
 			})
