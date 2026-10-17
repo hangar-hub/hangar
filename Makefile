@@ -14,11 +14,15 @@ LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.d
 BIN       := bin/hangar
 IMAGE     ?= ghcr.io/jamesagarside/hangar:dev
 GOTESTFLAGS ?= -race -count=1
-# The compat suites run real git, git-lfs and Python clients. On a busy host
-# one package can pass but take longer than go test's 10-minute default
-# (compat/git took 168 s on a quiet host and over 600 s on a loaded one).
-# scripts/check-compat-timeout.sh checks that every compat run sets one.
+# On a busy host one package can pass but take longer than go test's
+# 10-minute default. The compat suites run real git, git-lfs and Python
+# clients (compat/git took 168 s on a quiet host and over 600 s on a loaded
+# one). The unit and integration tests in git-heavy packages slow down the
+# same way: internal/datasets/pipeline took 29 s alone and over 600 s under
+# load, and internal/upstream 350 s alone. scripts/check-test-timeouts.sh
+# checks that every compat, integration and coverage run sets a timeout.
 COMPAT_TIMEOUT ?= 30m
+GO_TEST_TIMEOUT ?= 30m
 
 # Postgres tests need Docker: test-go starts one Postgres container that
 # every package shares (scripts/with-test-postgres.sh). Set
@@ -111,7 +115,7 @@ lint-style:
 	    cmd internal ui/src api compat docs deploy loadtest scripts .github README.md CLAUDE.md CONTEXT.md CONTRIBUTING.md SECURITY.md 2>/dev/null; then \
 	  echo "House style: replace the em dashes above."; exit 1; fi
 	@./scripts/check-spelling.sh
-	@./scripts/check-compat-timeout.sh
+	@./scripts/check-test-timeouts.sh
 	@./scripts/check-test-targets.sh
 	@python3 scripts/check-hub-matrix.py
 
@@ -128,7 +132,7 @@ test: ## Run unit and integration tests (SQLite and Postgres)
 
 .PHONY: test-go
 test-go:
-	scripts/with-test-postgres.sh scripts/with-test-minio.sh $(GO) test $(GOTESTFLAGS) -tags integration ./...
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh $(GO) test $(GOTESTFLAGS) -timeout $(GO_TEST_TIMEOUT) -tags integration ./...
 
 .PHONY: test-ui
 test-ui: ui-deps
@@ -149,7 +153,7 @@ fuzz: ## Run every fuzz target for FUZZTIME each (default 10m)
 
 .PHONY: cover
 cover: ## Check Go coverage per package against the floors in 13-testing.md
-	scripts/with-test-postgres.sh scripts/with-test-minio.sh ./scripts/coverage.sh -tags integration
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh ./scripts/coverage.sh -timeout $(GO_TEST_TIMEOUT) -tags integration
 
 .PHONY: e2e
 e2e: ui-deps ## Run Playwright against the mock server

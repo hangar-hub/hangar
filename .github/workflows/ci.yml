@@ -62,7 +62,9 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Test with SQLite and Postgres, and check coverage floors
-        run: ./scripts/with-test-minio.sh ./scripts/coverage.sh -race -tags integration
+        # Git-heavy packages can pass but run past go test's 10-minute
+        # default on a busy runner (Makefile, GO_TEST_TIMEOUT).
+        run: ./scripts/with-test-minio.sh ./scripts/coverage.sh -race -timeout 30m -tags integration
       - name: Blob store conformance
         run: ./scripts/with-test-minio.sh go test -count=1 -run Conformance ./internal/blob/...
 

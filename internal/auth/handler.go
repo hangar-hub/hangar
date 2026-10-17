@@ -206,6 +206,13 @@ func (s *Service) signInAndRespond(w http.ResponseWriter, r *http.Request, u *Us
 
 // writeError maps errors from this package to problem details.
 func (s *Service) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	// A request the client closed is not a server error (bellatrix
+	// finding 9): answer 499 and log it at debug level.
+	if httpx.ClientGone(r, err) {
+		s.log.DebugContext(r.Context(), "client closed the request", "error", err.Error())
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: httpx.StatusClientClosedRequest, Title: "Client Closed Request", Detail: httpx.ClientClosedMessage})
+		return
+	}
 	status, detail := http.StatusInternalServerError, ""
 	var te *ThrottledError
 	switch {

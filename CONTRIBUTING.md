@@ -26,7 +26,7 @@ make dev          # the server on :8080 and the UI with live reload on :5173
 | `make build` | Build the UI and the `hangar` binary into `bin/`. |
 | `make dev` | Run the server with live UI reload. |
 | `make lint` | Go, UI and house style linters. |
-| `make test` | Unit and integration tests, on SQLite and Postgres and against MinIO (needs Docker). |
+| `make test` | Unit and integration tests, on SQLite and Postgres and against MinIO (needs Docker). Each package may run for 30 minutes (`GO_TEST_TIMEOUT`), because git-heavy packages can pass but take longer than go test's 10-minute default on a busy machine. |
 | `make test-compat` | The client compatibility suites in `compat/`. |
 | `make generate` | Regenerate the API code, the configuration, CLI and metrics references and the dashboards. CI fails if they are out of date. |
 | `make lint-deploy` | Lint the Helm chart, check the Compose files, and check that every GitHub Action the workflows use exists at the version they name, and that every job that runs uv installs it (needs `yq`). |

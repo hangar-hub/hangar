@@ -97,8 +97,7 @@ func (s *Service) serveAsset(w http.ResponseWriter, r *http.Request, escapedPath
 			writeError(w, r, http.StatusNotFound, "ResponseNotFound", "Not found.")
 			return
 		}
-		s.d.Log.ErrorContext(r.Context(), "dataset asset failed", "error", err.Error())
-		writeError(w, r, http.StatusInternalServerError, "UnexpectedApiError", "Unexpected error.")
+		s.internalError(w, r, "dataset asset failed", err)
 		return
 	}
 	mime := "application/octet-stream"
