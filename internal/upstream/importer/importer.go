@@ -126,12 +126,19 @@ func hashFile(path string) (string, int64, error) {
 	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
 
-// walkFiles lists regular files under root (following symlinks to
-// files), with paths relative to root using `/`. Hidden files and folders
-// (starting with `.`) are skipped, except .gitattributes.
+// walkFiles lists regular files under root, with paths relative to root
+// using `/`. Hidden files and folders (starting with `.`) are skipped,
+// except .gitattributes. Symbolic links are followed only to files inside
+// root or, for a Hugging Face cache snapshot, inside the Repo's cache
+// folder, so an import never uploads a file from elsewhere on the machine
+// (06-upstreams-and-pulls.md "Bulk import").
 func walkFiles(root string) ([]File, error) {
+	scope, err := linkScope(root)
+	if err != nil {
+		return nil, err
+	}
 	var out []File
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -143,6 +150,9 @@ func walkFiles(root string) ([]File, error) {
 			return nil
 		}
 		if d.IsDir() {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 && !linkInScope(p, scope) {
 			return nil
 		}
 		info, err := os.Stat(p) // follows symlinks, as the HF cache uses them
@@ -164,6 +174,38 @@ func walkFiles(root string) ([]File, error) {
 	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, err
+}
+
+// linkScope returns the folder symbolic links under root may resolve into:
+// root, or the Repo folder of a Hugging Face cache snapshot
+// (<type>s--<ns>--<name>/snapshots/<commit>), whose files link into its
+// blobs folder.
+func linkScope(root string) (string, error) {
+	real, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	if real, err = filepath.Abs(real); err != nil {
+		return "", err
+	}
+	snapshots := filepath.Dir(real)
+	if filepath.Base(snapshots) == "snapshots" && cacheDirRe.MatchString(filepath.Base(filepath.Dir(snapshots))) {
+		return filepath.Dir(snapshots), nil
+	}
+	return real, nil
+}
+
+// linkInScope reports whether the symbolic link p resolves inside scope.
+func linkInScope(p, scope string) bool {
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return false
+	}
+	if real, err = filepath.Abs(real); err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(scope, real)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 func hashAll(files []File) error {

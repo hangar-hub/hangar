@@ -57,21 +57,28 @@ type localFile struct {
 
 // walkFolder lists the files under dir, skipping .git and huggingface_hub's
 // .cache/huggingface metadata, and applies include and exclude patterns.
-func walkFolder(dir string, include, exclude []string) ([]localFile, error) {
+// Symbolic links are followed only into dir (or the Repo folder of a
+// Hugging Face cache snapshot); outside lists, by path in the Repo, the
+// links it skipped because they point elsewhere (symlinks.go).
+func walkFolder(dir string, include, exclude []string) (files []localFile, outside []string, err error) {
 	inc, err := newGlobMatcher(include)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	exc, err := newGlobMatcher(exclude)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	st, err := os.Stat(dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !st.IsDir() {
-		return nil, usagef("%s is not a folder", dir)
+		return nil, nil, usagef("%s is not a folder", dir)
+	}
+	scope, err := linkScope(dir)
+	if err != nil {
+		return nil, nil, err
 	}
 	var out []localFile
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
@@ -95,6 +102,12 @@ func walkFolder(dir string, include, exclude []string) ([]localFile, error) {
 		if !inc.empty() && !inc.match(rel) || exc.match(rel) {
 			return nil
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			if _, ok := resolveInScope(p, scope); !ok {
+				outside = append(outside, rel)
+				return nil
+			}
+		}
 		info, err := os.Stat(p) // follows symlinks, as in an HF cache snapshot.
 		if err != nil {
 			return err
@@ -106,10 +119,10 @@ func walkFolder(dir string, include, exclude []string) ([]localFile, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out, nil
+	return out, outside, nil
 }
 
 // dirOnlyHF reports whether a .cache folder holds only huggingface_hub's metadata.

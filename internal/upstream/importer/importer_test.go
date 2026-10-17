@@ -274,10 +274,15 @@ func importAll(t *testing.T, w *world, target importer.Target) {
 	write(t, filepath.Join(dir, "sub", "weights.bin"), w.weights)
 	write(t, filepath.Join(dir, "README.md"), []byte("# mine"))
 	write(t, filepath.Join(dir, ".git", "HEAD"), []byte("ref: x"))
+	// A link out of the folder is never followed (it used to upload the
+	// file it named); a link within it is.
+	write(t, filepath.Join(root, "secret"), []byte("PRIVATE KEY"))
+	require.NoError(t, os.Symlink(filepath.Join(root, "secret"), filepath.Join(dir, "config.json")))
+	require.NoError(t, os.Symlink("README.md", filepath.Join(dir, "README-copy.md")))
 	mine := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "from-dir"}
 	res := importer.New(importer.Options{Target: target}).FromDir(ctx, dir, mine, "")
 	require.NoError(t, res.Err)
-	require.Equal(t, 2, res.Files, ".git is skipped")
+	require.Equal(t, 3, res.Files, ".git and the link out of the folder are skipped")
 	w.check(t, mine, "sub/weights.bin", w.weights)
 	res = importer.New(importer.Options{Target: target}).FromDir(ctx, filepath.Join(root, "empty-missing"), mine, "")
 	require.Error(t, res.Err)

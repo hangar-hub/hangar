@@ -98,10 +98,11 @@ The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,
 
 // push runs `hangar push`.
 func (a *app) push(ctx context.Context, dir string, id model.RepoID, o pushOptions) (*pushResult, error) {
-	files, err := walkFolder(dir, o.Include, o.Exclude)
+	files, outside, err := walkFolder(dir, o.Include, o.Exclude)
 	if err != nil {
 		return nil, err
 	}
+	a.warnOutside(dir, outside)
 	if len(files) == 0 {
 		return nil, usagef("%s has no files to upload", dir)
 	}
