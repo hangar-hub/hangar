@@ -376,7 +376,7 @@ func TestDatasetOfOtherFilesLogsAtDebug(t *testing.T) {
 	e := newEnv(t, d, 0)
 	r, sha := e.dataset(t, "samples", map[string][]byte{
 		"README.md":         []byte("# Sample inputs for another project\n"),
-		"inputs/blob.bin":   []byte{0, 1, 2, 3},
+		"inputs/blob.bin":   {0, 1, 2, 3},
 		"inputs/config.ini": []byte("[a]\nb = 1\n"),
 	})
 	e.run(t, r, sha)
