@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/db"
@@ -37,6 +38,9 @@ type LFS struct {
 	// resume after a failure (resumingReader).
 	readRetries int
 	readBackoff time.Duration
+	// completions shares a completion that is still running with the
+	// requests that send it again (CompleteUpload).
+	completions singleflight.Group
 }
 
 var _ LFSStore = (*LFS)(nil)
@@ -448,7 +452,40 @@ func (l *LFS) PutPart(ctx context.Context, id uuid.UUID, part int, r io.Reader, 
 // keeps the upload row and the assembled object and returns ErrRetryable,
 // so the client can send the completion again without uploading the parts
 // again. The read itself resumes from where it broke (resumingReader).
+//
+// The work carries on when the caller goes away, such as a client or proxy
+// that stops waiting for a large file, so the object is still stored and
+// a completion sent again finds it: one still running in this process is
+// joined, and a finished one has removed the upload, so the client plans
+// the file again and finds the object stored.
 func (l *LFS) CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob.Part) (LFSObject, error) {
+	work := context.WithoutCancel(ctx)
+	ch := l.completions.DoChan(id.String(), func() (any, error) {
+		row, err := l.upload(work, id)
+		if err != nil {
+			return LFSObject{}, err
+		}
+		work, cancel := context.WithTimeout(work, completeTimeout(row.Size))
+		defer cancel()
+		return l.completeUpload(work, id, parts)
+	})
+	select {
+	case res := <-ch:
+		obj, _ := res.Val.(LFSObject)
+		return obj, res.Err
+	case <-ctx.Done():
+		return LFSObject{}, ctx.Err()
+	}
+}
+
+// completeTimeout bounds a completion that carries on without its caller:
+// an hour, and a second more per 10 MiB, which allows for reading the
+// object at 10 MiB/s.
+func completeTimeout(size int64) time.Duration {
+	return time.Hour + time.Duration(size/(10<<20))*time.Second
+}
+
+func (l *LFS) completeUpload(ctx context.Context, id uuid.UUID, parts []blob.Part) (LFSObject, error) {
 	row, err := l.upload(ctx, id)
 	if err != nil {
 		return LFSObject{}, err

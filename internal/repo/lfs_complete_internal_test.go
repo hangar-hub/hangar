@@ -503,3 +503,111 @@ func TestCompleteUploadKeepsPartsWhenTheCopyFails(t *testing.T) {
 		require.Zero(t, uploadRows(t, d))
 	})
 }
+
+// gatedStore holds every Get of one key until gate is closed, like a read
+// of a large object over a slow link, and counts them.
+type gatedStore struct {
+	*blobtest.Fake
+	key  string
+	gate chan struct{}
+	mu   sync.Mutex
+	gets int
+}
+
+func (g *gatedStore) Get(ctx context.Context, key string, rng *blob.Range) (io.ReadCloser, blob.Info, error) {
+	if key == g.key {
+		g.mu.Lock()
+		g.gets++
+		g.mu.Unlock()
+		select {
+		case <-g.gate:
+		case <-ctx.Done():
+			return nil, blob.Info{}, ctx.Err()
+		}
+	}
+	return g.Fake.Get(ctx, key, rng)
+}
+
+// TestCompleteUploadCarriesOnWhenTheCallerGoesAway covers bellatrix
+// finding 13c: a completion of a large file can outlast the client's or a
+// proxy's patience. It now finishes without its caller, and a completion
+// sent while it runs joins it instead of reading the object again.
+func TestCompleteUploadCarriesOnWhenTheCallerGoesAway(t *testing.T) {
+	t.Parallel()
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		gs := &gatedStore{Fake: blobtest.NewFake(), gate: make(chan struct{})}
+		l := NewLFS(d, gs)
+		content := bytes.Repeat([]byte("carry on "), 30)
+		oid, u, parts := startUpload(t, l, content)
+		gs.key = blob.PrefixTmp + "uploads/" + u.ID.String()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		first := make(chan error, 1)
+		go func() {
+			_, err := l.CompleteUpload(ctx, u.ID, parts)
+			first <- err
+		}()
+		require.Eventually(t, func() bool { gs.mu.Lock(); defer gs.mu.Unlock(); return gs.gets == 1 }, 10*time.Second, time.Millisecond)
+		cancel()
+		require.ErrorIs(t, <-first, context.Canceled, "the caller stops waiting")
+
+		// Sent again while the first still runs: it joins it.
+		type result struct {
+			obj LFSObject
+			err error
+		}
+		again := make(chan result, 1)
+		go func() {
+			obj, err := l.CompleteUpload(context.Background(), u.ID, parts)
+			again <- result{obj, err}
+		}()
+		close(gs.gate)
+		res := <-again
+		require.NoError(t, res.err)
+		require.Equal(t, oid, res.obj.OID)
+		gs.mu.Lock()
+		require.Equal(t, 1, gs.gets, "the object was read once")
+		gs.mu.Unlock()
+		stored, err := l.Stat(context.Background(), oid)
+		require.NoError(t, err)
+		require.True(t, stored.Verified)
+
+		// Sent once more after it finished: the upload is gone, and the
+		// object is stored.
+		_, err = l.CompleteUpload(context.Background(), u.ID, parts)
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
+// TestCompleteUploadFinishesAfterTheCallerLeft checks a completion whose
+// caller left finishes on its own and stores the object.
+func TestCompleteUploadFinishesAfterTheCallerLeft(t *testing.T) {
+	t.Parallel()
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		gs := &gatedStore{Fake: blobtest.NewFake(), gate: make(chan struct{})}
+		l := NewLFS(d, gs)
+		content := bytes.Repeat([]byte("left early "), 30)
+		oid, u, parts := startUpload(t, l, content)
+		gs.key = blob.PrefixTmp + "uploads/" + u.ID.String()
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			_, err := l.CompleteUpload(ctx, u.ID, parts)
+			done <- err
+		}()
+		require.Eventually(t, func() bool { gs.mu.Lock(); defer gs.mu.Unlock(); return gs.gets == 1 }, 10*time.Second, time.Millisecond)
+		cancel()
+		require.ErrorIs(t, <-done, context.Canceled)
+		close(gs.gate)
+		require.Eventually(t, func() bool {
+			obj, err := l.Stat(context.Background(), oid)
+			return err == nil && obj.Verified
+		}, 10*time.Second, 5*time.Millisecond)
+		require.Eventually(t, func() bool { return uploadRows(t, d) == 0 }, 10*time.Second, 5*time.Millisecond)
+	})
+}
+
+func TestCompleteTimeoutAllowsForSize(t *testing.T) {
+	require.Equal(t, time.Hour, completeTimeout(0))
+	require.Equal(t, time.Hour+5120*time.Second, completeTimeout(50<<30))
+}
