@@ -1,7 +1,6 @@
 package scan
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -10,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,8 +29,14 @@ import (
 	"github.com/jamesagarside/hangar/internal/webhook"
 )
 
-// Version is the scanner version; results are keyed by it.
-const Version = 1
+// Version is the scanner version; results are keyed by it. Version 2
+// reads files by content, follows joblib's reading and records Partial.
+const Version = 2
+
+// partialSince is the first scanner version that records Partial. An
+// error in an older result may hide code the scan did not read, so the
+// Gate treats it as partial.
+const partialSince = 2
 
 // commitRow is the path of the row that records a Commit's overall
 // status, so a Commit with nothing to scan still has results.
@@ -70,26 +73,37 @@ func New(o Options) *Service {
 	return &Service{o: o}
 }
 
-// ScanFile implements Scanner. It reads r as a stream; the path's
-// extension decides the checks.
+// ScanFile implements Scanner. It reads the whole of r into memory, so it
+// is for small files; ScanCommit reads Repo files with ranged reads. The
+// path's extension and the content decide the checks.
 func (s *Service) ScanFile(ctx context.Context, p string, r io.Reader) (FileResult, error) {
-	fr := FileResult{Path: p, Status: StatusSafe}
-	switch KindOf(p) {
-	case KindPickle:
-		scanPickleStream(&fr, r)
-	case KindJoblib:
-		scanJoblib(&fr, r)
-	case KindNumpy:
-		scanNumpy(&fr, r)
-	case KindSafetensors, KindGGUF:
-		b, err := io.ReadAll(r)
-		if err != nil {
-			return FileResult{}, err
-		}
-		checkIntegrity(&fr, KindOf(p), bytes.NewReader(b), int64(len(b)))
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return FileResult{}, err
 	}
-	sortFindings(&fr)
+	fr := FileResult{Path: p, Status: StatusSafe}
+	c := content{ra: bytes.NewReader(b), size: int64(len(b)), open: func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}}
+	if err := scanContent(ctx, &fr, KindOf(p), c); err != nil {
+		return FileResult{}, err
+	}
 	return fr, ctx.Err()
+}
+
+// scanContent checks one file's content by kind.
+func scanContent(ctx context.Context, fr *FileResult, k Kind, c content) error {
+	switch {
+	case k.RunsCode():
+		sc := &scanner{ctx: ctx, fr: fr}
+		if err := sc.scanLoadable(k, c); err != nil {
+			return err
+		}
+	case k == KindSafetensors || k == KindGGUF:
+		checkIntegrity(fr, k, c.ra, c.size)
+	}
+	sortFindings(fr)
+	return nil
 }
 
 // checkIntegrity applies the safetensors and GGUF rules in 07.
@@ -122,12 +136,8 @@ func (s *Service) open(ctx context.Context, id model.RepoID, commit model.Commit
 
 // scanEntry scans one file of a Commit, using ranged reads where they
 // avoid reading the whole file.
-func (s *Service) scanEntry(ctx context.Context, id model.RepoID, commit model.CommitSHA, e model.Entry, siblings map[string]bool) (FileResult, bool, error) {
+func (s *Service) scanEntry(ctx context.Context, id model.RepoID, commit model.CommitSHA, e model.Entry) (FileResult, bool, error) {
 	k := KindOf(e.Path)
-	if k == KindPickle && strings.EqualFold(path.Ext(e.Path), ".bin") && siblings[strings.TrimSuffix(e.Path, path.Ext(e.Path))+".xml"] {
-		// OpenVINO weights: raw numbers beside an .xml graph.
-		k = KindNone
-	}
 	if k == KindNone && e.LFS == nil {
 		return FileResult{}, false, nil
 	}
@@ -139,6 +149,10 @@ func (s *Service) scanEntry(ctx context.Context, id model.RepoID, commit model.C
 			msg := "the LFS object is missing from the Blob store"
 			fr.Findings = append(fr.Findings, Finding{Status: StatusError, Detail: msg})
 			fail(&fr, errors.New(msg))
+			if k.RunsCode() {
+				// Nothing was read, so nothing says what a loader would run.
+				fr.Partial = true
+			}
 			return fr, true, nil
 		case err != nil:
 			return FileResult{}, false, err
@@ -151,38 +165,20 @@ func (s *Service) scanEntry(ctx context.Context, id model.RepoID, commit model.C
 	if k == KindNone {
 		return fr, fr.Status != StatusSafe, nil
 	}
-	ra := rangeio.New(ctx, e.Size, s.o.Window, s.open(ctx, id, commit, e.Path))
-	switch k {
-	case KindSafetensors, KindGGUF:
-		checkIntegrity(&fr, k, ra, e.Size)
-	case KindPickle:
-		head := make([]byte, 4)
-		n, _ := ra.ReadAt(head, 0)
-		if n == 4 && (bytes.Equal(head, zipMagic) || bytes.Equal(head, emptyZipMagic)) {
-			scanZipAt(&fr, ra, e.Size)
-			break
-		}
-		fallthrough
-	default:
-		rc, _, err := s.o.Repos.OpenFile(ctx, id, commit, e.Path, nil)
-		if err != nil {
-			return FileResult{}, false, err
-		}
-		r := bufio.NewReaderSize(rc, 256<<10)
-		switch k {
-		case KindJoblib:
-			scanJoblib(&fr, r)
-		case KindNumpy:
-			scanNumpy(&fr, r)
-		default:
-			scanPickleStream(&fr, r)
-		}
-		_ = rc.Close()
+	c := content{
+		ra:   rangeio.New(ctx, e.Size, s.o.Window, s.open(ctx, id, commit, e.Path)),
+		size: e.Size,
+		open: func() (io.ReadCloser, error) {
+			rc, _, err := s.o.Repos.OpenFile(ctx, id, commit, e.Path, nil)
+			return rc, err
+		},
+	}
+	if err := scanContent(ctx, &fr, k, c); err != nil {
+		return FileResult{}, false, err
 	}
 	if err := ctx.Err(); err != nil {
 		return FileResult{}, false, err
 	}
-	sortFindings(&fr)
 	return fr, true, nil
 }
 
@@ -192,16 +188,12 @@ func (s *Service) ScanCommit(ctx context.Context, repoUUID uuid.UUID, id model.R
 	if err != nil {
 		return nil, err
 	}
-	siblings := map[string]bool{}
-	for _, e := range entries {
-		siblings[e.Path] = true
-	}
 	res := &CommitResult{Status: StatusSafe, Files: []FileResult{}}
 	for _, e := range entries {
 		if e.Type != model.EntryFile || !e.Present {
 			continue
 		}
-		fr, ok, err := s.scanEntry(ctx, id, commit, e, siblings)
+		fr, ok, err := s.scanEntry(ctx, id, commit, e)
 		if err != nil {
 			return nil, fmt.Errorf("scan %s: %w", e.Path, err)
 		}
@@ -223,6 +215,7 @@ func (s *Service) ScanCommit(ctx context.Context, repoUUID uuid.UUID, id model.R
 type storedFile struct {
 	Findings []Finding `json:"findings"`
 	Error    string    `json:"error,omitempty"`
+	Partial  bool      `json:"partial,omitempty"`
 }
 
 func (s *Service) store(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA, res *CommitResult) error {
@@ -233,7 +226,7 @@ func (s *Service) store(ctx context.Context, repoUUID uuid.UUID, commit model.Co
 		}
 		rows := []db.ScanResult{{RepoID: repoUUID, Commit: string(commit), Path: commitRow, ScannerVersion: Version, Status: string(res.Status), Findings: db.JSON("[]")}}
 		for _, f := range res.Files {
-			raw, err := json.Marshal(storedFile{Findings: nonNil(f.Findings), Error: f.Error})
+			raw, err := json.Marshal(storedFile{Findings: nonNil(f.Findings), Error: f.Error, Partial: f.Partial})
 			if err != nil {
 				return err
 			}
@@ -282,9 +275,17 @@ func (s *Service) Results(ctx context.Context, repoUUID uuid.UUID, commit model.
 		if err := json.Unmarshal(row.Findings, &sf); err != nil {
 			return nil, fmt.Errorf("decode scan results for %s: %w", row.Path, err)
 		}
-		res.Files = append(res.Files, FileResult{Path: row.Path, Status: Status(row.Status), Findings: sf.Findings, Error: sf.Error})
+		res.Files = append(res.Files, FileResult{Path: row.Path, Status: Status(row.Status), Findings: sf.Findings, Error: sf.Error,
+			Partial: storedPartial(sf, row.ScannerVersion)})
 	}
 	return res, nil
+}
+
+// storedPartial reads Partial from a stored row. Rows of scanner versions
+// before partialSince do not record it, so an error there counts as
+// partial.
+func storedPartial(sf storedFile, version int) bool {
+	return sf.Partial || (version < partialSince && sf.Error != "")
 }
 
 // FileResult returns the stored result of one file, or ErrNotScanned.

@@ -3,8 +3,6 @@ package scan
 import (
 	"context"
 	"errors"
-	"path"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -156,25 +154,13 @@ func scannedAncestor(ctx context.Context, results ResultsFunc, repos repo.Servic
 	return "", nil, nil
 }
 
-// openVINOGraph returns the .xml graph whose presence turns a .bin file
-// into OpenVINO weights the scanner skips (scanEntry), or "".
-func openVINOGraph(p string) string {
-	if KindOf(p) != KindPickle || !strings.EqualFold(path.Ext(p), ".bin") {
-		return ""
-	}
-	return strings.TrimSuffix(p, path.Ext(p)) + ".xml"
-}
-
-// unchanged returns the results of from whose file has the same blob, the
-// same presence and the same OpenVINO sibling at commit, so scanning
-// commit would give the same result.
+// unchanged returns the results of from whose file has the same blob and
+// the same presence at commit, so scanning commit would give the same
+// result: the scan decides by the file's name and content alone.
 func unchanged(ctx context.Context, repos repo.Service, id model.RepoID, from, commit model.CommitSHA, candidates []FileResult) ([]FileResult, error) {
 	paths := make([]string, 0, len(candidates))
 	for _, f := range candidates {
 		paths = append(paths, f.Path)
-		if g := openVINOGraph(f.Path); g != "" {
-			paths = append(paths, g)
-		}
 	}
 	index := func(c model.CommitSHA) (map[string]model.Entry, error) {
 		entries, err := repos.Entries(ctx, id, c, paths, false)
@@ -201,13 +187,6 @@ func unchanged(ctx context.Context, repos repo.Service, id model.RepoID, from, c
 		n, okN := now[f.Path]
 		if !okB || !okN || n.Type != model.EntryFile || b.OID != n.OID || b.Present != n.Present {
 			continue
-		}
-		if g := openVINOGraph(f.Path); g != "" {
-			_, gB := before[g]
-			_, gN := now[g]
-			if gB != gN {
-				continue
-			}
 		}
 		out = append(out, f)
 	}

@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -29,6 +29,12 @@ const (
 	// BlockNotScanned: the file can run code when loaded and has no scan
 	// result: the scan is pending, or its Job failed.
 	BlockNotScanned BlockReason = "not_scanned"
+	// BlockPartial: the file can run code when loaded and the scan could
+	// not read all of it, so its findings may be incomplete.
+	BlockPartial BlockReason = "partial"
+	// BlockHistory: a git fetch or clone of a Repo whose history is too
+	// long for the Gate to check.
+	BlockHistory BlockReason = "history"
 )
 
 // BlockedError is a download the Gate refused. Error is a message for
@@ -45,6 +51,12 @@ func (e *BlockedError) Error() string {
 		name = "This file"
 	}
 	switch e.Reason {
+	case BlockHistory:
+		return "This Repo's history is too long for Hangar to check for files that can run code when loaded. " +
+			"An admin blocks unsafe downloads on this Instance."
+	case BlockPartial:
+		return name + " could not be read in full by Hangar's security scan, and loading it can run code. " +
+			"An admin blocks unsafe downloads on this Instance."
 	case BlockNotScanned:
 		return name + " has not been scanned by Hangar's security scan yet, and loading it can run code. " +
 			"An admin blocks unsafe downloads on this Instance, so it downloads once the scan finds it safe."
@@ -62,14 +74,16 @@ func IsBlocked(err error) bool {
 
 // Gate enforces the Instance setting scan.block_unsafe_downloads
 // (07-indexing-and-scanning.md "Where results show") for every protocol
-// that serves file bytes: the Hub API, git-lfs, signed Pull-through links,
-// the Ollama registry and zip exports, so the setting has no way around it.
-// Signed links are checked again when they are used. With the setting on it
-// refuses files the scan marked unsafe, and fails closed for files that can
-// run code when loaded (pickle, joblib and NumPy files) that have no result,
-// because their scan is pending or its Job failed. A file the scan read but
-// could not parse (status error) is not refused: the scanner records the
-// imports it saw before the error, and many .bin files are not pickles.
+// that serves file bytes: the Hub API, git-lfs, git-upload-pack, signed
+// Pull-through links, the Ollama registry and zip exports, so the setting
+// has no way around it. Signed links are checked again when they are
+// used. With the setting on it refuses files the scan marked unsafe, and
+// fails closed for files that can run code when loaded (pickle, joblib and
+// NumPy files, by name) that have no result, because their scan is pending
+// or its Job failed, or whose result is partial, because the scan could
+// not read all of what a loader runs. A file the scan read to the point
+// where every loader stops (status error without Partial) is not refused:
+// nothing after that point runs.
 //
 // While a Commit's scan is pending, a path whose file is unchanged since
 // the nearest scanned ancestor keeps that ancestor's result (Current). A
@@ -78,15 +92,18 @@ func IsBlocked(err error) bool {
 // Commit the scan has read.
 //
 // Downloads that name an object instead of a path (git-lfs, Pull-through
-// links, Ollama blobs) are decided from the files that hold the object: in
-// the tip of every ref and in every Commit with a file marked unsafe, or,
-// when none of those holds it, in the Commits that added it. The object is
-// refused when any of those files is refused, and when no Commit reachable
-// from a ref places it, because then nothing says whether loading it can
-// run code.
+// links, Ollama blobs) are decided from every file that holds the object:
+// in the tip of every ref, in every Commit with a file marked unsafe, and
+// in every Commit reachable from a ref that adds it. Because the object's
+// content is the same wherever it is, the result of any scanned file that
+// can run code decides it. The object is refused when that result is
+// refused, when a file that can run code holds it and none has a result,
+// and when no Commit reachable from a ref places it, because then nothing
+// says whether loading it can run code.
 //
-// git-upload-pack is not gated: a git pack holds whole Commits, and the
-// Hub's default .gitattributes store every pickle format in LFS.
+// git-upload-pack sends whole Commits, so it is refused while a file
+// stored in git rather than LFS that can run code would be refused in any
+// Commit a clone can reach (CheckGit).
 type Gate struct {
 	// Block reads scan.block_unsafe_downloads. Nil never blocks.
 	Block func(ctx context.Context) (bool, error)
@@ -130,12 +147,18 @@ func (s *Service) NewGate(block func(ctx context.Context) (bool, error)) *Gate {
 
 // runsCode reports whether loading a file of this path can run code, so
 // the Gate fails closed for it.
-func runsCode(p string) bool {
-	switch KindOf(p) {
-	case KindPickle, KindJoblib, KindNumpy:
-		return true
+func runsCode(p string) bool { return KindOf(p).RunsCode() }
+
+// refusal returns why a file's result refuses it, or "" when it may
+// download.
+func refusal(p string, status Status, partial bool) BlockReason {
+	switch {
+	case status == StatusUnsafe:
+		return BlockUnsafe
+	case partial && runsCode(p):
+		return BlockPartial
 	}
-	return false
+	return ""
 }
 
 func (g *Gate) enabled(ctx context.Context) (bool, error) {
@@ -154,57 +177,56 @@ func isMissing(err error) bool {
 // is not scanned). blobOID is the file's git object (for LFS files, the
 // pointer's); when empty it is read only if needed.
 func (g *Gate) verdict(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, res *CommitResult, p, blobOID string) (*BlockedError, error) {
-	if res != nil {
-		for _, f := range res.Files {
-			if f.Path != p {
-				continue
-			}
-			if f.Status == StatusUnsafe {
-				return &BlockedError{Path: p, Reason: BlockUnsafe}, nil
-			}
-			return nil, nil
+	if f, ok := res.file(p); ok {
+		if r := refusal(p, f.Status, f.Partial); r != "" {
+			return &BlockedError{Path: p, Reason: r}, nil
 		}
+		return nil, nil
 	}
 	if !runsCode(p) {
 		return nil, nil
 	}
-	if res != nil && strings.EqualFold(path.Ext(p), ".bin") && g.Repos != nil {
-		// OpenVINO weights beside an .xml graph are raw numbers, which the
-		// scanner skips (scanEntry).
-		if _, err := g.Repos.Entry(ctx, id, commit, strings.TrimSuffix(p, path.Ext(p))+".xml"); err == nil {
-			return nil, nil
-		} else if !errors.Is(err, repo.ErrEntryNotFound) && !errors.Is(err, repo.ErrNotFound) {
-			return nil, err
-		}
-	}
 	// No result for a file that can run code: its Commit is not scanned,
 	// or the file was not present when it was, as in a Partial mirror. The
 	// same file in a Commit the scan has read decides it.
-	status, found, err := g.sameFile(ctx, repoUUID, id, commit, p, blobOID)
+	sf, found, err := g.sameFile(ctx, repoUUID, id, commit, p, blobOID)
 	if err != nil {
 		return nil, err
 	}
 	if found {
-		if status == StatusUnsafe {
-			return &BlockedError{Path: p, Reason: BlockUnsafe}, nil
+		if r := refusal(p, sf.Status, sf.Partial); r != "" {
+			return &BlockedError{Path: p, Reason: r}, nil
 		}
 		return nil, nil
 	}
 	return &BlockedError{Path: p, Reason: BlockNotScanned}, nil
 }
 
-// sameFile returns the stored status of the file at p with the same git
-// object in another scanned Commit of the Repo, the worst one when there
-// are several, and whether there is one.
-func (g *Gate) sameFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, p, blobOID string) (Status, bool, error) {
+// file returns the result of the file at p, and whether there is one.
+func (r *CommitResult) file(p string) (FileResult, bool) {
+	if r == nil {
+		return FileResult{}, false
+	}
+	for _, f := range r.Files {
+		if f.Path == p {
+			return f, true
+		}
+	}
+	return FileResult{}, false
+}
+
+// sameFile returns the stored result of the file at p with the same git
+// object in other scanned Commits of the Repo, the worst of them when
+// there are several, and whether there is one.
+func (g *Gate) sameFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, p, blobOID string) (ScannedFile, bool, error) {
+	var out ScannedFile
 	if g.Scanned == nil || g.Repos == nil {
-		return "", false, nil
+		return out, false, nil
 	}
 	scanned, err := g.Scanned(ctx, repoUUID, p)
 	if err != nil {
-		return "", false, err
+		return out, false, err
 	}
-	var status Status
 	found := false
 	for _, sf := range scanned {
 		if sf.Commit == commit {
@@ -213,10 +235,10 @@ func (g *Gate) sameFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 		if blobOID == "" {
 			e, err := g.Repos.Entry(ctx, id, commit, p)
 			if isMissing(err) {
-				return "", false, nil
+				return out, false, nil
 			}
 			if err != nil {
-				return "", false, err
+				return out, false, err
 			}
 			blobOID = e.OID
 		}
@@ -225,17 +247,17 @@ func (g *Gate) sameFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 			continue
 		}
 		if err != nil {
-			return "", false, err
+			return out, false, err
 		}
 		if e.OID != blobOID {
 			continue
 		}
 		if !found {
-			status = sf.Status
+			out.Status = sf.Status
 		}
-		status, found = Worst(status, sf.Status), true
+		out.Status, out.Partial, found = Worst(out.Status, sf.Status), out.Partial || sf.Partial, true
 	}
-	return status, found, nil
+	return out, found, nil
 }
 
 func (g *Gate) results(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) (*CommitResult, error) {
@@ -357,7 +379,7 @@ func (g *Gate) CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.Re
 			}
 		}
 	}
-	placed := map[string]bool{}
+	d := &objectDecider{g: g, repoUUID: repoUUID, id: id, results: map[model.CommitSHA]*CommitResult{}, places: map[string][]filePlace{}, seen: map[filePlace]bool{}}
 	for _, commit := range commits {
 		entries, err := g.Repos.Tree(ctx, id, commit, "", repo.TreeOpts{Recursive: true})
 		if !isTip[commit] && errors.Is(err, repo.ErrRevisionNotFound) {
@@ -367,51 +389,274 @@ func (g *Gate) CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.Re
 		if err != nil {
 			return nil, err
 		}
-		var res *CommitResult
-		loaded := false
 		for _, e := range entries {
-			if e.Type != model.EntryFile || e.LFS == nil || !want[e.LFS.OID] {
-				continue
-			}
-			oid := e.LFS.OID
-			placed[oid] = true
-			if out[oid] != nil {
-				continue
-			}
-			if !loaded {
-				if res, err = g.results(ctx, repoUUID, commit); err != nil {
-					return nil, err
-				}
-				loaded = true
-			}
-			blocked, err := g.verdict(ctx, repoUUID, id, commit, res, e.Path, e.OID)
-			if err != nil {
-				return nil, err
-			}
-			if blocked != nil {
-				out[oid] = blocked
+			if e.Type == model.EntryFile && e.LFS != nil && want[e.LFS.OID] {
+				d.add(e.LFS.OID, filePlace{commit: commit, path: e.Path, pointer: e.OID})
 			}
 		}
 	}
-	var rest []string
+	// A file that can run code may hold the object only in an older
+	// Commit, such as an intermediate Commit of a push or a file renamed
+	// since. The Commits that add the object place it there.
+	var history []string
 	for _, o := range oids {
-		if !placed[o] {
-			placed[o] = true
-			rest = append(rest, o)
+		if !d.decidedByScan(ctx, o) {
+			history = append(history, o)
 		}
 	}
-	if len(rest) > 0 {
-		if err := g.checkHistory(ctx, repoUUID, id, tips, rest, out); err != nil {
+	if len(history) > 0 {
+		if err := d.addHistory(ctx, tips, history); err != nil {
 			return nil, err
 		}
 	}
+	for _, o := range oids {
+		if _, done := out[o]; done {
+			continue
+		}
+		blocked, err := d.decide(ctx, o)
+		if err != nil {
+			return nil, err
+		}
+		if blocked != nil {
+			out[o] = blocked
+		}
+	}
 	return out, nil
+}
+
+// objectDecider gathers the files that hold LFS objects and decides each
+// object from them.
+type objectDecider struct {
+	g        *Gate
+	repoUUID uuid.UUID
+	id       model.RepoID
+	results  map[model.CommitSHA]*CommitResult
+	places   map[string][]filePlace
+	seen     map[filePlace]bool
+	// done caches decidedByScan.
+	done map[string]*BlockedError
+}
+
+func (d *objectDecider) add(oid string, pl filePlace) {
+	key := filePlace{commit: pl.commit, path: pl.path}
+	if d.seen[key] {
+		return
+	}
+	d.seen[key] = true
+	d.places[oid] = append(d.places[oid], pl)
+}
+
+func (d *objectDecider) result(ctx context.Context, commit model.CommitSHA) (*CommitResult, error) {
+	if res, ok := d.results[commit]; ok {
+		return res, nil
+	}
+	res, err := d.g.results(ctx, d.repoUUID, commit)
+	if err != nil {
+		return nil, err
+	}
+	d.results[commit] = res
+	return res, nil
+}
+
+// decidedByScan reports whether a scanned file that can run code already
+// decides the object, so no older Commit can change the answer.
+func (d *objectDecider) decidedByScan(ctx context.Context, oid string) bool {
+	blocked, ok, err := d.fromScan(ctx, oid)
+	if err != nil || !ok {
+		return false
+	}
+	if d.done == nil {
+		d.done = map[string]*BlockedError{}
+	}
+	d.done[oid] = blocked
+	return true
+}
+
+// fromScan decides an object from the stored results of the files that
+// can run code and hold it. ok is false when none has a result.
+func (d *objectDecider) fromScan(ctx context.Context, oid string) (*BlockedError, bool, error) {
+	var refused *BlockedError
+	known := false
+	for _, pl := range d.places[oid] {
+		if !runsCode(pl.path) {
+			continue
+		}
+		res, err := d.result(ctx, pl.commit)
+		if err != nil {
+			return nil, false, err
+		}
+		f, ok := res.file(pl.path)
+		if !ok {
+			continue
+		}
+		known = true
+		if r := refusal(pl.path, f.Status, f.Partial); r != "" && (refused == nil || r == BlockUnsafe) {
+			refused = &BlockedError{Path: pl.path, Reason: r}
+		}
+	}
+	return refused, known, nil
+}
+
+// decide returns the refusal of an object, or nil.
+func (d *objectDecider) decide(ctx context.Context, oid string) (*BlockedError, error) {
+	if blocked, ok := d.done[oid]; ok {
+		return blocked, nil
+	}
+	places := d.places[oid]
+	if len(places) == 0 {
+		// No Commit says what the object is, so nothing says whether
+		// loading it can run code.
+		return &BlockedError{Reason: BlockNotScanned}, nil
+	}
+	blocked, known, err := d.fromScan(ctx, oid)
+	if err != nil || known {
+		return blocked, err
+	}
+	// No file that can run code and holds the object is scanned: the same
+	// file in another scanned Commit decides each of them.
+	var first *BlockedError
+	for _, pl := range places {
+		if !runsCode(pl.path) {
+			continue
+		}
+		res, err := d.result(ctx, pl.commit)
+		if err != nil {
+			return nil, err
+		}
+		b, err := d.g.verdict(ctx, d.repoUUID, d.id, pl.commit, res, pl.path, pl.pointer)
+		if err != nil {
+			return nil, err
+		}
+		if b != nil && (first == nil || b.Reason == BlockUnsafe) {
+			first = b
+		}
+	}
+	return first, nil
+}
+
+// addHistory adds the Commits reachable from tips that add each object.
+func (d *objectDecider) addHistory(ctx context.Context, tips []model.CommitSHA, oids []string) error {
+	lfsRefs, err := d.g.Repos.LFSRefs(ctx, d.id, oids)
+	if err != nil {
+		return err
+	}
+	h, err := d.g.historyOf(ctx, d.id, d.repoUUID, tips)
+	if err != nil {
+		return err
+	}
+	for _, oid := range oids {
+		ref, ok := lfsRefs[oid]
+		if !ok {
+			continue
+		}
+		pointer := model.LFSPointer{OID: oid, Size: ref.Size}.GitOID()
+		for _, pl := range h.places[pointer] {
+			pl.pointer = pointer
+			d.add(oid, pl)
+		}
+	}
+	return nil
+}
+
+// CheckGit checks a git fetch or clone of a Repo (git-upload-pack). A pack
+// holds whole Commits, so it is refused while any Commit a client can
+// fetch holds a file stored in git, not LFS, that the Gate would refuse by
+// path: in the tip of every ref, in every Commit with a file marked unsafe,
+// and in every Commit reachable from a ref that adds one. LFS files are not
+// in the pack; git-lfs fetches them by OID, which CheckObjects checks.
+// History too long for the Gate to walk fails closed.
+func (g *Gate) CheckGit(ctx context.Context, repoUUID uuid.UUID, id model.RepoID) error {
+	on, err := g.enabled(ctx)
+	if err != nil || !on {
+		return err
+	}
+	refs, err := g.Repos.Refs(ctx, id)
+	if err != nil {
+		return err
+	}
+	tips := refTips(refs)
+	commits := slices.Clone(tips)
+	if g.Flagged != nil {
+		flagged, err := g.Flagged(ctx, repoUUID)
+		if err != nil {
+			return err
+		}
+		commits = append(commits, flagged...)
+	}
+	seen := map[filePlace]bool{}
+	check := func(commit model.CommitSHA, p, blobOID string, res *CommitResult) error {
+		key := filePlace{commit: commit, path: p}
+		if seen[key] {
+			return nil
+		}
+		seen[key] = true
+		blocked, err := g.verdict(ctx, repoUUID, id, commit, res, p, blobOID)
+		if err != nil {
+			return err
+		}
+		if blocked != nil {
+			return blocked
+		}
+		return nil
+	}
+	for _, commit := range commits {
+		entries, err := g.Repos.Tree(ctx, id, commit, "", repo.TreeOpts{Recursive: true})
+		if errors.Is(err, repo.ErrRevisionNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var paths []string
+		for _, e := range entries {
+			if e.Type == model.EntryFile && e.LFS == nil && runsCode(e.Path) {
+				paths = append(paths, e.Path)
+			}
+		}
+		if len(paths) == 0 {
+			continue
+		}
+		res, err := g.current(ctx, repoUUID, id, commit, paths)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if e.Type == model.EntryFile && e.LFS == nil && runsCode(e.Path) {
+				if err := check(commit, e.Path, e.OID, res); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	h, err := g.historyOf(ctx, id, repoUUID, tips)
+	if err != nil {
+		return err
+	}
+	if h.truncated {
+		return &BlockedError{Reason: BlockHistory}
+	}
+	results := map[model.CommitSHA]*CommitResult{}
+	for _, pl := range h.git {
+		res, ok := results[pl.commit]
+		if !ok {
+			if res, err = g.results(ctx, repoUUID, pl.commit); err != nil {
+				return err
+			}
+			results[pl.commit] = res
+		}
+		if err := check(pl.commit, pl.path, pl.pointer, res); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // filePlace is a Commit that added or changed an LFS file, and its path.
 type filePlace struct {
 	commit model.CommitSHA
 	path   string
+	// pointer is the git object of the LFS pointer file.
+	pointer string
 }
 
 // historyIndex lists, by the git object of the LFS pointer, where the
@@ -420,54 +665,15 @@ type filePlace struct {
 type historyIndex struct {
 	key    string
 	places map[string][]filePlace
-}
-
-// checkHistory decides objects that no ref tip or Flagged Commit holds,
-// such as an object that only an intermediate Commit of a push or a file
-// later deleted holds, from the Commits that added them.
-func (g *Gate) checkHistory(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, tips []model.CommitSHA, oids []string, out map[string]error) error {
-	lfsRefs, err := g.Repos.LFSRefs(ctx, id, oids)
-	if err != nil {
-		return err
-	}
-	h, err := g.historyOf(ctx, id, repoUUID, tips)
-	if err != nil {
-		return err
-	}
-	results := map[model.CommitSHA]*CommitResult{}
-	for _, oid := range oids {
-		ref, ok := lfsRefs[oid]
-		var pointer string
-		var places []filePlace
-		if ok {
-			pointer = model.LFSPointer{OID: oid, Size: ref.Size}.GitOID()
-			places = h.places[pointer]
-		}
-		if len(places) == 0 {
-			// No Commit says what the object is, so nothing says whether
-			// loading it can run code.
-			out[oid] = &BlockedError{Reason: BlockNotScanned}
-			continue
-		}
-		for _, pl := range places {
-			res, done := results[pl.commit]
-			if !done {
-				if res, err = g.results(ctx, repoUUID, pl.commit); err != nil {
-					return err
-				}
-				results[pl.commit] = res
-			}
-			blocked, err := g.verdict(ctx, repoUUID, id, pl.commit, res, pl.path, pointer)
-			if err != nil {
-				return err
-			}
-			if blocked != nil {
-				out[oid] = blocked
-				break
-			}
-		}
-	}
-	return nil
+	// git lists the Commits that add or change a file stored in git, not
+	// LFS, that can run code when loaded.
+	git []filePlace
+	// truncated is set when the walk stopped at a limit, so it may have
+	// missed Commits.
+	truncated bool
+	// lfsFull is set when places reached maxHistoryPlaces, so later LFS
+	// files were not indexed.
+	lfsFull bool
 }
 
 // historyOf returns the history index of the Commits reachable from tips,
@@ -489,12 +695,13 @@ func (g *Gate) historyOf(ctx context.Context, id model.RepoID, repoUUID uuid.UUI
 	h = &historyIndex{key: key, places: map[string][]filePlace{}}
 	visited := map[model.CommitSHA]bool{}
 	n := 0
+	h.truncated = true
 walk:
 	for _, tip := range sorted {
 		if visited[model.CommitSHA(tip)] {
 			continue
 		}
-		log, err := g.Repos.Log(ctx, id, tip, repo.LogOpts{Limit: maxHistoryCommits})
+		log, err := g.Repos.Log(ctx, id, tip, repo.LogOpts{Limit: maxHistoryCommits + 1})
 		if err != nil {
 			return nil, err
 		}
@@ -511,17 +718,28 @@ walk:
 				return nil, err
 			}
 			for _, ch := range changes {
-				if ch.Status == repo.ChangeDeleted || !ch.LFS || ch.NewOID == "" {
+				if ch.Status == repo.ChangeDeleted || ch.NewOID == "" {
+					continue
+				}
+				if !ch.LFS {
+					if runsCode(ch.Path) {
+						if len(h.git) >= maxHistoryPlaces {
+							break walk
+						}
+						h.git = append(h.git, filePlace{commit: c.SHA, path: ch.Path, pointer: ch.NewOID})
+					}
 					continue
 				}
 				if n >= maxHistoryPlaces {
-					break walk
+					h.lfsFull = true
+					continue
 				}
 				h.places[ch.NewOID] = append(h.places[ch.NewOID], filePlace{commit: c.SHA, path: ch.Path})
 				n++
 			}
 		}
 	}
+	h.truncated = false
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.history == nil {
@@ -557,8 +775,9 @@ func (s *Service) Flagged(ctx context.Context, repoUUID uuid.UUID) ([]model.Comm
 
 // ScannedFile is the stored result of a file in one Commit.
 type ScannedFile struct {
-	Commit model.CommitSHA
-	Status Status
+	Commit  model.CommitSHA
+	Status  Status
+	Partial bool
 }
 
 // Scanned returns the stored results of the file at p in the Commits of a
@@ -566,7 +785,7 @@ type ScannedFile struct {
 // first.
 func (s *Service) Scanned(ctx context.Context, repoUUID uuid.UUID, p string) ([]ScannedFile, error) {
 	var rows []db.ScanResult
-	err := s.o.DB.NewSelect().Model(&rows).Column("commit_sha", "status", "scanner_version").
+	err := s.o.DB.NewSelect().Model(&rows).Column("commit_sha", "status", "scanner_version", "findings").
 		Where("repo_id = ?", repoUUID).Where("path = ?", p).
 		OrderExpr("created_at DESC").Limit(4 * maxSameFileCommits).Scan(ctx)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -576,6 +795,13 @@ func (s *Service) Scanned(ctx context.Context, repoUUID uuid.UUID, p string) ([]
 	versions := map[string]int{}
 	var out []ScannedFile
 	for _, r := range rows {
+		var sf storedFile
+		if len(r.Findings) > 0 {
+			if err := json.Unmarshal(r.Findings, &sf); err != nil {
+				return nil, fmt.Errorf("decode scan results for %s: %w", p, err)
+			}
+		}
+		file := ScannedFile{Commit: model.CommitSHA(r.Commit), Status: Status(r.Status), Partial: storedPartial(sf, r.ScannerVersion)}
 		i, seen := at[r.Commit]
 		switch {
 		case !seen:
@@ -583,10 +809,10 @@ func (s *Service) Scanned(ctx context.Context, repoUUID uuid.UUID, p string) ([]
 				continue
 			}
 			at[r.Commit] = len(out)
-			out = append(out, ScannedFile{Commit: model.CommitSHA(r.Commit), Status: Status(r.Status)})
+			out = append(out, file)
 			versions[r.Commit] = r.ScannerVersion
 		case r.ScannerVersion > versions[r.Commit]:
-			out[i].Status = Status(r.Status)
+			out[i] = file
 			versions[r.Commit] = r.ScannerVersion
 		}
 	}

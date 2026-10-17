@@ -69,6 +69,11 @@ type FileResult struct {
 	Status   Status    `json:"status"`
 	Findings []Finding `json:"findings,omitempty"`
 	Error    string    `json:"error,omitempty"`
+	// Partial is set when the scan could not read every part of the file
+	// that a loader runs, such as a pickle compressed with xz or a joblib
+	// array it cannot measure: the findings may be incomplete, so the Gate
+	// fails closed for it.
+	Partial bool `json:"partial,omitempty"`
 }
 
 // CommitResult is the result for a Commit.
@@ -79,8 +84,8 @@ type CommitResult struct {
 
 // Scanner scans files and Commits.
 type Scanner interface {
-	// ScanFile scans one file's content without executing it. path decides
-	// the file type.
+	// ScanFile scans one file's content without executing it. path and
+	// the content decide the file type.
 	ScanFile(ctx context.Context, path string, r io.Reader) (FileResult, error)
 	// ScanCommit scans every present file of a Commit that needs scanning,
 	// stores the results and returns them.

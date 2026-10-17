@@ -58,7 +58,8 @@ func TestScanFileByType(t *testing.T) {
 		{"pytorch_model.bin", scantest.TorchZip(scantest.TorchStateDict(), 4096), scan.StatusSafe},
 		{"evil.bin", scantest.TorchZip(scantest.OSSystemProtocol0(), 10), scan.StatusUnsafe},
 		{"evil-deflate.pt", deflated(), scan.StatusUnsafe},
-		{"descriptor.pt", scantest.ZipWithDescriptors(scantest.TorchStateDict()), scan.StatusError},
+		{"descriptor.pt", scantest.ZipWithDescriptors(scantest.TorchStateDict()), scan.StatusSafe},
+		{"evil-descriptor.pt", scantest.ZipWithDescriptors(scantest.OSSystemProtocol0()), scan.StatusUnsafe},
 		{"legacy.pt", scantest.LegacyTorch(scantest.PosixSystemStackGlobal()), scan.StatusUnsafe},
 		{"model.ckpt", scantest.TorchStateDict(), scan.StatusSafe},
 		{"weights.pth", scantest.SklearnSuspicious(), scan.StatusSuspicious},
@@ -66,13 +67,15 @@ func TestScanFileByType(t *testing.T) {
 		{"data.pickle", scantest.PartialSafe(), scan.StatusSuspicious},
 		{"objects.npy", scantest.NumpyObjectArray(scantest.BuiltinsEval()), scan.StatusUnsafe},
 		{"floats.npy", scantest.NumpyFloatArray(), scan.StatusSafe},
-		{"bad.npy", []byte("not numpy"), scan.StatusError},
+		{"bad.npy", []byte("not numpy"), scan.StatusSafe},
+		{"pickle.npy", scantest.OSSystemProtocol0(), scan.StatusUnsafe},
 		{"model.joblib", scantest.Joblib(scantest.SklearnSuspicious(), false), scan.StatusSuspicious},
 		{"zlib.joblib", scantest.Joblib(scantest.OSSystemProtocol0(), true), scan.StatusUnsafe},
 		{"gzip.joblib", gz(scantest.PartialOSSystem()), scan.StatusUnsafe},
 		{"xz.joblib", []byte{0xfd, '7', 'z', 'X', 'Z', 0, 1, 2}, scan.StatusError},
 		{"lz4.joblib", []byte{0x04, 0x22, 0x4d, 0x18, 0, 0}, scan.StatusError},
-		{"random.bin", []byte("\x00\x01\x02"), scan.StatusError},
+		{"random.bin", []byte("\x00\x01\x02"), scan.StatusSafe},
+		{"truncated.pkl", []byte("(cos\nsys"), scan.StatusError},
 		{"empty.pt", []byte("PK\x05\x06" + string(make([]byte, 18))), scan.StatusError},
 		{"model.safetensors", st, scan.StatusSafe},
 		{"broken.safetensors", st[:len(st)-1], scan.StatusError},
@@ -188,7 +191,8 @@ func TestScanCommitStoresResults(t *testing.T) {
 		}
 		require.Equal(t, map[string]scan.Status{
 			"pytorch_model.bin": scan.StatusSafe, "legacy.pt": scan.StatusUnsafe, "weights.npy": scan.StatusSafe,
-			"wrong.safetensors": scan.StatusError, "gone.onnx": scan.StatusError,
+			"openvino_model.bin": scan.StatusSafe,
+			"wrong.safetensors":  scan.StatusError, "gone.onnx": scan.StatusError,
 		}, status)
 		for _, f := range res.Files {
 			if f.Path == "legacy.pt" {
