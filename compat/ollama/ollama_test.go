@@ -108,19 +108,21 @@ type target interface {
 type targetFactory struct {
 	name  string
 	start func(t *testing.T, listen string) target
+	// postgres is true for a target that needs Postgres tests enabled;
+	// without them it is skipped with the reason.
+	postgres bool
 }
 
 // targets lists the Instances to test: the Ollama registry in the test
-// process, and the hangar binary on SQLite and, when Postgres tests are on
-// (HANGAR_TEST_POSTGRES=1 or HANGAR_TEST_POSTGRES_DSN), on Postgres.
-func targets(t *testing.T) []targetFactory {
-	out := []targetFactory{{"in-process", startInProcess}, {"binary-sqlite", startBinarySQLite}}
-	if dbtest.PostgresEnabled() {
-		out = append(out, targetFactory{"binary-postgres", startBinaryPostgres})
-	} else {
-		t.Logf("binary-postgres not run: set %s=1 or %s to run it", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
+// process, and the hangar binary on SQLite and on Postgres. The Postgres
+// target needs HANGAR_TEST_POSTGRES=1 or HANGAR_TEST_POSTGRES_DSN, as make
+// test-compat sets, and is skipped without them.
+func targets() []targetFactory {
+	return []targetFactory{
+		{name: "in-process", start: startInProcess},
+		{name: "binary-sqlite", start: startBinarySQLite},
+		{name: "binary-postgres", start: startBinaryPostgres, postgres: true},
 	}
-	return out
 }
 
 // recorder records each request for target.log and target.timeline.
@@ -365,8 +367,11 @@ func generate(t *testing.T, ctx context.Context, r runner, name string) string {
 
 func TestOllamaClient(t *testing.T) {
 	model260K := fixture(t)
-	for _, f := range targets(t) {
+	for _, f := range targets() {
 		t.Run(f.name, func(t *testing.T) {
+			if f.postgres {
+				dbtest.RequirePostgres(t)
+			}
 			r, listen := startRunner(t)
 			scenarios(t, r, f.start(t, listen), model260K)
 		})

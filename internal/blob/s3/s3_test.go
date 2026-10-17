@@ -26,22 +26,8 @@ import (
 	"github.com/jamesagarside/hangar/internal/blob/s3"
 )
 
-// s3Enabled reports whether the S3 tests run, as dbtest does for
-// Postgres: `make test` turns them on, and a plain `go test` without Docker
-// logs that they are not registered.
-func s3Enabled(t *testing.T) bool {
-	t.Helper()
-	if !blobtest.S3Enabled() {
-		t.Logf("S3 tests not registered: set %s=1 (needs Docker) or %s", blobtest.EnvMinIO, blobtest.EnvS3Endpoint)
-		return false
-	}
-	return true
-}
-
 func TestConformanceMinIO(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	blobtest.RunConformance(t, blobtest.Capabilities{
 		Presign:         true,
 		MinPartSize:     blob.MinPartSize,
@@ -51,9 +37,7 @@ func TestConformanceMinIO(t *testing.T) {
 }
 
 func TestPutUnknownSizeStreamsInParts(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	s := blobtest.S3(t)
 	data := make([]byte, blob.DefaultPartSize+3<<20)
@@ -71,9 +55,7 @@ func TestPutUnknownSizeStreamsInParts(t *testing.T) {
 }
 
 func TestPutKnownSizeOverSinglePutLimit(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	s := blobtest.S3(t)
 	data := make([]byte, blob.DefaultPartSize+1)
@@ -90,9 +72,7 @@ func TestPutKnownSizeOverSinglePutLimit(t *testing.T) {
 }
 
 func TestRangedGetReportsWholeSize(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	s := blobtest.S3(t)
 	require.NoError(t, s.Put(ctx, "tmp/r", strings.NewReader("0123456789"), 10))
@@ -105,9 +85,7 @@ func TestRangedGetReportsWholeSize(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	require.NoError(t, blobtest.S3(t).Check(ctx))
 	srv := blobtest.S3TestServer(t)
@@ -169,9 +147,7 @@ func TestNewValidatesOptions(t *testing.T) {
 }
 
 func TestStreamsLargeObjects(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	// 48 MiB is three 16 MiB parts, each streamed without a part buffer.
 	blobtest.RunStreaming(t, blobtest.S3(t), 48<<20, 16<<20)
 }
@@ -193,9 +169,7 @@ func signedHeaders(t *testing.T, raw string) []string {
 // uploader stored as text/html, so no stored object carries a type a
 // browser would render.
 func TestStoredContentTypeIsPinned(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	srv := blobtest.S3TestServer(t)
 	opts := srv.Options()
@@ -287,13 +261,10 @@ func (b *breakingBody) Close() error { return b.r.Close() }
 // length, and checks streamed uploads still stream and store the right
 // bytes.
 func TestPartRetriesOnMinIO(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	srv := blobtest.S3TestServer(t)
 	if !strings.HasPrefix(srv.Endpoint, "http://") {
-		t.Logf("fault injection needs a plain HTTP test server; %s is not one", srv.Endpoint)
-		return
+		t.Skipf("fault injection needs a plain HTTP test server; %s is not one (scripts/with-test-minio.sh starts one)", srv.Endpoint)
 	}
 	base, err := minio.DefaultTransport(false)
 	require.NoError(t, err)
@@ -324,9 +295,7 @@ func TestPartRetriesOnMinIO(t *testing.T) {
 // single request copies gigabytes (bellatrix finding 13b), and that the
 // copy has the source's bytes and the safe Content-Type.
 func TestCopyLargeObjectsInParts(t *testing.T) {
-	if !s3Enabled(t) {
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	srv := blobtest.S3TestServer(t)
 	opts := srv.Options()

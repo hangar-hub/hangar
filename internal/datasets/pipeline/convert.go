@@ -213,7 +213,11 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 			// Reading the files or the card failed; the Job retries.
 			return cerr
 		}
-		p.d.Log.WarnContext(ctx, "the dataset has no Configs", "repo", r.ID.Path(), "error", cerr.Error())
+		// A dataset may hold files the Viewer cannot read ("Datasets hold
+		// any files" in docs/build/decisions.md), so this is a normal
+		// state, recorded in the Split row the UI shows. Log it at DEBUG,
+		// as the Viewer does.
+		p.d.Log.DebugContext(ctx, "the dataset has no Configs", "repo", r.ID.Path(), "error", cerr.Error())
 		return p.store.ReplaceSplits(ctx, r.UUID, commit, []SplitRow{{Config: DatasetLevel, Split: DatasetLevel, Status: StatusFailed, Error: code}})
 	}
 	// Show every Split as pending while the conversion runs.

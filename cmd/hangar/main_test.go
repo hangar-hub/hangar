@@ -438,10 +438,7 @@ func TestReadyzWaitsForTheInstance(t *testing.T) {
 // until the migration lets the Instance start. Roles other than all need
 // Postgres, so the test is registered only when Postgres tests are on.
 func TestReadyzWhileWaitingForMigrate(t *testing.T) {
-	if !dbtest.PostgresEnabled() {
-		t.Logf("not registered: set %s=1 or %s to run it", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
-		return
-	}
+	dbtest.RequirePostgres(t)
 	cfg := testConfig(t)
 	cfg.Server.Role = config.RoleWeb
 	cfg.Database.Driver = "postgres"

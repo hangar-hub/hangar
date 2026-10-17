@@ -35,6 +35,8 @@ type SystemInfo struct {
 	BlobBackend string
 	// DownloadMode is redirect or proxy; empty for the filesystem backend.
 	DownloadMode string
+	// UploadMode is direct or proxy; empty for the filesystem backend.
+	UploadMode string
 	// Telemetry is the exporter of each signal, from telemetry.Telemetry.Exporters.
 	Telemetry map[string]string
 }
@@ -75,6 +77,10 @@ func (h *AdminSystem) AdminGetSystem(w http.ResponseWriter, r *http.Request) {
 	if h.Info.DownloadMode != "" {
 		m := h.Info.DownloadMode
 		out.BlobStore.DownloadMode = &m
+	}
+	if h.Info.UploadMode != "" {
+		m := h.Info.UploadMode
+		out.BlobStore.UploadMode = &m
 	}
 	out.Database.Driver = h.DB.Driver()
 	if st, err := h.DB.Schema(r.Context()); err == nil {

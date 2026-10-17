@@ -68,10 +68,7 @@ func TestMigrateGivesUpWaitingForTheDatabase(t *testing.T) {
 // port a few seconds later. The migration must wait and then succeed,
 // instead of exiting into the kubelet's restart back-off.
 func TestMigrateWaitsForTheDatabase(t *testing.T) {
-	if !dbtest.PostgresEnabled() {
-		t.Logf("not registered: set %s=1 or %s to run it", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
-		return
-	}
+	dbtest.RequirePostgres(t)
 	server, err := url.Parse(dbtest.PostgresDSN(t))
 	require.NoError(t, err)
 	addr := closedPort(t)

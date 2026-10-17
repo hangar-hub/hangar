@@ -225,10 +225,7 @@ func listColumns(t *testing.T, d *db.DB, table string) []string {
 }
 
 func TestDialectsHaveTheSameColumns(t *testing.T) {
-	if !dbtest.PostgresEnabled() {
-		t.Logf("needs Postgres: set %s=1", dbtest.EnvPostgres)
-		return
-	}
+	dbtest.RequirePostgres(t)
 	lite, pg := dbtest.SQLite(t), dbtest.Postgres(t)
 	tables := listTables(t, lite)
 	require.Equal(t, tables, listTables(t, pg))
@@ -379,10 +376,7 @@ func TestNewIDIsVersion7(t *testing.T) {
 // pg_type_typname_nsp_index) or on its migration lock row, and every loser
 // exited 1 into CrashLoopBackOff.
 func TestConcurrentPostgresMigratesWaitForOneAnother(t *testing.T) {
-	if !dbtest.PostgresEnabled() {
-		t.Logf("needs Postgres: set %s=1", dbtest.EnvPostgres)
-		return
-	}
+	dbtest.RequirePostgres(t)
 	dsn := dbtest.PostgresDSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -433,10 +427,7 @@ func TestMigrateIgnoresALockLeftByAKilledMigrator(t *testing.T) {
 // until its context ends, and once the holding session ends, as when a
 // migrator is killed, the next Migrate runs without anything to clean up.
 func TestPostgresMigrateWaitsForTheLockHolder(t *testing.T) {
-	if !dbtest.PostgresEnabled() {
-		t.Logf("needs Postgres: set %s=1", dbtest.EnvPostgres)
-		return
-	}
+	dbtest.RequirePostgres(t)
 	dsn := dbtest.PostgresDSN(t)
 	ctx := context.Background()
 	holder, err := db.Open(ctx, db.Options{Driver: db.Postgres, DSN: dsn, MaxOpenConns: 1})

@@ -140,10 +140,7 @@ func (m *minioInstance) python(t *testing.T, script string, args ...string) stri
 // "AccessDenied: There were headers present in the request which were not
 // signed" and every such upload failed when hf_xet was off or absent.
 func TestHubBasicUploadToMinIOWithoutXet(t *testing.T) {
-	if !blobtest.S3Enabled() {
-		t.Logf("MinIO test not registered: set %s=1 (needs Docker) or %s; make test-compat sets it", blobtest.EnvMinIO, blobtest.EnvS3Endpoint)
-		return
-	}
+	blobtest.RequireS3(t)
 	recordMatrix(t, "POST /{repo}.git/info/lfs/objects/batch (basic, presigned MinIO URL, no Xet)")
 	m := startMinIOInstance(t)
 	dir := t.TempDir()

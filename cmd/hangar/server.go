@@ -84,16 +84,19 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 			return err
 		}
 	}
-	blobs, err := openBlobStore(ctx, cfg, tel)
-	if err != nil {
-		return err
-	}
 	// Health answers at once; the rest of the Instance is built once the
-	// schema is current, which web and worker processes wait for while
-	// hangar admin migrate runs. /readyz answers 503 until the full handler
-	// is installed and the worker has started.
+	// Blob store answers and the schema is current, which web and worker
+	// processes wait for while hangar admin migrate runs. /readyz answers
+	// 503 until the full handler is installed and the worker has started.
 	var started atomic.Bool
-	health := newHealth(d, blobs, startupCheck(&started))
+	var waiting atomic.Pointer[string]
+	var store atomic.Pointer[blob.Store]
+	health := newHealthFor(d, func() blob.Store {
+		if s := store.Load(); s != nil {
+			return *s
+		}
+		return nil
+	}, startupCheckWaiting(&started, &waiting))
 	health.SetLogger(log)
 	var current atomic.Pointer[http.Handler]
 	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
@@ -121,6 +124,20 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return nil
 	}
 
+	waitingForBlobs := "waiting for the Blob store to answer"
+	waiting.Store(&waitingForBlobs)
+	blobs, err := openBlobStoreWaiting(ctx, cfg, func(ctx context.Context) (blob.Store, error) {
+		return openBlobStore(ctx, cfg, tel)
+	}, log)
+	if err != nil {
+		_ = shutdown()
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	store.Store(&blobs)
+	waiting.Store(nil)
 	if err := waitForSchema(ctx, d, log); err != nil {
 		_ = shutdown()
 		if ctx.Err() != nil {
@@ -215,6 +232,56 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 			return ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
+	}
+}
+
+// Bounds of the retry interval in openBlobStoreWaiting.
+const (
+	blobRetryFirst = time.Second
+	blobRetryMax   = 10 * time.Second
+)
+
+// openBlobStoreWaiting opens the Blob store with open, and while an S3
+// store does not answer, keeps trying for up to storage.s3.startup_wait,
+// logging each attempt. A web or worker Pod that starts before its object
+// store then waits, with /healthz answering and /readyz not ready, instead
+// of exiting into the kubelet's growing restart back-off. The filesystem
+// backend is never retried: its errors do not go away.
+func openBlobStoreWaiting(ctx context.Context, cfg *config.Config, open func(context.Context) (blob.Store, error), log *slog.Logger) (blob.Store, error) {
+	wait := cfg.Storage.S3.StartupWait
+	if cfg.Storage.Backend != config.BackendS3 || wait <= 0 {
+		return open(ctx)
+	}
+	deadline := time.Now().Add(wait)
+	retry := blobRetryFirst
+	for attempt := 1; ; attempt++ {
+		actx, cancel := context.WithDeadline(ctx, deadline)
+		s, err := open(actx)
+		cancel()
+		if err == nil {
+			if attempt > 1 {
+				log.InfoContext(ctx, "the Blob store answered", "attempts", attempt)
+			}
+			return s, nil
+		}
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("wait for the Blob store: %w (last error: %w)", context.Cause(ctx), err)
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			return nil, fmt.Errorf("the Blob store did not answer within %s (storage.s3.startup_wait): %w", wait, err)
+		}
+		next := min(retry, left)
+		log.WarnContext(ctx, "waiting for the Blob store", "endpoint", cfg.Storage.S3.Endpoint, "bucket", cfg.Storage.S3.Bucket,
+			"attempt", attempt, "retry_in", next.String(), "gives_up_in", left.Round(time.Second).String(), "error", err.Error())
+		t := time.NewTimer(next)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil, fmt.Errorf("wait for the Blob store: %w (last error: %w)", context.Cause(ctx), err)
+		case <-t.C:
+		}
+		retry = min(retry*2, blobRetryMax)
 	}
 }
 

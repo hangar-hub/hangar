@@ -45,7 +45,8 @@ func newNativeServer(in *instance) (*nativeServer, error) {
 		Jobs:         &api.Jobs{Queue: in.queue, Authz: authz, Repos: in.repos},
 		AdminStorage: &api.AdminStorage{Authz: authz, Accounting: in.accounting, Queue: in.queue, Audit: in.audit},
 		AdminSystem: &api.AdminSystem{Authz: authz, DB: in.db, Info: api.SystemInfo{Version: version, Commit: commit, Role: cfg.Server.Role,
-			BlobBackend: blobBackend(cfg), DownloadMode: downloadMode(cfg), Telemetry: in.tel.Exporters},
+			BlobBackend: blobBackend(cfg), DownloadMode: downloadMode(cfg), UploadMode: uploadMode(cfg),
+			Telemetry: in.tel.Exporters},
 			Checks: api.DoctorChecks(in.db, api.DoctorOptions{Store: in.blobs, Downloads: in.downloads, Config: cfg})},
 		Identity:  api.NewIdentity(api.IdentityOptions{Auth: in.auth, Orgs: in.orgs, Audit: in.audit, Repos: in.repos, Log: in.log}),
 		Upstreams: &api.Upstreams{Service: in.pulls, Client: in.client, Repos: in.repos, Authz: authz, Queue: in.queue, Log: in.log},
@@ -103,4 +104,13 @@ func downloadMode(cfg *config.Config) string {
 		return ""
 	}
 	return cfg.Storage.S3.DownloadMode
+}
+
+// uploadMode is storage.s3.upload_mode on S3 and empty on the
+// filesystem, where every upload goes through Hangar.
+func uploadMode(cfg *config.Config) string {
+	if cfg.Storage.Backend != config.BackendS3 {
+		return ""
+	}
+	return cfg.Storage.S3.UploadMode
 }

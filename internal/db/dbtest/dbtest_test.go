@@ -73,10 +73,7 @@ func TestDatabasesFromTheTemplateAreSeparate(t *testing.T) {
 // TestPostgresDSNIsEmpty checks that PostgresDSN gives an unmigrated
 // database, for tests that run a binary which migrates it.
 func TestPostgresDSNIsEmpty(t *testing.T) {
-	if !dbtest.PostgresEnabled() {
-		t.Logf("Postgres test not registered: set %s=1 or %s", dbtest.EnvPostgres, dbtest.EnvPostgresDSN)
-		return
-	}
+	dbtest.RequirePostgres(t)
 	ctx := context.Background()
 	d, err := db.Open(ctx, db.Options{Driver: db.Postgres, DSN: dbtest.PostgresDSN(t)})
 	require.NoError(t, err)

@@ -49,6 +49,7 @@ func TestValidateReportsEveryError(t *testing.T) {
 	cfg.Telemetry.LogLevel = "trace"
 	cfg.Storage.S3.DownloadMode = "stream"
 	cfg.Storage.S3.UploadMode = "presigned"
+	cfg.Storage.S3.StartupWait = -time.Second
 	cfg.Viewer.MaxRequestBytes = 0
 	err := cfg.Validate()
 	require.Error(t, err)
@@ -65,11 +66,12 @@ func TestValidateReportsEveryError(t *testing.T) {
 		"telemetry.log_level",
 		`storage.s3.download_mode "stream" must be redirect or proxy`,
 		`storage.s3.upload_mode "presigned" must be direct or proxy`,
+		"storage.s3.startup_wait must be between 0 and 1h",
 		"viewer.max_request_bytes",
 	} {
 		require.Contains(t, msg, want)
 	}
-	require.GreaterOrEqual(t, len(errs), 10)
+	require.GreaterOrEqual(t, len(errs), 11)
 }
 
 func TestLoadOrderFileEnvFlags(t *testing.T) {

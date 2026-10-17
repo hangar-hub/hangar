@@ -53,6 +53,17 @@ func PostgresEnabled() bool {
 	return os.Getenv(EnvPostgresDSN) != "" || os.Getenv(EnvPostgres) == "1"
 }
 
+// RequirePostgres skips t, saying how to run it, unless Postgres tests
+// are enabled. make test and make test-compat enable them, so nothing is
+// skipped there; a plain go test without Docker reports the skip instead of
+// a pass.
+func RequirePostgres(t testing.TB) {
+	t.Helper()
+	if !PostgresEnabled() {
+		t.Skipf("needs Postgres: set %s=1 (needs Docker) or %s; make test and make test-compat set it", EnvPostgres, EnvPostgresDSN)
+	}
+}
+
 // SQLite returns a migrated SQLite database in a temporary directory,
 // closed when the test ends.
 func SQLite(t testing.TB) *db.DB {
@@ -159,16 +170,18 @@ func Drivers() []Driver {
 }
 
 // ForEachDriver runs fn as a subtest against a fresh database for each
-// driver in Drivers.
+// driver in Drivers. Without Postgres tests enabled, the postgres subtest
+// is skipped with the reason.
 func ForEachDriver(t *testing.T, fn func(t *testing.T, d *db.DB)) {
 	t.Helper()
-	if !PostgresEnabled() {
-		t.Logf("Postgres subtests not registered: set %s=1 or %s to run them", EnvPostgres, EnvPostgresDSN)
-	}
 	for _, drv := range Drivers() {
 		t.Run(drv.Name, func(t *testing.T) {
 			fn(t, drv.Open(t))
 		})
+	}
+	if !PostgresEnabled() {
+		// Report the Postgres subtest as skipped rather than leave it out.
+		t.Run(db.Postgres, func(t *testing.T) { RequirePostgres(t) })
 	}
 }
 

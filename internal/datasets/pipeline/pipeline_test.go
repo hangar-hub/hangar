@@ -73,7 +73,7 @@ func newEnvWith(t *testing.T, d *db.DB, maxBytes int64, wrap func(*repotest.Fake
 	}
 	log := &syncBuffer{}
 	p, err := pipeline.New(pipeline.Deps{DB: d, Blobs: blobtest.NewFake(), Repos: svc, LFS: repos.LFS, Jobs: q,
-		MaxConvertBytes: maxBytes, TempDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(log, nil))})
+		MaxConvertBytes: maxBytes, TempDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelDebug}))})
 	require.NoError(t, err)
 	require.NoError(t, p.Register(reg))
 	return &env{ctx: context.Background(), repos: repos, db: d, q: q, p: p, log: log}
@@ -213,6 +213,7 @@ func TestFailures(t *testing.T) {
 	require.Equal(t, pipeline.DatasetLevel, rows[0].Config)
 	require.Equal(t, pipeline.FailureEmpty, rows[0].Error)
 	require.Contains(t, e.log.String(), "no data files")
+	requireLoggedAtDebug(t, e.log.String(), "the dataset has no Configs")
 
 	// The error behind a failure is logged; only its code is stored, so
 	// no error text reaches the Viewer or the API.
@@ -381,4 +382,39 @@ func TestMirrorExportPulledLater(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, pipeline.StatusReady, rows[0].Status, rows[0].Error)
 	require.EqualValues(t, 3, rows[0].NumRows)
+}
+
+// requireLoggedAtDebug checks that msg was logged, and only at DEBUG.
+func requireLoggedAtDebug(t *testing.T, logs, msg string) {
+	t.Helper()
+	found := false
+	for _, line := range strings.Split(logs, "\n") {
+		if !strings.Contains(line, `msg="`+msg+`"`) {
+			continue
+		}
+		found = true
+		require.Contains(t, line, "level=DEBUG", line)
+	}
+	require.True(t, found, "no %q line in:\n%s", msg, logs)
+}
+
+// TestDatasetOfOtherFilesLogsAtDebug checks that a dataset holding only
+// files the Dataset Viewer cannot read, a normal dataset since James's
+// decision that datasets hold any files, logs that it has no Configs at
+// DEBUG and not as a warning, as the Viewer does.
+func TestDatasetOfOtherFilesLogsAtDebug(t *testing.T) {
+	d := dbtest.SQLite(t)
+	e := newEnv(t, d, 0)
+	r, sha := e.dataset(t, "samples", map[string][]byte{
+		"README.md":         []byte("# Sample inputs for another project\n"),
+		"inputs/blob.bin":   {0, 1, 2, 3},
+		"inputs/config.ini": []byte("[a]\nb = 1\n"),
+	})
+	e.run(t, r, sha)
+	rows, err := e.p.Store().Splits(e.ctx, r.UUID, sha)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, pipeline.FailureEmpty, rows[0].Error)
+	requireLoggedAtDebug(t, e.log.String(), "the dataset has no Configs")
+	require.NotContains(t, e.log.String(), "level=WARN", e.log.String())
 }

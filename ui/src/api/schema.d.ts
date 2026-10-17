@@ -2919,8 +2919,12 @@ export interface components {
                 schema_version: string;
             };
             blob_store: {
+                /** @description fs or s3. */
                 backend: string;
+                /** @description storage.s3.download_mode: redirect or proxy. Absent on the filesystem backend. */
                 download_mode?: string;
+                /** @description storage.s3.upload_mode: direct or proxy. Absent on the filesystem backend. */
+                upload_mode?: string;
             };
             /** @description Exporter per signal. */
             telemetry: {

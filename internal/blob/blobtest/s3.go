@@ -48,6 +48,16 @@ func S3Enabled() bool {
 	return os.Getenv(EnvS3Endpoint) != "" || os.Getenv(EnvMinIO) == "1"
 }
 
+// RequireS3 skips t, saying how to run it, unless S3 tests are enabled.
+// make test and make test-compat enable them, so nothing is skipped there;
+// a plain go test without Docker reports the skip instead of a pass.
+func RequireS3(t testing.TB) {
+	t.Helper()
+	if !S3Enabled() {
+		t.Skipf("needs an S3 server: set %s=1 (needs Docker) or %s; make test and make test-compat set it", EnvMinIO, EnvS3Endpoint)
+	}
+}
+
 // S3Server describes the test S3 server.
 type S3Server struct {
 	Endpoint  string
