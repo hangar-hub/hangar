@@ -24,8 +24,10 @@ COMPAT_TIMEOUT ?= 30m
 # every package shares (scripts/with-test-postgres.sh). Set
 # HANGAR_TEST_POSTGRES_DSN to use an existing server instead.
 export HANGAR_TEST_POSTGRES ?= 1
-# S3 Blob store tests run against MinIO with testcontainers (Docker). Set
-# HANGAR_TEST_S3_ENDPOINT to use an existing S3-compatible server instead.
+# S3 Blob store tests need Docker too: test-go starts one MinIO container
+# that every package shares (scripts/with-test-minio.sh), so no package's
+# MinIO depends on testcontainers' reaper. Set HANGAR_TEST_S3_ENDPOINT to
+# use an existing S3-compatible server instead.
 export HANGAR_TEST_MINIO ?= 1
 
 .PHONY: help
@@ -110,16 +112,23 @@ lint-style:
 	  echo "House style: replace the em dashes above."; exit 1; fi
 	@./scripts/check-spelling.sh
 	@./scripts/check-compat-timeout.sh
+	@./scripts/check-test-targets.sh
 	@python3 scripts/check-hub-matrix.py
 
 ## Test ------------------------------------------------------------------------------
 
 .PHONY: test
-test: test-go test-ui ## Run unit and integration tests (SQLite and Postgres)
+# Both suites run even when the first fails, so one run reports both
+# results; the target fails if either does.
+test: ## Run unit and integration tests (SQLite and Postgres)
+	@status=0; \
+	$(MAKE) --no-print-directory test-go || status=1; \
+	$(MAKE) --no-print-directory test-ui || status=1; \
+	exit $$status
 
 .PHONY: test-go
 test-go:
-	scripts/with-test-postgres.sh $(GO) test $(GOTESTFLAGS) -tags integration ./...
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh $(GO) test $(GOTESTFLAGS) -tags integration ./...
 
 .PHONY: test-ui
 test-ui: ui-deps
@@ -127,7 +136,7 @@ test-ui: ui-deps
 
 .PHONY: test-compat
 test-compat: ## Run the client compatibility suites against a real binary
-	$(GO) test -count=1 -timeout $(COMPAT_TIMEOUT) -tags compat ./compat/...
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh $(GO) test -count=1 -timeout $(COMPAT_TIMEOUT) -tags compat ./compat/...
 	$(UV) run --project compat pytest compat
 
 .PHONY: fixtures
@@ -140,7 +149,7 @@ fuzz: ## Run every fuzz target for FUZZTIME each (default 10m)
 
 .PHONY: cover
 cover: ## Check Go coverage per package against the floors in 13-testing.md
-	./scripts/coverage.sh -tags integration
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh ./scripts/coverage.sh -tags integration
 
 .PHONY: e2e
 e2e: ui-deps ## Run Playwright against the mock server

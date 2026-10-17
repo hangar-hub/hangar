@@ -16,4 +16,5 @@ Working notes for the agents building Hangar v1.0 from [`docs/spec/15-build-plan
 
 - Build against the fakes in the `<pkg>test` packages. Every interface has one, with its own tests.
 - Never run `go mod tidy` in phase 1; add dependencies with `go get` and a line in [`docs/dependencies.md`](../dependencies.md).
-- `make build lint test` must pass before you hand off. `make test` runs Postgres tests through testcontainers, so Docker must be running.
+- `make build lint test` must pass before you hand off. Docker must be running: `make test`, `make cover` and `make test-compat` run the Go tests against one Postgres container and one MinIO container for the whole run (`scripts/with-test-postgres.sh` and `scripts/with-test-minio.sh`), and `make test` runs the UI tests even when the Go tests fail.
+- When you run `go test` over many packages yourself, run it through both scripts too. Without them, each package starts its own containers with testcontainers, and its reaper can remove a package's MinIO while that package's tests still run (`Reaper handshake failed: read ack: EOF` in the output, then `connection refused`).

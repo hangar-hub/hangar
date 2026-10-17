@@ -98,6 +98,10 @@ type target interface {
 	// log returns a line per request Ollama sent: the status, method,
 	// path, whether the URL was signed, and the Range header.
 	log() []string
+	// timeline returns a line per request Ollama sent, in arrival order,
+	// with when it arrived and how long it took, including requests that
+	// have not finished.
+	timeline() []string
 }
 
 // targetFactory starts a target listening on listen.
@@ -119,10 +123,22 @@ func targets(t *testing.T) []targetFactory {
 	return out
 }
 
-// recorder records a line per request for target.log.
+// recorder records each request for target.log and target.timeline.
 type recorder struct {
 	mu       sync.Mutex
-	statuses []string
+	start    time.Time
+	requests []recorded
+}
+
+// recorded is one request: when it arrived, and once it has finished, how
+// long it took and its log line.
+type recorded struct {
+	at      time.Time
+	method  string
+	path    string
+	done    bool
+	took    time.Duration
+	logLine string
 }
 
 type statusWriter struct {
@@ -143,25 +159,60 @@ func (w *statusWriter) Flush() {
 
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// wrap records every request next serves.
+// wrap records every request next serves. It records the path only, never
+// the query, which carries signatures.
 func (rec *recorder) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		at := time.Now()
+		rec.mu.Lock()
+		if rec.start.IsZero() {
+			rec.start = at
+		}
+		i := len(rec.requests)
+		rec.requests = append(rec.requests, recorded{at: at, method: r.Method, path: r.URL.Path})
+		rec.mu.Unlock()
+
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
 		signed := ""
 		if r.URL.Query().Get(httpx.SigParam) != "" {
 			signed = " signed"
 		}
+		line := fmt.Sprintf("%d %s %s%s range=%q", sw.status, r.Method, r.URL.Path, signed, r.Header.Get("Range"))
 		rec.mu.Lock()
-		rec.statuses = append(rec.statuses, fmt.Sprintf("%d %s %s%s range=%q", sw.status, r.Method, r.URL.Path, signed, r.Header.Get("Range")))
+		rec.requests[i].done = true
+		rec.requests[i].took = time.Since(at)
+		rec.requests[i].logLine = line
 		rec.mu.Unlock()
 	})
 }
 
+// log returns the finished requests' lines, in arrival order.
 func (rec *recorder) log() []string {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-	return append([]string(nil), rec.statuses...)
+	var out []string
+	for _, r := range rec.requests {
+		if r.done {
+			out = append(out, r.logLine)
+		}
+	}
+	return out
+}
+
+func (rec *recorder) timeline() []string {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	out := make([]string, 0, len(rec.requests))
+	for _, r := range rec.requests {
+		at := fmt.Sprintf("+%.3fs", r.at.Sub(rec.start).Seconds())
+		if r.done {
+			out = append(out, fmt.Sprintf("%s took %s: %s", at, r.took.Round(time.Millisecond), r.logLine))
+		} else {
+			out = append(out, fmt.Sprintf("%s unfinished after %s: %s %s", at, time.Since(r.at).Round(time.Millisecond), r.method, r.path))
+		}
+	}
+	return out
 }
 
 // runner runs Ollama commands, locally or in a container.
@@ -291,10 +342,13 @@ func waitUp(t *testing.T, base string) {
 	t.Fatalf("ollama did not start at %s", base)
 }
 
-func generate(t *testing.T, r runner, name string) string {
+func generate(t *testing.T, ctx context.Context, r runner, name string) string {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{"model": name, "prompt": "Once upon a time", "stream": false, "options": map[string]any{"num_predict": 1, "temperature": 0}})
-	resp, err := http.Post(r.api()+"/api/generate", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.api()+"/api/generate", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
@@ -331,10 +385,32 @@ func startRunner(t *testing.T) (runner, string) {
 	return startDocker(t), "0.0.0.0:0"
 }
 
-// scenarios runs the client checks against one target.
+// scenarioTimeout bounds each scenario. Each has its own deadline, so a
+// pull that stalls on a loaded host fails that scenario, not every
+// scenario after it as well.
+const scenarioTimeout = 5 * time.Minute
+
+// scenario runs fn as a subtest with a context that ends after timeout.
+func scenario(t *testing.T, name string, timeout time.Duration, fn func(t *testing.T, ctx context.Context)) bool {
+	t.Helper()
+	return t.Run(name, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		fn(t, ctx)
+	})
+}
+
+// scenarios runs the client checks against one target. When one fails, it
+// logs every request Ollama sent the target, with timings, so a stalled
+// pull shows whether Hangar was slow to answer or never asked.
 func scenarios(t *testing.T, r runner, in target, model260K []byte) {
 	_, port, _ := net.SplitHostPort(in.addr())
 	host := r.host(port)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("requests Ollama sent, in arrival order:\n%s", strings.Join(in.timeline(), "\n"))
+		}
+	})
 
 	public := model.RepoID{Type: model.RepoTypeModel, Namespace: owner, Name: "Tiny-Stories-GGUF"}
 	in.createRepo(t, public, model.VisibilityPublic, map[string][]byte{
@@ -343,10 +419,8 @@ func scenarios(t *testing.T, r runner, in target, model260K []byte) {
 		"LICENSE":               []byte("MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy.\n"),
 		"params":                []byte(`{"temperature": 0.1}`),
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
 
-	t.Run("pull by latest", func(t *testing.T) {
+	scenario(t, "pull by latest", scenarioTimeout, func(t *testing.T, ctx context.Context) {
 		name := host + "/alice/tiny-stories-gguf"
 		out, err := r.cli(ctx, "pull", "--insecure", name)
 		require.NoError(t, err, out)
@@ -357,13 +431,13 @@ func scenarios(t *testing.T, r runner, in target, model260K []byte) {
 	})
 
 	q8 := host + "/alice/tiny-stories-gguf:Q8_0"
-	t.Run("pull by quant", func(t *testing.T) {
+	scenario(t, "pull by quant", scenarioTimeout, func(t *testing.T, ctx context.Context) {
 		out, err := r.cli(ctx, "pull", "--insecure", strings.ToLower(q8))
 		require.NoError(t, err, out)
 		require.Contains(t, out, "success")
 	})
 
-	t.Run("show", func(t *testing.T) {
+	scenario(t, "show", scenarioTimeout, func(t *testing.T, ctx context.Context) {
 		out, err := r.cli(ctx, "show", strings.ToLower(q8))
 		require.NoError(t, err, out)
 		require.Contains(t, out, "llama")
@@ -374,16 +448,16 @@ func scenarios(t *testing.T, r runner, in target, model260K []byte) {
 		require.Contains(t, tmpl, "{{", "a Go template was served or derived")
 	})
 
-	t.Run("run one token", func(t *testing.T) {
-		_ = generate(t, r, strings.ToLower(q8))
+	scenario(t, "run one token", scenarioTimeout, func(t *testing.T, ctx context.Context) {
+		_ = generate(t, ctx, r, strings.ToLower(q8))
 	})
 
-	t.Run("missing quant", func(t *testing.T) {
+	scenario(t, "missing quant", scenarioTimeout, func(t *testing.T, ctx context.Context) {
 		out, err := r.cli(ctx, "pull", "--insecure", host+"/alice/tiny-stories-gguf:Q2_K")
 		require.Error(t, err, out)
 	})
 
-	t.Run("private Repo with a registered key", func(t *testing.T) {
+	scenario(t, "private Repo with a registered key", scenarioTimeout, func(t *testing.T, ctx context.Context) {
 		private := model.RepoID{Type: model.RepoTypeModel, Namespace: owner, Name: "private-stories"}
 		in.createRepo(t, private, model.VisibilityPrivate, map[string][]byte{"stories260K-Q8_0.gguf": model260K})
 		name := host + "/alice/private-stories:q8_0"
@@ -393,7 +467,7 @@ func scenarios(t *testing.T, r runner, in target, model260K []byte) {
 		out, err = r.cli(ctx, "pull", "--insecure", name)
 		require.NoError(t, err, out)
 		require.Contains(t, out, "success")
-		_ = generate(t, r, name)
+		_ = generate(t, ctx, r, name)
 	})
 
 	t.Run("blobs are served directly", func(t *testing.T) {
