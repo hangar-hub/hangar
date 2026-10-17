@@ -186,13 +186,16 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 	}
 	ok := false
 	if u != nil && u.HasPassword && !u.IsSystem {
-		ok, err = VerifyPassword(u.passwordHash, a.Password)
+		ok, err = VerifyPassword(ctx, u.passwordHash, a.Password)
+		if err != nil && ctx.Err() != nil {
+			return nil, err
+		}
 		if err != nil {
 			l.s.log.ErrorContext(ctx, "stored password hash is unreadable", "user_id", u.ID.String())
 			ok = false
 		}
-	} else {
-		timingSafeDummyVerify(a.Password)
+	} else if err := timingSafeDummyVerify(ctx, a.Password); err != nil {
+		return nil, err
 	}
 	if !ok {
 		if err := l.fail(ctx, keys); err != nil {

@@ -261,7 +261,7 @@ func (us *UserStore) createTx(ctx context.Context, tx bun.Tx, nu NewUser) (uuid.
 		if err := CheckPasswordPolicy(nu.Password, nu.Username); err != nil {
 			return uuid.Nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
-		h, err := HashPassword(nu.Password)
+		h, err := HashPassword(ctx, nu.Password)
 		if err != nil {
 			return uuid.Nil, err
 		}
@@ -425,7 +425,7 @@ func (us *UserStore) setPasswordTx(ctx context.Context, tx bun.IDB, u *User, pw 
 	if err := CheckPasswordPolicy(pw, u.Username); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	h, err := HashPassword(pw)
+	h, err := HashPassword(ctx, pw)
 	if err != nil {
 		return err
 	}
