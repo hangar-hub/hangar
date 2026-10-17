@@ -74,6 +74,8 @@ A Config is a named subset of a dataset, from the card's `configs:` YAML or infe
 
 Hangar converts every Config and Split to Parquet, on the `refs/convert/parquet` branch, as huggingface.co does. The Dataset Viewer reads it, and you can load it directly.
 
+A Mirror keeps the Upstream's own Parquet export instead of converting. A Pull of the dataset's files does not always bring the export's files with it; until they are in the Arsenal, the **Viewer** tab says to pull them, which `hangar pull datasets/<namespace>/<name> --parquet-only --server-only` does.
+
 ## Partial and Parquet-only Pulls
 
 Pull only the Configs and Splits you need, or only their Parquet export, which can turn a very large raw dataset into a few GB:
