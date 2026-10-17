@@ -2,6 +2,8 @@ package db_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -367,4 +369,105 @@ func TestNewIDIsVersion7(t *testing.T) {
 	id := db.NewID()
 	require.Equal(t, uuid.Version(7), id.Version())
 	require.Equal(t, time.UTC, db.Now().Location())
+}
+
+// TestConcurrentPostgresMigratesWaitForOneAnother runs several migrators at
+// once against an empty Postgres database, as the migrate init containers
+// of Pods that start together do. Each must wait for the others and
+// succeed: before Migrate took an advisory lock, concurrent runs failed on
+// bun's CREATE TABLE IF NOT EXISTS (SQLSTATE 23505 on
+// pg_type_typname_nsp_index) or on its migration lock row, and every loser
+// exited 1 into CrashLoopBackOff.
+func TestConcurrentPostgresMigratesWaitForOneAnother(t *testing.T) {
+	if !dbtest.PostgresEnabled() {
+		t.Logf("needs Postgres: set %s=1", dbtest.EnvPostgres)
+		return
+	}
+	dsn := dbtest.PostgresDSN(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	const migrators = 8
+	// Open every handle first, so the Migrate calls start as close together
+	// as the start barrier allows. A pool of one connection, as hangar admin
+	// migrate's callers may use, must not deadlock against the lock.
+	dbs := make([]*db.DB, migrators)
+	for i := range dbs {
+		d, err := db.Open(ctx, db.Options{Driver: db.Postgres, DSN: dsn, MaxOpenConns: 1})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = d.Close() })
+		dbs[i] = d
+	}
+	start := make(chan struct{})
+	errs := make(chan error, migrators)
+	for _, d := range dbs {
+		go func() {
+			<-start
+			errs <- d.Migrate(ctx)
+		}()
+	}
+	close(start)
+	for range migrators {
+		require.NoError(t, <-errs)
+	}
+	st, err := dbs[0].Schema(ctx)
+	require.NoError(t, err)
+	require.True(t, st.UpToDate(), "pending after concurrent migrates: %v", st.Pending)
+}
+
+// TestMigrateIgnoresALockLeftByAKilledMigrator checks that a migration lock
+// row left behind by a migrator killed between taking and releasing bun's
+// table lock (OOM, eviction, node loss) does not block later migrations.
+// The lock Migrate takes is released with the process or session that held
+// it, so nothing is left to clean up by hand.
+func TestMigrateIgnoresALockLeftByAKilledMigrator(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		_, err := d.ExecContext(ctx, "INSERT INTO bun_migration_locks (table_name) VALUES ('bun_migrations')")
+		require.NoError(t, err)
+		require.NoError(t, d.Migrate(ctx))
+	})
+}
+
+// TestPostgresMigrateWaitsForTheLockHolder holds Migrate's advisory lock
+// from another session, as a migrator in another Pod would. Migrate waits
+// until its context ends, and once the holding session ends, as when a
+// migrator is killed, the next Migrate runs without anything to clean up.
+func TestPostgresMigrateWaitsForTheLockHolder(t *testing.T) {
+	if !dbtest.PostgresEnabled() {
+		t.Logf("needs Postgres: set %s=1", dbtest.EnvPostgres)
+		return
+	}
+	dsn := dbtest.PostgresDSN(t)
+	ctx := context.Background()
+	holder, err := db.Open(ctx, db.Options{Driver: db.Postgres, DSN: dsn, MaxOpenConns: 1})
+	require.NoError(t, err)
+	defer holder.Close()
+	conn, err := holder.Conn(ctx)
+	require.NoError(t, err)
+	// The key Migrate locks: SHA-256("hangar.migrate"), first eight bytes.
+	sum := sha256.Sum256([]byte("hangar.migrate"))
+	_, err = conn.ExecContext(ctx, "SELECT pg_advisory_lock(?)", int64(binary.BigEndian.Uint64(sum[:8])))
+	require.NoError(t, err)
+
+	d, err := db.Open(ctx, db.Options{Driver: db.Postgres, DSN: dsn, MaxOpenConns: 1})
+	require.NoError(t, err)
+	defer d.Close()
+	short, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	err = d.Migrate(short)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	st, err := d.Schema(ctx)
+	require.NoError(t, err)
+	require.False(t, st.UpToDate(), "Migrate ran while another session held the lock")
+
+	// End the holding session without unlocking: closing the pool closes
+	// the connection once it is back in it.
+	require.NoError(t, conn.Close())
+	require.NoError(t, holder.Close())
+	done, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	require.NoError(t, d.Migrate(done))
+	st, err = d.Schema(ctx)
+	require.NoError(t, err)
+	require.True(t, st.UpToDate())
 }

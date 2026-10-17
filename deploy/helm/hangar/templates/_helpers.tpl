@@ -251,8 +251,10 @@ spec:
     # Brings the schema up to date before Hangar starts. It needs no Helm
     # hook, so GitOps tools such as Argo CD can apply the database in the
     # same sync: until the database answers, the container fails and the
-    # kubelet retries it. Migrations take a lock in the database, so Pods
-    # that start together wait for one another.
+    # kubelet retries it. On Postgres, migrations hold an advisory lock, so
+    # when Pods start together one migrates and the others wait for it
+    # instead of failing; the lock goes with the session, so a migrator that
+    # is killed leaves nothing behind (internal/db Migrate).
     - name: migrate
       image: {{ include "hangar.image" $ }}
       imagePullPolicy: {{ $.Values.image.pullPolicy }}

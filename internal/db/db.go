@@ -9,8 +9,11 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -46,6 +49,9 @@ type DB struct {
 	*bun.DB
 	driver string
 	lock   *fileLock
+	// pgConnector opens Postgres connections outside the pool, for the
+	// migration lock.
+	pgConnector driver.Connector
 }
 
 // Options configures Open.
@@ -96,11 +102,12 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 		sqldb.SetConnMaxLifetime(0)
 		d = &DB{DB: bun.NewDB(sqldb, sqlitedialect.New()), driver: SQLite, lock: lock}
 	case Postgres:
-		sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(opts.DSN)))
+		connector := pgdriver.NewConnector(pgdriver.WithDSN(opts.DSN))
+		sqldb := sql.OpenDB(connector)
 		sqldb.SetMaxOpenConns(maxConns)
 		sqldb.SetMaxIdleConns(maxConns)
 		sqldb.SetConnMaxIdleTime(5 * time.Minute)
-		d = &DB{DB: bun.NewDB(sqldb, pgdialect.New()), driver: Postgres}
+		d = &DB{DB: bun.NewDB(sqldb, pgdialect.New()), driver: Postgres, pgConnector: connector}
 	default:
 		return nil, fmt.Errorf("unknown database driver %q", opts.Driver)
 	}
@@ -197,23 +204,101 @@ func (d *DB) migrator() (*migrate.Migrator, *migrate.Migrations, error) {
 	return migrate.NewMigrator(d.DB, m, migrate.WithMarkAppliedOnSuccess(true)), m, nil
 }
 
-// Migrate applies every pending migration.
+// Migrate applies every pending migration. Migrators that start together,
+// such as the migrate init containers of several Pods, wait for one another
+// instead of failing: see lockMigrations.
 func (d *DB) Migrate(ctx context.Context) error {
 	mg, _, err := d.migrator()
 	if err != nil {
 		return err
 	}
+	unlock, err := d.lockMigrations(ctx)
+	if err != nil {
+		return fmt.Errorf("lock migrations: %w", err)
+	}
+	defer unlock()
+	// bun's Init and its bun_migration_locks lock are not safe to run
+	// concurrently: two CREATE TABLE IF NOT EXISTS on Postgres race and fail
+	// with SQLSTATE 23505, and its lock is a row that fails at once instead of
+	// waiting and that a migrator killed before Unlock leaves behind for good.
+	// lockMigrations replaces it, so Migrate never takes it.
 	if err := mg.Init(ctx); err != nil {
 		return fmt.Errorf("init migrations: %w", err)
 	}
-	if err := mg.Lock(ctx); err != nil {
-		return fmt.Errorf("lock migrations: %w", err)
-	}
-	defer func() { _ = mg.Unlock(context.WithoutCancel(ctx)) }()
 	if _, err := mg.Migrate(ctx); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	return nil
+}
+
+// migrationLockKey is the Postgres advisory lock key Migrate holds: the
+// first eight bytes of SHA-256("hangar.migrate") as a signed integer.
+var migrationLockKey = func() int64 {
+	sum := sha256.Sum256([]byte("hangar.migrate"))
+	return int64(binary.BigEndian.Uint64(sum[:8]))
+}()
+
+// Lock polling bounds for lockMigrations.
+const (
+	migrationLockFirstWait = 50 * time.Millisecond
+	migrationLockMaxWait   = 2 * time.Second
+)
+
+// lockMigrations makes this the only migrator of the database until unlock
+// is called, waiting for others until ctx ends.
+//
+// On Postgres it holds a session-level advisory lock on a dedicated
+// connection. Postgres releases it when the session ends, so a migrator
+// killed mid-migration (OOM, eviction, node loss) leaves nothing behind. It
+// polls pg_try_advisory_lock with a capped exponential backoff rather than
+// blocking in pg_advisory_lock, so ctx cancellation stops the wait.
+//
+// SQLite needs nothing more: Open holds an exclusive lock file, so no other
+// process can migrate the same database.
+func (d *DB) lockMigrations(ctx context.Context) (unlock func(), err error) {
+	if d.driver != Postgres {
+		return func() {}, nil
+	}
+	// The lock's connection comes from its own pool of one, so holding it
+	// never takes a connection Init and Migrate need, even when the
+	// caller's pool has only one.
+	lockDB := sql.OpenDB(d.pgConnector)
+	lockDB.SetMaxOpenConns(1)
+	fail := func(err error) (func(), error) {
+		_ = lockDB.Close()
+		return nil, err
+	}
+	conn, err := lockDB.Conn(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	wait := migrationLockFirstWait
+	for {
+		var locked bool
+		if err := conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1)", migrationLockKey).Scan(&locked); err != nil {
+			_ = conn.Close()
+			return fail(err)
+		}
+		if locked {
+			break
+		}
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			_ = conn.Close()
+			return fail(fmt.Errorf("wait for another migrator: %w", context.Cause(ctx)))
+		case <-t.C:
+		}
+		wait = min(wait*2, migrationLockMaxWait)
+	}
+	return func() {
+		// Closing the session releases the lock too; unlock first so a
+		// connection the pool keeps never holds it.
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", migrationLockKey)
+		_ = conn.Close()
+		_ = lockDB.Close()
+	}, nil
 }
 
 // SchemaStatus describes how far the database schema is from the binary's.
