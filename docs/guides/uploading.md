@@ -38,6 +38,8 @@ hangar push ./data datasets/acme/reviews --branch march
 
 `hangar push` hashes every file, asks the Instance which ones it needs, uploads only those, in parts, then makes one Commit. If an upload stops part-way, run the same command again: parts already stored are not sent again. A file that still fails after its retries does not stop the others: the command uploads the rest, names the files that failed and makes no Commit, so the next run sends only those files and then commits. `.git` and `huggingface_hub`'s `.cache/huggingface` folder are skipped; add `--include` and `--exclude` patterns for more control, or `--create-pr` to open a pull request instead.
 
+Symbolic links are followed only to files inside the folder, or to files in a Hugging Face cache, such as the files of a cache snapshot or the files `hangar lmstudio` links into LM Studio's folder. `hangar push` skips any other link and names it, so a folder you did not make yourself cannot send a file from elsewhere on your machine. Copy such a file into the folder to upload it.
+
 ## Your own models, not on any Upstream
 
 Repos you upload are ordinary Repos: they have the same history, browsing, indexing and security scanning as Mirrors, and you can share them through Organisations, collaborators or visibility. Repos in the Arsenal that came from somewhere else can be [imported](import.md) without uploading them through the network twice.

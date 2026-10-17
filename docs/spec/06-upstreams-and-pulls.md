@@ -9,6 +9,16 @@ An Upstream is any hub that speaks the Hugging Face Hub API: huggingface.co (bui
 - Auth: the requesting user's upstream token if they saved one, otherwise the Instance token for that Upstream, otherwise anonymous.
 - Upstream file downloads never use Xet: the client sends no Xet headers and follows the classic `resolve` redirects ([03](03-hf-api.md)).
 
+### Network policy
+
+Decided in Phase 3 (see [decisions](../build/decisions.md), "Outbound network policy"). Admins choose each Upstream's URL and may point it at the local network, such as another Hangar or a corporate mirror on the LAN, so the policy follows where the Upstream itself is:
+
+- Hangar connects to an Upstream's own host wherever it resolves, except reserved addresses: link-local addresses (which include the cloud metadata service at 169.254.169.254), other metadata services (100.100.100.200, fd00:ec2::254), unspecified addresses (0.0.0.0 reaches the local host), broadcast and multicast. Hangar never connects to these, for Upstreams or webhooks.
+- A redirect to another host may reach a private address (loopback, RFC 1918, carrier-grade NAT, unique local) only when the Upstream's own host is private too, as a LAN Hangar that redirects to its LAN object store is. A public Upstream, such as huggingface.co, cannot redirect Hangar into the local network.
+- Checks apply to the address each connection is made to, after DNS resolution, so a name that resolves differently between a check and the connection (DNS rebinding) gets nowhere. Requests that may reach private addresses and requests that may not use separate connection pools.
+- A refused connection is not retried, and its error names the address and the reason, never the URL.
+- A proxy from `HTTP_PROXY` or `HTTPS_PROXY` is trusted: Hangar checks the proxy's address, and the proxy decides the rest.
+
 ## Mirrors keep upstream IDs
 
 A Pull of `jinaai/jina-embeddings-v3` creates the Repo `jinaai/jina-embeddings-v3` in Hangar. Keeping the ID is what makes `HF_ENDPOINT` swaps work with no code changes.
@@ -98,3 +108,5 @@ Rules:
 - `--from-ollama`: imports Ollama models' GGUF blobs as local Repos with `template`, `system` and `params` files from the Ollama manifest.
 
 Uploads go through the normal Hub API, so the CLI works against any Hangar the user can write to.
+
+Symbolic links in a folder that `hangar push` or `hangar import` uploads are followed only into that folder, into the Repo's cache folder for a Hugging Face cache snapshot, or to a blob of a Hugging Face cache (as `hangar lmstudio` links). Any other link, such as `config.json` pointing at `~/.ssh/id_ed25519` in a cloned folder, is skipped and named on stderr, so an upload never sends a file from elsewhere on the machine. Decided in Phase 3 (see [decisions](../build/decisions.md), "Symbolic links in uploaded folders").
