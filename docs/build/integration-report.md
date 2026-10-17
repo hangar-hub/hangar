@@ -15,7 +15,7 @@ It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every su
 
 ## Preview feedback round (2026-10-17)
 
-James deployed image `preview-5975bec` on bellatrix (Raspberry Pis, MinIO on a NAS behind Nginx Proxy Manager) on 2026-10-16 and reported 13 findings. This round fixed them on `integration/v1` from `c79363e`. The suites ran in round 6 at `3a16ea0`. Three commits came after that run and are covered by targeted checks only (see [After the suites](#after-the-suites)). `main` is unchanged, and nothing was pushed or published.
+James deployed image `preview-5975bec` on bellatrix (Raspberry Pis, MinIO on a NAS behind Nginx Proxy Manager) on 2026-10-16 and reported 13 findings. This round fixed them on `integration/v1` from `c79363e`. The suites ran in round 6 at `3a16ea0`. Five commits came after that run and are covered by targeted checks only (see [After the suites](#after-the-suites)). `main` is unchanged, and nothing was pushed or published.
 
 ### What changed for each finding
 
@@ -71,13 +71,15 @@ These commits came after `3a16ea0`, so no round 6 suite covers them.
 |---|---|---|
 | `b27da7d` | Fixes the flaky `TestCompleteUploadCarriesOnWhenTheCallerGoesAway` | `go test -race -count=5 -run TestCompleteUpload ./internal/repo/`: 135 passed |
 | `c76ce22` | Audit finding: the signed-out page tests now fail on any API answer of 400 or above or a `Failed to load resource` error, so the `/me` 401 cannot come back unnoticed | `pnpm exec playwright test e2e/pages.spec.ts -g "signed out"`: 15 passed. The author's full `e2e/pages.spec.ts` run: 260 passed, 1 skipped. With the mock answering 401 again, the test failed as intended. `e2e-real` not run |
-| `d1141f6` | Audit finding: `scripts/go-test.sh` runs packages again only when a Go build cache file vanished mid-run, never after a compile error or a test failure; `make test-go`, `make test-compat` and `scripts/coverage.sh` use it | `scripts/check-go-test.sh` and `scripts/check-test-targets.sh`: exit 0 |
+| `d1141f6` | Audit finding: added a script that ran Go packages again when a build cache file vanished mid-run. Reverted by `a73486e` | Superseded |
+| `a73486e` | Reverts `d1141f6`. The cache files vanished because a disk trimmer on the build machine deleted them mid-run, and that trimmer is fixed. `scripts/go-test.sh`, `scripts/check-go-test.sh`, the `scripts/go-test.sh` check in `scripts/check-test-targets.sh` and the CONTRIBUTING.md paragraph about a separate `GOCACHE` are gone; `make test-go`, `make test-compat` and `scripts/coverage.sh` call `go test` directly again | `make lint test` at `8daab65`: exit 0. golangci-lint 0 issues; Go 77 packages ok with `-race -tags integration`, Postgres 18 and MinIO; Vitest 25 files, 107 of 107 |
+| `8daab65` | The Postgres health checks in the `scale` and `postgres-minio` Compose examples and the CI service containers pass `-h 127.0.0.1`. Without it, `pg_isready` used the Unix socket and passed while the image's init server was still running, so the `scale` example's one-shot `migrate` service sometimes got connection refused (1 failure in 10 first starts) | `TestPostgresHealthchecksUseTCP` and `TestPgIsReadyTCPCheck`. With an image built from the branch: `scale` first start 10 of 10 with `docker compose up --wait`; `scripts/compose-smoke.sh` passed on `scale` and `postgres-minio` |
 
 ### Still open
 
 - **Rerun the import on the preview (needs James).** Nothing here has moved a multi-GB file through Nginx Proxy Manager. James rebuilds the preview and the CLI from `integration/v1`, runs `hangar admin doctor --large-read` against Aquila's MinIO, and reruns the `Qwen2.5-Coder-32B-Instruct-GGUF` import. This closes the red item in [Open issues](#open-issues).
-- **Full suites at the branch head.** The three commits above have targeted checks only; the next round should run `make test` (now through `scripts/go-test.sh`) and the `e2e-real` suite at the head.
-- **Shared Go build cache.** Concurrent runners on this machine lost cache files mid-build with the disk at 99%. `d1141f6` makes the targets recover, and CONTRIBUTING.md explains how to give a run its own `GOCACHE`; disk space on the machine is still tight.
+- **Full suites at the branch head.** The commits above have targeted checks only; the next round should run the full suites, including `e2e-real`, at the head.
+- **Go build cache files vanishing.** In round 6, 33 packages stopped with `[build failed]` because a disk trimmer on the build machine deleted Go build cache files mid-run. The trimmer is fixed, so `a73486e` dropped the rerun script and `make test` calls `go test` directly again. The next full run confirms it; disk space on the machine is still tight.
 - **Local `govulncheck`.** `~/go/bin/govulncheck` was built with Go 1.26 and cannot load this module; rebuild it with Go 1.27. `go run ...@latest` works.
 - **Not run this round.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, fuzz, and `make release-rehearsal`.
 - **Release on hold.** Nothing is published until James says go.

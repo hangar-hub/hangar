@@ -86,8 +86,10 @@ services:
       POSTGRES_DB: hangar
     volumes:
       - postgres-data:/var/lib/postgresql
+    # -h checks TCP. During first start the image runs a temporary server
+    # on the Unix socket only, so a socket check passes too early.
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "hangar", "-d", "hangar"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "hangar", "-d", "hangar"]
       interval: 2s
       timeout: 5s
       retries: 30
