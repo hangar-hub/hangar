@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -345,3 +346,51 @@ func TestIsPrivate(t *testing.T) {
 	require.False(t, webhook.ValidEvent("ping"))
 	require.True(t, errors.Is(webhook.ErrPrivateTarget, webhook.ErrPrivateTarget))
 }
+
+// TestReservedTargetsAreAlwaysRefused checks that webhooks never reach
+// link-local, metadata or unspecified addresses, even with private targets
+// allowed (the default). Before, http://0.0.0.0:<port>/ delivered to the
+// receiver on the local host, and 169.254.169.254 (the cloud metadata
+// service) was dialled.
+func TestReservedTargetsAreAlwaysRefused(t *testing.T) {
+	d := dbtest.SQLite(t)
+	e := newEnv(t, d)
+	ctx := t.Context()
+	sealer, _ := secrets.New([]byte("0123456789abcdef0123456789abcdef"))
+	reg := jobs.NewRegistry()
+	q := jobstest.NewFake(reg)
+	open := webhook.New(webhook.Options{DB: d, Queue: q, Sealer: sealer, Now: func() time.Time { return *e.clock },
+		AllowPrivateTargets: func(context.Context) (bool, error) { return true, nil }})
+	require.NoError(t, open.Register(reg))
+	port := netip.MustParseAddrPort(e.srv.Listener.Addr().String()).Port()
+	for _, u := range []string{
+		"http://0.0.0.0:" + itoa(port) + "/",
+		"http://169.254.169.254/latest/meta-data/",
+		"http://[::ffff:169.254.169.254]/latest/meta-data/",
+		"http://[fe80::1]/",
+		"http://100.100.100.200/latest/meta-data/",
+	} {
+		hook, err := open.Create(ctx, webhook.CreateParams{NamespaceID: &e.nsID, URL: u, Secret: "ping-secret", Events: []string{"repo.created"}, Enabled: true})
+		require.NoError(t, err, u)
+		del, err := open.Test(ctx, hook.ID, indextest.Owner("alice"))
+		require.NoError(t, err)
+		q.RunPending(ctx)
+		list, _, err := open.Deliveries(ctx, hook.ID, "", 1)
+		require.NoError(t, err)
+		require.Equal(t, del.ID, list[0].ID)
+		require.Equal(t, "failed", list[0].State(), u)
+		require.Equal(t, webhook.ErrReservedTarget.Error(), list[0].Error, u)
+	}
+	require.Empty(t, e.recv.got, "the local receiver was never reached through 0.0.0.0")
+
+	// The loopback receiver itself is a private target, which this
+	// Instance allows.
+	hook, err := open.Create(ctx, webhook.CreateParams{NamespaceID: &e.nsID, URL: e.srv.URL, Secret: "ping-secret", Events: []string{"repo.created"}, Enabled: true})
+	require.NoError(t, err)
+	_, err = open.Test(ctx, hook.ID, indextest.Owner("alice"))
+	require.NoError(t, err)
+	q.RunPending(ctx)
+	require.Len(t, e.recv.got, 1)
+}
+
+func itoa(n uint16) string { return strconv.Itoa(int(n)) }

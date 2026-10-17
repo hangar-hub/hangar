@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/jobs"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/secrets"
@@ -46,6 +47,9 @@ var (
 	// ErrPrivateTarget means the URL resolves to a private address and the
 	// Instance setting webhooks.allow_private_targets is off.
 	ErrPrivateTarget = errors.New("webhook targets a private address, which this Instance does not allow")
+	// ErrReservedTarget means the URL resolves to a link-local, metadata,
+	// unspecified or multicast address, which no Instance allows.
+	ErrReservedTarget = errors.New("webhook targets a link-local, cloud metadata or other reserved address, which Hangar never connects to")
 )
 
 // MaxPayloadSize bounds a delivery body.
@@ -594,6 +598,9 @@ func sanitise(err error) error {
 	}
 	var priv privateError
 	if errors.As(err, &priv) {
+		if priv.reserved {
+			return errNoRetry{ErrReservedTarget}
+		}
 		return errNoRetry{ErrPrivateTarget}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -602,27 +609,17 @@ func sanitise(err error) error {
 	return errors.New(strings.TrimSpace(err.Error()))
 }
 
-type privateError struct{ addr netip.Addr }
+type privateError struct {
+	addr     netip.Addr
+	reserved bool
+}
 
 func (e privateError) Error() string { return "private address " + e.addr.String() }
 
 // IsPrivate reports whether an address is in a range a multi-tenant
 // Instance must not reach: loopback, private, link-local (including cloud
 // metadata), carrier-grade NAT, unique local, unspecified and multicast.
-func IsPrivate(a netip.Addr) bool {
-	a = a.Unmap()
-	if a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() || a.IsUnspecified() ||
-		a.IsMulticast() || a.IsInterfaceLocalMulticast() {
-		return true
-	}
-	for _, p := range []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("192.0.0.0/24"),
-		netip.MustParsePrefix("198.18.0.0/15"), netip.MustParsePrefix("0.0.0.0/8"), netip.MustParsePrefix("64:ff9b::/96")} {
-		if p.Contains(a) {
-			return true
-		}
-	}
-	return false
-}
+func IsPrivate(a netip.Addr) bool { return httpx.IsPrivateAddr(a) }
 
 func (s *Service) transport() http.RoundTripper {
 	if s.o.Transport != nil {
@@ -634,14 +631,20 @@ func (s *Service) transport() http.RoundTripper {
 
 func (s *Service) newTransport() http.RoundTripper {
 	dialer := &net.Dialer{Timeout: DeliveryTimeout, Control: func(_, address string, _ syscall.RawConn) error {
+		ap, err := netip.ParseAddrPort(address)
+		if err != nil {
+			return err
+		}
+		// Link-local and metadata addresses are refused even when private
+		// targets are allowed: no receiver runs there, and the cloud
+		// metadata service hands out the host's credentials.
+		if httpx.IsReservedAddr(ap.Addr()) {
+			return privateError{addr: ap.Addr(), reserved: true}
+		}
 		if s.o.AllowPrivateTargets == nil {
 			return nil
 		}
 		allow, err := s.o.AllowPrivateTargets(context.Background())
-		if err != nil {
-			return err
-		}
-		ap, err := netip.ParseAddrPort(address)
 		if err != nil {
 			return err
 		}

@@ -27,7 +27,8 @@ import (
 type HTTPOptions struct {
 	// Version goes in the User-Agent: `hangar/<version>`.
 	Version string
-	// Transport sends requests. Nil means a clone of http.DefaultTransport.
+	// Transport sends requests. Nil means a clone of http.DefaultTransport
+	// that follows the network policy in netpolicy.go.
 	Transport http.RoundTripper
 	// MaxAttempts bounds tries per request on 429, 5xx and network
 	// errors. Zero means 4.
@@ -71,7 +72,7 @@ func NewHTTPClient(opts HTTPOptions) *HTTPClient {
 		opts.Version = "dev"
 	}
 	if opts.Transport == nil {
-		opts.Transport = http.DefaultTransport.(*http.Transport).Clone()
+		opts.Transport = newGuardedTransport()
 	}
 	if opts.MaxAttempts <= 0 {
 		opts.MaxAttempts = 4
@@ -172,6 +173,7 @@ func (c *HTTPClient) do(ctx context.Context, r request) (*http.Response, error) 
 
 func (c *HTTPClient) doRetry(ctx context.Context, r request) (*http.Response, error) {
 	var lastErr error
+	ctx = withOrigin(ctx, r.url)
 	for attempt := 1; ; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, r.method, r.url, bytes.NewReader(r.body))
 		if err != nil {
@@ -197,6 +199,10 @@ func (c *HTTPClient) doRetry(ctx context.Context, r request) (*http.Response, er
 		case err != nil:
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
+			}
+			if errors.Is(err, ErrBlockedAddress) {
+				// The policy will refuse it again: no retries.
+				return nil, redactErr(err)
 			}
 			lastErr = fmt.Errorf("%w: %w", ErrUnavailable, redactErr(err))
 		case resp.StatusCode >= 200 && resp.StatusCode < 300:
