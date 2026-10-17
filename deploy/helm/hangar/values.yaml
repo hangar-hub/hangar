@@ -32,10 +32,15 @@ config: {}
 # Use existingSecret instead to keep secrets out of Helm values.
 secrets: {}
 # Name of an existing Secret with HANGAR_* variables, used instead of `secrets`.
+# Use this with Argo CD and other GitOps tools. Pods restart when the name
+# changes, or, under helm upgrade, when the Secret's data changes.
 existingSecret: ""
 # Generate HANGAR_SECURITY_INSTANCE_KEY and the bootstrap admin password
 # when neither `secrets` nor existingSecret sets them. They are kept across
-# upgrades. Read the password with:
+# upgrades by reading the Secret back from the cluster, so this works only
+# with helm install and helm upgrade: helm template, --dry-run=client and
+# Argo CD fail with a message instead of generating new ones on every
+# render. Read the password with:
 #   kubectl get secret <release>-hangar-generated -o jsonpath='{.data.HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d
 generateSecrets: true
 
@@ -93,10 +98,17 @@ worker:
   affinity: {}
   topologySpreadConstraints: []
 
-# The pre-install and pre-upgrade Job that runs `hangar admin migrate` when
-# persistence is off. With persistence on, the `all` Pod migrates at start.
+# How `hangar admin migrate` runs when persistence is off. With persistence
+# on, the `all` Pod migrates at start.
 migrations:
   enabled: true
+  # hook: a Helm pre-install and pre-upgrade Job, which finishes before any
+  #   Pod of the new version starts.
+  # initContainer: an init container in every web and worker Pod, with no
+  #   Helm hooks. Use it with Argo CD and other GitOps tools, which run
+  #   Helm hooks before everything else in the sync, so a database in the
+  #   same Application would never start.
+  mode: hook
   backoffLimit: 3
   activeDeadlineSeconds: 900
   resources:
@@ -171,9 +183,12 @@ securityContext:
   capabilities:
     drop: [ALL]
 
-# Size of the emptyDir volumes for /tmp and the git pack cache.
+# Size of the emptyDir volumes for /tmp and the git pack cache. The pack
+# cache (git.cache_size, 10GiB by default) goes over its limit while Repos
+# are in use, so the chart requires cacheSizeLimit to be at least a quarter
+# larger; the kubelet evicts a Pod whose emptyDir passes its limit.
 tmpSizeLimit: 2Gi
-cacheSizeLimit: 10Gi
+cacheSizeLimit: 16Gi
 
 extraEnv: []
 extraEnvFrom: []

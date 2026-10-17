@@ -14,7 +14,7 @@ helm install hangar oci://ghcr.io/jamesagarside/charts/hangar \
   --set 'ingress.hosts[0].host=hangar.example.com'
 ```
 
-The chart generates the Instance key and the first admin password into the Secret `<release>-hangar-generated` and keeps them across upgrades. Read the password:
+The chart generates the Instance key and the first admin password into the Secret `<release>-hangar-generated` and keeps them across upgrades by reading the Secret back from the cluster. Read the password:
 
 ```sh
 kubectl get secret --namespace hangar hangar-hangar-generated \
@@ -22,6 +22,8 @@ kubectl get secret --namespace hangar hangar-hangar-generated \
 ```
 
 With persistence on, the chart refuses to render more than one replica or any workers, because SQLite and a ReadWriteOnce volume belong to one Pod.
+
+Generated secrets need `helm install` or `helm upgrade` with access to the cluster. `helm template`, `helm lint`, `--dry-run=client` and Argo CD cannot read the cluster, so they would make a new Instance key on every render, and Hangar could no longer decrypt the upstream tokens and webhook secrets it stored with the old one. The chart stops with an error there instead. Set `existingSecret` for those tools, as described in [Run with Argo CD](#run-with-argo-cd).
 
 ## Scaled out with Postgres and S3
 
@@ -57,7 +59,77 @@ kubectl create secret generic hangar-secrets --namespace hangar \
 helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml
 ```
 
-A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `worker` Pods report ready only when the schema is at the version they expect. A fuller example is [`deploy/helm/examples/scale-values.yaml`](https://github.com/jamesagarside/hangar/blob/main/deploy/helm/examples/scale-values.yaml).
+A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `worker` Pods report ready only when the schema is at the version they expect. With `migrations.mode: initContainer`, each `web` and `worker` Pod runs the migration in an init container instead, with no Helm hooks; see [Run with Argo CD](#run-with-argo-cd). A fuller example is [`deploy/helm/examples/scale-values.yaml`](https://github.com/jamesagarside/hangar/blob/main/deploy/helm/examples/scale-values.yaml).
+
+## Run with Argo CD
+
+Argo CD, Flux and other GitOps tools render the chart with `helm template` and apply the result. Two things differ from `helm install`:
+
+- **Hooks run first.** Argo CD runs Helm's pre-install and pre-upgrade hooks as `PreSync` hooks, before anything else in the Application. If Postgres is in the same Application, the migrate Job waits for a database that Argo CD has not created yet, and the first sync never finishes. Set `migrations.mode: initContainer`: every `web` and `worker` Pod then runs `hangar admin migrate` in an init container, which fails and is retried until the database answers. Migrations take a lock in the database, so Pods that start together wait for one another.
+- **No cluster access while rendering.** `lookup` returns nothing, so the chart cannot keep generated secrets and stops with an error if `generateSecrets` would generate them. Create the Secret yourself and name it in `existingSecret`.
+
+Create the namespace and the Secret once, outside Git or with a secrets operator such as Sealed Secrets or External Secrets:
+
+```sh
+kubectl create namespace hangar
+kubectl create secret generic hangar-secrets --namespace hangar \
+  --from-literal=HANGAR_DATABASE_DSN='postgres://hangar:<password>@postgres:5432/hangar' \
+  --from-literal=HANGAR_STORAGE_S3_ACCESS_KEY_ID='<access key ID>' \
+  --from-literal=HANGAR_STORAGE_S3_SECRET_ACCESS_KEY='<secret access key>' \
+  --from-literal=HANGAR_SECURITY_INSTANCE_KEY="$(openssl rand -base64 32)" \
+  --from-literal=HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD="$(openssl rand -base64 18)"
+```
+
+Back up `HANGAR_SECURITY_INSTANCE_KEY`: without it, stored upstream tokens and webhook secrets cannot be decrypted.
+
+Then point an Application at the chart with values like [`deploy/helm/examples/gitops-values.yaml`](https://github.com/jamesagarside/hangar/blob/main/deploy/helm/examples/gitops-values.yaml):
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hangar
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hangar
+  source:
+    repoURL: ghcr.io/jamesagarside/charts
+    chart: hangar
+    targetRevision: 1.0.0   # the chart version to deploy
+    helm:
+      releaseName: hangar
+      valuesObject:
+        publicURL: https://hangar.example.com
+        persistence: {enabled: false}
+        config:
+          database: {driver: postgres}
+          storage:
+            backend: s3
+            # region: the region your MinIO is configured with.
+            s3: {endpoint: minio.example.com, region: us-east-1, bucket: hangar, use_path_style: true}
+        existingSecret: hangar-secrets
+        generateSecrets: false
+        migrations: {mode: initContainer}
+        web: {replicas: 1}
+        worker: {replicas: 1}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+```
+
+Argo CD pulls OCI charts from a Helm repository with `enableOCI: true`; add `ghcr.io/jamesagarside/charts` as one, as the [Argo CD Helm guide](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/) describes. Set `releaseName: hangar` so resource names match the rest of this guide. Argo CD skips the chart's `helm test` Pod, and the PersistentVolumeClaim and generated Secret keep `helm.sh/resource-policy: keep`, which Argo CD treats as `Delete=false`.
+
+To check a render before you commit it, run the same command Argo CD runs:
+
+```sh
+helm template hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml
+```
+
+To rotate a credential in the Secret, create a Secret with a new name and change `existingSecret`: the Pods' `checksum/secret` annotation covers the name, so the Pods restart and read it. Under `helm upgrade`, the chart also reads the Secret's data, so changing it in place restarts the Pods on the next upgrade.
+
+With persistence on (SQLite in one Pod), you can instead set `generateSecrets: false` and leave the Instance key and admin password unset: Hangar generates them on its volume on first start and prints the password once in its log.
 
 ## Values
 
@@ -66,7 +138,8 @@ A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `wo
 | `publicURL` | Required. `server.public_url`. |
 | `config` | Any configuration, rendered into a ConfigMap as `hangar.yaml`. |
 | `secrets`, `existingSecret` | `HANGAR_*` variables in a Secret the chart writes, or one you manage. |
-| `generateSecrets` | Generate the Instance key and admin password when you do not set them (default on). |
+| `generateSecrets` | Generate the Instance key and admin password when you do not set them (default on). Needs `helm install` or `helm upgrade`; renders without cluster access stop with an error. |
+| `migrations.mode` | `hook` (default): a pre-install and pre-upgrade Job. `initContainer`: an init container in each `web` and `worker` Pod, for GitOps tools. |
 | `persistence.*` | SQLite and filesystem mode on a PersistentVolumeClaim (default on). |
 | `web.*`, `worker.*` | Replicas, resources, autoscaling (HPA on CPU), PodDisruptionBudget, node selection and topology spread. |
 | `ingress.*` | An Ingress; `datasetsServerHost: true` also routes `datasets-server.<host>`, which the `datasets` library calls. |
@@ -74,6 +147,7 @@ A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `wo
 | `serviceAccount.annotations` | For IRSA or Workload Identity. |
 | `metrics.*` | A Prometheus port and an optional ServiceMonitor. |
 | `networkPolicy.*` | An optional NetworkPolicy. |
+| `cacheSizeLimit`, `tmpSizeLimit` | Sizes of the emptyDir volumes for the git pack cache (default 16Gi) and `/tmp`. The pack cache goes over `git.cache_size` (10GiB by default) while Repos are in use, so the chart requires `cacheSizeLimit` to be at least a quarter larger; the kubelet evicts a Pod whose emptyDir passes its limit. |
 | `extraEnv`, `extraEnvFrom`, `extraVolumes`, `extraVolumeMounts` | Anything else. |
 
 Every Pod runs as non-root with a read-only root filesystem, no privilege escalation, every capability dropped and the `RuntimeDefault` seccomp profile. `helm test` checks `/readyz` from inside the cluster.

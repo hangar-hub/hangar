@@ -168,15 +168,20 @@ release-rehearsal: image ## Rehearse the release's signing and SBOM steps with a
 
 .PHONY: lint-deploy
 lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Compose files, the workflows' action refs and that jobs needing uv install it
-	helm lint deploy/helm/hangar -f deploy/helm/hangar/ci/default-values.yaml
+	@# Offline renders cannot keep generated secrets, so the chart refuses to
+	@# generate them; the CI values turn generation off here, and
+	@# scripts/kind-chart-test.sh covers it on a cluster.
+	helm lint deploy/helm/hangar -f deploy/helm/hangar/ci/default-values.yaml --set generateSecrets=false
 	helm lint deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml
-	@for values in deploy/helm/hangar/ci/default-values.yaml deploy/helm/examples/scale-values.yaml; do \
-	  helm template hangar deploy/helm/hangar -f $$values | $(KUBECONFORM); \
+	helm lint deploy/helm/hangar -f deploy/helm/examples/gitops-values.yaml
+	@for values in deploy/helm/hangar/ci/default-values.yaml deploy/helm/examples/scale-values.yaml deploy/helm/examples/gitops-values.yaml; do \
+	  helm template hangar deploy/helm/hangar -f $$values --set generateSecrets=false | $(KUBECONFORM); \
 	done
+	helm template hangar deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml --set migrations.mode=initContainer | $(KUBECONFORM)
 	@# The example values keep credentials in an existing Secret, so render the
 	@# chart's own Secrets (secrets: in values) once more with a dummy value.
 	helm template hangar deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml \
-	  --set existingSecret= --set secrets.HANGAR_DATABASE_DSN=postgres://lint@postgres/hangar | $(KUBECONFORM)
+	  --set existingSecret= --set generateSecrets=false --set secrets.HANGAR_DATABASE_DSN=postgres://lint@postgres/hangar | $(KUBECONFORM)
 	@# Render the chart and check every Pod spec (deploy/chart_test.go).
 	$(GO) test -count=1 -tags helm -run '^TestChart' ./deploy/
 	@for f in deploy/compose/*.yaml; do HANGAR_INSTANCE_KEY=x HANGAR_ADMIN_PASSWORD=x POSTGRES_PASSWORD=x MINIO_ROOT_PASSWORD=x \
@@ -185,6 +190,10 @@ lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Com
 	shellcheck scripts/*.sh loadtest/*.sh
 	./scripts/check-action-refs.sh
 	./scripts/check-workflow-uv.sh
+
+.PHONY: test-kind
+test-kind: ## Install the Helm chart on a throwaway kind cluster and run deploy/kind_test.go (IMAGE: a local Hangar image)
+	./scripts/kind-chart-test.sh $(IMAGE)
 
 .PHONY: docs
 docs: ## Build the documentation site into site/ (needs uv)

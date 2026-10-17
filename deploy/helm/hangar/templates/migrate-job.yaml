@@ -1,8 +1,10 @@
-{{- if and .Values.migrations.enabled (not .Values.persistence.enabled) }}
+{{- if include "hangar.migrateHook" . }}
 {{- /*
 Runs `hangar admin migrate` before web and worker Pods start. Hooks run
 before the release's own ConfigMap and Secret exist, so the Job gets its own
-copies, which Helm deletes once it succeeds.
+copies, which Helm deletes once it succeeds. Argo CD runs these hooks before
+anything else in the Application, so with the database in the same
+Application, use migrations.mode: initContainer instead.
 */}}
 apiVersion: v1
 kind: ConfigMap

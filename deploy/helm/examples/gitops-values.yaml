@@ -1,0 +1,33 @@
+# Values for Argo CD and other GitOps tools, which render the chart with
+# helm template: no Helm hooks run in their usual order, and the chart cannot
+# read the cluster, so it cannot keep generated secrets. These values use
+# Postgres and S3 (MinIO here), run migrations in an init container and take
+# every credential from a Secret you create before the first sync:
+#
+#   kubectl create secret generic hangar-secrets --namespace hangar \
+#     --from-literal=HANGAR_DATABASE_DSN='postgres://hangar:<password>@postgres:5432/hangar' \
+#     --from-literal=HANGAR_STORAGE_S3_ACCESS_KEY_ID='<access key ID>' \
+#     --from-literal=HANGAR_STORAGE_S3_SECRET_ACCESS_KEY='<secret access key>' \
+#     --from-literal=HANGAR_SECURITY_INSTANCE_KEY="$(openssl rand -base64 32)" \
+#     --from-literal=HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD="$(openssl rand -base64 18)"
+#
+# CI renders these values without a cluster and installs them on kind, with
+# Postgres and MinIO applied in the same step (deploy/kind_test.go).
+publicURL: https://hangar.example.test
+persistence:
+  enabled: false
+config:
+  database: {driver: postgres}
+  storage:
+    backend: s3
+    # Use the region your MinIO is configured with (MINIO_SITE_REGION),
+    # which is us-east-1 unless you set one.
+    s3: {endpoint: minio.example.test:9000, region: us-east-1, bucket: hangar, use_path_style: true}
+existingSecret: hangar-secrets
+generateSecrets: false
+migrations:
+  mode: initContainer
+web:
+  replicas: 1
+worker:
+  replicas: 1
