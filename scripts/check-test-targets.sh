@@ -6,6 +6,8 @@
 #     scripts/with-test-minio.sh, so those tests use one MinIO container
 #     the script owns instead of one testcontainers' reaper can remove
 #     mid-run.
+#   - The Makefile's unit, integration and compat runs and
+#     scripts/coverage.sh run go test through scripts/go-test.sh.
 #   - `make test` runs the UI tests even when the Go tests fail, and still
 #     fails.
 # Usage: scripts/check-test-targets.sh
@@ -63,6 +65,30 @@ for f in Makefile .github/workflows/*.yml; do
   done < <(sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$f")
 done
 echo "${checked} test runs that include S3 Blob store tests checked."
+
+# The Makefile's unit, integration and compat runs, and scripts/coverage.sh,
+# run go test through scripts/go-test.sh, so a package that failed to build
+# only because GOCACHE files were deleted mid-run runs again and is not
+# reported as a code failure.
+tagged='(^|[^A-Za-z0-9_])(go|\$\(GO\)) test .*-tags[ =]['"'"'"]?[A-Za-z0-9_, ]*(compat|integration)'
+wrapped=0
+while IFS= read -r line; do
+  printf '%s\n' "$line" | grep -Eq "$tagged" || continue
+  wrapped=$((wrapped + 1))
+  if ! printf '%s\n' "$line" | grep -Eq 'scripts/go-test\.sh (go|\$\(GO\)) test '; then
+    echo "error: Makefile: runs go test without scripts/go-test.sh: $(printf '%s' "$line" | sed 's/^[[:space:]]*//')" >&2
+    failed=1
+  fi
+done < <(sed -e ':a' -e '/\\$/N; s/\\\n//; ta' Makefile)
+if [ "$wrapped" -eq 0 ]; then
+  echo "error: Makefile: found no unit, integration or compat go test run" >&2
+  failed=1
+fi
+if ! grep -Eq '^out="\$\(scripts/go-test\.sh go test ' scripts/coverage.sh; then
+  echo "error: scripts/coverage.sh runs go test without scripts/go-test.sh" >&2
+  failed=1
+fi
+echo "${wrapped} Makefile go test runs and scripts/coverage.sh go through scripts/go-test.sh."
 
 # `make test` with a failing Go suite: the UI suite must still run. GO=false
 # fails test-go at once, PNPM=echo prints the UI commands instead of running
