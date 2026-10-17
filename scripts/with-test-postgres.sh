@@ -17,7 +17,7 @@ fi
 image=postgres:18-alpine
 name="hangar-test-postgres-$$"
 
-cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
+cleanup() { docker rm -fv "$name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

@@ -4,7 +4,9 @@
 # mounted at /backups, the backup copies out with docker cp, and it
 # restores from that volume. A volume mounted at a path the image does
 # not own is created root-owned, and the backup fails with "permission
-# denied".
+# denied". The check also leaves no volume behind: the image declares
+# VOLUME /var/lib/hangar, so the copy container gets an anonymous volume
+# that only `docker rm -v` removes.
 # Usage: scripts/image-backup-check.sh <image>
 set -euo pipefail
 image="${1:?usage: scripts/image-backup-check.sh <image>}"
@@ -14,7 +16,7 @@ data="$id-data"
 backups="$id-backups"
 tmp="$(mktemp -d)"
 cleanup() {
-  docker rm -f "$id-copy" >/dev/null 2>&1 || true
+  docker rm -fv "$id-copy" >/dev/null 2>&1 || true
   docker volume rm -f "$data" "$backups" >/dev/null 2>&1 || true
   rm -rf "$tmp"
 }
@@ -41,6 +43,17 @@ if [[ ! -s "$tmp/check/manifest.json" ]]; then
   exit 1
 fi
 echo "ok: docker cp copies the backup out of the volume"
+
+# Remove the copy container as cleanup does, and check that its anonymous
+# volume for /var/lib/hangar went with it.
+anon="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/hangar"}}{{.Name}}{{end}}{{end}}' "$id-copy")"
+docker rm -fv "$id-copy" >/dev/null
+if [[ -n "$anon" ]] && docker volume inspect "$anon" >/dev/null 2>&1; then
+  docker volume rm -f "$anon" >/dev/null 2>&1 || true
+  echo "error: removing the copy container left its anonymous volume $anon behind" >&2
+  exit 1
+fi
+echo "ok: the copy container leaves no volume behind"
 
 if ! run -v "$data:/var/lib/hangar" -v "$backups:/backups:ro" "$image" \
   admin restore /backups/check --force --skip-blobs >"$tmp/restore.log" 2>&1; then
