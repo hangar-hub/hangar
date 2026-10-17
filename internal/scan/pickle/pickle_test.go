@@ -2,6 +2,8 @@ package pickle_test
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -123,7 +125,6 @@ func TestScanCoversEveryOpcode(t *testing.T) {
 	p.Raw('T', 1, 0, 0, 0, 'a').Raw('U', 1, 'b').Raw('V').Op("c\n").Raw(0x8d, 1, 0, 0, 0, 0, 0, 0, 0, 'd')
 	p.Raw('B', 1, 0, 0, 0, 'e').Raw('C', 1, 'f').Raw(0x8e, 1, 0, 0, 0, 0, 0, 0, 0, 'g').Raw(0x96, 1, 0, 0, 0, 0, 0, 0, 0, 'h')
 	p.Op("P").Op("pid\n").Op("N").Op("Q")
-	p.Raw(0x82, 1).Raw(0x83, 1, 0).Raw(0x84, 1, 0, 0, 0)
 	p.Raw(0x97).Raw(0x98)
 	p.Op("l")
 	p.Op("p7\n").Op("0").Op("g7\n").Raw('r', 8, 0, 0, 0).Raw('j', 8, 0, 0, 0).Op("2").Op("0")
@@ -140,6 +141,18 @@ func TestScanCoversEveryOpcode(t *testing.T) {
 	require.Equal(t, pickle.Safe, res.Worst())
 }
 
+// TestScanTreatsExtensionCodesAsUnnamedImports checks EXT1, EXT2 and EXT4.
+// They push a global registered with copyreg.add_extension, which the scan
+// cannot name, so each is an unsafe import, as a computed STACK_GLOBAL is.
+func TestScanTreatsExtensionCodesAsUnnamedImports(t *testing.T) {
+	for _, ext := range [][]byte{{0x82, 1}, {0x83, 1, 0}, {0x84, 1, 0, 0, 0}} {
+		p := scantest.NewPickle(2).Raw(ext...).Op(")R.")
+		res, err := pickle.Scan(bytes.NewReader(p.Bytes()))
+		require.NoError(t, err)
+		require.Equal(t, []string{"?.?:EXT:unsafe"}, globals(res))
+	}
+}
+
 func FuzzScan(f *testing.F) {
 	for _, seed := range [][]byte{
 		scantest.TorchStateDict(), scantest.Protocol4Benign(), scantest.OSSystemProtocol0(), scantest.PosixSystemStackGlobal(),
@@ -147,15 +160,20 @@ func FuzzScan(f *testing.F) {
 	} {
 		f.Add(seed)
 	}
+	for _, seed := range [][]byte{scantest.JoblibHiddenOSSystem(), scantest.JoblibFramedOSSystem()} {
+		f.Add(seed)
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		res, err := pickle.Scan(bytes.NewReader(data))
-		if err != nil {
-			require.ErrorIs(t, err, pickle.ErrInvalid)
-		}
-		w := res.Worst()
-		for _, i := range res.Imports {
-			if i.Classification == pickle.Unsafe {
-				require.Equal(t, pickle.Unsafe, w)
+		for _, scan := range []func(io.Reader) (pickle.Result, error){pickle.Scan, pickle.ScanJoblib} {
+			res, err := scan(bytes.NewReader(data))
+			if err != nil && !errors.Is(err, pickle.ErrUnsupported) {
+				require.ErrorIs(t, err, pickle.ErrInvalid)
+			}
+			w := res.Worst()
+			for _, i := range res.Imports {
+				if i.Classification == pickle.Unsafe {
+					require.Equal(t, pickle.Unsafe, w)
+				}
 			}
 		}
 	})

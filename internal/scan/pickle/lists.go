@@ -89,6 +89,16 @@ var unsafeGlobals = []string{
 	"torch.utils._config_module.*", "torch.utils.bottleneck.*", "torch.utils.collect_env.run",
 	"torch.utils.data.datapipes.utils.decoder.basichandlers",
 	"trace.*", "urllib.*", "uuid.*", "venv.*", "webbrowser.*", "_osx_support.*", "_aix_support.*", "_pyrepl.*",
+	// [hangar] Found in the phase 3 review: each runs code, loads a
+	// native library or another pickle, writes files, or reaches the
+	// import system, and none is in picklescan's list.
+	"_posixsubprocess.*", "_winapi.*", "_ctypes.*", "zipimport.*", "_imp.*", "imp.*",
+	"_frozen_importlib.*", "_frozen_importlib_external.*",
+	"builtins.setattr", "builtins.delattr", "builtins.globals", "builtins.locals", "builtins.vars",
+	"_io.open", "io.open", "_io.open_code", "io.open_code", "codecs.open", "shelve.*", "dill.*", "cloudpickle.*",
+	"torch.utils.cpp_extension.*", "torch.ops.load_library", "torch._ops.*", "torch.classes.load_library",
+	"numpy.load", "numpy.lib.npyio.load", "numpy.ctypeslib.*", "numpy.distutils.*",
+	"joblib.load", "joblib.numpy_pickle.load", "pandas.read_pickle", "pandas.io.pickle.*", "antigravity.*",
 	// [spec]
 	"importlib.*", "http.client.*", "torch.load", "torch.hub.*", "multiprocessing.*", "marshal.*",
 }
