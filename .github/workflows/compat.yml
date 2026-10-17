@@ -256,9 +256,21 @@ jobs:
         run: kind load docker-image hangar:ci --name hangar
       - name: ct lint and ct install (runs helm test)
         run: |
-          ct lint --charts deploy/helm/hangar --validate-maintainers=false --check-version-increment=false
+          # Offline renders cannot keep generated secrets, so the chart
+          # refuses to generate them there; ct install and the cluster tests
+          # below cover generation.
+          ct lint --charts deploy/helm/hangar --validate-maintainers=false --check-version-increment=false \
+            --helm-lint-extra-args "--set=generateSecrets=false"
           ct install --charts deploy/helm/hangar \
             --helm-extra-set-args "--set=image.repository=hangar --set=image.tag=ci --set=image.pullPolicy=Never"
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Cluster tests (generated secrets, a GitOps-style install with Postgres and MinIO)
+        env:
+          KIND_CLUSTER: hangar
+          KIND_CLUSTER_EXISTS: "1"
+        run: ./scripts/kind-chart-test.sh hangar:ci
       - name: Smoke test through a port-forward
         run: |
           helm install smoke deploy/helm/hangar --namespace smoke --create-namespace \
