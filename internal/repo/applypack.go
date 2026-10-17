@@ -73,10 +73,27 @@ func (s *Store) ApplyPack(ctx context.Context, p ApplyPackParams) error {
 		br := bufio.NewReader(p.Pack)
 		if _, err := br.Peek(1); err == nil {
 			lr := &limitedReader{r: br, limit: s.opts.MaxPackSize}
-			pack, err = st.IndexPack(ctx, lr, p.Source == SourcePush)
+			// git index-pack rebuilds every delta in memory, so the pack
+			// is checked against the limits before it gets the trailer.
+			// Mirrors keep the Upstream's files as they are: only their
+			// deltas are bounded.
+			limits := gitstore.PackLimitsFor(s.opts.MaxBlobSize, s.opts.MaxPackSize)
+			if p.Source != SourcePush {
+				limits.MaxObjectSize, limits.MaxObjects = 0, 0
+			}
+			lp := gitstore.LimitPack(lr, limits)
+			pack, err = st.IndexPack(ctx, lp, p.Source == SourcePush)
+			_ = lp.Close()
 			if err != nil {
-				if errors.Is(err, errPackTooLarge) || lr.n > lr.limit {
+				var limit *gitstore.PackLimitError
+				checked := lp.Err()
+				switch {
+				case errors.As(checked, &limit):
+					return &PolicyError{Message: limit.Message}
+				case errors.Is(err, errPackTooLarge) || lr.n > lr.limit:
 					return &PolicyError{Message: fmt.Sprintf("the push is larger than the %d byte limit; push fewer commits at a time or store large files with git lfs", s.opts.MaxPackSize)}
+				case errors.Is(checked, gitstore.ErrMalformedPack):
+					return fmt.Errorf("%w: unpack failed: %s", ErrInvalid, checked.Error())
 				}
 				return fmt.Errorf("%w: unpack failed: %s", ErrInvalid, gitMessage(err))
 			}
@@ -114,8 +131,11 @@ func (s *Store) ApplyPack(ctx context.Context, p ApplyPackParams) error {
 			}
 		}
 	}
-	lfsRefs, added, err := s.checkPackObjects(ctx, st, row, p.Source, objects)
+	lfsRefs, added, commits, err := s.checkPackObjects(ctx, st, row, p.Source, objects)
 	if err != nil {
+		return err
+	}
+	if err := s.checkTrees(ctx, st.Dir, commits); err != nil {
 		return err
 	}
 	if s.opts.Quota != nil && p.Source == SourcePush && added > 0 {
@@ -133,21 +153,26 @@ func (s *Store) ApplyPack(ctx context.Context, p ApplyPackParams) error {
 // checkPackObjects applies the blob policy to the objects of a new pack:
 // pushes may not add non-LFS files over git.max_blob_size, and every LFS
 // pointer they add must name a stored, verified object. Mirrors record the
-// pointers they bring as present or not.
-func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row *repoRow, source PackSource, objects []string) ([]LFSRef, int64, error) {
+// pointers they bring as present or not. It also returns the Commits in
+// the pack.
+func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row *repoRow, source PackSource, objects []string) ([]LFSRef, int64, []string, error) {
 	if len(objects) == 0 {
-		return nil, 0, nil
+		return nil, 0, nil, nil
 	}
 	g := s.git.Git()
 	info, err := g.BatchCheck(ctx, st.Dir, objects)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	var (
-		small []string
-		added int64
+		small   []string
+		commits []string
+		added   int64
 	)
 	for _, i := range info {
+		if i.Type == "commit" {
+			commits = append(commits, i.OID)
+		}
 		if i.Type != "blob" {
 			continue
 		}
@@ -157,7 +182,7 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 		}
 		added += i.Size
 		if source == SourcePush && i.Size > s.opts.MaxBlobSize {
-			return nil, 0, &PolicyError{Message: fmt.Sprintf("a file in the push (blob %s) is %d bytes, larger than the %d byte limit for files outside LFS. Track large files with git lfs track \"*.ext\", commit .gitattributes and push again", i.OID, i.Size, s.opts.MaxBlobSize)}
+			return nil, 0, nil, &PolicyError{Message: fmt.Sprintf("a file in the push (blob %s) is %d bytes, larger than the %d byte limit for files outside LFS. Track large files with git lfs track \"*.ext\", commit .gitattributes and push again", i.OID, i.Size, s.opts.MaxBlobSize)}
 		}
 	}
 	var ptrs []model.LFSPointer
@@ -170,10 +195,10 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 		return nil
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	if len(ptrs) == 0 {
-		return nil, added, nil
+		return nil, added, commits, nil
 	}
 	oids := make([]string, 0, len(ptrs))
 	for _, p := range ptrs {
@@ -181,7 +206,7 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 	}
 	stored, err := s.lfs.StatMany(ctx, oids)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	refs := make([]LFSRef, 0, len(ptrs))
 	for _, p := range ptrs {
@@ -190,7 +215,7 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 			// An object written by a presigned PUT may not be verified yet.
 			v, err := s.verifyLFS(ctx, p.OID, p.Size)
 			if errors.Is(err, errVerifyWait) {
-				return nil, 0, &PolicyError{Message: err.Error()}
+				return nil, 0, nil, &PolicyError{Message: err.Error()}
 			}
 			if err == nil {
 				obj, ok = v, true
@@ -198,12 +223,12 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 		}
 		present := ok && obj.Size == p.Size
 		if source == SourcePush && !present {
-			return nil, 0, &PolicyError{Message: fmt.Sprintf("the push refers to LFS object %s (%d bytes), which has not been uploaded; run git lfs push --all and push again", p.OID, p.Size)}
+			return nil, 0, nil, &PolicyError{Message: fmt.Sprintf("the push refers to LFS object %s (%d bytes), which has not been uploaded; run git lfs push --all and push again", p.OID, p.Size)}
 		}
 		refs = append(refs, LFSRef{OID: p.OID, Size: p.Size, Present: present})
 		if present {
 			added += p.Size
 		}
 	}
-	return refs, added, nil
+	return refs, added, commits, nil
 }

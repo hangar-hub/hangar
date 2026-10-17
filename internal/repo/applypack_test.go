@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,14 +58,14 @@ func (w *workdir) pack(tip model.CommitSHA, have ...model.CommitSHA) []byte {
 	for _, h := range have {
 		in += "^" + string(h) + "\n"
 	}
-	out, err := gitRunBytes(w.dir, strings.NewReader(in), "pack-objects", "--revs", "--stdout", "-q")
+	// Only stdout: git warns on stderr about paths it cannot check out.
+	cmd := exec.Command("git", "pack-objects", "--revs", "--stdout", "-q")
+	cmd.Dir = w.dir
+	cmd.Stdin = strings.NewReader(in)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.Output()
 	require.NoError(w.t, err)
 	return out
-}
-
-func gitRunBytes(dir string, stdin *strings.Reader, args ...string) ([]byte, error) {
-	out, err := gitRun(dir, stdin, args...)
-	return []byte(out), err
 }
 
 func TestApplyPackPushPolicy(t *testing.T) {

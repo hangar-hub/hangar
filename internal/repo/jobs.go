@@ -178,6 +178,12 @@ func (s *Store) runZipExport(ctx context.Context, j *jobs.Job, prog jobs.Progres
 		if e.LFS != nil && !e.Present {
 			continue
 		}
+		// Pushes and Pulls refuse such paths (checkTrees), but a Commit
+		// stored before that check could hold one, and an entry named
+		// "../x" or "a\\..\\x" would extract outside the folder.
+		if clean, err := model.CleanRepoPath(e.Path); err != nil || clean != e.Path {
+			return jobs.Permanent(fmt.Errorf("%w: the Commit has a file whose path cannot be extracted safely: %q", ErrInvalid, e.Path))
+		}
 		files = append(files, e)
 		total += e.Size
 	}

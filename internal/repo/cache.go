@@ -39,30 +39,82 @@ type lsEntry struct {
 
 // lsTree runs `git ls-tree -l -z` in dir and parses the result.
 func lsTree(ctx context.Context, g gitstore.Git, dir string, args ...string) ([]lsEntry, error) {
-	out, err := g.Run(ctx, dir, nil, nil, append([]string{"ls-tree", "-l", "-z"}, args...)...)
+	return lsTreeLimited(ctx, g, dir, 0, args...)
+}
+
+// lsTreeLimited is lsTree that stops git and fails with errTreeTooLarge
+// once it has listed more than limit entries, or a path longer than
+// model.MaxPathLength, as it reads them. Zero means no limit.
+func lsTreeLimited(ctx context.Context, g gitstore.Git, dir string, limit int64, args ...string) ([]lsEntry, error) {
+	w := &lsTreeWriter{limit: limit}
+	err := g.Stream(ctx, dir, nil, w, nil, append([]string{"ls-tree", "-l", "-z"}, args...)...)
+	if w.err != nil {
+		return nil, w.err
+	}
 	if err != nil {
 		return nil, err
 	}
-	var entries []lsEntry
-	for _, rec := range bytes.Split(out, []byte{0}) {
-		if len(rec) == 0 {
-			continue
+	if len(w.rest) > 0 {
+		if err := w.record(w.rest); err != nil {
+			return nil, err
 		}
-		meta, p, ok := strings.Cut(string(rec), "\t")
-		if !ok {
-			return nil, fmt.Errorf("unexpected ls-tree output %q", rec)
-		}
-		f := strings.Fields(meta)
-		if len(f) != 4 {
-			return nil, fmt.Errorf("unexpected ls-tree output %q", rec)
-		}
-		e := lsEntry{mode: f[0], typ: f[1], oid: f[2], path: p}
-		if f[3] != "-" {
-			e.size, _ = strconv.ParseInt(f[3], 10, 64)
-		}
-		entries = append(entries, e)
 	}
-	return entries, nil
+	return w.entries, nil
+}
+
+// lsTreeWriter parses `git ls-tree -l -z` output as git writes it.
+type lsTreeWriter struct {
+	limit   int64
+	entries []lsEntry
+	rest    []byte
+	err     error
+}
+
+func (w *lsTreeWriter) Write(p []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	w.rest = append(w.rest, p...)
+	for {
+		i := bytes.IndexByte(w.rest, 0)
+		if i < 0 {
+			break
+		}
+		if err := w.record(w.rest[:i]); err != nil {
+			w.err = err
+			return 0, err
+		}
+		w.rest = w.rest[i+1:]
+	}
+	if w.limit > 0 && len(w.rest) > model.MaxPathLength+256 {
+		w.err = errTreeTooLarge
+		return 0, w.err
+	}
+	w.rest = append([]byte(nil), w.rest...)
+	return len(p), nil
+}
+
+func (w *lsTreeWriter) record(rec []byte) error {
+	if len(rec) == 0 {
+		return nil
+	}
+	meta, p, ok := strings.Cut(string(rec), "\t")
+	if !ok {
+		return fmt.Errorf("unexpected ls-tree output %q", rec)
+	}
+	f := strings.Fields(meta)
+	if len(f) != 4 {
+		return fmt.Errorf("unexpected ls-tree output %q", rec)
+	}
+	if w.limit > 0 && (int64(len(w.entries)) >= w.limit || len(p) > model.MaxPathLength) {
+		return errTreeTooLarge
+	}
+	e := lsEntry{mode: f[0], typ: f[1], oid: f[2], path: p}
+	if f[3] != "-" {
+		e.size, _ = strconv.ParseInt(f[3], 10, 64)
+	}
+	w.entries = append(w.entries, e)
+	return nil
 }
 
 func parentDir(p string) string {
@@ -124,7 +176,12 @@ func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.Com
 	if err != nil {
 		return err
 	}
-	entries, err := lsTree(ctx, g, objs.Dir, "-r", "-t", string(commit))
+	// The limit protects readers from Commits stored before pushes and
+	// Pulls were checked against it (checkTrees).
+	entries, err := lsTreeLimited(ctx, g, objs.Dir, s.opts.MaxTreePaths, "-r", "-t", string(commit))
+	if errors.Is(err, errTreeTooLarge) {
+		return fmt.Errorf("%w: Commit %s has more than %d files and folders, or a path longer than %d bytes", ErrInvalid, commit, s.opts.MaxTreePaths, model.MaxPathLength)
+	}
 	if err != nil {
 		return err
 	}
@@ -161,8 +218,8 @@ func (s *Store) fillTree(ctx context.Context, repoID uuid.UUID, commit model.Com
 				}
 			}
 		} else {
-			pe, err := lsTree(ctx, g, objs.Dir, "-r", "-t", parent)
-			if err != nil {
+			pe, err := lsTreeLimited(ctx, g, objs.Dir, s.opts.MaxTreePaths, "-r", "-t", parent)
+			if err != nil && !errors.Is(err, errTreeTooLarge) {
 				return err
 			}
 			parentOIDs = make(map[string]string, len(pe))
