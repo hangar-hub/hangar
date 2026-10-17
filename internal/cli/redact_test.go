@@ -74,9 +74,11 @@ func TestPushDoesNotPrintPresignedPartURLs(t *testing.T) {
 	e.inst.PresignBase = closedURL(t)
 	dir := filepath.Join(e.home, "model")
 	writeTree(t, dir, map[string][]byte{"model.safetensors": blobOf("weights", 100<<10)})
+	waits := recordWaits(t)
 
 	r := e.run("push", dir, "acme/leak", "--create")
 	require.Equal(t, ExitFailure, r.code)
+	require.NotEmpty(t, *waits, "a refused connection is retried before the command gives up")
 	requireNoSignature(t, r)
 	require.Contains(t, r.err.Error(), "send the part")
 	require.Contains(t, r.err.Error(), "/presigned/")
@@ -105,9 +107,11 @@ func TestPullDoesNotPrintPresignedDownloadURLs(t *testing.T) {
 	e.inst.PresignBase = closedURL(t)
 	id := mustID(t, model.RepoTypeModel, "acme/redirected")
 	e.inst.AddRepo(id, clitest.File{Path: "model.safetensors", Content: blobOf("redirect", 100<<10)})
+	waits := recordWaits(t)
 
 	r := e.run("pull", "acme/redirected", "--to", filepath.Join(e.home, "out"))
 	require.Equal(t, ExitFailure, r.code)
+	require.Len(t, *waits, transferAttempts-1, "a refused connection is retried before the command gives up")
 	requireNoSignature(t, r)
 	require.True(t, strings.HasPrefix(r.err.Error(), "model.safetensors") || strings.Contains(r.err.Error(), "reach "), r.err.Error())
 	require.False(t, errors.Is(r.err, context.Canceled))

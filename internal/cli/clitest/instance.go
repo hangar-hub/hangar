@@ -151,6 +151,12 @@ type Instance struct {
 	failedParts map[string]partFailure
 	// failedCompletes holds injected completion failures by SHA-256.
 	failedCompletes map[string]completeFailure
+	// droppedCompletes counts completions to cut off, by SHA-256.
+	droppedCompletes map[string]int
+	failedDownloads  map[string]downloadFailure
+	downloads        map[string]int
+	// stalePlans counts upload plans to hand expired part URLs.
+	stalePlans int
 	// partStored is closed, and replaced, each time a part is stored.
 	partStored chan struct{}
 	// Requests counts requests by "METHOD path-template".
@@ -169,21 +175,24 @@ type device struct {
 func New(t testing.TB) *Instance {
 	t.Helper()
 	i := &Instance{
-		Users:           map[string]string{Token: "alice"},
-		LFSThreshold:    1 << 10,
-		InlineMax:       10 << 20,
-		PartSize:        64 << 10,
-		JobPolls:        2,
-		repos:           map[string]*Repo{},
-		upstream:        map[string]*UpstreamRepo{},
-		objects:         map[string][]byte{},
-		uploads:         map[uuid.UUID]*upload{},
-		jobs:            map[uuid.UUID]*job{},
-		devices:         map[string]*device{},
-		failedParts:     map[string]partFailure{},
-		failedCompletes: map[string]completeFailure{},
-		partStored:      make(chan struct{}),
-		Requests:        map[string]int{},
+		Users:            map[string]string{Token: "alice"},
+		LFSThreshold:     1 << 10,
+		InlineMax:        10 << 20,
+		PartSize:         64 << 10,
+		JobPolls:         2,
+		repos:            map[string]*Repo{},
+		upstream:         map[string]*UpstreamRepo{},
+		objects:          map[string][]byte{},
+		uploads:          map[uuid.UUID]*upload{},
+		jobs:             map[uuid.UUID]*job{},
+		devices:          map[string]*device{},
+		failedParts:      map[string]partFailure{},
+		failedCompletes:  map[string]completeFailure{},
+		droppedCompletes: map[string]int{},
+		failedDownloads:  map[string]downloadFailure{},
+		downloads:        map[string]int{},
+		partStored:       make(chan struct{}),
+		Requests:         map[string]int{},
 	}
 	r := chi.NewRouter()
 	r.Use(i.count)
@@ -365,11 +374,16 @@ type partFailure struct {
 	// afterOthers holds each failure until the upload's other parts are
 	// stored.
 	afterOthers bool
+	// status is the answer; zero means 500.
+	status int
+	// reset closes the connection half way through the body instead of
+	// answering, as a dropped Wi-Fi link or a proxy does.
+	reset bool
 }
 
 // FailPart makes the next times uploads of part number part of the file
-// with this SHA-256 fail with 500, to test resumed uploads. Each failure is
-// answered at once.
+// with this SHA-256 fail with 500, to test retried and resumed uploads.
+// Each failure is answered at once.
 func (i *Instance) FailPart(sha string, part, times int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -386,6 +400,65 @@ func (i *Instance) FailPartLast(sha string, part, times int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = partFailure{times: times, afterOthers: true}
+}
+
+// FailPartStatus is FailPart with another answer, such as 503 from a
+// proxy or 403 from a Blob store.
+func (i *Instance) FailPartStatus(sha string, part, times, status int) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = partFailure{times: times, status: status}
+}
+
+// ResetPart makes the next times uploads of part number part of the file
+// with this SHA-256 break off: the Instance reads half the body, stores
+// nothing and closes the connection without an answer.
+func (i *Instance) ResetPart(sha string, part, times int) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.failedParts[fmt.Sprintf("%s/%d", sha, part)] = partFailure{times: times, reset: true}
+}
+
+// StalePartURLs makes the next times upload plans hand out presigned part
+// URLs that have already expired, so they answer 403 as S3 does once a
+// URL's expiry has passed. Planning the file again hands out URLs that
+// work.
+func (i *Instance) StalePartURLs(times int) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.stalePlans = times
+}
+
+// DropCompletion makes the next times completions of the upload of the
+// file with this SHA-256 succeed, then close the connection without an
+// answer, as a proxy does when it gives up waiting for a long completion.
+// The upload is gone afterwards, as on a real Instance.
+func (i *Instance) DropCompletion(sha string, times int) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.droppedCompletes[sha] = times
+}
+
+// downloadFailure is an injected failure of a file download.
+type downloadFailure struct {
+	times int
+	// status is the answer; zero means the body breaks off half way.
+	status int
+}
+
+// FailDownload makes the next times downloads of a file answer status, or
+// with status 0, send half the body and close the connection.
+func (i *Instance) FailDownload(path string, times, status int) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.failedDownloads[path] = downloadFailure{times: times, status: status}
+}
+
+// Downloads returns how many download requests for a file were answered.
+func (i *Instance) Downloads(path string) int {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.downloads[path]
 }
 
 // completeFailure is an injected failure of an upload completion.

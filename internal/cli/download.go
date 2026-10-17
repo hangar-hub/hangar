@@ -5,6 +5,7 @@ import (
 	"crypto/sha1" // #nosec G505 -- git blob IDs are SHA-1 by definition.
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -123,20 +124,41 @@ func (d *downloader) fetch(ctx context.Context, f wantFile) (downloaded, error) 
 
 // get downloads f into target through target.incomplete, resuming a
 // partial download with a Range request and verifying the hash before the
-// rename.
+// rename. A download that breaks off for a reason that may pass
+// (transient) resumes from where it stopped after a growing wait, up to
+// transferAttempts times. Progress counts each byte once.
 func (d *downloader) get(ctx context.Context, f wantFile, target string) error {
+	for attempt := 1; ; attempt++ {
+		counted, err := d.getOnce(ctx, f, target)
+		if err == nil {
+			return nil
+		}
+		// The next attempt counts what is on disk again.
+		d.prog.add(-counted)
+		if !transient(ctx, err) || attempt >= transferAttempts {
+			return err
+		}
+		if werr := waitRetry(ctx, retryWait(err, attempt)); werr != nil {
+			return err
+		}
+	}
+}
+
+// getOnce makes one download request for f, from the end of any partial
+// file, and returns how many bytes it added to the progress.
+func (d *downloader) getOnce(ctx context.Context, f wantFile, target string) (int64, error) {
 	tmp := target + ".incomplete"
 	h := newFileHash(f)
 	var have int64
 	if st, err := os.Stat(tmp); err == nil && st.Size() < f.Size {
 		in, err := os.Open(tmp) // #nosec G304 -- our own partial file.
 		if err != nil {
-			return err
+			return 0, err
 		}
 		have, err = io.Copy(h, in)
 		_ = in.Close()
 		if err != nil {
-			return err
+			return 0, err
 		}
 	} else {
 		_ = os.Remove(tmp)
@@ -147,7 +169,7 @@ func (d *downloader) get(ctx context.Context, f wantFile, target string) error {
 	}
 	resp, err := d.c.do(ctx, http.MethodGet, d.c.url(resolvePath(d.id, d.commit, f.Path)), nil, header, http.StatusOK, http.StatusPartialContent)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
@@ -160,23 +182,38 @@ func (d *downloader) get(ctx context.Context, f wantFile, target string) error {
 	d.prog.add(have)
 	out, err := os.OpenFile(tmp, flags, 0o644) // #nosec G302 G304 -- model files are not secret.
 	if err != nil {
-		return err
+		return have, err
 	}
-	n, err := io.Copy(io.MultiWriter(out, h), progressReader{r: resp.Body, p: d.prog})
+	body := &countingProgress{r: resp.Body, p: d.prog}
+	n, err := io.Copy(io.MultiWriter(out, h), body)
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}
+	counted := have + body.n
 	if err != nil {
-		return fmt.Errorf("download interrupted after %s; run the command again to resume: %w", formatBytes(have+n), err)
+		if ctx.Err() == nil && !errors.Is(err, os.ErrClosed) {
+			// The body broke off: the connection, not the disk.
+			var pe *os.PathError
+			if !errors.As(err, &pe) {
+				err = &transportError{err: err}
+			}
+		}
+		return counted, fmt.Errorf("download interrupted after %s; run the command again to resume: %w", formatBytes(have+n), err)
 	}
-	if have+n != f.Size {
-		return fmt.Errorf("got %d bytes, want %d; run the command again to resume", have+n, f.Size)
+	if have+n < f.Size {
+		// The body ended early, as one cut off by a proxy does.
+		return counted, fmt.Errorf("got %d bytes, want %d; run the command again to resume: %w", have+n, f.Size,
+			&transportError{err: io.ErrUnexpectedEOF})
+	}
+	if have+n > f.Size {
+		_ = os.Remove(tmp)
+		return counted, fmt.Errorf("got %d bytes, want %d", have+n, f.Size)
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != f.ETag {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("checksum mismatch: got %s, want %s", got, f.ETag)
+		return counted, fmt.Errorf("checksum mismatch: got %s, want %s", got, f.ETag)
 	}
-	return os.Rename(tmp, target)
+	return counted, os.Rename(tmp, target)
 }
 
 // newFileHash returns SHA-256 for LFS files and the git blob hasher for

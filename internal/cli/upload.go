@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -150,6 +151,9 @@ type uploader struct {
 	id       model.RepoID
 	revision string
 	prog     *progress
+	// waiting shows a status line while the Instance checks an upload;
+	// nil shows none.
+	waiting func(msg string) func()
 }
 
 // upload sends every file that the Instance does not already have and
@@ -201,20 +205,22 @@ func (u *uploader) upload(ctx context.Context, files []localFile) ([]gen.CommitO
 }
 
 // uploadFile sends the parts of one file that are not stored yet, then
-// completes the upload.
+// completes the upload. A part that fails for a reason that may pass is
+// sent again (sendPart); presigned part URLs that expired are replaced by
+// planning the file again, which resumes the same upload.
 func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadPlanItem) error {
 	if item.UploadId == nil || item.PartUrls == nil || item.PartSize == nil || *item.PartSize <= 0 {
 		return fmt.Errorf("the upload plan has no upload ID, part size or part URLs")
 	}
-	urls := *item.PartUrls
 	partSize := *item.PartSize
 	want := int((f.Size + partSize - 1) / partSize)
 	if f.Size == 0 {
 		want = 1
 	}
-	if len(urls) != want {
-		return fmt.Errorf("the upload plan has %d part URLs for %d parts", len(urls), want)
+	if len(*item.PartUrls) != want {
+		return fmt.Errorf("the upload plan has %d part URLs for %d parts", len(*item.PartUrls), want)
 	}
+	urls := &partURLs{list: *item.PartUrls, upload: *item.UploadId}
 	done := map[int]gen.UploadedPart{}
 	st, err := u.c.uploadStatus(ctx, u.id, *item.UploadId)
 	if err != nil {
@@ -246,7 +252,7 @@ func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadP
 		g.Go(func() error {
 			off := int64(n-1) * partSize
 			size := min(partSize, f.Size-off)
-			etag, err := u.putPart(gctx, f.Disk, off, size, urls[n-1], presigned)
+			etag, err := u.sendPart(gctx, f, n, off, size, urls, presigned)
 			if err != nil {
 				return fmt.Errorf("part %d: %w", n, err)
 			}
@@ -257,7 +263,9 @@ func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadP
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("%w; run the command again to resume the upload", err)
 	}
-	fin, err := u.complete(ctx, *item.UploadId, results)
+	stop := u.status(fmt.Sprintf("Checking %s (%s) on the Instance", f.Path, formatBytes(f.Size)))
+	fin, err := u.complete(ctx, f, *item.UploadId, results)
+	stop()
 	if err != nil {
 		return err
 	}
@@ -267,27 +275,157 @@ func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadP
 	return nil
 }
 
+// status shows a line while something slow happens, if the uploader has a
+// way to show one, and returns a function that removes it.
+func (u *uploader) status(msg string) func() {
+	if u.waiting == nil {
+		return func() {}
+	}
+	return u.waiting(msg)
+}
+
+// partURLs holds an upload's part URLs, which a refresh replaces when
+// presigned URLs expire during a long upload.
+type partURLs struct {
+	mu     sync.Mutex
+	list   []string
+	upload gen.ID
+	// gen counts refreshes, so parts that fail together refresh once.
+	gen int
+}
+
+func (p *partURLs) get(n int) (string, int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.list[n-1], p.gen
+}
+
+// refresh plans the file again, which resumes the same upload with new
+// part URLs, unless another part has refreshed them since seen.
+func (u *uploader) refresh(ctx context.Context, f localFile, urls *partURLs, seen int) error {
+	urls.mu.Lock()
+	defer urls.mu.Unlock()
+	if urls.gen != seen {
+		return nil
+	}
+	req := gen.UploadPlanRequest{Files: []gen.UploadFile{{Path: f.Path, Size: f.Size, Sha256: f.SHA256}}}
+	if u.revision != "" {
+		req.Revision = &u.revision
+	}
+	plan, err := u.c.planUploads(ctx, u.id, req)
+	if err != nil {
+		return err
+	}
+	if len(plan.Files) != 1 || plan.Files[0].Action != gen.Upload || plan.Files[0].UploadId == nil || *plan.Files[0].UploadId != urls.upload ||
+		plan.Files[0].PartUrls == nil || len(*plan.Files[0].PartUrls) != len(urls.list) {
+		return fmt.Errorf("the Instance no longer has this upload")
+	}
+	urls.list = *plan.Files[0].PartUrls
+	urls.gen++
+	return nil
+}
+
+// sendPart uploads one part, sending it again after a failure that may
+// pass (transient) with a growing wait, up to transferAttempts times. A
+// presigned URL that answers 403 has usually expired, so the URLs are
+// refreshed once and the part is sent again. Progress counts the part's
+// bytes once, however many times it is sent.
+func (u *uploader) sendPart(ctx context.Context, f localFile, n int, off, size int64, urls *partURLs, presigned bool) (string, error) {
+	refreshed := false
+	for attempt := 1; ; attempt++ {
+		raw, seen := urls.get(n)
+		etag, err := u.putPart(ctx, f.Disk, off, size, raw, presigned)
+		if err == nil {
+			return etag, nil
+		}
+		var ae *APIError
+		if presigned && !refreshed && errors.As(err, &ae) && ae.Status == http.StatusForbidden && ctx.Err() == nil {
+			refreshed = true
+			if rerr := u.refresh(ctx, f, urls, seen); rerr != nil {
+				return "", fmt.Errorf("%w; renew the part URLs: %w", err, rerr)
+			}
+			continue
+		}
+		if !transient(ctx, err) || attempt >= transferAttempts {
+			return "", err
+		}
+		if werr := waitRetry(ctx, retryWait(err, attempt)); werr != nil {
+			return "", werr
+		}
+	}
+}
+
 // complete finishes an upload. A 503 with Retry-After means the Instance
 // kept the upload and its parts (api/openapi.yaml), so the same request is
-// sent again after the wait it asks for, up to completeAttempts times.
-func (u *uploader) complete(ctx context.Context, upload gen.ID, parts []gen.UploadedPart) (*gen.UploadStatus, error) {
+// sent again after the wait it asks for. A connection that fails or times
+// out, or a proxy that answers 502, 504, 408 or 429, may cut off a
+// completion the Instance carries on with, so it is sent again too, after
+// a growing wait. If a completion sent again finds the upload gone, an
+// earlier one finished it: planning the file again then says the object
+// is stored. It sends the completion at most completeAttempts times.
+func (u *uploader) complete(ctx context.Context, f localFile, upload gen.ID, parts []gen.UploadedPart) (*gen.UploadStatus, error) {
 	for attempt := 1; ; attempt++ {
 		fin, err := u.c.completeUpload(ctx, u.id, upload, parts)
+		if err == nil {
+			return fin, nil
+		}
 		var ae *APIError
-		if err == nil || !errors.As(err, &ae) || !ae.Retryable {
-			return fin, err
+		var wait time.Duration
+		switch {
+		case errors.As(err, &ae) && ae.Retryable:
+			wait = ae.RetryAfter
+		case attempt > 1 && IsNotFound(err):
+			if ok, perr := u.stored(ctx, f); perr == nil && ok {
+				return &gen.UploadStatus{Id: upload, Sha256: f.SHA256, Size: f.Size, Parts: parts, State: gen.Verified}, nil
+			}
+			return nil, err
+		case completionCutOff(ctx, err):
+			wait = retryWait(err, attempt)
+		default:
+			return nil, err
 		}
 		if attempt == completeAttempts {
 			return nil, fmt.Errorf("%w; the Instance kept the upload, so run the command again to finish it", err)
 		}
-		if err := waitRetry(ctx, ae.RetryAfter); err != nil {
+		if err := waitRetry(ctx, wait); err != nil {
 			return nil, err
 		}
 	}
 }
 
-// putPart uploads one part and returns its ETag.
-func (u *uploader) putPart(ctx context.Context, disk string, off, size int64, rawURL string, presigned bool) (string, error) {
+// completionCutOff reports whether a completion may have been cut off on
+// the way rather than refused: the connection failed or timed out, or a
+// proxy gave up waiting (502, 504, 408) or throttled it (429). A 500 or a
+// 503 without Retry-After is the Instance's own answer, so it is not.
+func completionCutOff(ctx context.Context, err error) bool {
+	var ae *APIError
+	if errors.As(err, &ae) {
+		switch ae.Status {
+		case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusRequestTimeout, http.StatusTooManyRequests:
+			return ctx.Err() == nil
+		}
+		return false
+	}
+	return transient(ctx, err)
+}
+
+// stored reports whether the Instance holds f's object, by planning it.
+func (u *uploader) stored(ctx context.Context, f localFile) (bool, error) {
+	req := gen.UploadPlanRequest{Files: []gen.UploadFile{{Path: f.Path, Size: f.Size, Sha256: f.SHA256}}}
+	if u.revision != "" {
+		req.Revision = &u.revision
+	}
+	plan, err := u.c.planUploads(ctx, u.id, req)
+	if err != nil {
+		return false, err
+	}
+	return len(plan.Files) == 1 && plan.Files[0].Action == gen.Exists, nil
+}
+
+// putPart uploads one part and returns its ETag. The part's bytes count
+// towards progress as they are sent; if the request fails, they are taken
+// off again, so a part sent twice counts once.
+func (u *uploader) putPart(ctx context.Context, disk string, off, size int64, rawURL string, presigned bool) (etag string, err error) {
 	f, err := os.Open(disk) // #nosec G304 -- a file the user asked to upload.
 	if err != nil {
 		return "", err
@@ -300,10 +438,15 @@ func (u *uploader) putPart(ctx context.Context, disk string, off, size int64, ra
 	if !target.IsAbs() {
 		target = u.c.base.ResolveReference(target)
 	}
-	body := progressReader{r: io.NewSectionReader(f, off, size), p: u.prog}
+	body := &countingProgress{r: io.NewSectionReader(f, off, size), p: u.prog}
+	defer func() {
+		if err != nil {
+			body.undo()
+		}
+	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, target.String(), body)
 	if err != nil {
-		return "", err
+		return "", redactURLError(err)
 	}
 	req.ContentLength = size
 	req.Header.Set("User-Agent", u.c.ua)
@@ -316,11 +459,14 @@ func (u *uploader) putPart(ctx context.Context, disk string, off, size int64, ra
 		return "", fmt.Errorf("send the part: %w", err)
 	}
 	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	b, rerr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if resp.StatusCode/100 != 2 {
 		return "", apiError(resp.StatusCode, resp.Header, b)
 	}
-	etag := resp.Header.Get("ETag")
+	if rerr != nil {
+		return "", fmt.Errorf("read the part upload's answer: %w", &transportError{err: rerr})
+	}
+	etag = resp.Header.Get("ETag")
 	if etag == "" {
 		var p gen.UploadedPart
 		if json.Unmarshal(b, &p) == nil {

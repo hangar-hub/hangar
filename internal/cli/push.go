@@ -143,7 +143,7 @@ func (a *app) commitFiles(ctx context.Context, c *client, id model.RepoID, files
 		return nil, err
 	}
 	hp.finish()
-	up := &uploader{c: c, id: id, revision: o.Branch, prog: newProgress(a.stderr, "Uploading", total, a.json)}
+	up := &uploader{c: c, id: id, revision: o.Branch, prog: newProgress(a.stderr, "Uploading", total, a.json), waiting: a.waitStatus}
 	ops, err := up.upload(ctx, files)
 	up.prog.finish()
 	if err != nil {
