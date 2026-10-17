@@ -32,12 +32,26 @@ else
   kind get kubeconfig --name "$cluster" > "$KUBECONFIG"
 fi
 
-# Load what is already local, so the nodes need not pull it. A multi-platform
-# image that is only partly local cannot be loaded; the node pulls that one.
+# Load what is already local, so the nodes need not pull it. kind load
+# docker-image imports every platform, so it fails for a multi-platform
+# image that is only partly local (Docker's containerd image store keeps
+# only the platform it pulled); load the node's platform from an archive
+# instead. Pulling on the node instead took about 5 minutes for Postgres
+# and MinIO, which TestKindGitOpsInstall's rollout waits had to absorb.
+node_platform="linux/$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}')"
+archive_dir="$(mktemp -d)"
+trap 'rm -rf "$archive_dir"; cleanup' EXIT
 for img in "$image" "$postgres_image" "$minio_image"; do
-  if docker image inspect "$img" > /dev/null 2>&1; then
-    kind load docker-image "$img" --name "$cluster" || echo "could not load $img; the node pulls it" >&2
+  docker image inspect "$img" > /dev/null 2>&1 || continue
+  kind load docker-image "$img" --name "$cluster" && continue
+  archive="$archive_dir/image.tar"
+  if docker save --platform "$node_platform" -o "$archive" "$img" &&
+    kind load image-archive "$archive" --name "$cluster"; then
+    echo "loaded $img for $node_platform from an archive" >&2
+  else
+    echo "could not load $img; the node pulls it" >&2
   fi
+  rm -f "$archive"
 done
 
 cd deploy
