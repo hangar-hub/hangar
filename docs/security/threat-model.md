@@ -247,7 +247,7 @@ The Hub API and web UI accept `accept_risk=1`; git-lfs and Ollama answer 403 wit
 
 The scanner (`internal/scan/pickle`) walks the opcode stream the way CPython's unpickler does and classifies every import against allow and deny lists (`internal/scan/pickle/lists.go`). Content decides how a file is read: it decompresses, opens zip archives and `.npz` members, and follows the array data joblib stores inside its pickles. Files that fail at their first opcode are not pickles and are safe.
 
-Bypasses fixed in phase 3, each with a regression test in `internal/scan/bypass_test.go`, `internal/scan/pickle/bypass_test.go` or `cmd/hangar/unsafe_bypass_test.go`:
+Bypasses fixed in phase 3, each with a regression test in `internal/scan/bypass_test.go`, `internal/scan/pickle/bypass_test.go`, `internal/scan/pickle/pickle_test.go` or `cmd/hangar/unsafe_bypass_test.go`:
 
 - joblib array bytes that hid an `os.system` call (`TestScanJoblibFindsCodeHiddenByArrayData`).
 - A `.bin` skipped because an `.xml` of the same name existed (`TestScanFileReadsLoadableFilesByContent`).
