@@ -43,4 +43,5 @@ Made on 2026-10-17 where a page under `docs/get-started` or `docs/guides` and th
 
 ## Open questions for James
 
+- **Ollama and a quant that is not pulled.** Spec 08 answers 404 `MANIFEST_UNKNOWN` with a message naming the Pull to run, but Ollama 0.31 shows only `file does not exist` for any manifest 404. Keep 404 (the docs now explain it), answer another status so Ollama prints the message, or have `hangar ollama install` check the quant first? See [handoffs/p3-docs.md](handoffs/p3-docs.md).
 - **When to release.** The release is on hold (see "Release on hold" above). After the release dry run passes, ask James whether to go ahead with phase 4.
