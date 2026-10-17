@@ -17,6 +17,15 @@ cluster="${KIND_CLUSTER:-hangar-chart}"
 postgres_image=postgres:18-alpine
 minio_image=pgsty/minio:RELEASE.2026-08-04T00-00-00Z
 
+# The chart tests run Hangar with imagePullPolicy Never, so a Hangar image
+# that is not local fails every test only after its rollout wait, with
+# ErrImageNeverPull. Fail now instead.
+if ! docker image inspect "$image" > /dev/null 2>&1; then
+  echo "kind-chart-test: the Hangar image $image is not in the local Docker image store." >&2
+  echo "Build it with make image IMAGE=$image, or pass an image that is local. The chart tests run it with imagePullPolicy Never, so the cluster cannot pull it." >&2
+  exit 1
+fi
+
 # A kubeconfig of our own, so the cluster never becomes the current context
 # in yours.
 export KUBECONFIG
@@ -48,6 +57,9 @@ for img in "$image" "$postgres_image" "$minio_image"; do
   if docker save --platform "$node_platform" -o "$archive" "$img" &&
     kind load image-archive "$archive" --name "$cluster"; then
     echo "loaded $img for $node_platform from an archive" >&2
+  elif [[ "$img" == "$image" ]]; then
+    echo "kind-chart-test: could not load the Hangar image $image into the cluster, and the chart tests cannot pull it (imagePullPolicy Never)." >&2
+    exit 1
   else
     echo "could not load $img; the node pulls it" >&2
   fi
