@@ -278,7 +278,19 @@ func (s *Service) writeErr(w http.ResponseWriter, r *http.Request, st *state, er
 	case errors.Is(err, datasets.ErrInvalidQuery):
 		writeError(w, r, http.StatusUnprocessableEntity, "InvalidParameter", strings.TrimPrefix(msg, datasets.ErrInvalidQuery.Error()+": "))
 	default:
-		s.d.Log.ErrorContext(r.Context(), "dataset viewer request failed", "error", msg)
-		writeError(w, r, http.StatusInternalServerError, "UnexpectedApiError", "Unexpected error.")
+		s.internalError(w, r, "dataset viewer request failed", err)
 	}
+}
+
+// internalError logs err as logMsg and answers 500 without details. A
+// request the client closed, such as a Viewer tab shut mid-query, is
+// answered 499 and logged at debug level instead (bellatrix finding 9).
+func (s *Service) internalError(w http.ResponseWriter, r *http.Request, logMsg string, err error) {
+	if httpx.ClientGone(r, err) {
+		s.d.Log.DebugContext(r.Context(), "client closed the request", "error", err.Error())
+		writeError(w, r, httpx.StatusClientClosedRequest, "ClientClosedRequest", httpx.ClientClosedMessage)
+		return
+	}
+	s.d.Log.ErrorContext(r.Context(), logMsg, "error", err.Error())
+	writeError(w, r, http.StatusInternalServerError, "UnexpectedApiError", "Unexpected error.")
 }

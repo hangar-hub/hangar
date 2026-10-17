@@ -224,7 +224,15 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 	return nil, false
 }
 
+// internal logs err and answers 500 without details. A request the
+// client closed, such as `ollama pull` stopped with Ctrl-C, is answered
+// 499 and logged at debug level instead (bellatrix finding 9).
 func (h *Handler) internal(w http.ResponseWriter, r *http.Request, err error) {
+	if httpx.ClientGone(r, err) {
+		h.o.Log.DebugContext(r.Context(), "client closed the request", "error", err.Error())
+		registryError(w, r, httpx.StatusClientClosedRequest, "UNKNOWN", httpx.ClientClosedMessage)
+		return
+	}
 	h.o.Log.ErrorContext(r.Context(), "ollama registry request failed", "error", err.Error())
 	registryError(w, r, http.StatusInternalServerError, "UNKNOWN", httpx.InternalErrorMessage(r.Context()))
 }
