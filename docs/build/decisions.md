@@ -32,6 +32,20 @@ James used a preview on his home cluster on 2026-10-16 and decided the following
 - **Datasets hold any files.** Decided by James on 2026-10-16. A dataset of files the Dataset Viewer cannot read, such as sample data for another project, reads as a normal dataset: the Viewer tab says there is nothing to preview and why, and links to the files; **Use this dataset** offers only the download snippets.
 - **Equal-height cards.** Decided by James on 2026-10-16. Repo cards in a grid row are the same height, with the stats row at the bottom, and show three quant chips, then a **+N** chip whose accessible name and tooltip list the rest.
 
+## Decisions from the phase 3 security review of the scanner
+
+Made by the phase 3 scan agent on 2026-10-17 from the security inputs for `scan.block_unsafe_downloads` (items 1, 2 and 6). Details are in [the handoff](handoffs/p3-scan.md) and [07](../spec/07-indexing-and-scanning.md).
+
+- **Content decides how a file is read.** A `.bin` file is no longer skipped because an `.xml` file of the same name exists; data that fails at its first opcode is not a pickle and is safe.
+- **More names are scanned.** `.npz`, and the pickle, joblib and NumPy names with a compression or archive suffix (`.gz`, `.bz2`, `.xz`, `.lzma`, `.z`, `.zst`, `.lz4`, `.zip`, `.tar`), because `joblib.load`, `numpy.load` and `pandas.read_pickle` load them.
+- **Partial results fail closed.** A scan that could not follow a file to where every loader stops records `partial`, and the Gate refuses such files that can run code, with `accept_risk=1` still working on the Hub API. A parse error where every loader also stops does not block. Results of scanner version 1 with an error count as partial until the rescan.
+- **joblib is read as joblib reads it.** The scanner follows `NumpyArrayWrapper` array data and frames as `joblib.load` does, as well as the `pickle.load` reading.
+- **Objects are decided from every Commit that holds them**, not only ref tips and Commits with unsafe files.
+- **git clone and fetch are gated.** git-upload-pack is refused while a reachable Commit holds a refused file stored in git rather than LFS, or the history is too long to check.
+- **Scanner version 2.** The rescan of every ref tip runs when workers start.
+
 ## Open questions for James
+
+- **Should `scan.block_unsafe_downloads` also refuse suspicious files that can run code?** The setting blocks only imports on the deny list, which cannot be complete: a function that runs code and is on neither list is suspicious and downloads. Options: keep it (model classes from `transformers` and `sklearn` are suspicious, so blocking them would refuse most sklearn and full-model pickles); block suspicious pickles too, which matches `torch.load(weights_only=True)`; or make the level a setting (`unsafe` or `suspicious`). Raised by the phase 3 scan review; not changed.
 
 - **When to release.** The release is on hold (see "Release on hold" above). After the release dry run passes, ask James whether to go ahead with phase 4.
