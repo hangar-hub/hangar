@@ -82,7 +82,7 @@ The Python compat suites (`compat/hf` with `huggingface_hub`) were not run: the 
 
 ## Notes for the integration lead
 
-- New packages and files: `internal/gitstore/packlimit.go` (with test helpers in `internal/gitstore/gitstoretest`), `internal/repo/treecheck.go`, `internal/httpx/netaddr.go`, `internal/upstream/netpolicy.go`, `internal/cli/symlinks.go`. `internal/gitserver` now imports `internal/gitstore` for the pack check.
+- New packages and files: `internal/gitstore/packlimit.go` (with test helpers in `internal/gitstore/gitstoretest`, which has its own tests in `packs_test.go` so that `make cover` holds it to the 75% floor like the other helper packages), `internal/repo/treecheck.go`, `internal/httpx/netaddr.go`, `internal/upstream/netpolicy.go`, `internal/cli/symlinks.go`. `internal/gitserver` now imports `internal/gitstore` for the pack check.
 - `repo.Options.MaxTreePaths` defaults to `repo.DefaultMaxTreePaths` (1,000,000); `cmd/hangar` needs no change.
 - `upstream.NewHTTPClient` applies the network policy only when `HTTPOptions.Transport` is nil, which is how `cmd/hangar` builds it. A custom transport is used as given.
 - The repo test helper `workdir.pack` now captures stdout only: `git pack-objects` writes warnings to stderr for paths it cannot check out, and those had been mixed into the pack bytes.
