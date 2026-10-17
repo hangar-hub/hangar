@@ -76,7 +76,7 @@ Hangar converts every Config and Split to Parquet, on the `refs/convert/parquet`
 
 ## Partial and Parquet-only Pulls
 
-Pull just the Configs and Splits you need, or only their Parquet export, which can turn a very large raw dataset into a few GB:
+Pull only the Configs and Splits you need, or only their Parquet export, which can turn a very large raw dataset into a few GB:
 
 ```sh
 hangar pull datasets/HuggingFaceFW/fineweb-edu --config sample-10BT --split train --parquet-only --to ./fineweb
