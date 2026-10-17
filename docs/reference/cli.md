@@ -114,6 +114,14 @@ Runs the same kind of checks as the readiness endpoint, with more detail:
 the configuration, the database connection and schema version, the clock
 against the database, a write, read and delete in the Blob store, presigned
 downloads on S3, and the git version. Exits with 1 if any check fails.
+
+With --large-read, it also writes an object of that size (1100 MiB if no
+size is given) to the Blob store and reads it back in one request at
+16 MiB/s, more slowly than the store sends, as Hangar does when it checks
+a large upload on a small server. A proxy in front of the store that cuts
+long reads, such as nginx with its default proxy_max_temp_file_size of
+1024 MiB, fails this check. It takes over a minute at the default size
+and deletes the object afterwards.
 ```
 
 Usage:
@@ -122,12 +130,21 @@ Usage:
 hangar admin doctor [flags]
 ```
 
+Examples:
+
+```sh
+hangar admin doctor --config /etc/hangar/hangar.yaml
+hangar admin doctor --config /etc/hangar/hangar.yaml --large-read
+hangar admin doctor --config /etc/hangar/hangar.yaml --large-read=3GiB
+```
+
 Flags:
 
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
 | `--json` | print JSON instead of text |  |
+| `--large-read` | also write an object of this size and read it back slowly in one request, to find a proxy that cuts long reads |  |
 | `--set` | set a configuration key, such as --set database.dsn=... (repeatable) |  |
 
 ## hangar admin gc
