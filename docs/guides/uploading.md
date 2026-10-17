@@ -36,7 +36,7 @@ hangar push ./my-finetune acme/my-finetune --create --private -m "First upload"
 hangar push ./data datasets/acme/reviews --branch march
 ```
 
-`hangar push` hashes every file, asks the Instance which ones it needs, uploads only those, in parts, then makes one Commit. If an upload stops part-way, run the same command again: parts already stored are not sent again. `.git` and `huggingface_hub`'s `.cache/huggingface` folder are skipped; add `--include` and `--exclude` patterns for more control, or `--create-pr` to open a pull request instead.
+`hangar push` hashes every file, asks the Instance which ones it needs, uploads only those, in parts, then makes one Commit. If an upload stops part-way, run the same command again: parts already stored are not sent again. A file that still fails after its retries does not stop the others: the command uploads the rest, names the files that failed and makes no Commit, so the next run sends only those files and then commits. `.git` and `huggingface_hub`'s `.cache/huggingface` folder are skipped; add `--include` and `--exclude` patterns for more control, or `--create-pr` to open a pull request instead.
 
 ## Your own models, not on any Upstream
 

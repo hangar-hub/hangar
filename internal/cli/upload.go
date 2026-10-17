@@ -157,9 +157,15 @@ type uploader struct {
 }
 
 // upload sends every file that the Instance does not already have and
-// returns the Commit operations that add them.
+// returns the Commit operations that add them. A file that still fails
+// after its retries does not stop the others (bellatrix finding 8): upload
+// sends the rest, then returns the operations for the files that are on
+// the Instance with an *uploadFailures naming the ones that are not, so
+// running the command again sends only those. A cancelled context stops
+// at once.
 func (u *uploader) upload(ctx context.Context, files []localFile) ([]gen.CommitOperation, error) {
 	ops := make([]gen.CommitOperation, 0, len(files))
+	failed := &uploadFailures{}
 	for start := 0; start < len(files); start += planBatch {
 		batch := files[start:min(start+planBatch, len(files))]
 		req := gen.UploadPlanRequest{Files: make([]gen.UploadFile, len(batch))}
@@ -193,7 +199,11 @@ func (u *uploader) upload(ctx context.Context, files []localFile) ([]gen.CommitO
 				ops = append(ops, gen.CommitOperation{Op: gen.AddLfs, Path: f.Path, Sha256: ptr(f.SHA256), Size: ptr(f.Size)})
 			case gen.Upload:
 				if err := u.uploadFile(ctx, f, item); err != nil {
-					return nil, fmt.Errorf("%s: %w", f.Path, err)
+					if ctx.Err() != nil {
+						return nil, fmt.Errorf("%s: %w", f.Path, err)
+					}
+					failed.files = append(failed.files, fileFailure{path: f.Path, err: err})
+					continue
 				}
 				ops = append(ops, gen.CommitOperation{Op: gen.AddLfs, Path: f.Path, Sha256: ptr(f.SHA256), Size: ptr(f.Size)})
 			default:
@@ -201,7 +211,51 @@ func (u *uploader) upload(ctx context.Context, files []localFile) ([]gen.CommitO
 			}
 		}
 	}
+	if len(failed.files) > 0 {
+		return ops, failed
+	}
 	return ops, nil
+}
+
+// uploadFailures lists the files that failed to upload after every retry,
+// while the other files of the same push or import went up.
+type uploadFailures struct {
+	files []fileFailure
+}
+
+type fileFailure struct {
+	path string
+	err  error
+}
+
+func (e *uploadFailures) Error() string {
+	if len(e.files) == 1 {
+		return fmt.Sprintf("%s: %v", e.files[0].path, e.files[0].err)
+	}
+	msgs := make([]string, len(e.files))
+	for i, f := range e.files {
+		msgs[i] = fmt.Sprintf("%s: %v", f.path, f.err)
+	}
+	return fmt.Sprintf("%d files failed to upload: %s", len(e.files), strings.Join(msgs, "; "))
+}
+
+// Unwrap returns each file's error, so errors.As finds an API error and
+// its exit code.
+func (e *uploadFailures) Unwrap() []error {
+	out := make([]error, len(e.files))
+	for i, f := range e.files {
+		out[i] = f.err
+	}
+	return out
+}
+
+// paths returns the paths of the files that failed.
+func (e *uploadFailures) paths() []string {
+	out := make([]string, len(e.files))
+	for i, f := range e.files {
+		out[i] = f.path
+	}
+	return out
 }
 
 // uploadFile sends the parts of one file that are not stored yet, then

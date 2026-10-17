@@ -67,7 +67,10 @@ func (a *app) importCommand() *cobra.Command {
                            file and its template, system and params files.
 
 Uploads go through the Instance's API, so you need write access to the
-Namespaces involved. Use --dry-run to see what would be imported.`,
+Namespaces involved. A file that fails to upload does not stop the other
+files or Repos: files that went up into a Mirror are added to it, and the
+results name what failed, so running the command again sends only that.
+Use --dry-run to see what would be imported.`,
 		Example: `  hangar import --from-hf-cache
   hangar import --from-hf-cache /mnt/models/hf --offline --namespace acme
   hangar import --from-dir ./weights --repo acme/my-model
@@ -291,8 +294,15 @@ func (a *app) importSnapshot(ctx context.Context, c *client, id model.RepoID, co
 	}
 	if !o.Offline {
 		r, err := a.importAsMirror(ctx, c, id, commit, files, o.Upstream)
-		if err == nil {
+		var failed *uploadFailures
+		if err == nil || errors.As(err, &failed) {
+			// Some files may have failed to upload while the rest were
+			// added to the Mirror: report both, and never fall back to a
+			// local Repo because a failed file's error was a 404.
 			r.Source = src
+			if err != nil {
+				r.Error = err.Error()
+			}
 			return r
 		}
 		if !IsNotFound(err) {
@@ -415,10 +425,28 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		a.logf("Uploading %s to %s.\n", countFiles(len(upload), total), display(id))
 	}
 	up := &uploader{c: c, id: id, prog: newProgress(a.stderr, "Uploading "+display(id), total, a.json), waiting: a.waitStatus}
-	if _, err := up.upload(ctx, upload); err != nil {
+	_, err = up.upload(ctx, upload)
+	up.prog.finish()
+	var failed *uploadFailures
+	if err != nil && !errors.As(err, &failed) {
 		return res, err
 	}
-	up.prog.finish()
+	if failed != nil {
+		// The other files went up, so add them to the Mirror now and
+		// report the ones that failed; running the import again sends
+		// only those.
+		skip := map[string]bool{}
+		for _, p := range failed.paths() {
+			skip[p] = true
+		}
+		var sent []localFile
+		for _, f := range upload {
+			if !skip[f.Path] {
+				sent = append(sent, f)
+			}
+		}
+		upload = sent
+	}
 	res.Uploaded = paths(upload)
 	if len(upload) > 0 {
 		// Pull the uploaded files into the Mirror: the Instance holds their
@@ -432,6 +460,9 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		if _, err := a.watchJob(ctx, c, job.Id, "Adding the files to "+display(id)); err != nil {
 			return res, err
 		}
+	}
+	if failed != nil {
+		return res, failed
 	}
 	return res, nil
 }

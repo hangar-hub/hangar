@@ -454,7 +454,10 @@ Adds content that is already on this machine to the Arsenal. Choose one source:
                            file and its template, system and params files.
 
 Uploads go through the Instance's API, so you need write access to the
-Namespaces involved. Use --dry-run to see what would be imported.
+Namespaces involved. A file that fails to upload does not stop the other
+files or Repos: files that went up into a Mirror are added to it, and the
+results name what failed, so running the command again sends only that.
+Use --dry-run to see what would be imported.
 ```
 
 Usage:
@@ -945,6 +948,9 @@ part URLs that expired are renewed. When finishing an upload fails for a
 reason that may pass, the Instance answers 503 with Retry-After, or a proxy
 cuts the request off, and the command waits and tries again, up to 10
 times.
+A file that still fails does not stop the others: the command uploads the
+rest, names the files that failed and makes no Commit, so running it again
+sends only those files.
 Files the Instance already has anywhere are not sent again.
 
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.
