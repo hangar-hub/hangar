@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,8 +41,13 @@ type LFS struct {
 
 var _ LFSStore = (*LFS)(nil)
 
-// Upload kinds in the uploads table.
-const uploadKindLFS = "lfs"
+// Upload kinds in the uploads table: a multipart upload, or a single
+// upload through Hangar ("lfs"), and an object a presigned PUT stages
+// ("lfs-put").
+const (
+	uploadKindLFS = "lfs"
+	uploadKindPut = "lfs-put"
+)
 
 // NewLFS returns the LFS store.
 func NewLFS(d *db.DB, blobs blob.Store) *LFS {
@@ -432,7 +438,10 @@ func (l *LFS) PutPart(ctx context.Context, id uuid.UUID, part int, r io.Reader, 
 }
 
 // CompleteUpload implements LFSStore: it assembles the parts at the staging
-// key, then ingests the result, which checks the SHA-256 and size.
+// key, hashes the result, and copies it to the object's key server-side
+// when the SHA-256 and size match (promote). The bytes are read once and
+// never sent back through Hangar, so completing a large file costs one read
+// of it, not a read and a write.
 //
 // Only content that fails the check discards the upload. Any other failure,
 // such as a Blob store read that breaks part way through a large object,
@@ -477,28 +486,23 @@ func (l *LFS) CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob.Par
 			return LFSObject{}, fmt.Errorf("%w: repo: record assembled upload: %w", ErrRetryable, err)
 		}
 	}
-	rr, _, err := openResuming(ctx, l.blobs, row.StorageKey, l.readRetries, l.readBackoff)
-	if errors.Is(err, blob.ErrNotFound) {
+	obj, err := l.promote(ctx, row.StorageKey, row.OID, row.Size)
+	switch {
+	case err == nil:
+	case errors.Is(err, blob.ErrNotFound):
 		// The assembled object is gone, so the parts are too.
 		_ = l.discard(context.WithoutCancel(ctx), row)
 		return LFSObject{}, fmt.Errorf("%w: upload %s lost its parts; upload the file again", ErrNotFound, id)
-	}
-	if err != nil {
-		return LFSObject{}, fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
-	}
-	obj, err := l.Ingest(ctx, row.OID, row.Size, rr)
-	_ = rr.Close()
-	if err != nil {
+	case errors.Is(err, ErrChecksumMismatch):
+		_ = l.discard(context.WithoutCancel(ctx), row)
+		return LFSObject{}, err
+	default:
 		if stored, serr := l.Stat(context.WithoutCancel(ctx), row.OID); serr == nil && stored.Size == row.Size {
 			// A concurrent completion of the same object stored it.
 			_ = l.discard(context.WithoutCancel(ctx), row)
 			return stored, nil
 		}
-		if errors.Is(err, ErrChecksumMismatch) && rr.err == nil {
-			_ = l.discard(context.WithoutCancel(ctx), row)
-			return LFSObject{}, err
-		}
-		return LFSObject{}, fmt.Errorf("%w: %w", ErrRetryable, err)
+		return LFSObject{}, err
 	}
 	if derr := l.discard(context.WithoutCancel(ctx), row); derr != nil {
 		return obj, fmt.Errorf("repo: remove completed upload: %w", derr)
@@ -529,6 +533,12 @@ func (l *LFS) AbortUpload(ctx context.Context, id uuid.UUID) error {
 }
 
 func (l *LFS) abort(ctx context.Context, row *db.Upload) error {
+	if row.UploadID == "" && strings.HasPrefix(row.StorageKey, blob.PrefixTmp) {
+		// A presigned PUT's staged object.
+		if err := l.blobs.Delete(ctx, row.StorageKey); err != nil {
+			return fmt.Errorf("repo: abort upload: %w", err)
+		}
+	}
 	if row.UploadID != "" {
 		if err := l.blobs.AbortMultipart(ctx, row.StorageKey, row.UploadID); err != nil && !errors.Is(err, blob.ErrNotFound) {
 			return fmt.Errorf("repo: abort upload: %w", err)
@@ -558,18 +568,46 @@ func (l *LFS) ExpireUploads(ctx context.Context) (int, error) {
 	return len(rows), nil
 }
 
-// PresignPut implements LFSStore. The URL writes straight to the object's
-// key; Verify checks the content before the object is recorded.
+// PresignPut implements LFSStore. The URL writes to a staging key of its
+// own, never to the object's key, and signs no headers: huggingface_hub
+// sends none on a basic upload, and S3 refuses a request that leaves out a
+// header the URL signed (docs/research/s3-presigned-checksum.md). Verify
+// then checks the staged object's SHA-256 and size and copies it into
+// place server-side, so no client can write unverified bytes to an
+// object's key, where other Repos may already reference it.
 func (l *LFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration) (blob.PresignedRequest, error) {
-	sum, err := hex.DecodeString(oid)
-	if err != nil || len(sum) != sha256.Size || !model.IsSHA256(oid) {
-		return blob.PresignedRequest{}, fmt.Errorf("%w: invalid oid", ErrInvalid)
+	if !model.IsSHA256(oid) || size < 0 {
+		return blob.PresignedRequest{}, fmt.Errorf("%w: invalid oid or size", ErrInvalid)
 	}
-	return l.blobs.PresignPut(ctx, model.LFSObjectKey(oid), size, sum, ttl)
+	id := db.NewID()
+	key := stagedPutKey(id)
+	req, err := l.blobs.PresignPut(ctx, key, size, nil, ttl)
+	if err != nil {
+		return blob.PresignedRequest{}, err
+	}
+	// The row keeps the staged object until Verify promotes it, or until
+	// upload.expire removes both. The grace period lets a PUT that started
+	// just before the URL expired finish and be verified.
+	row := &db.Upload{ID: id, OID: oid, Size: size, Kind: uploadKindPut, StorageKey: key,
+		Parts: []db.UploadPart{}, ExpiresAt: l.now().Add(max(ttl, 0) + stagedPutGrace)}
+	if _, err := l.db.NewInsert().Model(row).Exec(ctx); err != nil {
+		return blob.PresignedRequest{}, fmt.Errorf("repo: record upload: %w", err)
+	}
+	return req, nil
 }
 
-// Verify implements LFSStore: it re-hashes the stored object, records it if
-// it matches, and deletes it if it does not.
+// stagedPutGrace is how long a presigned PUT's staged object is kept after
+// its URL expires.
+const stagedPutGrace = time.Hour
+
+// stagedPutKey is where a presigned single PUT writes.
+func stagedPutKey(id uuid.UUID) string { return blob.PrefixTmp + "uploads/" + id.String() }
+
+// Verify implements LFSStore: it checks what presigned PUTs staged for the
+// object, newest first, promotes the first that matches the SHA-256 and
+// size, and discards those that do not. An object written straight to its
+// key, by a URL issued before uploads were staged, is re-hashed in place,
+// recorded if it matches and deleted if it does not.
 func (l *LFS) Verify(ctx context.Context, oid string, size int64) (LFSObject, error) {
 	if obj, err := l.Stat(ctx, oid); err == nil {
 		if obj.Size != size {
@@ -577,6 +615,40 @@ func (l *LFS) Verify(ctx context.Context, oid string, size int64) (LFSObject, er
 		}
 		return obj, nil
 	}
+	if !model.IsSHA256(oid) || size < 0 {
+		return LFSObject{}, fmt.Errorf("%w: invalid oid or size", ErrInvalid)
+	}
+	var rows []db.Upload
+	if err := l.db.NewSelect().Model(&rows).Where("oid = ?", oid).Where("size = ?", size).Where("kind = ?", uploadKindPut).
+		Where("expires_at > ?", l.now()).OrderExpr("created_at DESC").Limit(100).Scan(ctx); err != nil {
+		return LFSObject{}, fmt.Errorf("repo: find staged uploads: %w", err)
+	}
+	mismatch := false
+	for i := range rows {
+		obj, err := l.promote(ctx, rows[i].StorageKey, oid, size)
+		switch {
+		case err == nil:
+			_ = l.discard(context.WithoutCancel(ctx), &rows[i])
+			return obj, nil
+		case errors.Is(err, blob.ErrNotFound):
+			// Nothing was uploaded to this URL (yet).
+		case errors.Is(err, ErrChecksumMismatch):
+			mismatch = true
+			_ = l.discard(context.WithoutCancel(ctx), &rows[i])
+		default:
+			return LFSObject{}, err
+		}
+	}
+	obj, err := l.verifyInPlace(ctx, oid, size)
+	if errors.Is(err, ErrNotFound) && mismatch {
+		return LFSObject{}, fmt.Errorf("%w: %s", ErrChecksumMismatch, oid)
+	}
+	return obj, err
+}
+
+// verifyInPlace re-hashes an object stored at its own key and records it
+// if it matches, or deletes it if it does not.
+func (l *LFS) verifyInPlace(ctx context.Context, oid string, size int64) (LFSObject, error) {
 	key := model.LFSObjectKey(oid)
 	rc, info, err := openResuming(ctx, l.blobs, key, l.readRetries, l.readBackoff)
 	if err != nil {
@@ -595,6 +667,42 @@ func (l *LFS) Verify(ctx context.Context, oid string, size int64) (LFSObject, er
 		return LFSObject{}, fmt.Errorf("%w: %s", ErrChecksumMismatch, oid)
 	}
 	return l.record(ctx, oid, size)
+}
+
+// promote hashes the object staged at key and, if its SHA-256 and size
+// match, copies it to the object's key server-side and records it. The
+// bytes are read once and never sent back through Hangar. It returns
+// blob.ErrNotFound if nothing is staged, ErrChecksumMismatch if the
+// content is wrong, and ErrRetryable for a failure that may pass, such as a
+// read that broke more often than resumingReader retries.
+func (l *LFS) promote(ctx context.Context, key, oid string, size int64) (LFSObject, error) {
+	rr, info, err := openResuming(ctx, l.blobs, key, l.readRetries, l.readBackoff)
+	if err != nil {
+		if errors.Is(err, blob.ErrNotFound) {
+			return LFSObject{}, err
+		}
+		return LFSObject{}, fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
+	}
+	h := sha256.New()
+	n, err := io.Copy(h, rr)
+	_ = rr.Close()
+	if err != nil {
+		return LFSObject{}, fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
+	}
+	if n != size || info.Size != size {
+		return LFSObject{}, fmt.Errorf("%w: %s has %d bytes, not %d", ErrChecksumMismatch, oid, n, size)
+	}
+	if hex.EncodeToString(h.Sum(nil)) != oid {
+		return LFSObject{}, fmt.Errorf("%w: sha256 does not match %s", ErrChecksumMismatch, oid)
+	}
+	if err := l.blobs.Copy(ctx, key, model.LFSObjectKey(oid)); err != nil {
+		return LFSObject{}, fmt.Errorf("%w: repo: store lfs object: %w", ErrRetryable, err)
+	}
+	obj, err := l.record(ctx, oid, size)
+	if err != nil {
+		return LFSObject{}, fmt.Errorf("%w: %w", ErrRetryable, err)
+	}
+	return obj, nil
 }
 
 // Open implements LFSStore.

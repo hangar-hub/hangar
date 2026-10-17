@@ -362,6 +362,7 @@ func (f *Fake) PresignPut(_ context.Context, key string, size int64, sha256 []by
 		headers[checksumHeader] = v
 		q.Set(signedChecksumParam, v)
 		q.Set(signedContentTypeParam, blob.SafeContentType)
+		q.Set(signedHeadersParam, "content-type;"+checksumHeader)
 	}
 	return blob.PresignedRequest{URL: strings.TrimRight(f.PresignBaseURL, "/") + "/" + key + "?" + q.Encode(), Headers: headers}, nil
 }
@@ -391,19 +392,58 @@ const (
 	// signedContentTypeParam carries the Content-Type a presigned PUT was
 	// signed with.
 	signedContentTypeParam = "X-Content-Type"
+	// signedHeadersParam lists the headers a URL signed beyond Host, as
+	// X-Amz-SignedHeaders does for S3.
+	signedHeadersParam = "X-Signed-Headers"
 	// s3DefaultContentType is what S3 stores when a PUT has no Content-Type.
 	s3DefaultContentType = "binary/octet-stream"
 )
 
 var _ http.Handler = (*Fake)(nil)
 
+// checkSignedHeaders applies the header rules S3 and MinIO apply to a
+// presigned URL, and returns why the request is refused, or "" if it is
+// not. Every header the URL signed must be sent with the signed value: S3
+// answers 403 SignatureDoesNotMatch and MinIO 400 AccessDenied otherwise.
+// An x-amz-* header the URL did not sign is refused too ("There were
+// headers present in the request which were not signed"). Other headers,
+// such as Content-Type, may be sent without being signed.
+func checkSignedHeaders(r *http.Request, q url.Values) string {
+	signed := map[string]string{}
+	if list := q.Get(signedHeadersParam); list != "" {
+		for _, name := range strings.Split(list, ";") {
+			switch name {
+			case "content-type":
+				signed[name] = q.Get(signedContentTypeParam)
+			case checksumHeader:
+				signed[name] = q.Get(signedChecksumParam)
+			default:
+				signed[name] = ""
+			}
+		}
+	}
+	for name, want := range signed {
+		if got, ok := r.Header[http.CanonicalHeaderKey(name)]; !ok || len(got) != 1 || got[0] != want {
+			return "the request does not match the signature: " + name + " is signed and must be sent with the signed value"
+		}
+	}
+	for name := range r.Header {
+		lower := strings.ToLower(name)
+		if _, ok := signed[lower]; !ok && strings.HasPrefix(lower, "x-amz-") {
+			return "there were headers present in the request which were not signed: " + lower
+		}
+	}
+	return ""
+}
+
 // ServeHTTP serves the Fake's presigned URLs the way S3 does: GET and HEAD
 // download an object (with Range, and the response-content-type and
 // response-content-disposition overrides, else the stored Content-Type),
 // PUT uploads one (storing the request's Content-Type and checking the
-// signed SHA-256 and Content-Type), and PUT with partNumber and uploadId
-// uploads a multipart part and returns its ETag. A URL whose
-// X-Expires has passed gets 403. Mount it at the path of PresignBaseURL.
+// content against a signed SHA-256), and PUT with partNumber and uploadId
+// uploads a multipart part and returns its ETag. A URL whose X-Expires has
+// passed gets 403, and so does a request that breaks S3's signed-header
+// rules (checkSignedHeaders). Mount it at the path of PresignBaseURL.
 func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	base, err := url.Parse(f.PresignBaseURL)
 	if f.PresignBaseURL == "" || err != nil {
@@ -419,6 +459,11 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	exp, err := strconv.ParseInt(q.Get("X-Expires"), 10, 64)
 	if err != nil || !f.now().Before(time.Unix(exp, 0)) {
 		http.Error(w, "the URL has expired or is not presigned", http.StatusForbidden)
+		return
+	}
+	if msg := checkSignedHeaders(r, q); msg != "" {
+		f.call("ServeRefused")
+		http.Error(w, msg, http.StatusForbidden)
 		return
 	}
 	ctx := r.Context()
@@ -461,14 +506,6 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPut:
 		f.call("ServePut")
 		signed := q.Get(signedChecksumParam)
-		if r.Header.Get(checksumHeader) != signed {
-			http.Error(w, "the request does not match the signature", http.StatusForbidden)
-			return
-		}
-		if ct := q.Get(signedContentTypeParam); ct != "" && r.Header.Get("Content-Type") != ct {
-			http.Error(w, "the request does not match the signature", http.StatusForbidden)
-			return
-		}
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

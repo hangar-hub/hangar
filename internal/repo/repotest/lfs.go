@@ -265,11 +265,12 @@ func (f *FakeLFS) AbortUpload(ctx context.Context, id uuid.UUID) error {
 
 // PresignPut implements repo.LFSStore.
 func (f *FakeLFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration) (blob.PresignedRequest, error) {
-	sum, err := hex.DecodeString(oid)
-	if err != nil || len(sum) != sha256.Size {
+	if !model.IsSHA256(oid) {
 		return blob.PresignedRequest{}, fmt.Errorf("%w: invalid oid", repo.ErrInvalid)
 	}
-	return f.Store.PresignPut(ctx, model.LFSObjectKey(oid), size, sum, ttl)
+	// Like repo.LFS, sign no headers: huggingface_hub sends none on a
+	// basic upload. Verify checks the content.
+	return f.Store.PresignPut(ctx, model.LFSObjectKey(oid), size, nil, ttl)
 }
 
 // Verify implements repo.LFSStore: it re-hashes the stored object.
