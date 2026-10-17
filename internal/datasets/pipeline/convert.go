@@ -222,7 +222,7 @@ func (p *Pipeline) convert(ctx context.Context, r *repo.Repo, commit model.Commi
 		return err
 	}
 	if r.Mirror {
-		adopted, err := p.adoptExport(ctx, watch, r, commit, res)
+		adopted, err := p.adoptExport(ctx, watch, r, commit, res, files)
 		if err != nil || adopted {
 			return err
 		}
@@ -408,8 +408,11 @@ func (p *Pipeline) ingest(ctx context.Context, sh convert.Shard) error {
 
 // adoptExport uses a Mirror's own refs/convert/parquet, which Pulls fetch
 // from the Upstream, instead of converting. It returns false when the
-// Mirror has no export.
-func (p *Pipeline) adoptExport(ctx context.Context, watch *readWatch, r *repo.Repo, commit model.CommitSHA, res *datasets.Resolved) (bool, error) {
+// Mirror has no export. files are the Commit's source files, whose sizes
+// the Splits report as num_bytes_source and /info as download_size, as
+// when Hangar converts.
+func (p *Pipeline) adoptExport(ctx context.Context, watch *readWatch, r *repo.Repo, commit model.CommitSHA, res *datasets.Resolved,
+	files map[string]convert.File) (bool, error) {
 	tip, err := p.d.Repos.Resolve(ctx, r.ID, ExportRef)
 	if errors.Is(err, repo.ErrRevisionNotFound) {
 		return false, nil
@@ -447,10 +450,19 @@ func (p *Pipeline) adoptExport(ctx context.Context, watch *readWatch, r *repo.Re
 		info := &ConfigInfo{Config: c.Name, Builder: c.Builder, DatasetName: convert.SnakeCase(r.ID.Name), ExportCommit: tip, Commit: commit,
 			Partial: partial[c.Name]}
 		for _, s := range c.Splits() {
-			files := shards[key{c.Name, s}]
-			sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-			row := SplitRow{Config: c.Name, Split: s, ConvertedCommit: tip}
-			if len(files) == 0 {
+			for _, path := range c.Files[s] {
+				info.SourceFiles = append(info.SourceFiles, SourceFile{Path: path, Size: files[path].Size})
+			}
+		}
+		for _, s := range c.Splits() {
+			var source int64
+			for _, path := range c.Files[s] {
+				source += files[path].Size
+			}
+			shardFiles := shards[key{c.Name, s}]
+			sort.Slice(shardFiles, func(i, j int) bool { return shardFiles[i].Path < shardFiles[j].Path })
+			row := SplitRow{Config: c.Name, Split: s, ConvertedCommit: tip, NumBytesSource: source}
+			if len(shardFiles) == 0 {
 				p.d.Log.WarnContext(ctx, "the Upstream's Parquet export has no files for a split", "repo", r.ID.Path(), "config", c.Name, "split", s)
 				row.Status, row.Error = StatusFailed, FailureGeneration
 				rows = append(rows, row)
@@ -459,7 +471,7 @@ func (p *Pipeline) adoptExport(ctx context.Context, watch *readWatch, r *repo.Re
 			si := SplitInfo{Name: s}
 			var ferr error
 			watch.reset()
-			for _, f := range files {
+			for _, f := range shardFiles {
 				if !f.Present {
 					ferr = errNotPulled
 					break

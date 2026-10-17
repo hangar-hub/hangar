@@ -343,6 +343,10 @@ func TestMirrorAdoptsUpstreamExport(t *testing.T) {
 	require.Equal(t, pipeline.StatusReady, rows[0].Status)
 	require.Equal(t, tip, rows[0].ConvertedCommit)
 	require.EqualValues(t, 3, rows[0].NumRows)
+	// The source size comes from the Mirror's own data files, as when Hangar
+	// converts, so hangar info and the Viewer's /info and /size do not
+	// report 0 bytes for a Mirror.
+	require.EqualValues(t, len(demoCSV), rows[0].NumBytesSource)
 	after, err := e.repos.Resolve(e.ctx, r.ID, pipeline.ExportRef)
 	require.NoError(t, err)
 	require.Equal(t, tip, after, "a Mirror's export is used, not rewritten")
@@ -350,4 +354,5 @@ func TestMirrorAdoptsUpstreamExport(t *testing.T) {
 	require.NoError(t, err)
 	b, _ := json.Marshal(info.Features)
 	require.Contains(t, string(b), "review")
+	require.Equal(t, []pipeline.SourceFile{{Path: "data/train.csv", Size: int64(len(demoCSV))}}, info.SourceFiles)
 }
