@@ -35,14 +35,23 @@ ds = load_dataset("lhoestq/demo1", split="train")
 stream = load_dataset("lhoestq/demo1", split="train", streaming=True)
 ```
 
-pandas and Polars read the `hf://` file system that `huggingface_hub` provides:
+pandas reads the `hf://` file system that `huggingface_hub` provides:
 
 ```python
 import pandas as pd
-import polars as pl
 
 df = pd.read_parquet("hf://datasets/acme/reviews/data/train-00000-of-00001.parquet")
-lf = pl.scan_parquet("hf://datasets/acme/reviews/**/*.parquet")
+```
+
+Polars has its own `hf://` client, which always talks to huggingface.co and ignores `HF_ENDPOINT`. Open the files through `huggingface_hub` instead:
+
+```python
+import polars as pl
+from huggingface_hub import HfFileSystem
+
+fs = HfFileSystem()
+paths = fs.glob("datasets/acme/reviews/**/*.parquet")
+df = pl.concat([pl.read_parquet(fs.open(p, "rb")) for p in paths])
 ```
 
 DuckDB reads files over HTTPS from `resolve` URLs. Its own `hf://` scheme talks to huggingface.co, so use HTTPS URLs for Hangar:

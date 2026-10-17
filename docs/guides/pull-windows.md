@@ -14,6 +14,7 @@ server:
 - The bandwidth limit holds across every worker: each worker leases a share of the budget from the database every few seconds.
 - Outside a window, Pulls are planned straight away (so the history is browsable) but file transfers wait. Transfers already running finish their current part, then wait. The UI shows "Waiting for pull window (01:00-07:00)".
 - Windows can span midnight, such as `22:00-06:00`.
-- A user with `write` can start a Pull with **Pull now** (or `hangar pull --now`), which ignores windows but not the bandwidth limit, if the Instance setting `pull.allow_override_windows` is on.
+- A user with `write` can start a Pull outside the windows with `hangar pull --now`, which still keeps to the bandwidth limit, while the Instance setting **Let writers pull now** (`pull.allow_override_windows`, under **Admin**, **Pull settings**) is on, as it is by default.
+- Admins can also change the bandwidth limit, concurrency and windows under **Admin**, **Pull settings**.
 
 Time spent waiting for the bandwidth limit is exported as the `hangar.pull.rate_limited.duration` metric.

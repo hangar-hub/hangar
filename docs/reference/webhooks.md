@@ -37,5 +37,6 @@ Every delivery is an HTTP `POST` with a JSON body:
 | `discussion.commented` | Someone comments. |
 | `discussion.status_changed` | A discussion or pull request is closed or reopened. |
 | `pr.merged` | A pull request is merged. |
+| `ping` | An admin sends a test event from the webhook's settings. It goes to that webhook whatever events it lists. |
 
 Deliveries time out after 10 seconds and are retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours.

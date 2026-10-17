@@ -32,6 +32,15 @@ James used a preview on his home cluster on 2026-10-16 and decided the following
 - **Datasets hold any files.** Decided by James on 2026-10-16. A dataset of files the Dataset Viewer cannot read, such as sample data for another project, reads as a normal dataset: the Viewer tab says there is nothing to preview and why, and links to the files; **Use this dataset** offers only the download snippets.
 - **Equal-height cards.** Decided by James on 2026-10-16. Repo cards in a grid row are the same height, with the stats row at the bottom, and show three quant chips, then a **+N** chip whose accessible name and tooltip list the rest.
 
+## Decisions from the phase 3 docs walk-through
+
+Made on 2026-10-17 where a page under `docs/get-started` or `docs/guides` and the product disagreed; the log is in [docs-walkthrough.md](docs-walkthrough.md).
+
+- **Discover opens a Repo by ID.** huggingface.co search leaves some organisations out, such as `hf-internal-testing`, so the first-pull guide's Repo could not be found by searching. A Discover search of the form `namespace/name` also offers **Open** for that Repo ([09](../spec/09-web-ui.md)).
+- **A gating update keeps the keys it does not send.** `PATCH /repos/{type}/{ns}/{name}` with `gating` changes only the gating keys in the body, so saving the mode in the UI no longer clears request form fields set through the API.
+- **`hangar push --branch` creates a missing branch** from the default branch, as `hf upload --revision` does.
+- **An anonymous 401 from an Upstream is not found.** huggingface.co answers an anonymous request for a Repo that does not exist with a bare 401; with no credentials sent, Hangar reads it as not found, as `huggingface_hub` does, instead of saying the Upstream rejected the user's credentials.
+
 ## Open questions for James
 
 - **When to release.** The release is on hold (see "Release on hold" above). After the release dry run passes, ask James whether to go ahead with phase 4.
