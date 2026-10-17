@@ -9,10 +9,12 @@
 | `tree.js` | A recursive Hub API listing of a 100,000-file Repo, following `Link` headers | a full listing in under 10 seconds at p95 |
 | `upload.js` | Concurrent 1 GiB uploads through the native upload API | memory of each web replica flat and under 256 MiB |
 | `git_clone.js` | A full clone of a 10,000-Commit Repo over smart HTTP | under 30 seconds at p95 |
+| `download.js` | Concurrent downloads of a large file through `/resolve` in `proxy` mode | memory of each web replica flat and under 256 MiB; throughput limited by network and storage, not CPU |
+| `viewer_rows.js` | Dataset Viewer `/rows` at random offsets of a 10 million row Split ([14](../docs/spec/14-datasets.md) "Tests") | p99 under 200 ms |
 
 ## Reference setup
 
-Two `web` replicas (2 vCPU, 1 GiB each), one `worker`, Postgres and MinIO on one host: the `deploy/compose/scale.yaml` example with CPU and memory limits added. Run k6 from a second machine on the same network, so the load generator does not compete for CPU.
+Two `web` replicas (2 vCPU, 1 GiB each), one `worker`, Postgres and MinIO on one host: the `deploy/compose/scale.yaml` example with CPU and memory limits added. Run k6 from a second machine on the same network, so the load generator does not compete for CPU. `docs/benchmarks.md` has an override file that sets the limits, and the results.
 
 ## Run
 
@@ -32,5 +34,9 @@ Two `web` replicas (2 vCPU, 1 GiB each), one `worker`, Postgres and MinIO on one
    ```
 
    `upload.js` takes `VUS` (default 4) and `UPLOAD_SIZE` (default 1 GiB), and each VU commits to its own Repo, `<UPLOAD_REPO>-<vu>` (by default `<namespace>/uploads-<vu>`); watch replica memory with `docker stats` while it runs. `git_clone.js` takes `HANGAR_USERNAME` for the git Basic credentials.
+
+   `download.js` downloads the largest file in `<namespace>/uploads-1`, so run it after `upload.js`, or set `DOWNLOAD_REPO` and `DOWNLOAD_PATH`. It takes `VUS` (default 4).
+
+   `viewer_rows.js` needs a dataset that `seed.sh` does not create: push a Parquet file of 10 million rows as `<namespace>/rows10m` (or set `ROWS_DATASET`, `ROWS_CONFIG`, `ROWS_SPLIT` and `ROWS_TOTAL`), and run it once `/datasets-server/is-valid` reports `"viewer": true`. It takes `RATE` (default 50 requests per second).
 
 Every script also takes `DURATION`. k6 exits non-zero when a threshold fails.

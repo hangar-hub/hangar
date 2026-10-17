@@ -80,7 +80,7 @@ See [14](14-datasets.md) "Tests".
 
 ## Load tests (`loadtest/`)
 
-k6 scenarios: `resolve` HEAD and GET mix, `model_info`, tree listing of a 100,000-file Repo, concurrent 1 GiB uploads, `git clone` of a 10,000-Commit Repo. Reference setup: 2 `web` replicas (2 vCPU, 1 GiB each), 1 `worker`, Postgres, MinIO, on one host. Record results against the targets in [02](02-architecture.md).
+k6 scenarios: `resolve` HEAD and GET mix, `model_info`, tree listing of a 100,000-file Repo, concurrent 1 GiB uploads (one Repo per client), concurrent downloads of a large file, `git clone` of a 10,000-Commit Repo, and Dataset Viewer `/rows` on a 10 million row Split. Reference setup: 2 `web` replicas (2 vCPU, 1 GiB each), 1 `worker`, Postgres, MinIO, on one host. Record results against the targets in [02](02-architecture.md).
 
 ## Coverage
 
