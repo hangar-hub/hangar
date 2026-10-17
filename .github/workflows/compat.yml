@@ -166,7 +166,9 @@ jobs:
       - name: compat/git
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          go test -count=1 -tags compat ./compat/git/
+          # Real git and git-lfs subprocesses: allow more than go test's
+          # 10-minute default on a slow runner (Makefile, COMPAT_TIMEOUT).
+          go test -count=1 -timeout 30m -tags compat ./compat/git/
 
   # Xet uploads (UP-7): the oldest hf_xet huggingface_hub 2.2.0 accepts and
   # the latest 1.x, each on the fakes and on the real Repo service, plus the
