@@ -200,6 +200,8 @@ func New(t testing.TB) *Instance {
 	r.Post("/oauth/token", i.oauthToken)
 	r.Put("/presigned/{id}/{n}", i.presignedPart)
 	r.Get("/presigned-objects/{sha}", i.presignedObject)
+	r.Post("/api/models/{ns}/{name}/branch/{branch}", i.createBranch(model.RepoTypeModel))
+	r.Post("/api/datasets/{ns}/{name}/branch/{branch}", i.createBranch(model.RepoTypeDataset))
 	r.Get("/datasets/{ns}/{name}/resolve/{rev}/*", i.resolve(model.RepoTypeDataset))
 	r.Get("/{ns}/{name}/resolve/{rev}/*", i.resolve(model.RepoTypeModel))
 	gen.HandlerWithOptions(&server{i: i}, gen.ChiServerOptions{BaseURL: "/api/hangar/v1", BaseRouter: r})
@@ -221,6 +223,36 @@ func (i *Instance) count(next http.Handler) http.Handler {
 }
 
 func repoKey(id model.RepoID) string { return id.Path() }
+
+// createBranch serves the Hub API's POST /api/{type}s/{repo}/branch/{branch}:
+// a new branch at the default branch's head (startingPoint is not
+// supported), or 409 when the branch exists, as on the Hub.
+func (i *Instance) createBranch(t model.RepoType) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if i.user(r) == "" {
+			w.Header().Set("X-Error-Code", "RepoNotFound")
+			http.Error(w, `{"error":"Repository not found"}`, http.StatusUnauthorized)
+			return
+		}
+		id := model.RepoID{Type: t, Namespace: chi.URLParam(r, "ns"), Name: chi.URLParam(r, "name")}
+		branch := chi.URLParam(r, "branch")
+		i.mu.Lock()
+		defer i.mu.Unlock()
+		repo := i.repos[repoKey(id)]
+		if repo == nil {
+			w.Header().Set("X-Error-Code", "RepoNotFound")
+			http.Error(w, `{"error":"Repository not found"}`, http.StatusNotFound)
+			return
+		}
+		if _, ok := repo.refs[branch]; ok {
+			http.Error(w, `{"error":"Reference already exists: refs/heads/`+branch+`."}`, http.StatusConflict)
+			return
+		}
+		repo.refs[branch] = repo.refs[repo.DefaultBranch]
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
+	}
+}
 
 // AddUpstream adds a Repo to the fake Upstream with files on `main`.
 func (i *Instance) AddUpstream(id model.RepoID, files ...File) *UpstreamRepo {

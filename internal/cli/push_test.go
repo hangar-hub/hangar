@@ -188,3 +188,31 @@ func TestJobsListWatchCancel(t *testing.T) {
 	require.Equal(t, ExitFailure, r.code)
 	require.Contains(t, r.err.Error(), "cancelled")
 }
+
+// TestPushToANewBranch follows docs/guides/uploading.md: `hangar push
+// --branch march` on a Repo that has no `march` branch yet creates it from
+// the default branch, as `hf upload --revision` does, and commits there.
+// The Commit endpoint answers 404 for a branch that does not exist, so
+// without the branch step the command uploaded everything and then failed.
+func TestPushToANewBranch(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	id := mustID(t, model.RepoTypeDataset, "acme/reviews")
+	e.inst.AddRepo(id, clitest.File{Path: "README.md", Content: []byte("# Reviews\n")})
+	dir := filepath.Join(e.home, "data")
+	writeTree(t, dir, map[string][]byte{"data/train.csv": []byte("text,label\ngood,1\n")})
+
+	r := e.ok("push", dir, "datasets/acme/reviews", "--branch", "march")
+	require.Contains(t, r.stderr, "Created branch march")
+	march := e.inst.Files(id, "march")
+	require.Equal(t, []byte("text,label\ngood,1\n"), march["data/train.csv"])
+	require.Equal(t, []byte("# Reviews\n"), march["README.md"], "the branch starts from the default branch")
+	require.NotContains(t, e.inst.Files(id, "main"), "data/train.csv")
+
+	// The branch exists now: the next push commits to it without creating it.
+	writeTree(t, dir, map[string][]byte{"data/test.csv": []byte("text,label\nbad,0\n")})
+	r = e.ok("push", dir, "datasets/acme/reviews", "--branch", "march")
+	require.NotContains(t, r.stderr, "Created branch")
+	require.Contains(t, e.inst.Files(id, "march"), "data/test.csv")
+	require.Equal(t, 2, e.inst.Requests["POST /api/datasets/{ns}/{name}/branch/{branch}"])
+}

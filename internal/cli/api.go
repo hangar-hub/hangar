@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -188,6 +189,19 @@ func (c *client) completeUpload(ctx context.Context, id model.RepoID, upload ope
 		return nil, err
 	}
 	return r.JSON200, nil
+}
+
+// ensureBranch creates a branch from the default branch through the Hub API,
+// as `hf upload --revision` does. A branch that exists already (409) is
+// left as it is.
+func (c *client) ensureBranch(ctx context.Context, id model.RepoID, branch string) (created bool, err error) {
+	resp, err := c.do(ctx, http.MethodPost, c.url(branchPath(id, branch)), strings.NewReader("{}"),
+		http.Header{"Content-Type": {"application/json"}}, http.StatusOK, http.StatusConflict)
+	if err != nil {
+		return false, err
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK, nil
 }
 
 func (c *client) createCommit(ctx context.Context, id model.RepoID, body gen.CommitRequest) (*gen.CommitResponse, error) {

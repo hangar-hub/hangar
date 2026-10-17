@@ -75,6 +75,12 @@ func escapePath(p string) string {
 }
 
 // resolvePath returns the Hub download path of a file at a Commit.
+// branchPath returns the Hub API path that creates or deletes a branch.
+func branchPath(id model.RepoID, branch string) string {
+	return "/api/" + id.Type.Plural() + "/" + escapePath(id.Namespace) + "/" + escapePath(id.Name) +
+		"/branch/" + url.PathEscape(branch)
+}
+
 func resolvePath(id model.RepoID, rev, file string) string {
 	return "/" + id.Type.URLPrefix() + escapePath(id.Namespace) + "/" + escapePath(id.Name) +
 		"/resolve/" + url.PathEscape(rev) + "/" + escapePath(file)
