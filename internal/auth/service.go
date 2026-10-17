@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -77,6 +78,10 @@ type Service struct {
 	csrfKey  []byte
 	client   *http.Client
 	upstream UpstreamLookup
+	// origins refuses cross-origin requests that carry browser credentials.
+	origins *originGuard
+	// viewerHost is datasets-server.<public host>, for httpx.Classify.
+	viewerHost string
 
 	// Settings reads and changes Instance settings.
 	Settings *SettingsStore
@@ -125,6 +130,12 @@ func New(opts Options) (*Service, error) {
 		db: opts.DB, cfg: opts.Config, orgs: opts.Orgs, audit: opts.Audit, inst: opts.Instruments,
 		log: opts.Log, now: opts.Now, sealer: sealer, client: opts.HTTPClient, upstream: opts.Upstreams,
 		jwtKey: deriveKey(key, "hangar ollama registry jwt v1"), csrfKey: deriveKey(key, "hangar csrf v1"),
+	}
+	if s.origins, err = newOriginGuard(opts.Config.Server.PublicURL); err != nil {
+		return nil, err
+	}
+	if u, perr := url.Parse(opts.Config.Server.PublicURL); perr == nil && u.Host != "" {
+		s.viewerHost = "datasets-server." + u.Host
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.NewTextHandler(io.Discard, nil))
