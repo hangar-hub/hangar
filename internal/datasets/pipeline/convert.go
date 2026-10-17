@@ -140,8 +140,10 @@ func (p *Pipeline) HandleConvert(ctx context.Context, j *jobs.Job, progress jobs
 	if r.DeletedAt != nil || r.ID.Type != model.RepoTypeDataset {
 		return nil
 	}
-	// Skip work that is already done.
-	if rows, err := p.store.Splits(ctx, r.UUID, pl.Commit); err == nil && len(rows) > 0 && !anyPending(rows) {
+	// Skip work that is already done. A Split whose mirrored Parquet export
+	// was not pulled is not done: once the export is pulled, the Pull's
+	// index Job queues this Job again, and it must look again.
+	if rows, err := p.store.Splits(ctx, r.UUID, pl.Commit); err == nil && len(rows) > 0 && !anyRedo(rows) {
 		return nil
 	}
 	if err := p.convert(ctx, r, pl.Commit, progress); err != nil {
@@ -156,9 +158,12 @@ func (p *Pipeline) HandleConvert(ctx context.Context, j *jobs.Job, progress jobs
 	return err
 }
 
-func anyPending(rows []SplitRow) bool {
+// anyRedo reports whether a conversion should run again: a Split is
+// pending, or failed only because its mirrored Parquet export was not in
+// the Arsenal, which a later Pull can change.
+func anyRedo(rows []SplitRow) bool {
 	for _, r := range rows {
-		if r.Status == StatusPending {
+		if r.Status == StatusPending || r.Status == StatusFailed && r.Error == FailureNotPulled {
 			return true
 		}
 	}
