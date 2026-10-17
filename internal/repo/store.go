@@ -247,7 +247,7 @@ func (s *Store) byUUID(ctx context.Context, idb bun.IDB, id uuid.UUID) (*repoRow
 
 // Get implements Service.
 func (s *Store) Get(ctx context.Context, id model.RepoID) (*Repo, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}

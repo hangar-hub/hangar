@@ -92,3 +92,62 @@ func TestEntryFillsAMissingTreeCache(t *testing.T) {
 		require.Equal(t, int64(2), got.Size)
 	})
 }
+
+// countRepoLookups returns how many queries read the repos table.
+func countRepoLookups(queries []string) int {
+	n := 0
+	for _, q := range queries {
+		if strings.Contains(q, `FROM "repos"`) {
+			n++
+		}
+	}
+	return n
+}
+
+// Under WithReadCache, the read methods look a Repo up once for the whole
+// context, whatever case the ID is in. A Repo that is not there is not
+// remembered, so one created later in the same context is found, and
+// without the cache every call looks the Repo up.
+func TestReadCache(t *testing.T) {
+	t.Parallel()
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		log := &queryLog{}
+		logged := *d
+		logged.DB = d.WithQueryHook(log)
+		e := newEnv(t, &logged)
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "cached"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		sha := e.commit(id, alice, add("config.json", "{}")).SHA
+		_, err := e.svc.Entry(e.ctx, id, sha, "config.json")
+		require.NoError(t, err)
+
+		reads := func(ctx context.Context) {
+			t.Helper()
+			_, err := e.svc.Get(ctx, id)
+			require.NoError(t, err)
+			upper := model.RepoID{Type: id.Type, Namespace: "Alice", Name: "CACHED"}
+			got, err := e.svc.Resolve(ctx, upper, "main")
+			require.NoError(t, err)
+			require.Equal(t, sha, got)
+			_, err = e.svc.Entry(ctx, id, sha, "config.json")
+			require.NoError(t, err)
+			rc, _, err := e.svc.OpenFile(ctx, id, sha, "config.json", nil)
+			require.NoError(t, err)
+			require.NoError(t, rc.Close())
+		}
+		log.take()
+		reads(e.ctx)
+		require.Equal(t, 4, countRepoLookups(log.take()), "without the cache")
+		reads(repo.WithReadCache(e.ctx))
+		require.Equal(t, 1, countRepoLookups(log.take()), "with the cache")
+
+		ctx := repo.WithReadCache(e.ctx)
+		later := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "later"}
+		_, err = e.svc.Get(ctx, later)
+		require.ErrorIs(t, err, repo.ErrNotFound)
+		e.create(repo.CreateParams{ID: later, Actor: alice})
+		_, err = e.svc.Get(ctx, later)
+		require.NoError(t, err)
+	})
+}
