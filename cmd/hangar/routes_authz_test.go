@@ -501,9 +501,70 @@ type probeServer struct {
 	in     *instance
 	url    string
 	tokens map[string]string
-	mu     *sync.Mutex
-	routes map[string]string
+	routes *routeLog
+	mu     sync.Mutex // guards n
 	n      int
+}
+
+// routeWait is how long a probe waits for the access log line of its
+// request once the response has arrived. The line is written after the
+// handler returns, which can be after the client has read the response.
+const routeWait = 30 * time.Second
+
+// routeLog keeps the route template the access log recorded for each
+// request ID, and lets a probe wait for it.
+//
+// httpx.AccessLog logs after the handler returns, but a response larger
+// than the server's write buffer, or one the handler flushes (git
+// info/refs, file downloads), reaches the client before that. Reading
+// the route as soon as the response arrives then races the log line.
+type routeLog struct {
+	mu     sync.Mutex
+	routes map[string]string
+	ready  map[string]chan struct{}
+}
+
+func newRouteLog() *routeLog {
+	return &routeLog{routes: map[string]string{}, ready: map[string]chan struct{}{}}
+}
+
+// signal returns the channel closed when the route for id is recorded.
+// The caller holds l.mu.
+func (l *routeLog) signal(id string) chan struct{} {
+	ch, ok := l.ready[id]
+	if !ok {
+		ch = make(chan struct{})
+		l.ready[id] = ch
+	}
+	return ch
+}
+
+func (l *routeLog) record(id, route string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, done := l.routes[id]; done {
+		return
+	}
+	l.routes[id] = route
+	close(l.signal(id))
+}
+
+// wait returns the route recorded for id, waiting up to timeout for it.
+// It returns "" and false if no route was recorded in time.
+func (l *routeLog) wait(id string, timeout time.Duration) (string, bool) {
+	l.mu.Lock()
+	ch := l.signal(id)
+	l.mu.Unlock()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-ch:
+	case <-timer.C:
+		return "", false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.routes[id], true
 }
 
 func newProbeServer(t *testing.T) *probeServer {
@@ -515,18 +576,13 @@ func newProbeServer(t *testing.T) *probeServer {
 		c.HFAPI.DefaultNamespace = "alice"
 	})
 	ctx := context.Background()
-	routes := map[string]string{}
-	var mu sync.Mutex
+	routes := newRouteLog()
 	// The access log records each request's route template; keep it by
 	// request ID.
-	in.log = slog.New(routeRecorder{record: func(id, route string) {
-		mu.Lock()
-		routes[id] = route
-		mu.Unlock()
-	}})
+	in.log = slog.New(routeRecorder{record: routes.record})
 	h, err := newHandler(ctx, in, newHealth(in.db, in.blobs), false)
 	require.NoError(t, err)
-	ps := &probeServer{t: t, in: in, url: pub, tokens: map[string]string{}, routes: routes, mu: &mu}
+	ps := &probeServer{t: t, in: in, url: pub, tokens: map[string]string{}, routes: routes}
 	srv.Config.Handler = h
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -582,11 +638,14 @@ func (ps *probeServer) do(persona, method, path, body string, header map[string]
 	if d := time.Since(start); d > 2*time.Second {
 		ps.t.Logf("slow probe: %s %s as %s took %s", method, path, persona, d)
 	}
-	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	ps.mu.Lock()
-	route := ps.routes[id]
-	ps.mu.Unlock()
+	// Close before waiting: a handler still writing a large body only
+	// returns, and logs its route, once the client stops reading.
+	require.NoError(ps.t, resp.Body.Close())
+	route, ok := ps.routes.wait(id, routeWait)
+	if !ok {
+		ps.t.Logf("no access log line for %s %s as %s within %s", method, path, persona, routeWait)
+	}
 	return probeResp{status: resp.StatusCode, route: route, body: string(raw)}
 }
 
@@ -837,4 +896,49 @@ func TestRouteAuthorisationMatrix(t *testing.T) {
 func viewerEndpoints(t *testing.T) []string {
 	t.Helper()
 	return append([]string{"/healthcheck"}, scanMapKeys(t, "internal/datasets/viewer/http.go", "known")...)
+}
+
+// TestProbeWaitsForLateAccessLog covers a flake in
+// TestRouteAuthorisationMatrix: httpx.AccessLog writes its line after the
+// handler returns, so for a response flushed before then (git info/refs,
+// file downloads, anything over the write buffer) the probe used to read
+// the route before it was recorded and report `reached route ""`. The
+// handler here flushes more than the probe reads and, like a handler
+// streaming a body, returns and logs only once the client hangs up.
+func TestProbeWaitsForLateAccessLog(t *testing.T) {
+	const route = "/{ns}/{name}.git/info/refs"
+	routes := newRouteLog()
+	log := slog.New(routeRecorder{record: routes.record})
+	srv := httptest.NewServer(httpx.RequestIDs(httpx.AccessLog(log)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpx.SetRoute(r.Context(), route)
+		_, _ = w.Write([]byte(strings.Repeat("x", 8192)))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))))
+	t.Cleanup(srv.Close)
+
+	ps := &probeServer{t: t, url: srv.URL, tokens: map[string]string{}, routes: routes}
+	r := ps.do("anonymous", http.MethodGet, "/alice/r1.git/info/refs", "", nil)
+	require.Equal(t, http.StatusOK, r.status)
+	require.Equal(t, route, r.route)
+}
+
+func TestRouteLogWait(t *testing.T) {
+	l := newRouteLog()
+	_, ok := l.wait("missing", 10*time.Millisecond)
+	require.False(t, ok, "wait must time out when no route is recorded")
+
+	l.record("early", "/a")
+	route, ok := l.wait("early", time.Second)
+	require.True(t, ok)
+	require.Equal(t, "/a", route)
+
+	done := make(chan string, 1)
+	go func() {
+		r, _ := l.wait("late", 10*time.Second)
+		done <- r
+	}()
+	l.record("late", "/b")
+	l.record("late", "/c") // A second line for the same ID is ignored.
+	require.Equal(t, "/b", <-done)
 }
