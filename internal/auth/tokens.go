@@ -249,7 +249,7 @@ func (ts *TokenStore) authenticate(ctx context.Context, secret string) (model.Pr
 	if row.ExpiresAt != nil && !now.Before(*row.ExpiresAt) {
 		return model.Principal{}, fmt.Errorf("%w: expired token", ErrInvalidCredentials)
 	}
-	u, err := ts.s.Users.Get(ctx, row.UserID)
+	u, err := ts.s.Users.forRequest(ctx, row.UserID)
 	if err != nil {
 		return model.Principal{}, fmt.Errorf("%w: unknown user", ErrInvalidCredentials)
 	}

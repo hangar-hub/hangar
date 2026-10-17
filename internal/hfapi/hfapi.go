@@ -212,6 +212,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		// A read looks its Repo up once, not once per repo.Service call:
+		// a download makes three or four (02-architecture.md "Scale
+		// targets").
+		r = r.WithContext(repo.WithReadCache(r.Context()))
+	}
 	switch p.segs[0] {
 	case "api":
 		h.serveAPI(w, r, p.shift(1))

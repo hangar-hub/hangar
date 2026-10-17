@@ -122,12 +122,13 @@ lint-style:
 ## Test ------------------------------------------------------------------------------
 
 .PHONY: test
-# Both suites run even when the first fails, so one run reports both
-# results; the target fails if either does.
+# Every suite runs even when an earlier one fails, so one run reports all
+# results; the target fails if any does.
 test: ## Run unit and integration tests (SQLite and Postgres)
 	@status=0; \
 	$(MAKE) --no-print-directory test-go || status=1; \
 	$(MAKE) --no-print-directory test-ui || status=1; \
+	$(MAKE) --no-print-directory test-loadtest || status=1; \
 	exit $$status
 
 .PHONY: test-go
@@ -137,6 +138,11 @@ test-go:
 .PHONY: test-ui
 test-ui: ui-deps
 	cd ui && $(PNPM) run test
+
+# The load test scripts' payload helpers (loadtest/lib), which use no k6 APIs.
+.PHONY: test-loadtest
+test-loadtest:
+	node --test loadtest/lib/*.test.js
 
 .PHONY: test-compat
 test-compat: ## Run the client compatibility suites against a real binary

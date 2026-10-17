@@ -32,7 +32,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 ## Local accounts
 
 - Usernames: 2 to 42 characters, `[A-Za-z0-9][A-Za-z0-9-_.]*`, unique across Namespaces case-insensitively.
-- Passwords: at least 10 characters, checked against a bundled list of common passwords, hashed with argon2id (memory 64 MiB, time 3, threads 2; parameters stored in the hash string so they can change).
+- Passwords: at least 10 characters, checked against a bundled list of common passwords, hashed with argon2id (memory 64 MiB, time 3, threads 2; parameters stored in the hash string so they can change). At most two hashes or checks run at once in a process (one for each two CPUs), so a burst of sign-ins cannot exhaust a replica's memory; the rest wait, and stop waiting when their request ends.
 - Registration: `closed` (admins create users or issue invite links), `invite` (invite links only), `open`.
 - Invite and reset links: single use, expire in 72 hours, created in the admin UI and copied by the admin.
 - Login throttling: per username and per IP, with exponential backoff after 5 failures, stored in the database so it works across replicas.

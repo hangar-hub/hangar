@@ -117,6 +117,18 @@ func (r *userRow) toUser() *User {
 }
 
 func (us *UserStore) one(ctx context.Context, idb bun.IDB, where string, args ...any) (*User, error) {
+	u, err := us.row(ctx, idb, where, args...)
+	if err != nil {
+		return nil, err
+	}
+	if err := us.loadProviders(ctx, idb, []*User{u}); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// row returns one User without OIDCProviders.
+func (us *UserStore) row(ctx context.Context, idb bun.IDB, where string, args ...any) (*User, error) {
 	var row userRow
 	if err := us.query(idb).Where(where, args...).Limit(1).Scan(ctx, &row); err != nil {
 		if db.IsNotFound(err) {
@@ -124,11 +136,14 @@ func (us *UserStore) one(ctx context.Context, idb bun.IDB, where string, args ..
 		}
 		return nil, err
 	}
-	u := row.toUser()
-	if err := us.loadProviders(ctx, idb, []*User{u}); err != nil {
-		return nil, err
-	}
-	return u, nil
+	return row.toUser(), nil
+}
+
+// forRequest returns the User a session or Token belongs to, for
+// authenticating a request. It leaves OIDCProviders empty: a Principal
+// does not use them, and every authenticated request pays this lookup.
+func (us *UserStore) forRequest(ctx context.Context, id uuid.UUID) (*User, error) {
+	return us.row(ctx, us.s.db, "u.id = ?", id)
 }
 
 func (us *UserStore) loadProviders(ctx context.Context, idb bun.IDB, users []*User) error {
@@ -261,7 +276,7 @@ func (us *UserStore) createTx(ctx context.Context, tx bun.Tx, nu NewUser) (uuid.
 		if err := CheckPasswordPolicy(nu.Password, nu.Username); err != nil {
 			return uuid.Nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
-		h, err := HashPassword(nu.Password)
+		h, err := HashPassword(ctx, nu.Password)
 		if err != nil {
 			return uuid.Nil, err
 		}
@@ -425,7 +440,7 @@ func (us *UserStore) setPasswordTx(ctx context.Context, tx bun.IDB, u *User, pw 
 	if err := CheckPasswordPolicy(pw, u.Username); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	h, err := HashPassword(pw)
+	h, err := HashPassword(ctx, pw)
 	if err != nil {
 		return err
 	}

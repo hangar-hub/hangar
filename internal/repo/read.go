@@ -28,7 +28,7 @@ const maxTextDiff = 1 << 20
 // otherwise branches win over tags, and full ref names are looked up as
 // given. Annotated tags are peeled to their Commit.
 func (s *Store) Resolve(ctx context.Context, id model.RepoID, revision string) (model.CommitSHA, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return "", err
 	}
@@ -347,7 +347,7 @@ func (s *Store) summaries(ctx context.Context, repoID uuid.UUID, shas map[string
 // Tree implements Service. Directories come before files, each in byte
 // order of their paths, as on the Hub.
 func (s *Store) Tree(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, opts TreeOpts) ([]model.Entry, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +399,7 @@ func (s *Store) Tree(ctx context.Context, id model.RepoID, commit model.CommitSH
 
 // Entry implements Service.
 func (s *Store) Entry(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string) (model.Entry, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return model.Entry{}, err
 	}
@@ -411,10 +411,17 @@ func (s *Store) entry(ctx context.Context, repoID uuid.UUID, commit model.Commit
 	if err != nil {
 		return model.Entry{}, fmt.Errorf("%w: %w", ErrEntryNotFound, err)
 	}
-	if err := s.ensureTree(ctx, repoID, commit); err != nil {
-		return model.Entry{}, err
-	}
+	// Look the path up first: the tree cache of a Commit is filled in one
+	// transaction, so a row means it is complete, and the hot path of
+	// resolve costs one query instead of two. A miss is a path that does
+	// not exist or a cache not filled yet, so fill it and look again.
 	r, err := s.treeRow(ctx, repoID, commit, clean)
+	if errors.Is(err, ErrEntryNotFound) {
+		if err := s.ensureTree(ctx, repoID, commit); err != nil {
+			return model.Entry{}, err
+		}
+		r, err = s.treeRow(ctx, repoID, commit, clean)
+	}
 	if err != nil {
 		return model.Entry{}, err
 	}
@@ -427,7 +434,7 @@ func (s *Store) entry(ctx context.Context, repoID uuid.UUID, commit model.Commit
 
 // Entries implements Service.
 func (s *Store) Entries(ctx context.Context, id model.RepoID, commit model.CommitSHA, paths []string, expand bool) ([]model.Entry, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +471,7 @@ func (s *Store) Entries(ctx context.Context, id model.RepoID, commit model.Commi
 
 // OpenFile implements Service.
 func (s *Store) OpenFile(ctx context.Context, id model.RepoID, commit model.CommitSHA, p string, rng *blob.Range) (io.ReadCloser, model.Entry, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, model.Entry{}, err
 	}
@@ -540,7 +547,7 @@ func (r *releasingReader) Close() error {
 
 // Log implements Service.
 func (s *Store) Log(ctx context.Context, id model.RepoID, revision string, opts LogOpts) ([]CommitInfo, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -576,7 +583,7 @@ func (s *Store) Log(ctx context.Context, id model.RepoID, revision string, opts 
 
 // GetCommit implements Service.
 func (s *Store) GetCommit(ctx context.Context, id model.RepoID, sha model.CommitSHA) (*CommitInfo, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +702,7 @@ func (s *Store) blobMetas(ctx context.Context, dir string, oids []string) (map[s
 
 // Diff implements Service.
 func (s *Store) Diff(ctx context.Context, id model.RepoID, sha model.CommitSHA) ([]FileChange, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +799,7 @@ func (s *Store) diffBetween(ctx context.Context, objs *gitstore.Objects, from, t
 
 // FileDiff implements Service.
 func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitSHA, p string) (*FileDiff, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -810,7 +817,7 @@ func (s *Store) FileDiff(ctx context.Context, id model.RepoID, sha model.CommitS
 
 // CompareFile implements Service.
 func (s *Store) CompareFile(ctx context.Context, id model.RepoID, base, head model.CommitSHA, p string) (*FileDiff, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +864,7 @@ func (s *Store) fileDiff(ctx context.Context, objs *gitstore.Objects, changes []
 
 // Refs implements Service.
 func (s *Store) Refs(ctx context.Context, id model.RepoID) (*Refs, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +901,7 @@ func (s *Store) Refs(ctx context.Context, id model.RepoID) (*Refs, error) {
 
 // OpenView implements Service.
 func (s *Store) OpenView(ctx context.Context, id model.RepoID) (*GitView, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -907,7 +914,7 @@ func (s *Store) OpenView(ctx context.Context, id model.RepoID) (*GitView, error)
 
 // LFSRefs implements Service.
 func (s *Store) LFSRefs(ctx context.Context, id model.RepoID, oids []string) (map[string]LFSRef, error) {
-	row, err := s.lookup(ctx, s.db, id)
+	row, err := s.readLookup(ctx, id)
 	if err != nil {
 		return nil, err
 	}

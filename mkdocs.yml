@@ -144,6 +144,7 @@ nav:
       - Metrics: reference/metrics.md
   - Project:
       - Architecture: project/architecture.md
+      - Benchmarks: benchmarks.md
       - Contributing: project/contributing.md
       - Security policy: project/security.md
       - Changelog: project/changelog.md

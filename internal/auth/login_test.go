@@ -22,16 +22,16 @@ import (
 const goodPassword = "correct horse battery staple 42"
 
 func TestPasswordHashing(t *testing.T) {
-	h, err := auth.HashPassword(goodPassword)
+	h, err := auth.HashPassword(t.Context(), goodPassword)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(h, "$argon2id$v=19$m=65536,t=3,p=2$"), "parameters from 05-auth.md are stored in the hash: %s", h)
-	ok, err := auth.VerifyPassword(h, goodPassword)
+	ok, err := auth.VerifyPassword(t.Context(), h, goodPassword)
 	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = auth.VerifyPassword(h, goodPassword+"x")
+	ok, err = auth.VerifyPassword(t.Context(), h, goodPassword+"x")
 	require.NoError(t, err)
 	require.False(t, ok)
-	h2, err := auth.HashPassword(goodPassword)
+	h2, err := auth.HashPassword(t.Context(), goodPassword)
 	require.NoError(t, err)
 	require.NotEqual(t, h, h2, "salted")
 
@@ -42,7 +42,7 @@ func TestPasswordHashing(t *testing.T) {
 		"$argon2id$v=19$m=99999999,t=3,p=2$" + parts[4] + "$" + parts[5],
 		"$argon2id$v=19$m=65536,t=3,p=2$!!!$" + parts[5],
 	} {
-		_, err := auth.VerifyPassword(bad, goodPassword)
+		_, err := auth.VerifyPassword(t.Context(), bad, goodPassword)
 		require.Error(t, err, bad)
 	}
 }

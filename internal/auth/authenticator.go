@@ -132,7 +132,7 @@ func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
 	if err != nil {
 		return model.Principal{}, err
 	}
-	u, err := s.Users.Get(ctx, sess.UserID)
+	u, err := s.Users.forRequest(ctx, sess.UserID)
 	if errors.Is(err, ErrNotFound) {
 		return staleSession(ctx), nil
 	}
@@ -238,7 +238,7 @@ func (s *Service) registryPrincipal(ctx context.Context, token string) (model.Pr
 	if err != nil {
 		return model.Principal{}, fmt.Errorf("%w: bad subject", ErrInvalidCredentials)
 	}
-	u, err := s.Users.Get(ctx, uid)
+	u, err := s.Users.forRequest(ctx, uid)
 	if err != nil {
 		return model.Principal{}, fmt.Errorf("%w: unknown user", ErrInvalidCredentials)
 	}

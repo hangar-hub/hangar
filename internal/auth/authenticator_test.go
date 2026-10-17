@@ -5,11 +5,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/auth/authtest"
@@ -318,4 +320,56 @@ func TestWriteAuthError(t *testing.T) {
 			require.Contains(t, rec.Body.String(), "The client closed the request.", c.path)
 		}
 	}
+}
+
+// queryLog records the SQL a database runs.
+type queryLog struct {
+	mu      sync.Mutex
+	queries []string
+}
+
+func (l *queryLog) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context { return ctx }
+
+func (l *queryLog) AfterQuery(_ context.Context, ev *bun.QueryEvent) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.queries = append(l.queries, ev.Query)
+}
+
+func (l *queryLog) take() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := l.queries
+	l.queries = nil
+	return out
+}
+
+// Every authenticated request pays for its lookups (02-architecture.md
+// "Scale targets"), so a Token or session costs its own row and the
+// user's, and never the user's linked OIDC providers, which a Principal
+// does not carry.
+func TestAuthenticateLooksUpOnlyWhatAPrincipalNeeds(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		log := &queryLog{}
+		logged := *d
+		logged.DB = d.WithQueryHook(log)
+		s, _ := newSvc(t, &logged)
+		alice := mustUser(t, s, "alice", false)
+		_, secret, err := s.TokenStore.Create(ctx, auth.NewToken{UserID: alice.ID, Name: "laptop", Scope: model.ScopeRead})
+		require.NoError(t, err)
+		// The first use records last_used_at.
+		_, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+secret) })
+		require.NoError(t, err)
+		log.take()
+
+		p, err := authReq(t, s, http.MethodGet, func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+secret) })
+		require.NoError(t, err)
+		require.Equal(t, alice.ID, p.UserID)
+		queries := log.take()
+		require.Len(t, queries, 2, "the Token and its user: %v", queries)
+		for _, q := range queries {
+			require.NotContains(t, q, "identities")
+		}
+	})
 }

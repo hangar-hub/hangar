@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
 	"github.com/jamesagarside/hangar/internal/hfapi"
 	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
@@ -397,6 +398,57 @@ func TestResolveMovedRepo(t *testing.T) {
 	r = e.Request(t, http.MethodGet, "/api/models/alice/hidden-old", "alice", "")
 	require.Equal(t, http.StatusTemporaryRedirect, r.StatusCode)
 	require.Equal(t, "/api/models/alice/hidden-new", r.Header.Get("Location"))
+}
+
+// countingAuthz counts permission checks.
+type countingAuthz struct {
+	inner auth.Authz
+	mu    sync.Mutex
+	n     int
+}
+
+func (a *countingAuthz) Can(ctx context.Context, p model.Principal, action auth.Action, t auth.Target) error {
+	a.mu.Lock()
+	a.n++
+	a.mu.Unlock()
+	return a.inner.Can(ctx, p, action, t)
+}
+
+func (a *countingAuthz) take() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	n := a.n
+	a.n = 0
+	return n
+}
+
+// resolve is the Hub's hottest path (02-architecture.md "Scale targets"),
+// and every permission check costs database queries, so a download checks
+// once, and a check that refuses the action still redirects a moved Repo
+// the caller can read.
+func TestResolveChecksPermissionOnce(t *testing.T) {
+	t.Parallel()
+	counter := &countingAuthz{}
+	e := newEnv(t, func(o *hfapitest.Options) {
+		o.Deps = func(d *hfapi.Deps) { counter.inner = d.Authz; d.Authz = counter }
+	})
+	rp, _ := seed(t, e, "alice", modelID("alice", "once"), model.VisibilityPublic, map[string]string{"config.json": configJSON})
+	counter.take()
+	for _, m := range []string{http.MethodHead, http.MethodGet} {
+		r := e.Request(t, m, "/alice/once/resolve/main/config.json", "bob", "")
+		require.Equal(t, http.StatusOK, r.StatusCode, m)
+		require.Equal(t, 1, counter.take(), m)
+	}
+
+	_, err := e.Repos.UpdateSettings(context.Background(), rp.ID, repo.SettingsUpdate{Gating: &repo.Gating{Mode: "manual"}}, e.Users["alice"].Principal)
+	require.NoError(t, err)
+	_, err = e.Repos.Rename(context.Background(), rp.ID, "renamed", e.Users["alice"].Principal)
+	require.NoError(t, err)
+	r := e.Request(t, http.MethodGet, "/alice/once/resolve/main/config.json", "bob", "")
+	require.Equal(t, http.StatusTemporaryRedirect, r.StatusCode, "a gated Repo bob can read still redirects")
+	require.Equal(t, "/alice/renamed/resolve/main/config.json", r.Header.Get("Location"))
+	requireHubError(t, e.Request(t, http.MethodGet, "/alice/renamed/resolve/main/config.json", "bob", ""), http.StatusForbidden, "GatedRepo")
+	require.Equal(t, 2, counter.take())
 }
 
 // pullThrough is a fake hfapi.PullThrough.

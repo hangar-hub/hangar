@@ -100,7 +100,9 @@ type Target struct {
 }
 
 // Authz decides permissions. Can returns nil, or an error wrapping
-// ErrForbidden, ErrNotFound or ErrGated. Token scopes and restrictions
+// ErrForbidden, ErrNotFound or ErrGated. A caller who cannot read a Repo
+// gets ErrNotFound for every action on it, so ErrForbidden or ErrGated for
+// a Repo means the caller can read it. Token scopes and restrictions
 // narrow the rules and never widen them.
 type Authz interface {
 	Can(ctx context.Context, p model.Principal, action Action, target Target) error

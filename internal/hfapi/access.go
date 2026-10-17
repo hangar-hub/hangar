@@ -35,7 +35,11 @@ type repoRef struct {
 // checks the action. ok false means a response was written.
 //
 // Read access is checked before redirecting, so the redirect never shows a
-// private Repo's new name to a caller who cannot read it.
+// private Repo's new name to a caller who cannot read it. One Authz call
+// covers both checks: a caller who cannot read a Repo gets ErrNotFound for
+// every action (auth.Authz), so ErrForbidden or ErrGated means the Repo is
+// readable and only the action is refused. Every Hub request comes through
+// here, and each check costs database queries.
 func (h *Handler) load(w http.ResponseWriter, r *http.Request, ref repoRef, action auth.Action) (*repo.Repo, bool) {
 	ctx := r.Context()
 	p := httpx.Principal(ctx)
@@ -57,7 +61,8 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, ref repoRef, acti
 		}
 		return nil, false
 	}
-	if err := h.d.Authz.Can(ctx, p, auth.ActionRead, target(rp)); err != nil {
+	err = h.d.Authz.Can(ctx, p, action, target(rp))
+	if err != nil && !errors.Is(err, auth.ErrForbidden) && !errors.Is(err, auth.ErrGated) {
 		h.denied(w, r, ref.id, err)
 		return nil, false
 	}
@@ -66,11 +71,9 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, ref repoRef, acti
 		return nil, false
 	}
 	httpx.SetRepo(ctx, rp.ID)
-	if action != auth.ActionRead {
-		if err := h.d.Authz.Can(ctx, p, action, target(rp)); err != nil {
-			h.denied(w, r, rp.ID, err)
-			return nil, false
-		}
+	if err != nil {
+		h.denied(w, r, rp.ID, err)
+		return nil, false
 	}
 	return rp, true
 }
