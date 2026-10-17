@@ -2,7 +2,7 @@
 
 Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the test that proves it, the Hub API contract MUSTs, the suite results, the request resolutions and the open issues.
 
-It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every suite in [Suite results](#suite-results) ran in round 8 on detached worktrees at that commit. Phase 2 is **not finished**: the suites are green, but a user's 20 GB import failed on the preview Instance, which runs an older build (see [Open issues](#open-issues)). `main` is unchanged.
+It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every suite in [Suite results](#suite-results) ran in round 8 on detached worktrees at that commit. Phase 2 is **not finished**: the suites are green, but a user's 20 GB import failed on the preview Instance, which runs an older build (see [Open issues](#open-issues)). `main` is unchanged. [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) describes the fixes for the preview findings, tested at `3a16ea0`; the sections after it still describe round 8.
 
 ## Summary
 
@@ -12,6 +12,75 @@ It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every su
 - 108 request items have a resolution; 3 are deferred, 2 of them to James.
 - AWS S3 passed in full on 2026-10-15 after the fixes for the 2026-10-14 failures.
 - Red: the preview Instance's import failure (high), which needs a redeploy and a rerun by James. This report was stale before this update; it now covers every merge.
+
+## Preview feedback round (2026-10-17)
+
+James deployed image `preview-5975bec` on bellatrix (Raspberry Pis, MinIO on a NAS behind Nginx Proxy Manager) on 2026-10-16 and reported 13 findings. This round fixed them on `integration/v1` from `c79363e`. The suites ran in round 6 at `3a16ea0`. Three commits came after that run and are covered by targeted checks only (see [After the suites](#after-the-suites)). `main` is unchanged, and nothing was pushed or published.
+
+### What changed for each finding
+
+"Already fixed" means a fix from fix rounds 5 to 8, before this round.
+
+| Finding | What changed | Commits | Regression tests |
+|---|---|---|---|
+| 1. `huggingface_hub` single-PUT LFS uploads of 10 to 64 MiB fail on MinIO without Xet | `PresignPut` signs no headers and writes to a staging key; `Verify` hashes the staged object and copies it into place server-side, so a client still cannot write unverified bytes to a shared key. The fake Blob store now refuses unsigned or extra `x-amz-` headers as MinIO and AWS do | `6707273` | `TestPresignedPutWorksWithoutHeaders`, `TestPresignedPutCannotReplaceAVerifiedObject`, `TestPresignedPutVerifyRejectsWrongContent`, `TestFakeEnforcesSignedHeaderRules`, `compat/hf` `TestHubBasicUploadToMinIOWithoutXet` (20 MiB, Xet off, real MinIO). Recorded in the Hub compatibility matrix (`4299915`) |
+| 2. The migration hook deadlocks the first Argo CD sync | `migrations.mode=initContainer` runs migrations in an init container instead of a Helm hook. `docs/get-started/helm.md` has a "Run with Argo CD" section | `29d2073`, `b6a8e5f`, `d91688f` | `TestChartMigrationModes`, `TestKindGitOpsInstall` |
+| 3. `generateSecrets` regenerates secrets when `lookup` returns nothing | The chart refuses to generate secrets when it cannot reach the cluster, and `existingSecret` is documented for GitOps | `29d2073`, `b6a8e5f` | `TestChartGenerateSecretsNeedsCluster`, `TestKindGeneratedSecretsSurviveRenders` |
+| 4. The secret checksum ignores `existingSecret`; the cache volume equals the pack cache | The checksum annotation follows `existingSecret`, and the cache volume is sized above `git.cache_size` | `29d2073` | `TestChartSecretChecksumFollowsExistingSecret`, `TestChartCacheVolumeOutgrowsGitCache` |
+| 5. The storage docs say `us-east-1` for MinIO | `docs/operate/storage.md` says to use MinIO's configured region | `d91688f` | `TestStorageDocsMinIORegion` |
+| 6. Log noise: health probes, `create_repo(exist_ok=True)`, the landing page's `/me` 401 | Passing health probes log at `DEBUG`; creating an existing Repo uses `ON CONFLICT DO NOTHING`; `GET /me` answers 204 when nobody is signed in. After the audit, the signed-out page tests fail on any failed request or `Failed to load resource` error | `80fc37e`, `c76ce22` | `TestAccessLogPutsPassingHealthProbesAtDebug`, `TestCreateExistingRepoCausesNoDatabaseError` (both drivers), `TestSessionsTokensAndKeys`, `ui/mock/mock.test.ts`, the signed-out tests in `ui/e2e/pages.spec.ts` and `ui/e2e-real/pages.spec.ts` |
+| 7. A write Token cannot delete a Repo through the Hub API | A write Token can administer the Repos its user administers, as on the Hub. Decision recorded in [decisions](decisions.md) | `54e5307` | `TestPermissionMatrix` (member admin with a write Token), `compat/hf` `test_write_token_administers_own_repos` |
+| 8. One failed part PUT aborts a whole import | Part uploads and downloads retry up to six times on resets, timeouts and 408, 425, 429 and 5xx answers, with jittered backoff from 1 to 30 seconds or `Retry-After`. An expired part URL (403) plans the file again with new URLs. Downloads resume with `Range`. Progress counts resent bytes once. Other files carry on when one fails | `66a9488`, `1d0e599`, `eecc324` | `TestPushRetriesFailedParts`, `TestPushDoesNotRetryAPartTheInstanceRefuses`, `TestPushRenewsExpiredPartURLs`, `TestPullRetriesABrokenDownload`, `TestTransferBackoffGrowsAndIsCapped`, `internal/cli/upload_continue_test.go` |
+| 9. A client-cancelled sign-in is logged as a 500 `ERROR` | Already fixed for authentication and git reads (`6caf784`, `56fd278`). This round extended 499 to every error writer, including the Dataset Viewer and Ollama | `6c93d86`, `9d8d29d` | `TestCancelledLoginIsNotAServerError`, `clientgone_internal_test.go` in `api`, `auth`, `hfapi`, `gitserver`, `ollama` and `datasets/viewer` |
+| 10. `hangar import` looks frozen while it waits; Discover takes 40 s | The import prints what it is waiting for per Repo, with elapsed time. A Discover detail fetches the card, dependencies and Viewer answers in parallel instead of one after another | `66a9488`, `8dc2c71`, `d38afa5` | `TestImportSaysWhatItIsWaitingFor`, `TestWaitStatusOnATerminal`, `TestDiscoverDetailFetchesFromTheUpstreamAtOnce` |
+| 11 and 12. Product decisions: release on hold, Taxiway teal, separate Models and Datasets, equal-height cards | Models and Datasets are separate top-level sections with their own lists, filters and New buttons; `/arsenal` redirects and keeps its filters. A model has a "Datasets used" picker that writes `datasets:` to its card, and a dataset lists "Used by". Datasets of any file types explain themselves when the Viewer cannot read them. Taxiway teal tokens in both themes. Cards in a row have equal height with stats at the bottom and quant chips capped with "+N". Spec 09, `docs/guides/datasets.md`, the search palette, the README screenshot and spec 15's Phase 4 hold note are updated, and [decisions](decisions.md) records every decision | `6fd838a`, `2c15e82` | `ui/e2e/sections.spec.ts` (4 tests), the Taxiway teal, equal-height card, main navigation and dark-theme axe tests in `ui/e2e/pages.spec.ts` |
+| 13. Completion re-streams the whole object through the server, and nginx cuts reads at 1 GiB | (a) Already fixed: the server resumes a broken read with ranged GETs and keeps the upload and its parts (`fix/r4-w2`), and the CLI sends a completion again after 503 (`071ee7d`). (b) Completion hashes the assembled object and copies it into place server-side, in 512 MiB `UploadPartCopy` requests above the copy part size, pinned to the source's ETag. (c) A completion carries on after its caller leaves, and a repeated completion joins the one in progress. (d) `docs/operate/proxies.md` gives the nginx settings for MinIO, and `hangar admin doctor --large-read` finds a proxy that cuts long reads | `6707273`, `7972a2c`, `a3e3502`, `6e470e6`, `87f07c3`, `d91688f`, `dbbe9fb` | `TestCompleteUploadResumesABrokenRead`, `TestResumingReader*`, `TestCompleteUploadKeepsPartsWhenTheReadFails`, `TestCompleteUploadCopiesServerSide`, `TestCopyMultiGigabyteObjects` (2 GiB+, 5 GiB, 6 GiB), `TestCopyRefusesASourceThatChanges`, `TestCompleteUploadCarriesOnWhenTheCallerGoesAway`, `TestCompleteUploadFinishesAfterTheCallerLeft`, `TestPushFinishesACompletionAProxyCutOff`, `internal/repo/lfs_large_internal_test.go`, `TestProxyDocsNginxStreamsLargeFiles`, `internal/cli/doctor_test.go` |
+
+The round also fixed two flaky tests the runs exposed: `TestPushRefusesLargeNonLFSBlob` (`b0ddde7`, a go-git pack index quirk that dropped the file name about once in a few hundred runs) and `TestCompleteUploadCarriesOnWhenTheCallerGoesAway` (`b27da7d`, the test opened its gate before the second completion had joined the first).
+
+### Suite results
+
+Round 6, on detached worktrees at `3a16ea0`, Go 1.27.2 and Node 24.19.0. Load average was between 17 and 75 during the runs, with other projects on the machine.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `make lint` | Exit 0: golangci-lint, `go vet` for the compat tags, Biome, `tsc` and `lint-style` |
+| Unit and integration | `make test` (`-race -count=1 -tags integration`, SQLite, Postgres 18 and MinIO) | Vitest 25 files, 107 of 107. Go: 44 packages ok on the first pass; 33 packages stopped with `[build failed]` before any test ran, because files vanished from the shared Go build cache (see [Still open](#still-open)). Rerun with the same flags: all 33 ok |
+| Coverage | `make cover` | Exit 0. Every package ok and at or above its floor, which is a second clean full Go pass |
+| Generated files | `make check-generate` | Exit 0, no diff |
+| Vulnerabilities | `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` | 0 vulnerabilities reached; 3 in required modules, none called |
+| Workflows | `actionlint .github/workflows/*.yml` | Exit 0 |
+| git and Hub clients in Go | `scripts/with-test-postgres.sh scripts/with-test-minio.sh go test -count=1 -timeout 30m -tags compat ./compat/hf ./compat/git` | ok. `compat/hf` 63 s, including `TestHubBasicUploadToMinIOWithoutXet`; `compat/git` 897 s on the fake, real SQLite and real Postgres backends |
+| Hub clients against the binary | `HANGAR_HF_INSTANCE=binary uv run --frozen --project compat python -m pytest compat/hf` | Python 3.11.7, `hf_xet` 1.7.0: 42 passed, 2 skipped on SQLite and on Postgres, each with Xet uploads off and on. The skips belong to other matrix cells (`diffusers` and `upload_large_folder`) |
+| Xet | `HANGAR_XET_GO_TAGS=xetreal` pytest `compat/xet`; `go test -tags compat,xetserver,xetreal ./compat/xet` | `hf_xet` 1.7.0 on SQLite and Postgres and 1.6.0 on SQLite: 16 passed each. Go: ok |
+| Ollama, Upstreams, Dataset Viewer, LM Studio | `scripts/with-test-postgres.sh scripts/with-test-minio.sh go test -count=1 -timeout 40m -tags compat ./compat/ollama/ ./compat/upstream/ ./compat/viewer/ ./compat/lmstudio/` with `HANGAR_BINARY` | Exit 0, 133 subtests passed, none skipped. Ollama 0.31.1: 7 of 7 scenarios on three targets. Viewer pytest: 6 of 6. LM Studio also passed against a real server on SQLite and Postgres |
+| UI against the mock | `pnpm exec playwright test` at 390, 1024 and 1440 px | 356 passed, 43 skipped by design (desktop-only budget and lint tests, the phone card-height test, screenshot tests). A dark-theme pass: 272 passed, 1 skipped |
+| UI against a real Instance | `pnpm exec playwright test -c playwright.real.config.ts` against two `make build` binaries | 210 passed, 0 skipped. A dark-theme pass of `e2e-real/pages.spec.ts`: 159 passed |
+| Compose | `scripts/compose-smoke.sh` | Passed on `quickstart`, `postgres-minio`, `oidc-keycloak` and `scale` (health, sign-in, Token, upload, download, git clone, Pull from huggingface.co) |
+| Deploy, static | `make lint-deploy`; `go test ./deploy/`; `go test -tags helm ./deploy/` | Exit 0. kubeconform strict for Kubernetes 1.33 on every render. 17 and 35 passed |
+| Helm on kind | `helm install` with `ci/default-values.yaml` and with `examples/gitops-values.yaml`, smoke, `helm test`; `scripts/kind-chart-test.sh` | All passed, including `TestKindGitOpsInstall` (init container `migrate`, no migration Job) and `TestKindGeneratedSecretsSurviveRenders` |
+| Audit | Targeted `go test -race -tags integration` on the changed packages, Playwright on the changed specs, diff review | Every package passed (two on rerun after the cache problem). Findings 1 to 13 each have a fix and a regression test. House style clean; no test skipped, weakened or deleted. **Red at `3a16ea0`** for two findings, both addressed afterwards (below) |
+
+No test failed on its own merits and none was flaky in round 6.
+
+### After the suites
+
+These commits came after `3a16ea0`, so no round 6 suite covers them.
+
+| Commit | What it changed | Checked |
+|---|---|---|
+| `b27da7d` | Fixes the flaky `TestCompleteUploadCarriesOnWhenTheCallerGoesAway` | `go test -race -count=5 -run TestCompleteUpload ./internal/repo/`: 135 passed |
+| `c76ce22` | Audit finding: the signed-out page tests now fail on any API answer of 400 or above or a `Failed to load resource` error, so the `/me` 401 cannot come back unnoticed | `pnpm exec playwright test e2e/pages.spec.ts -g "signed out"`: 15 passed. The author's full `e2e/pages.spec.ts` run: 260 passed, 1 skipped. With the mock answering 401 again, the test failed as intended. `e2e-real` not run |
+| `d1141f6` | Audit finding: `scripts/go-test.sh` runs packages again only when a Go build cache file vanished mid-run, never after a compile error or a test failure; `make test-go`, `make test-compat` and `scripts/coverage.sh` use it | `scripts/check-go-test.sh` and `scripts/check-test-targets.sh`: exit 0 |
+
+### Still open
+
+- **Rerun the import on the preview (needs James).** Nothing here has moved a multi-GB file through Nginx Proxy Manager. James rebuilds the preview and the CLI from `integration/v1`, runs `hangar admin doctor --large-read` against Aquila's MinIO, and reruns the `Qwen2.5-Coder-32B-Instruct-GGUF` import. This closes the red item in [Open issues](#open-issues).
+- **Full suites at the branch head.** The three commits above have targeted checks only; the next round should run `make test` (now through `scripts/go-test.sh`) and the `e2e-real` suite at the head.
+- **Shared Go build cache.** Concurrent runners on this machine lost cache files mid-build with the disk at 99%. `d1141f6` makes the targets recover, and CONTRIBUTING.md explains how to give a run its own `GOCACHE`; disk space on the machine is still tight.
+- **Local `govulncheck`.** `~/go/bin/govulncheck` was built with Go 1.26 and cannot load this module; rebuild it with Go 1.27. `go run ...@latest` works.
+- **Not run this round.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, fuzz, and `make release-rehearsal`.
+- **Release on hold.** Nothing is published until James says go.
 
 ## Suite results
 
@@ -210,7 +279,7 @@ Fixes in earlier rounds are described in the owners' handoffs, in `RESOLUTIONS.m
 
 ### Red
 
-- **A 20 GB import fails on the preview Instance (high, needs James).** `hangar import` of `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` failed with HTTP 500 on `qwen2.5-coder-32b-instruct-q4_k_m.gguf`. The preview's log shows upload completion failing while reading the assembled object back from Aquila's MinIO: `repo: upload lfs part: upload part 65: unexpected EOF` at 14:55:49Z on 2026-10-16, then part 66 at 15:23:27Z, and part 66 once for `lmstudio-community/Qwen3.8-27B-MLX-4bit` (a later attempt succeeded). The CLI's message names no request ID, so it was built before `1c40413`, and the preview runs image `preview-5975bec`. Both sides are fixed on this branch: the server resumes a broken read with ranged reads, keeps the upload and its parts and answers 503 (`fix/r4-w2`), and the CLI sends the completion again after that 503 (`071ee7d`). `TestCompleteUploadResumesABrokenRead`, `TestCompleteUploadKeepsPartsWhenTheReadFails`, `TestResumingReader` and `TestImportResendsCompletionAfter503WithRetryAfter` pass with `-race -count=3`. No round 8 suite moves a multi-GB file, so the fix is not proven end to end. To close it, James rebuilds the preview from `integration/v1`, installs the CLI from the same commit and reruns the import. Why the MinIO read drops at about the same offset each time is not known; the proxy in front of Aquila's MinIO is worth checking if the rerun still logs retries.
+- **A 20 GB import fails on the preview Instance (high, needs James).** Update 2026-10-17: finding 13 is now fixed further (server-side copy, completions that outlive their caller, CLI part retries); see [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17). The rerun is still needed. `hangar import` of `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` failed with HTTP 500 on `qwen2.5-coder-32b-instruct-q4_k_m.gguf`. The preview's log shows upload completion failing while reading the assembled object back from Aquila's MinIO: `repo: upload lfs part: upload part 65: unexpected EOF` at 14:55:49Z on 2026-10-16, then part 66 at 15:23:27Z, and part 66 once for `lmstudio-community/Qwen3.8-27B-MLX-4bit` (a later attempt succeeded). The CLI's message names no request ID, so it was built before `1c40413`, and the preview runs image `preview-5975bec`. Both sides are fixed on this branch: the server resumes a broken read with ranged reads, keeps the upload and its parts and answers 503 (`fix/r4-w2`), and the CLI sends the completion again after that 503 (`071ee7d`). `TestCompleteUploadResumesABrokenRead`, `TestCompleteUploadKeepsPartsWhenTheReadFails`, `TestResumingReader` and `TestImportResendsCompletionAfter503WithRetryAfter` pass with `-race -count=3`. No round 8 suite moves a multi-GB file, so the fix is not proven end to end. To close it, James rebuilds the preview from `integration/v1`, installs the CLI from the same commit and reruns the import. Why the MinIO read drops at about the same offset each time is not known; the proxy in front of Aquila's MinIO is worth checking if the rerun still logs retries.
 
 ### Gaps and decisions
 
