@@ -85,6 +85,17 @@ function Result({ item, onOpen }: { item: DiscoverItem; onOpen: () => void }) {
   );
 }
 
+/**
+ * repoIdQuery returns the query as a Repo ID when it has the form
+ * `namespace/name`, so Discover can open that Repo directly. Upstream
+ * searches do not list every Repo: huggingface.co leaves some
+ * organisations out of search, such as hf-internal-testing.
+ */
+export function repoIdQuery(q: string | undefined): string | undefined {
+  const id = q?.trim();
+  return id && /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/.test(id) ? id : undefined;
+}
+
 /** Search Upstreams for models and datasets, marked with their Arsenal state (BROWSE-2, DATA-7). */
 export function DiscoverPage() {
   const [search, update] = useSearchState<DiscoverSearch>();
@@ -119,6 +130,11 @@ export function DiscoverPage() {
     getNextPageParam: (l) => l.next_cursor || undefined,
   });
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const queryId = repoIdQuery(search.q);
+  const exactId =
+    queryId && !items.some((i) => i.id.toLowerCase() === queryId.toLowerCase())
+      ? queryId
+      : undefined;
   const tab = (t: "models" | "datasets", label: string) => (
     <button
       type="button"
@@ -227,6 +243,13 @@ export function DiscoverPage() {
           </label>
         ))}
       </div>
+      {exactId && upstreams.data?.items.length ? (
+        <p className="text-sm">
+          <Button variant="secondary" size="sm" onClick={() => update({ repo: exactId })}>
+            Open <span className="font-mono">{exactId}</span>
+          </Button>
+        </p>
+      ) : null}
       {upstreams.isSuccess && !upstreams.data.items.length ? (
         <EmptyState icon={<Telescope />} title="No Upstreams are enabled">
           Ask an admin to enable huggingface.co or add another Upstream.
