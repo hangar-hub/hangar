@@ -193,6 +193,31 @@ export function watchConsole(page: Page): string[] {
 }
 
 /**
+ * Records every request the page could not load: an API answer of 400 or
+ * above, and each "Failed to load resource" error the browser logs. A
+ * signed-out page has no reason to send a request that fails, and the
+ * browser logs any 4xx or 5xx answer in the console, as it did for the 401
+ * from GET /me that the landing page used to get (bellatrix finding 6).
+ * watchConsole does not look at these, because signed-in pages such as a
+ * not-found Repo fail a request on purpose.
+ */
+export function watchFailedLoads(page: Page): string[] {
+  const failures: string[] = [];
+  page.on("response", (r) => {
+    if (isApiRequest(r.request()) && r.status() >= 400) {
+      failures.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`);
+    }
+  });
+  page.on("console", (m) => {
+    if (m.type() === "error" && /Failed to load resource/i.test(m.text())) {
+      const url = m.location().url;
+      failures.push(`${m.text()} (${url ? new URL(url).pathname : "unknown URL"})`);
+    }
+  });
+  return failures;
+}
+
+/**
  * Runs every axe rule, as phase 0's shell test did: the WCAG 2.2 AA rules
  * (09-web-ui.md "Accessibility") and axe's best practices, such as heading
  * order.
