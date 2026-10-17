@@ -266,6 +266,6 @@ func (ts *TokenStore) authenticate(ctx context.Context, secret string) (model.Pr
 	}
 	p := u.Principal(model.AuthToken)
 	p.Token = &model.TokenInfo{ID: row.ID, Name: row.Name, Scope: model.Scope(row.Scope),
-		Restrictions: model.TokenRestrictions{Namespaces: row.Restrictions.Namespaces, Repos: row.Restrictions.Repos}}
+		Restrictions: model.TokenRestrictions{Namespaces: row.Restrictions.Namespaces, Repos: row.Restrictions.Repos}, ExpiresAt: row.ExpiresAt}
 	return p, nil
 }

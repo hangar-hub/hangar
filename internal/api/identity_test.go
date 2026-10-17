@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -248,6 +249,15 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		tok2 := &client{e: e, http: http.DefaultClient, bearer: unrestricted.Secret}
 		tok2.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "wider", "scope": "admin"}, http.StatusForbidden, nil)
 		tok2.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "narrower", "scope": "read"}, http.StatusCreated, nil)
+		// A Token that expires cannot create one that outlives it.
+		soon := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+		var expiring gen.TokenCreated
+		alice.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "ci-1h", "scope": "write", "expires_at": soon}, http.StatusCreated, &expiring)
+		tok3 := &client{e: e, http: http.DefaultClient, bearer: expiring.Secret}
+		tok3.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "forever", "scope": "read"}, http.StatusForbidden, nil)
+		tok3.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "later", "scope": "read", "expires_at": soon.Add(time.Minute)}, http.StatusForbidden, nil)
+		tok3.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "same", "scope": "read", "expires_at": soon}, http.StatusCreated, nil)
+		tok3.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "sooner", "scope": "read", "expires_at": soon.Add(-time.Minute)}, http.StatusCreated, nil)
 		readTok := &client{e: e, http: http.DefaultClient}
 		var rt gen.TokenCreated
 		alice.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "ro", "scope": "read"}, http.StatusCreated, &rt)
