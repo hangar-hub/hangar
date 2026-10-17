@@ -21,13 +21,19 @@ describe("UI copy agrees with the docs", () => {
   });
 
   it("describes Token scopes as the permissions page does", () => {
-    // A write Token administers Repos the user is an admin of (decided on
-    // 2026-10-17); the admin scope adds Organisation Members and the Instance.
+    // A write Token administers Repos the user is an admin of only through
+    // the Hub API calls huggingface_hub makes (decided by James on
+    // 2026-10-17, "Hub actions only"); the admin scope covers every other
+    // Repo administration, Organisation Members and the Instance.
     expect(scopeHelp.write).toMatch(/start Pulls/);
+    expect(scopeHelp.write).toMatch(/huggingface_hub/);
     expect(scopeHelp.write).toMatch(/Repos you administer/);
+    expect(scopeHelp.write).not.toMatch(/webhooks|transfer/);
+    expect(scopeHelp.admin).toMatch(/webhooks/);
     expect(scopeHelp.admin).toMatch(/Organisation Members/);
-    expect(scopeHelp.admin).not.toMatch(/settings|webhooks/);
-    expect(doc("concepts/permissions.md")).toMatch(/`admin` also manages Organisation Members/);
+    const permissions = doc("concepts/permissions.md");
+    expect(permissions).toMatch(/through `huggingface_hub`/);
+    expect(permissions).toMatch(/`admin` is needed for everything else that administers a Repo/);
   });
 });
 
