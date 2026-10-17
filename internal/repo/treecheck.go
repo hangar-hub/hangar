@@ -20,6 +20,10 @@ import (
 // in full.
 const DefaultMaxTreePaths = 1_000_000
 
+// maxTreeObject bounds the commit and tree objects checkTrees reads into
+// memory, as gitstore.PackLimitsFor bounds pushed objects.
+const maxTreeObject = gitstore.MinPackObjectSize
+
 // errTreeTooLarge is a Commit over MaxTreePaths or with a path over
 // model.MaxPathLength, found while listing it.
 var errTreeTooLarge = errors.New("the commit has too many files or too long a path to list")
@@ -51,18 +55,22 @@ func (s *Store) checkTrees(ctx context.Context, dir string, commits []string, na
 	if len(commits) == 0 {
 		return nil
 	}
-	g := s.git.Git()
-	roots := make(map[string]string, len(commits))
-	err := g.BatchRead(ctx, dir, commits, func(info gitstore.ObjectInfo, content []byte) error {
-		tree, ok := commitTreeOID(content)
-		if info.Missing || !ok {
-			return fmt.Errorf("%w: commit %s has no tree", ErrInvalid, info.OID)
-		}
-		roots[info.OID] = tree
-		return nil
-	})
+	batch, err := s.git.Git().OpenBatch(ctx, dir)
 	if err != nil {
 		return err
+	}
+	defer func() { _ = batch.Close() }()
+	roots := make(map[string]string, len(commits))
+	for _, c := range commits {
+		info, content, err := batch.Read(c, maxTreeObject)
+		if err != nil {
+			return err
+		}
+		tree, ok := commitTreeOID(content)
+		if info.Missing || !ok {
+			return fmt.Errorf("%w: commit %s has no tree", ErrInvalid, c)
+		}
+		roots[c] = tree
 	}
 	trees := map[string][]treeEntry{}
 	queued := map[string]bool{}
@@ -79,25 +87,28 @@ func (s *Store) checkTrees(ctx context.Context, dir string, commits []string, na
 			return &PolicyError{Message: fmt.Sprintf("a Commit in the push has folders nested more than %d deep, so its paths are longer than the limit of %d bytes", model.MaxPathLength/2, model.MaxPathLength)}
 		}
 		var next []string
-		err := g.BatchRead(ctx, dir, level, func(info gitstore.ObjectInfo, content []byte) error {
+		for _, oid := range level {
+			info, content, err := batch.Read(oid, maxTreeObject)
+			if errors.Is(err, gitstore.ErrObjectTooLarge) {
+				return &PolicyError{Message: fmt.Sprintf("tree %s is %d bytes, over the limit of %d for one folder", oid, info.Size, maxTreeObject)}
+			}
+			if err != nil {
+				return err
+			}
 			if info.Missing || info.Type != "tree" {
-				return fmt.Errorf("%w: tree %s is missing", ErrInvalid, info.OID)
+				return fmt.Errorf("%w: tree %s is missing", ErrInvalid, oid)
 			}
 			ents, err := parseTreeObject(content, names)
 			if err != nil {
 				return err
 			}
-			trees[info.OID] = ents
+			trees[oid] = ents
 			for _, e := range ents {
 				if e.sub != "" && !queued[e.sub] {
 					queued[e.sub] = true
 					next = append(next, e.sub)
 				}
 			}
-			return nil
-		})
-		if err != nil {
-			return err
 		}
 		level = next
 	}

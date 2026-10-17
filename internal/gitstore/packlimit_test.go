@@ -2,6 +2,7 @@ package gitstore_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os/exec"
@@ -219,4 +220,35 @@ func TestPackLimitsFor(t *testing.T) {
 	require.Equal(t, int64(1<<30), gitstore.PackLimitsFor(1<<30, 0).MaxObjectSize)
 	require.Zero(t, gitstore.PackLimitsFor(1, 0).MaxUnpacked)
 	require.Equal(t, int64(gitstore.MinUnpacked), gitstore.PackLimitsFor(1, 64<<10).MaxUnpacked)
+}
+
+func TestBatchReadsObjectsOneAtATime(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	git := func(stdin string, args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Stdin = strings.NewReader(stdin)
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	git("", "init", "-q", "--bare")
+	small := git("hello\n", "hash-object", "-w", "--stdin")
+	large := git(strings.Repeat("x", 100), "hash-object", "-w", "--stdin")
+	b, err := gitstore.Git{Home: t.TempDir()}.OpenBatch(context.Background(), dir)
+	require.NoError(t, err)
+	info, content, err := b.Read(small, 10)
+	require.NoError(t, err)
+	require.Equal(t, "blob", info.Type)
+	require.Equal(t, "hello\n", string(content))
+	info, _, err = b.Read(strings.Repeat("0", 40), 10)
+	require.NoError(t, err)
+	require.True(t, info.Missing)
+	_, content, err = b.Read(small, 10)
+	require.NoError(t, err)
+	require.Equal(t, "hello\n", string(content), "the stream stays in step")
+	_, _, err = b.Read(large, 10)
+	require.ErrorIs(t, err, gitstore.ErrObjectTooLarge)
+	_ = b.Close()
 }
