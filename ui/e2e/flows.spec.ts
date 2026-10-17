@@ -658,12 +658,18 @@ test("shows the empty Models and Datasets lists and virtualises long lists", asy
   await expect(list.getByRole("link", { name: "bulk/bulk-model-000" })).toBeVisible();
   // Load every page: by button, or by scrolling to the end of the list.
   const last = list.getByRole("link", { name: "bulk/bulk-model-259" });
+  const more = page.getByRole("button", { name: "Load more" });
   await expect(async () => {
-    const more = page.getByRole("button", { name: "Load more" });
-    if (await more.isVisible()) await more.click();
+    // Scrolling to the end can load the last page between isVisible and
+    // click, and then the button unmounts for good. A click without a
+    // timeout would wait for it until toPass runs out, so give the click a
+    // short timeout and let the next iteration check the list instead.
+    if (await more.isVisible()) await more.click({ timeout: 1_000 }).catch(() => {});
     await page.keyboard.press("End");
     await expect(last).toBeVisible({ timeout: 500 });
   }).toPass({ timeout: 45_000 });
+  // The last page is in, so there is nothing more to load.
+  await expect(more).toHaveCount(0);
   // 260 Repos are loaded, but only the rows near the screen are in the page.
   const rendered = await list.locator("article").count();
   expect(rendered).toBeGreaterThan(0);
