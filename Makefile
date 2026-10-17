@@ -33,9 +33,6 @@ export HANGAR_TEST_POSTGRES ?= 1
 # MinIO depends on testcontainers' reaper. Set HANGAR_TEST_S3_ENDPOINT to
 # use an existing S3-compatible server instead.
 export HANGAR_TEST_MINIO ?= 1
-# Go test runs go through scripts/go-test.sh, which runs a package once more
-# when it failed to build only because something deleted files from GOCACHE
-# mid-run, and says so (see CONTRIBUTING.md).
 
 .PHONY: help
 help: ## Show this help
@@ -120,7 +117,6 @@ lint-style:
 	@./scripts/check-spelling.sh
 	@./scripts/check-test-timeouts.sh
 	@./scripts/check-test-targets.sh
-	@./scripts/check-go-test.sh
 	@python3 scripts/check-hub-matrix.py
 
 ## Test ------------------------------------------------------------------------------
@@ -136,7 +132,7 @@ test: ## Run unit and integration tests (SQLite and Postgres)
 
 .PHONY: test-go
 test-go:
-	scripts/with-test-postgres.sh scripts/with-test-minio.sh scripts/go-test.sh $(GO) test $(GOTESTFLAGS) -timeout $(GO_TEST_TIMEOUT) -tags integration ./...
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh $(GO) test $(GOTESTFLAGS) -timeout $(GO_TEST_TIMEOUT) -tags integration ./...
 
 .PHONY: test-ui
 test-ui: ui-deps
@@ -144,7 +140,7 @@ test-ui: ui-deps
 
 .PHONY: test-compat
 test-compat: ## Run the client compatibility suites against a real binary
-	scripts/with-test-postgres.sh scripts/with-test-minio.sh scripts/go-test.sh $(GO) test -count=1 -timeout $(COMPAT_TIMEOUT) -tags compat ./compat/...
+	scripts/with-test-postgres.sh scripts/with-test-minio.sh $(GO) test -count=1 -timeout $(COMPAT_TIMEOUT) -tags compat ./compat/...
 	$(UV) run --project compat pytest compat
 
 .PHONY: fixtures

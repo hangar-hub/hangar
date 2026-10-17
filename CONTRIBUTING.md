@@ -40,8 +40,6 @@ Tests ship with code. Every change needs tests that fail without it, and `make l
 
 Never skip, disable or weaken a test to get a change through. No stubs, placeholder data or `TODO`s in shipped code; fakes live in `*test` packages.
 
-`make test`, `make test-compat` and `make cover` run `go test` through `scripts/go-test.sh`. If a package fails to build because files vanished from the Go build cache (`go env GOCACHE`) during the run, for example `link: cannot open file .../go-build/3d/...-d: no such file or directory`, the script names the packages, says why and runs them once more. The go command opens a cached file some time after it looks the file up, so anything that deletes cache files while tests run breaks the build of whichever package needs them. On a machine that runs several test runs at once, do not delete files from the shared cache during a run, or give each run its own cache with `GOCACHE=$PWD/tmp/go-build make test` (`make clean` removes it). To trim the shared cache to save disk, delete only entries the go command has not used for a few hours, and judge that by modification time, not access time: the go command marks an entry as used by updating its modification time, at most once an hour.
-
 ## Style
 
 - Go: `gofmt` and `goimports`, checked by golangci-lint.
