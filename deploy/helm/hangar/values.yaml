@@ -109,6 +109,11 @@ migrations:
   #   Helm hooks before everything else in the sync, so a database in the
   #   same Application would never start.
   mode: hook
+  # initContainer mode: how long the init container keeps trying to reach a
+  # database that does not answer yet, such as a Postgres whose Pod is
+  # still starting, before it fails and the kubelet restarts it. Waiting
+  # here avoids the kubelet's restart back-off, which grows to 5 minutes.
+  waitForDatabase: 5m
   backoffLimit: 3
   activeDeadlineSeconds: 900
   resources:

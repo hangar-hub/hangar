@@ -379,8 +379,10 @@ func TestChartMigrationModes(t *testing.T) {
 					t.Errorf("%v: no migrate init container", md["name"])
 					continue
 				}
-				if args, _ := migrate["args"].([]any); fmt.Sprint(args) != "[admin migrate]" {
-					t.Errorf("%v: migrate init container args %v, want [admin migrate]", md["name"], args)
+				// It waits for a database that does not answer yet instead
+				// of exiting into the kubelet's restart back-off.
+				if args, _ := migrate["args"].([]any); fmt.Sprint(args) != "[admin migrate --wait-for-database=5m]" {
+					t.Errorf("%v: migrate init container args %v, want [admin migrate --wait-for-database=5m]", md["name"], args)
 				}
 				hangar := containerByName(spec["containers"], "hangar")
 				for _, field := range []string{"env", "envFrom"} {

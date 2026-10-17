@@ -11,6 +11,10 @@
 #     --from-literal=HANGAR_SECURITY_INSTANCE_KEY="$(openssl rand -base64 32)" \
 #     --from-literal=HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD="$(openssl rand -base64 18)"
 #
+# If your tool applies a helm template render as it is (kubectl apply,
+# Kustomize helmCharts), render with --skip-tests: Argo CD skips the helm
+# test Pod, but a plain apply would run it before Hangar is up.
+#
 # CI renders these values without a cluster and installs them on kind, with
 # Postgres and MinIO applied in the same step (deploy/kind_test.go).
 publicURL: https://hangar.example.test

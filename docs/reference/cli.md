@@ -184,7 +184,7 @@ Flags:
 Apply database migrations.
 
 ```text
-Applies every pending migration. The Helm chart runs it in a pre-install and pre-upgrade Job.
+Applies every pending migration. The Helm chart runs it in a pre-install and pre-upgrade Job, or in an init container of each web and worker Pod. Migrators that start together wait for one another. With --wait-for-database, it also waits for a Postgres server that does not answer yet, such as one whose Pod is still starting.
 ```
 
 Usage:
@@ -203,6 +203,7 @@ Flags:
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
 | `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
+| `--wait-for-database` | how long to keep trying to connect while a Postgres database does not answer (0 fails at once) | `0s` |
 
 ## hangar admin reindex
 
