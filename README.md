@@ -2,7 +2,7 @@
 
 **A self-hosted home for your arsenal of models.**
 
-![The Arsenal page of Hangar's web UI, listing models and datasets with filters for format, task, quantisation and size](docs/assets/screenshots/arsenal-desktop.webp)
+![The Models list in Hangar's web UI, with filters for format, task, quantisation and size](docs/assets/screenshots/models-desktop.webp)
 
 Hangar keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:
 

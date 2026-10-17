@@ -2,6 +2,28 @@
 
 Datasets are Repos of type `dataset`. In URLs and the CLI they carry a `datasets/` prefix: `datasets/acme/reviews`.
 
+## In the web UI
+
+Datasets have their own section, **Datasets** in the top bar (`/datasets`), separate from **Models**: each list holds one type only, with its own filters and its own **New dataset** button. Old `/arsenal` links still work. They open the Models list, or the Datasets list for `?type=datasets`.
+
+A dataset can hold any files, not only training data: for example, sample inputs for another project's tests. When none of its files is a data file the Dataset Viewer reads (Parquet, CSV, JSON Lines, text, Arrow, WebDataset archives, or folders of images or audio), the **Viewer** tab says there is nothing to preview and links to the files, and **Use this dataset** shows the snippets that download the files: the `hf` CLI, `huggingface_hub` and git.
+
+## Link models and datasets
+
+Links are optional. A model names the datasets it was trained or evaluated on in its Model card's `datasets` metadata, as on the Hugging Face Hub:
+
+```yaml
+---
+datasets:
+  - acme/reviews
+  - imdb
+---
+```
+
+To set it in the UI, open the model's **Settings** tab and use **Datasets used**: search the arsenal by name, or type the ID of a dataset on an Upstream, then **Commit to the Model card**. Hangar keeps the card's other metadata and text. The model's sidebar then lists the datasets under **Datasets used**, and each dataset's sidebar lists the model under **Used by**. Mirrors keep their upstream card, so set it on the Upstream instead.
+
+To group a project's models and datasets, put them in a [Collection](collections.md).
+
 ## Load them
 
 With `HF_ENDPOINT` pointing at Hangar:

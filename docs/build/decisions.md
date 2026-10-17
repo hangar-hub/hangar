@@ -20,6 +20,16 @@ Where the spec was silent or inconsistent, phase 0 chose as follows. Change any 
 - **Owners of native API endpoints the build plan left unowned.** Decided by the integration lead on 2026-10-13: `/jobs` and `/admin/system` belong to W1, `/search` and `/namespaces` to W2, and `/me/device` and `/admin/settings` to W5.
 - **Packages outside the layout in 02.** Decided by the integration lead on 2026-10-13: the integration lead owns `internal/contracttest`, `internal/secrets`, `internal/pins` and `internal/httpx/httpxtest`. Phase 2 deleted `internal/pins` once every pinned module was imported by real code.
 
+## Decisions from the bellatrix preview
+
+James used a preview on his home cluster on 2026-10-16 and decided the following that day.
+
+- **Taxiway teal accent.** Decided by James on 2026-10-16. The UI's accent changes from amber to Taxiway teal: light `--hg-accent` `#0b6e64`, `--hg-accent-fill` `#0b7a6e`, `--hg-accent-ink` `#ffffff`, `--hg-accent-soft` `#dff3ef`; dark `#5fd4c2`, `#2bb3a0`, `#021a17`, `#12332e`. Warnings stay amber, so the accent no longer looks like a warning. The amber colour tokens are gone, components use only the semantic tokens, and the logo's bay line, the favicon, the docs icon and the docs site accent follow. The palette is in [09](../spec/09-web-ui.md) "Visual direction".
+- **Models and Datasets are separate sections.** Decided by James on 2026-10-16. The top bar has **Models** (`/models`) and **Datasets** (`/datasets`) in place of the mixed **Arsenal** list. Each has its own list, filters, empty state and **New model** or **New dataset** button, and no list mixes the two types: the search palette groups results by type and Namespace pages list models and datasets separately. `/` shows the Models list to signed-in users. `/arsenal` stays as a redirect so old links work: to `/datasets` for `type=datasets`, to `/models` otherwise, with the other query parameters kept. Collections stay the way to group a project's models and datasets. "Arsenal" still names everything in an Instance (`CONTEXT.md`).
+- **Optional links between models and datasets.** Decided by James on 2026-10-16. A model's **Settings** tab has a **Datasets used** picker that commits the Model card's `datasets` metadata as the Hub stores it, a list of dataset IDs, keeping the card's other keys and text. The model's sidebar lists them under **Datasets used** and each dataset's sidebar lists the models under **Used by**, from the Dependencies Hangar already resolves from the card. A dataset with no links is normal.
+- **Datasets hold any files.** Decided by James on 2026-10-16. A dataset of files the Dataset Viewer cannot read, such as sample data for another project, reads as a normal dataset: the Viewer tab says there is nothing to preview and why, and links to the files; **Use this dataset** offers only the download snippets.
+- **Equal-height cards.** Decided by James on 2026-10-16. Repo cards in a grid row are the same height, with the stats row at the bottom, and show three quant chips, then a **+N** chip whose accessible name and tooltip list the rest.
+
 ## Open questions for James
 
 None.

@@ -23,7 +23,7 @@ These are added to `CONTEXT.md`.
 - **DATA-8** Partial dataset Pulls: select Configs and Splits (translated to the file globs from DATA-2 at the chosen Revision), or **Parquet export only** for selected Configs and Splits (pulls those files from the Upstream's `refs/convert/parquet`, which Mirrors fetch anyway, so a 500 GB raw dataset can arrive as a few GB of Parquet). Selections are stored by Config and Split name, so tracking follows new files.
 - **DATA-9** Dataset metadata in the index ([07](07-indexing-and-scanning.md)): Configs, Splits, rows and bytes per Split, features, modalities, formats, task categories, languages, size category (computed from rows, using the Hub's buckets such as `1K<n<10K`), licence, pretty name, and the models whose cards list this dataset (and the reverse on model pages).
 - **DATA-10** Croissant metadata: `GET /api/datasets/{repo}/croissant` returns MLCommons Croissant JSON-LD built from the card, Configs, Splits and features, as the Hub does.
-- **DATA-11** Arsenal facets for datasets: modality, format, task, language, size category, rows, licence, Mirror or local.
+- **DATA-11** Facets on the Datasets list: modality, format, task, language, size category, rows, licence, Mirror or local.
 - **DATA-12** CLI: `hangar pull datasets/<ns>/<name> [--config ...] [--split ...] [--parquet-only] [--to DIR]` and `hangar push --type dataset`. `hangar info datasets/...` shows Configs, Splits, rows and sizes. Repo IDs with a `datasets/` prefix are accepted everywhere the CLI takes a Repo ID.
 - **DATA-13** Dataset cards: the UI renders the card, shows the YAML metadata in a sidebar, and offers a card editor with a form for the common fields (pretty name, licence, task categories, languages, Configs) that writes valid YAML.
 

@@ -1,6 +1,14 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Boxes, LayoutGrid, List, SlidersHorizontal, Telescope, Upload } from "lucide-react";
+import {
+  Boxes,
+  Database,
+  LayoutGrid,
+  List,
+  SlidersHorizontal,
+  Telescope,
+  Upload,
+} from "lucide-react";
 import { useState } from "react";
 import { api } from "@/api/client";
 import { PageShell } from "@/components/PageShell";
@@ -11,17 +19,18 @@ import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { formatCount } from "@/lib/format";
 import { unwrap } from "@/lib/problem";
+import type { RepoKind } from "@/lib/repo";
 import { useSearchState } from "@/lib/use-search-state";
 import { cn } from "@/lib/utils";
 import { RepoCard } from "../repos/RepoCard";
 import {
-  type ArsenalSearch,
   activeFilterCount,
   contextOptions,
-  facetGroups,
+  facetGroupsFor,
+  type ListSearch,
   paramBuckets,
   sizeOptions,
-  sortOptions,
+  sortOptionsFor,
   toggleListValue,
   toListQuery,
 } from "./filters";
@@ -73,39 +82,20 @@ function FacetGroup({
 }
 
 function Filters({
+  kind,
   search,
   update,
   facets,
 }: {
-  search: ArsenalSearch;
-  update: (p: Partial<ArsenalSearch>) => void;
+  kind: RepoKind;
+  search: ListSearch;
+  update: (p: Partial<ListSearch>) => void;
   facets: Facets;
 }) {
   const sorted = (name: string): [string, number][] =>
     Object.entries(facets[name] ?? {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const type = search.type;
   return (
     <div className="space-y-5">
-      <fieldset className="space-y-1">
-        <legend className="mb-1 text-xs font-semibold text-muted">Type</legend>
-        <div className="flex gap-1">
-          {[
-            { v: undefined, l: "All" },
-            { v: "models", l: "Models" },
-            { v: "datasets", l: "Datasets" },
-          ].map((o) => (
-            <Button
-              key={o.l}
-              size="sm"
-              variant={type === o.v ? "primary" : "secondary"}
-              aria-pressed={type === o.v}
-              onClick={() => update({ type: o.v })}
-            >
-              {o.l}
-            </Button>
-          ))}
-        </div>
-      </fieldset>
       <fieldset className="space-y-1">
         <legend className="mb-1 text-xs font-semibold text-muted">Mirror or local</legend>
         <div className="flex flex-wrap gap-1">
@@ -126,38 +116,34 @@ function Filters({
           ))}
         </div>
       </fieldset>
-      {facetGroups
-        .filter(
-          (g) => !(g.datasetsOnly && type === "models") && !(g.modelsOnly && type === "datasets"),
-        )
-        .map((g) => {
-          const current = search[g.param];
-          const selected =
-            g.param === "format"
-              ? (current ?? "").split(",").filter(Boolean)
-              : current
-                ? [current]
-                : [];
-          return (
-            <FacetGroup
-              key={g.facet}
-              label={g.label}
-              values={sorted(g.facet)}
-              selected={selected}
-              onToggle={(v) =>
-                update({
-                  [g.param]:
-                    g.param === "format"
-                      ? toggleListValue(current, v)
-                      : current === v
-                        ? undefined
-                        : v,
-                })
-              }
-            />
-          );
-        })}
-      {type !== "datasets" ? (
+      {facetGroupsFor(kind).map((g) => {
+        const current = search[g.param];
+        const selected =
+          g.param === "format"
+            ? (current ?? "").split(",").filter(Boolean)
+            : current
+              ? [current]
+              : [];
+        return (
+          <FacetGroup
+            key={g.facet}
+            label={g.label}
+            values={sorted(g.facet)}
+            selected={selected}
+            onToggle={(v) =>
+              update({
+                [g.param]:
+                  g.param === "format"
+                    ? toggleListValue(current, v)
+                    : current === v
+                      ? undefined
+                      : v,
+              })
+            }
+          />
+        );
+      })}
+      {kind === "model" ? (
         <>
           <label className="block space-y-1">
             <span className="text-xs font-semibold text-muted">Parameters</span>
@@ -207,11 +193,49 @@ function Filters({
   );
 }
 
-/** Repos the user can see, with filters, sort, search and grid or list (BROWSE-1, DATA-11). */
-export function ArsenalPage() {
-  const [search, update] = useSearchState<ArsenalSearch>();
+/** What changes between the Models and Datasets lists. */
+const copy = {
+  model: {
+    title: "Models",
+    subtitle: "Every model you can see in this Instance.",
+    newLabel: "New model",
+    newTo: "/new",
+    discover: { type: undefined },
+    filterLabel: "Filter models by name",
+    loading: "Loading models",
+    listLabel: "Models",
+    emptyTitle: "Your arsenal has no models yet.",
+    emptyText: "Discover a model to pull, or upload your own.",
+    discoverAction: "Discover a model",
+    noMatch: "Remove a filter or change the search to see more of your models.",
+  },
+  dataset: {
+    title: "Datasets",
+    subtitle:
+      "Every dataset you can see in this Instance. A dataset holds any files: training and evaluation data, or sample data for other projects.",
+    newLabel: "New dataset",
+    newTo: "/new-dataset",
+    discover: { type: "datasets" },
+    filterLabel: "Filter datasets by name",
+    loading: "Loading datasets",
+    listLabel: "Datasets",
+    emptyTitle: "Your arsenal has no datasets yet.",
+    emptyText: "Discover a dataset to pull, or upload your own files.",
+    discoverAction: "Discover a dataset",
+    noMatch: "Remove a filter or change the search to see more of your datasets.",
+  },
+} as const;
+
+/**
+ * The Models or the Datasets list: the Repos of one kind the user can see,
+ * with filters, sort, search and grid or list (BROWSE-1, DATA-11). The two
+ * kinds never share a list.
+ */
+export function RepoListPage({ kind }: { kind: RepoKind }) {
+  const [search, update] = useSearchState<ListSearch>();
   const [sheet, setSheet] = useState(false);
-  const query = toListQuery(search);
+  const text = copy[kind];
+  const query = toListQuery(search, kind);
   const list = useInfiniteQuery({
     queryKey: ["repos", query],
     initialPageParam: undefined as string | undefined,
@@ -224,24 +248,27 @@ export function ArsenalPage() {
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const facets: Facets = list.data?.pages[0]?.facets ?? {};
   const view = search.view === "list" ? "list" : "grid";
-  const filterCount = activeFilterCount(search);
+  const filterCount = activeFilterCount(search, kind);
   const filtered = filterCount > 0 || Boolean(search.q);
-  const filters = <Filters search={search} update={update} facets={facets} />;
+  const filters = <Filters kind={kind} search={search} update={update} facets={facets} />;
+  const sort = sortOptionsFor(kind).some((o) => o.value === search.sort)
+    ? (search.sort ?? "updated")
+    : "updated";
 
   return (
     <PageShell
-      title="Arsenal"
-      subtitle="Every model and dataset you can see in this Instance."
+      title={text.title}
+      subtitle={text.subtitle}
       actions={
         <>
           <Button asChild>
-            <Link to="/new">
+            <Link to={text.newTo}>
               <Upload aria-hidden="true" />
-              New model
+              {text.newLabel}
             </Link>
           </Button>
           <Button asChild variant="primary">
-            <Link to="/discover">
+            <Link to="/discover" search={text.discover}>
               <Telescope aria-hidden="true" />
               Discover
             </Link>
@@ -269,7 +296,7 @@ export function ArsenalPage() {
                 key={search.q ?? ""}
                 type="search"
                 placeholder="Filter by name"
-                aria-label="Filter the arsenal by name"
+                aria-label={text.filterLabel}
               />
             </form>
             <Dialog
@@ -289,13 +316,13 @@ export function ArsenalPage() {
             <label className="flex items-center gap-2 text-sm">
               <span className="text-muted">Sort</span>
               <Select
-                value={search.sort ?? "updated"}
+                value={sort}
                 onChange={(e) =>
                   update({ sort: e.target.value === "updated" ? undefined : e.target.value })
                 }
                 className="w-auto"
               >
-                {sortOptions.map((o) => (
+                {sortOptionsFor(kind).map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -327,38 +354,38 @@ export function ArsenalPage() {
             </fieldset>
           </div>
           {list.isPending ? (
-            <LoadingRows rows={6} label="Loading the arsenal" />
+            <LoadingRows rows={6} label={text.loading} />
           ) : list.isError ? (
             <ErrorState error={list.error} onRetry={() => list.refetch()} />
           ) : items.length === 0 ? (
             filtered ? (
-              <EmptyState title="Nothing matches these filters">
-                Remove a filter or change the search to see more of your arsenal.
-              </EmptyState>
+              <EmptyState title="Nothing matches these filters">{text.noMatch}</EmptyState>
             ) : (
               <EmptyState
-                icon={<Boxes />}
-                title="Your arsenal is empty."
+                icon={kind === "dataset" ? <Database /> : <Boxes />}
+                title={text.emptyTitle}
                 action={
                   <>
                     <Button asChild variant="primary">
-                      <Link to="/discover">Discover a model</Link>
+                      <Link to="/discover" search={text.discover}>
+                        {text.discoverAction}
+                      </Link>
                     </Button>
                     <Button asChild>
-                      <Link to="/new">Upload your own</Link>
+                      <Link to={text.newTo}>Upload your own</Link>
                     </Button>
                   </>
                 }
               >
-                Discover a model to pull, or upload your own.
+                {text.emptyText}
               </EmptyState>
             )
           ) : (
             <>
               {/* Each card has an h3 title, so the grid needs an h2 above it. */}
-              <h2 className="sr-only">Repos</h2>
+              <h2 className="sr-only">{text.listLabel}</h2>
               <VirtualGrid
-                label="Repos"
+                label={text.listLabel}
                 items={items}
                 itemKey={(r) => `${r.type}/${r.id}`}
                 minColumnWidth={view === "list" ? 10_000 : 300}

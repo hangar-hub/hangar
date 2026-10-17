@@ -20,8 +20,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      // Retrying a refusal or a missing Repo only delays the message.
-      retry: (count, err) => count < 1 && ![401, 403, 404].includes(errorStatus(err)),
+      // Retrying a refusal, a missing Repo or a fact about it (422, such
+      // as a dataset with no files the Viewer reads) only delays the message.
+      retry: (count, err) => count < 1 && ![401, 403, 404, 422].includes(errorStatus(err)),
     },
   },
 });

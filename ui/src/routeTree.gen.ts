@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ArsenalRouteImport } from './routes/arsenal'
 import { Route as DiscoverRouteImport } from './routes/discover'
+import { Route as ModelsRouteImport } from './routes/models'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as NewDatasetRouteImport } from './routes/new-dataset'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -31,6 +32,7 @@ import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminWebhooksRouteImport } from './routes/admin.webhooks'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as CollectionsIndexRouteImport } from './routes/collections.index'
+import { Route as DatasetsIndexRouteImport } from './routes/datasets.index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsDeviceRouteImport } from './routes/settings.device'
 import { Route as SettingsOllamaKeysRouteImport } from './routes/settings.ollama-keys'
@@ -80,6 +82,11 @@ const ArsenalRoute = ArsenalRouteImport.update({
 const DiscoverRoute = DiscoverRouteImport.update({
   id: '/discover',
   path: '/discover',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModelsRoute = ModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NewRoute = NewRouteImport.update({
@@ -170,6 +177,11 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
 const CollectionsIndexRoute = CollectionsIndexRouteImport.update({
   id: '/collections/',
   path: '/collections/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatasetsIndexRoute = DatasetsIndexRouteImport.update({
+  id: '/datasets/',
+  path: '/datasets/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -335,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/arsenal': typeof ArsenalRoute
   '/discover': typeof DiscoverRoute
+  '/models': typeof ModelsRoute
   '/new': typeof NewRoute
   '/new-dataset': typeof NewDatasetRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -360,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/$ns/': typeof NsIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/collections/': typeof CollectionsIndexRoute
+  '/datasets/': typeof DatasetsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/$ns/$name/settings': typeof NsNameSettingsRoute
   '/auth/invite/$code': typeof AuthInviteCodeRoute
@@ -388,6 +402,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/arsenal': typeof ArsenalRoute
   '/discover': typeof DiscoverRoute
+  '/models': typeof ModelsRoute
   '/new': typeof NewRoute
   '/new-dataset': typeof NewDatasetRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -411,6 +426,7 @@ export interface FileRoutesByTo {
   '/$ns': typeof NsIndexRoute
   '/admin': typeof AdminIndexRoute
   '/collections': typeof CollectionsIndexRoute
+  '/datasets': typeof DatasetsIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/$ns/$name/settings': typeof NsNameSettingsRoute
   '/auth/invite/$code': typeof AuthInviteCodeRoute
@@ -440,6 +456,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/arsenal': typeof ArsenalRoute
   '/discover': typeof DiscoverRoute
+  '/models': typeof ModelsRoute
   '/new': typeof NewRoute
   '/new-dataset': typeof NewDatasetRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -465,6 +482,7 @@ export interface FileRoutesById {
   '/$ns/': typeof NsIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/collections/': typeof CollectionsIndexRoute
+  '/datasets/': typeof DatasetsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/$ns/$name/settings': typeof NsNameSettingsRoute
   '/auth/invite/$code': typeof AuthInviteCodeRoute
@@ -496,6 +514,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/arsenal'
     | '/discover'
+    | '/models'
     | '/new'
     | '/new-dataset'
     | '/settings'
@@ -521,6 +540,7 @@ export interface FileRouteTypes {
     | '/$ns/'
     | '/admin/'
     | '/collections/'
+    | '/datasets/'
     | '/settings/'
     | '/$ns/$name/settings'
     | '/auth/invite/$code'
@@ -549,6 +569,7 @@ export interface FileRouteTypes {
     | '/'
     | '/arsenal'
     | '/discover'
+    | '/models'
     | '/new'
     | '/new-dataset'
     | '/admin/audit'
@@ -572,6 +593,7 @@ export interface FileRouteTypes {
     | '/$ns'
     | '/admin'
     | '/collections'
+    | '/datasets'
     | '/settings'
     | '/$ns/$name/settings'
     | '/auth/invite/$code'
@@ -600,6 +622,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/arsenal'
     | '/discover'
+    | '/models'
     | '/new'
     | '/new-dataset'
     | '/settings'
@@ -625,6 +648,7 @@ export interface FileRouteTypes {
     | '/$ns/'
     | '/admin/'
     | '/collections/'
+    | '/datasets/'
     | '/settings/'
     | '/$ns/$name/settings'
     | '/auth/invite/$code'
@@ -655,6 +679,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   ArsenalRoute: typeof ArsenalRoute
   DiscoverRoute: typeof DiscoverRoute
+  ModelsRoute: typeof ModelsRoute
   NewRoute: typeof NewRoute
   NewDatasetRoute: typeof NewDatasetRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -662,6 +687,7 @@ export interface RootRouteChildren {
   AuthLoginRoute: typeof AuthLoginRoute
   NsIndexRoute: typeof NsIndexRoute
   CollectionsIndexRoute: typeof CollectionsIndexRoute
+  DatasetsIndexRoute: typeof DatasetsIndexRoute
   AuthInviteCodeRoute: typeof AuthInviteCodeRoute
   AuthResetCodeRoute: typeof AuthResetCodeRoute
   CollectionsNsSlugRoute: typeof CollectionsNsSlugRoute
@@ -696,6 +722,13 @@ declare module '@tanstack/react-router' {
       path: '/discover'
       fullPath: '/discover'
       preLoaderRoute: typeof DiscoverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/models': {
+      id: '/models'
+      path: '/models'
+      fullPath: '/models'
+      preLoaderRoute: typeof ModelsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/new': {
@@ -822,6 +855,13 @@ declare module '@tanstack/react-router' {
       path: '/collections'
       fullPath: '/collections/'
       preLoaderRoute: typeof CollectionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/datasets/': {
+      id: '/datasets/'
+      path: '/datasets'
+      fullPath: '/datasets/'
+      preLoaderRoute: typeof DatasetsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -1153,6 +1193,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   ArsenalRoute: ArsenalRoute,
   DiscoverRoute: DiscoverRoute,
+  ModelsRoute: ModelsRoute,
   NewRoute: NewRoute,
   NewDatasetRoute: NewDatasetRoute,
   SettingsRoute: SettingsRouteWithChildren,
@@ -1160,6 +1201,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthLoginRoute: AuthLoginRoute,
   NsIndexRoute: NsIndexRoute,
   CollectionsIndexRoute: CollectionsIndexRoute,
+  DatasetsIndexRoute: DatasetsIndexRoute,
   AuthInviteCodeRoute: AuthInviteCodeRoute,
   AuthResetCodeRoute: AuthResetCodeRoute,
   CollectionsNsSlugRoute: CollectionsNsSlugRoute,

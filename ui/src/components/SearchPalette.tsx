@@ -45,8 +45,8 @@ const itemClass =
   "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm aria-selected:bg-raised [&_svg]:size-4 [&_svg]:text-muted";
 
 /**
- * The command palette over Repos, Namespaces, Collections and actions
- * (BROWSE-6). Opens with `/` or Cmd-K.
+ * The command palette over models, datasets, Namespaces, Collections and
+ * actions (BROWSE-6). Opens with `/` or Cmd-K.
  */
 export function SearchPalette() {
   const [open, setOpen] = useState(false);
@@ -91,13 +91,25 @@ export function SearchPalette() {
     { label: "New model", to: "/new", icon: <FolderPlus /> },
     { label: "New dataset", to: "/new-dataset", icon: <Database /> },
     { label: "Discover models on an Upstream", to: "/discover", icon: <Telescope /> },
-    { label: "Open your arsenal", to: "/arsenal", icon: <Boxes /> },
+    {
+      label: "Discover datasets on an Upstream",
+      to: "/discover?type=datasets",
+      icon: <Telescope />,
+    },
+    { label: "Models", to: "/models", icon: <Boxes /> },
+    { label: "Datasets", to: "/datasets", icon: <Database /> },
     { label: "Collections", to: "/collections", icon: <Library /> },
     { label: "Create a Token", to: "/settings/tokens", icon: <KeyRound /> },
   ];
   const actions = allActions.filter(
     (a) => !query || a.label.toLowerCase().includes(query.toLowerCase()),
   );
+  // Models and datasets are separate sections of Hangar, so they are
+  // separate groups here too.
+  const repoGroups = [
+    { heading: "Models", repos: data?.repos.filter((r) => r.type === "model") ?? [] },
+    { heading: "Datasets", repos: data?.repos.filter((r) => r.type === "dataset") ?? [] },
+  ];
   const status =
     query && results.isFetching ? "Searching" : found === 0 ? `No matches for ${query}.` : "";
 
@@ -118,7 +130,7 @@ export function SearchPalette() {
         open={open}
         onOpenChange={setOpen}
         title="Search"
-        description="Repos, Namespaces, Collections and actions."
+        description="Models, datasets, Namespaces, Collections and actions."
         initialFocus={input}
       >
         <Command label="Search Hangar" shouldFilter={false} className="-mx-1">
@@ -137,26 +149,29 @@ export function SearchPalette() {
             {status}
           </p>
           <Command.List className="max-h-[50vh] overflow-y-auto">
-            {data && data.repos.length > 0 ? (
-              <Command.Group
-                heading="Repos"
-                className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
-              >
-                {data.repos.map((r) => (
-                  <Command.Item
-                    key={`${r.type}/${r.id}`}
-                    value={`repo:${r.type}:${r.id}`}
-                    onSelect={() => go(repoPath(r.type, r.namespace, r.name))}
-                    className={itemClass}
-                  >
-                    {r.type === "dataset" ? <Database /> : <Boxes />}
-                    <span className="font-mono text-ink">
-                      {repoLabel(r.type, r.namespace, r.name)}
-                    </span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            ) : null}
+            {repoGroups.map((g) =>
+              g.repos.length > 0 ? (
+                <Command.Group
+                  key={g.heading}
+                  heading={g.heading}
+                  className="text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+                >
+                  {g.repos.map((r) => (
+                    <Command.Item
+                      key={`${r.type}/${r.id}`}
+                      value={`repo:${r.type}:${r.id}`}
+                      onSelect={() => go(repoPath(r.type, r.namespace, r.name))}
+                      className={itemClass}
+                    >
+                      {r.type === "dataset" ? <Database /> : <Boxes />}
+                      <span className="font-mono text-ink">
+                        {repoLabel(r.type, r.namespace, r.name)}
+                      </span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              ) : null,
+            )}
             {data && data.namespaces.length > 0 ? (
               <Command.Group
                 heading="Namespaces"

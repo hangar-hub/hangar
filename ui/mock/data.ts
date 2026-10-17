@@ -880,6 +880,88 @@ function speechRepo(): MockRepo {
   });
 }
 
+/**
+ * A local GGUF model with many quants, so a grid card shows the "+N" quant
+ * chip, next to cards with one or two badges.
+ */
+function phiRepo(): MockRepo {
+  const quants: [string, number, number][] = [
+    ["Q2_K", 10, 1_420],
+    ["Q3_K_M", 12, 1_960],
+    ["Q4_K_M", 15, 2_390],
+    ["Q5_K_M", 17, 2_820],
+    ["Q6_K", 18, 3_140],
+    ["Q8_0", 7, 4_060],
+  ];
+  const files: MockFile[] = [
+    { path: ".gitattributes", text: "*.gguf filter=lfs diff=lfs merge=lfs -text\n" },
+    { path: "README.md", text: "# phi-mini GGUF\n\nQuantised builds for laptops.\n" },
+    ...quants.map(
+      ([q, fileType, mib]): MockFile => ({
+        path: `phi-mini.${q}.gguf`,
+        size: mib * MiB,
+        lfs: true,
+        present: true,
+        scan: "safe",
+        header: ggufHeader(q, fileType),
+      }),
+    ),
+  ];
+  const id = "ml-team/phi-mini-GGUF";
+  return finishRepo({
+    repo: repoBase("model", "ml-team", "phi-mini-GGUF", {
+      likes: 2,
+      downloads: 64,
+      licence: "mit",
+      summary: {
+        formats: ["gguf"],
+        architecture: "phi3",
+        parameters: 3_821_079_552,
+        quants: quants.map(([q]) => q),
+        context_length: 4096,
+        pipeline_tag: "text-generation",
+        library_name: "gguf",
+        scan_status: "safe",
+      },
+    }),
+    commits: makeCommits(id, [{ title: "Add GGUF builds", author: "ada", ago: 5 * DAY, files }]),
+    metadata: { formats: ["gguf"], architecture: "phi3" },
+    dependencies: { needs: [], needed_by: [] },
+    discussions: [],
+    collaborators: [],
+    accessRequests: [],
+  });
+}
+
+/**
+ * A dataset of files the Dataset Viewer cannot read: sample inputs for
+ * another project's tests. It has no Configs and is linked to no model.
+ */
+function sampleFilesRepo(): MockRepo {
+  const id = "ada/ingest-samples";
+  const files: MockFile[] = [
+    { path: ".gitattributes", text: "*.zip filter=lfs diff=lfs merge=lfs -text\n" },
+    {
+      path: "README.md",
+      text: "# Ingest samples\n\nInput files for the ingest service's integration tests.\n",
+    },
+    { path: "fixtures/firmware.bin", size: 2 * MiB, lfs: true, present: true },
+    { path: "fixtures/archive.zip", size: 14 * MiB, lfs: true, present: true },
+  ];
+  const commits = makeCommits(id, [
+    { title: "Add sample inputs", author: "ada", ago: 3 * DAY, files },
+  ]);
+  return finishRepo({
+    repo: repoBase("dataset", "ada", "ingest-samples", { likes: 0, downloads: 3 }),
+    commits,
+    metadata: {},
+    dependencies: { needs: [], needed_by: [] },
+    discussions: [],
+    collaborators: [],
+    accessRequests: [],
+  });
+}
+
 export function createState(): MockState {
   const repos = [
     bertRepo(),
@@ -889,6 +971,8 @@ export function createState(): MockState {
     imdbRepo(),
     cifarRepo(),
     speechRepo(),
+    sampleFilesRepo(),
+    phiRepo(),
   ];
   const me: S["Me"] = {
     id: uuidOf("user-ada"),

@@ -48,8 +48,10 @@ const datasets = `datasets/${datasetRepo}`;
 
 const signedIn: Route[] = [
   { path: "/" },
-  { path: "/arsenal" },
-  { path: "/arsenal?type=datasets&view=list" },
+  { path: "/models" },
+  { path: "/models?view=list" },
+  { path: "/datasets" },
+  { path: "/datasets?view=list" },
   { path: `/discover?upstream=${upstreamName}` },
   { path: `/discover?type=datasets&upstream=${upstreamName}` },
   { path: `/${modelRepo}` },

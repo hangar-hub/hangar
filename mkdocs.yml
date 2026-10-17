@@ -38,12 +38,12 @@ theme:
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: blue grey
-      accent: amber
+      accent: teal
       toggle: {icon: material/weather-night, name: Switch to dark mode}
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: blue grey
-      accent: amber
+      accent: teal
       toggle: {icon: material/weather-sunny, name: Switch to light mode}
 
 extra:

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tabs } from "@/components/ui/tabs";
+import { errorStatus } from "@/lib/problem";
 import { snippets } from "@/lib/snippets";
 import { useDatasetConfigs, useDependencies, useQuants } from "./hooks";
 
@@ -29,6 +30,8 @@ export function UsePanel({ repo }: { repo: Repo }) {
     config: firstConfig?.config,
     split: firstConfig?.splits[0]?.split,
     defaultBranch: repo.default_branch,
+    // 422: the dataset has no files the datasets library reads.
+    readable: !(configs.isError && errorStatus(configs.error) === 422),
   });
   const [tab, setTab] = useState(list[0]?.id ?? "");
   const label = repo.type === "dataset" ? "Use this dataset" : "Use this model";

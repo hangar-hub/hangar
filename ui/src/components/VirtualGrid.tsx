@@ -21,6 +21,7 @@ function useColumns(ref: React.RefObject<HTMLElement | null>, minWidth: number):
 /**
  * Renders items in a responsive grid (or a single column), virtualised
  * against the window once there are more than 200, so long lists stay fast.
+ * Each item fills its cell, so items in a row are the same height.
  * `onEnd` fires when the last row comes into view, to load the next page.
  */
 export function VirtualGrid<T>({
@@ -65,7 +66,10 @@ export function VirtualGrid<T>({
     return (
       <ul ref={ref} aria-label={label} className="grid gap-3" style={gridStyle}>
         {items.map((it) => (
-          <li key={itemKey(it)}>{render(it)}</li>
+          // A one-cell grid, so the item fills the row's height.
+          <li key={itemKey(it)} className="grid">
+            {render(it)}
+          </li>
         ))}
       </ul>
     );
@@ -81,7 +85,9 @@ export function VirtualGrid<T>({
           style={{ ...gridStyle, transform: `translateY(${row.start - v.options.scrollMargin}px)` }}
         >
           {items.slice(row.index * cols, row.index * cols + cols).map((it) => (
-            <div key={itemKey(it)}>{render(it)}</div>
+            <div key={itemKey(it)} className="grid">
+              {render(it)}
+            </div>
           ))}
         </li>
       ))}

@@ -207,22 +207,29 @@ export function NamespacePage({ ns }: { ns: string }) {
             ) : repos.data.items.length === 0 ? (
               <EmptyState title="No Repos you can see" />
             ) : (
-              <>
-                {/* Each card has an h3 title, so the grid needs an h2 above it. */}
-                <h2 id="namespace-repos" className="sr-only">
-                  Repos
-                </h2>
-                <ul
-                  aria-labelledby="namespace-repos"
-                  className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
-                >
-                  {repos.data.items.map((r) => (
-                    <li key={`${r.type}/${r.id}`}>
-                      <RepoCard repo={r} />
-                    </li>
-                  ))}
-                </ul>
-              </>
+              // Models and datasets are separate lists, as in the top bar.
+              <div className="space-y-6">
+                {(["model", "dataset"] as const).map((kind) => {
+                  const items = repos.data.items.filter((r) => r.type === kind);
+                  if (items.length === 0) return null;
+                  const id = `namespace-${kind}s`;
+                  return (
+                    <section key={kind} aria-labelledby={id} className="space-y-2">
+                      {/* Each card has an h3 title, so the grid needs an h2 above it. */}
+                      <h2 id={id} className="text-sm font-semibold">
+                        {kind === "model" ? "Models" : "Datasets"}
+                      </h2>
+                      <ul aria-labelledby={id} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {items.map((r) => (
+                          <li key={`${r.type}/${r.id}`} className="grid">
+                            <RepoCard repo={r} />
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  );
+                })}
+              </div>
             ),
           },
           {

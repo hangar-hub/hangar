@@ -11,8 +11,8 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { formatBytes, formatCompact, formatContext, formatCount, formatParams } from "@/lib/format";
 import { parseCardData, splitFrontMatter } from "@/lib/frontmatter";
-import { errorMessage, unwrap } from "@/lib/problem";
-import { blobPath, parseRepoId, type RepoKind, repoPath, resolveUrl } from "@/lib/repo";
+import { errorMessage, errorStatus, unwrap } from "@/lib/problem";
+import { blobPath, parseRepoId, type RepoKind, repoPath, resolveUrl, treePath } from "@/lib/repo";
 import { CardEditor } from "../datasets/CardEditor";
 import { ArsenalBadge, formatName, QuantChips } from "./badges";
 import {
@@ -38,9 +38,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
+  // An ID without spaces: aria-labelledby reads spaces as a list of IDs.
+  const id = `side-${title.toLowerCase().replace(/\W+/g, "-")}`;
   return (
-    <section aria-labelledby={`side-${title}`} className="border-t border-line pt-3">
-      <h2 id={`side-${title}`} className="mb-1 text-sm font-semibold">
+    <section aria-labelledby={id} className="border-t border-line pt-3">
+      <h2 id={id} className="mb-1 text-sm font-semibold">
         {title}
       </h2>
       {children}
@@ -209,6 +211,17 @@ function Sidebar({ repo, cardData }: { repo: Repo; cardData: Record<string, unkn
                 </li>
               ))}
             </ul>
+          ) : configs.isError && errorStatus(configs.error) === 422 ? (
+            <p className="text-sm text-muted">
+              None. The Viewer has no data files it can read here, so the files are in the{" "}
+              <AppLink
+                href={treePath("dataset", repo.namespace, repo.name, repo.default_branch)}
+                className="text-accent underline underline-offset-2"
+              >
+                Files
+              </AppLink>{" "}
+              tab.
+            </p>
           ) : (
             <p className="text-sm text-muted">No Configs found yet.</p>
           )}
@@ -262,16 +275,28 @@ function Sidebar({ repo, cardData }: { repo: Repo; cardData: Record<string, unkn
         </SidebarSection>
       ) : null}
       {trainedOn.length ? (
-        <SidebarSection title="Trained on">
+        <SidebarSection title="Datasets used">
           <ul>
             {trainedOn.map((d) => (
               <DependencyItem key={d.repo} dep={d} />
             ))}
           </ul>
         </SidebarSection>
+      ) : !isDataset && deps.isSuccess && repo.permissions?.admin && !repo.mirror ? (
+        <SidebarSection title="Datasets used">
+          <p className="text-sm text-muted">
+            No datasets listed.{" "}
+            <AppLink
+              href={`${repoPath(repo.type, repo.namespace, repo.name)}/settings`}
+              className="text-accent underline underline-offset-2"
+            >
+              Choose datasets
+            </AppLink>
+          </p>
+        </SidebarSection>
       ) : null}
       {isDataset && neededBy.length ? (
-        <SidebarSection title="Models trained on it">
+        <SidebarSection title="Used by">
           <ul>
             {neededBy.map((d) => (
               <DependencyItem key={d.repo} dep={d} />

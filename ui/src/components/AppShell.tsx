@@ -20,7 +20,8 @@ import { SearchPalette } from "./SearchPalette";
 import { ThemeToggle } from "./ThemeToggle";
 
 const nav = [
-  { to: "/arsenal", label: "Arsenal" },
+  { to: "/models", label: "Models" },
+  { to: "/datasets", label: "Datasets" },
   { to: "/discover", label: "Discover" },
   { to: "/collections", label: "Collections" },
 ] as const;

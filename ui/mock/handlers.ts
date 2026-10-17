@@ -13,9 +13,11 @@ import {
 import { discoverDetail, discoverList } from "./discover.ts";
 import {
   changesOf,
+  dependenciesOf,
   fileOid,
   fileSize,
   findRepo,
+  hasViewerFiles,
   lfsOid,
   listTree,
   quantGroups,
@@ -289,7 +291,8 @@ function listRepos(ctx: Ctx): Result {
     m[v] = (m[v] ?? 0) + 1;
     facets[name] = m;
   };
-  for (const r of visible) {
+  // Facets count the Repos that match, as repo.List does.
+  for (const r of filtered) {
     const s = r.repo.summary ?? {};
     for (const f of s.formats ?? []) add("format", f);
     for (const quant of s.quants ?? []) add("quant", quant);
@@ -784,7 +787,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       ),
     });
   }),
-  getDependencies: withRepo((_c, r) => ok(r.dependencies)),
+  getDependencies: withRepo((ctx, r) => ok(dependenciesOf(ctx.state, r))),
   likeRepo: withRepo((_c, r) => {
     if (!r.repo.liked) r.repo.likes++;
     r.repo.liked = true;
@@ -928,6 +931,14 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
   listDatasetConfigs: (ctx) => {
     const r = findRepo(ctx.state, "datasets", ctx.params.ns ?? "", ctx.params.name ?? "");
     if (!r) return problem(404, "Dataset not found.");
+    if (!r.configs?.configs.length && !hasViewerFiles(r)) {
+      // As internal/api/datasets.go answers for layout.ErrEmptyDataset.
+      const p = problem(
+        422,
+        "Hangar cannot read this dataset's Configs and Splits: The dataset is empty.",
+      );
+      return { ...p, body: { ...(p.body as Body), title: "The dataset has no Configs" } };
+    }
     return ok(r.configs ?? { commit: r.commits[0]?.sha ?? "", from_card: false, configs: [] });
   },
 

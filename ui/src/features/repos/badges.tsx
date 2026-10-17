@@ -126,10 +126,16 @@ export function FormatBadges({ formats }: { formats?: string[] }) {
   );
 }
 
-/** Quantisation chips, in monospace (09-web-ui.md "Visual direction"). */
+/**
+ * Quantisation chips, in monospace (09-web-ui.md "Visual direction"). Past
+ * `max`, one "+N" chip stands for the rest and names them for screen
+ * readers and in its tooltip.
+ */
 export function QuantChips({ quants, max = 4 }: { quants?: string[]; max?: number }) {
   if (!quants?.length) return null;
   const shown = quants.slice(0, max);
+  const rest = quants.slice(max);
+  const restText = `${rest.length} more ${rest.length === 1 ? "quant" : "quants"}: ${rest.join(", ")}`;
   return (
     <>
       {shown.map((q) => (
@@ -137,7 +143,11 @@ export function QuantChips({ quants, max = 4 }: { quants?: string[]; max?: numbe
           {q}
         </Badge>
       ))}
-      {quants.length > max ? <Badge mono>+{quants.length - max}</Badge> : null}
+      {rest.length ? (
+        <Badge mono role="img" aria-label={restText} title={restText}>
+          +{rest.length}
+        </Badge>
+      ) : null}
     </>
   );
 }

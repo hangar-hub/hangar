@@ -11,7 +11,7 @@ One running deployment of Hangar, made of one or more server and worker processe
 _Avoid_: Server (when the whole deployment is meant), cluster, site
 
 **Arsenal**:
-Everything stored in an Instance that a user can see. Used in the UI and docs, never in API names.
+Everything stored in an Instance that a user can see. Used in the UI and docs, never in API names. The UI lists it in two sections, **Models** and **Datasets**.
 _Avoid_: Library, catalogue (when local content is meant)
 
 **Namespace**:

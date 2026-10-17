@@ -15,6 +15,7 @@ import { errorMessage, fieldErrors, unwrap } from "@/lib/problem";
 import { apiType, type RepoKind, repoPath } from "@/lib/repo";
 import { useMe } from "@/lib/session";
 import { WebhookManager } from "../webhooks/WebhookManager";
+import { DatasetsUsed } from "./DatasetsUsed";
 import {
   type RepoRef,
   repoKey,
@@ -709,7 +710,7 @@ function DangerZone({ repo, ref }: { repo: Repo; ref: RepoRef }) {
             if (!res.response.ok) unwrap(res);
             qc.invalidateQueries({ queryKey: ["repos"] });
             toast(`${repo.id} deleted. An admin can restore it until it is purged.`);
-            go("/arsenal");
+            go(repo.type === "dataset" ? "/datasets" : "/models");
           }}
         >
           <p>
@@ -735,6 +736,20 @@ export function RepoSettingsPage({ kind, ns, name }: { kind: RepoKind; ns: strin
       <Section title="General">
         <General repo={r} ref={ref} />
       </Section>
+      {kind === "model" && !r.mirror ? (
+        <Section
+          title="Datasets used"
+          description={
+            <>
+              The datasets this model was trained or evaluated on, kept in the Model card's{" "}
+              <code className="font-mono">datasets</code> metadata as on the Hugging Face Hub. Each
+              dataset lists this model under Used by.
+            </>
+          }
+        >
+          <DatasetsUsed repo={r} />
+        </Section>
+      ) : null}
       {r.mirror ? (
         <Section
           title="Mirror"

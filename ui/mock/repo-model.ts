@@ -1,3 +1,4 @@
+import { parse as parseYaml } from "yaml";
 import type { components } from "../src/api/schema";
 import {
   type MockCommit,
@@ -252,4 +253,108 @@ export function quantGroups(
     groups.set(q, g);
   }
   return [...groups.values()].sort((a, b) => a.size - b.size);
+}
+
+/** The dataset IDs the head Commit's README.md lists under `datasets:`. */
+function headCardDatasets(r: MockRepo): string[] {
+  const head = resolveRev(r, undefined);
+  const text = head?.files.find((f) => f.path === "README.md")?.text ?? "";
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  if (!m) return [];
+  try {
+    const data = parseYaml(m[1] ?? "") as Record<string, unknown> | null;
+    const v = data?.datasets;
+    const list = typeof v === "string" ? [v] : Array.isArray(v) ? v : [];
+    return list.filter((x): x is string => typeof x === "string" && x.trim() !== "");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A Repo's Dependencies as W6's Graph gives them: dataset links come from
+ * the head Model card's `datasets:` metadata, so a model lists the datasets
+ * it uses and a dataset lists the models that use it (Used by).
+ */
+export function dependenciesOf(state: MockState, r: MockRepo): S["Dependencies"] {
+  const live = state.repos.filter((x) => !x.repo.deleted_at);
+  if (r.repo.type === "model") {
+    const needs = r.dependencies.needs.filter((d) => d.kind !== "dataset");
+    for (const id of headCardDatasets(r)) {
+      const [ns, name] = id.split("/");
+      const held = ns && name ? findRepo(state, "datasets", ns, name) : undefined;
+      needs.push({
+        repo: id,
+        type: "dataset",
+        kind: "dataset",
+        required: false,
+        source_path: "README.md",
+        source_key: "datasets",
+        arsenal: held ? "full" : "none",
+      });
+    }
+    return { needs, needed_by: r.dependencies.needed_by };
+  }
+  const id = r.repo.id.toLowerCase();
+  const neededBy = live
+    .filter(
+      (m) => m.repo.type === "model" && headCardDatasets(m).some((d) => d.toLowerCase() === id),
+    )
+    .map((m): S["Dependency"] => ({
+      repo: m.repo.id,
+      type: "model",
+      kind: "dataset",
+      required: false,
+      source_path: "README.md",
+      source_key: "datasets",
+      arsenal: "full",
+    }))
+    .sort((a, b) => a.repo.localeCompare(b.repo));
+  return { needs: r.dependencies.needs, needed_by: neededBy };
+}
+
+/** Extensions of data files the Dataset Viewer reads (a subset of layout/extensions.go). */
+const viewerExtensions = new Set([
+  "csv",
+  "tsv",
+  "json",
+  "jsonl",
+  "ndjson",
+  "parquet",
+  "arrow",
+  "txt",
+  "tar",
+  "xml",
+  "h5",
+  "hdf5",
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "bmp",
+  "tif",
+  "tiff",
+  "wav",
+  "mp3",
+  "flac",
+  "ogg",
+  "m4a",
+  "mp4",
+  "lance",
+  "fa",
+  "fasta",
+  "fq",
+  "fastq",
+]);
+
+/** True when the head Commit has a data file the Dataset Viewer reads. */
+export function hasViewerFiles(r: MockRepo): boolean {
+  const head = resolveRev(r, undefined);
+  return (head?.files ?? []).some((f) => {
+    const base = f.path.split("/").pop() ?? "";
+    if (base.startsWith(".") || f.path === "README.md") return false;
+    return viewerExtensions.has(base.split(".").pop()?.toLowerCase() ?? "");
+  });
 }
