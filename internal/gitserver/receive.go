@@ -307,7 +307,15 @@ func packObjects(packPath string) ([]plumbing.Hash, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, e.Hash)
+		// go-git v6.0.0-beta.1's index iterator copies the next name's
+		// bytes into the unused tail of a SHA-1 ObjectID, so e.Hash prints
+		// right but compares unequal to the same hash read from a tree.
+		// Rebuild it from its significant bytes.
+		h, ok := plumbing.FromBytes(e.Hash.Bytes())
+		if !ok {
+			return nil, fmt.Errorf("read pack index: object ID of %d bytes", len(e.Hash.Bytes()))
+		}
+		out = append(out, h)
 	}
 }
 

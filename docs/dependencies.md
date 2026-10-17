@@ -11,7 +11,7 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/uptrace/bun/extra/bunotel` | v1.3.0 | OpenTelemetry spans for database queries, without parameter values. |
 | `modernc.org/sqlite` | v1.60.1 | Pure Go SQLite, so builds need no cgo. |
 | `github.com/minio/minio-go/v7` | v7.4.1 | S3-compatible Blob store with presigning and multipart. |
-| `github.com/go-git/go-git/v6` | v6.0.0-beta.1 | git receive-pack (W3) and Mirror fetches (W6) (04-git.md). Server-side Commits use the git binary instead (W2 request 1). A pinned pre-release. |
+| `github.com/go-git/go-git/v6` | v6.0.0-beta.1 | git receive-pack (W3) and Mirror fetches (W6) (04-git.md). Server-side Commits use the git binary instead (W2 request 1). A pinned pre-release. Its pack index iterator leaves stray bytes in SHA-1 object IDs, so the git server rebuilds the IDs it reads from a push's index. |
 | `github.com/go-git/go-billy/v6` | v6.0.0-beta.1 | The filesystem go-git's storer uses for the push quarantine; released with go-git. |
 | `github.com/coreos/go-oidc/v3` | v3.21.0 | OIDC discovery and ID token verification. |
 | `golang.org/x/oauth2` | v0.37.0 | OAuth 2.0 authorisation code flow with PKCE. |

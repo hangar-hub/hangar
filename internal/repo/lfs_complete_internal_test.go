@@ -528,6 +528,25 @@ func (g *gatedStore) Get(ctx context.Context, key string, rng *blob.Range) (io.R
 	return g.Fake.Get(ctx, key, rng)
 }
 
+// joinProbe is a context that reports when CompleteUpload first waits on
+// it. CompleteUpload calls Done only in its final select, after it has
+// joined or started the shared completion, so a closed waiting channel
+// means the call has joined.
+type joinProbe struct {
+	context.Context
+	once    sync.Once
+	waiting chan struct{}
+}
+
+func newJoinProbe() *joinProbe {
+	return &joinProbe{Context: context.Background(), waiting: make(chan struct{})}
+}
+
+func (p *joinProbe) Done() <-chan struct{} {
+	p.once.Do(func() { close(p.waiting) })
+	return p.Context.Done()
+}
+
 // TestCompleteUploadCarriesOnWhenTheCallerGoesAway covers bellatrix
 // finding 13c: a completion of a large file can outlast the client's or a
 // proxy's patience. It now finishes without its caller, and a completion
@@ -557,10 +576,19 @@ func TestCompleteUploadCarriesOnWhenTheCallerGoesAway(t *testing.T) {
 			err error
 		}
 		again := make(chan result, 1)
+		joining := newJoinProbe()
 		go func() {
-			obj, err := l.CompleteUpload(context.Background(), u.ID, parts)
+			obj, err := l.CompleteUpload(joining, u.ID, parts)
 			again <- result{obj, err}
 		}()
+		// Release the read only once the second completion is waiting on
+		// the first. Released earlier, the first can finish and remove the
+		// upload before the second starts, which then finds no upload.
+		select {
+		case <-joining.waiting:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the second completion never waited on the first")
+		}
 		close(gs.gate)
 		res := <-again
 		require.NoError(t, res.err)
