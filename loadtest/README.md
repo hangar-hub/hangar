@@ -31,6 +31,6 @@ Two `web` replicas (2 vCPU, 1 GiB each), one `worker`, Postgres and MinIO on one
      -e REPLICAS=2 resolve.js
    ```
 
-   `upload.js` takes `VUS` (default 4) and `UPLOAD_SIZE` (default 1 GiB); watch replica memory with `docker stats` while it runs. `git_clone.js` takes `HANGAR_USERNAME` for the git Basic credentials.
+   `upload.js` takes `VUS` (default 4) and `UPLOAD_SIZE` (default 1 GiB), and each VU commits to its own Repo, `<UPLOAD_REPO>-<vu>` (by default `<namespace>/uploads-<vu>`); watch replica memory with `docker stats` while it runs. `git_clone.js` takes `HANGAR_USERNAME` for the git Basic credentials.
 
 Every script also takes `DURATION`. k6 exits non-zero when a threshold fails.
