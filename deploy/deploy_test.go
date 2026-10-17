@@ -634,3 +634,91 @@ func TestStorageDocsMinIORegion(t *testing.T) {
 	}
 	t.Fatal("no MinIO row in docs/operate/storage.md")
 }
+
+// pgIsReadyToken matches one argument of a pg_isready command written as a
+// YAML list (["CMD", "pg_isready", "-U", "hangar"]) or as a shell string.
+var pgIsReadyToken = regexp.MustCompile(`[^\s"',\[\]]+`)
+
+// TestPostgresHealthchecksUseTCP checks that every pg_isready health check
+// in the Compose examples and the CI workflows connects over TCP. The
+// postgres image's entrypoint runs a temporary init server that listens
+// only on the Unix socket, so a check without -h reports healthy before
+// Postgres accepts TCP. A service that waits on that check, such as the
+// scale example's one-shot migrate, then gets connection refused.
+func TestPostgresHealthchecksUseTCP(t *testing.T) {
+	workflows, err := filepath.Glob("../.github/workflows/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, path := range append(composeFiles(t), workflows...) {
+		b, err := os.ReadFile(path) // #nosec G304 -- test fixture path.
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "#") || !strings.Contains(line, "pg_isready") {
+				continue
+			}
+			found++
+			if !pgIsReadyUsesTCP(line) {
+				t.Errorf("%s: line %d: %s\n\tpass -h 127.0.0.1 so the check waits for Postgres to accept TCP, not just the init server's Unix socket",
+					path, i+1, strings.TrimSpace(line))
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("no pg_isready health check found; the check has nothing to test")
+	}
+}
+
+// pgIsReadyUsesTCP reports whether the pg_isready command in line names a
+// TCP host. A host that starts with / is a socket directory.
+func pgIsReadyUsesTCP(line string) bool {
+	args := pgIsReadyToken.FindAllString(line, -1)
+	start := -1
+	for i, a := range args {
+		if a == "pg_isready" || strings.HasSuffix(a, "/pg_isready") {
+			start = i + 1
+			break
+		}
+	}
+	if start < 0 {
+		return false
+	}
+	for i := start; i < len(args); i++ {
+		a := args[i]
+		var host string
+		switch {
+		case a == "-h" || a == "--host":
+			if i+1 < len(args) {
+				host = args[i+1]
+			}
+		case strings.HasPrefix(a, "--host="):
+			host = strings.TrimPrefix(a, "--host=")
+		case strings.HasPrefix(a, "-h") && !strings.HasPrefix(a, "--"):
+			host = strings.TrimPrefix(a, "-h")
+		default:
+			continue
+		}
+		return host != "" && !strings.HasPrefix(host, "/")
+	}
+	return false
+}
+
+func TestPgIsReadyTCPCheck(t *testing.T) {
+	for line, ok := range map[string]bool{
+		`test: ["CMD", "pg_isready", "-U", "hangar", "-d", "hangar"]`:                    false,
+		`test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "hangar", "-d", "hangar"]`: true,
+		`--health-cmd "pg_isready -U hangar"`:                                            false,
+		`--health-cmd "pg_isready -h 127.0.0.1 -U hangar"`:                               true,
+		`test: ["CMD-SHELL", "pg_isready --host=localhost -U hangar"]`:                   true,
+		`test: ["CMD-SHELL", "pg_isready -h127.0.0.1 -U hangar"]`:                        true,
+		`test: ["CMD-SHELL", "pg_isready -h /var/run/postgresql -U hangar"]`:             false,
+		`test: ["CMD-SHELL", "pg_isready -h"]`:                                           false,
+	} {
+		if got := pgIsReadyUsesTCP(line); got != ok {
+			t.Errorf("pgIsReadyUsesTCP(%q) = %v, want %v", line, got, ok)
+		}
+	}
+}
