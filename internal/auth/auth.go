@@ -55,8 +55,17 @@ const (
 	ActionWrite Action = "write"
 	// ActionDiscuss opens discussions and pull requests, comments and likes.
 	ActionDiscuss Action = "discuss"
-	// ActionAdmin changes settings, renames, transfers, deletes and manages webhooks.
+	// ActionAdmin changes settings, renames, transfers, deletes and manages
+	// webhooks, collaborators and access requests. It needs the admin Role
+	// and, for Token requests, the admin scope.
 	ActionAdmin Action = "admin"
+	// ActionHubAdmin is the part of ActionAdmin that huggingface_hub does
+	// with a write Token on the Hugging Face Hub: deleting a Repo, changing
+	// its visibility or gating, and renaming it within its Namespace. Only
+	// the Hub API's /api/repos/delete, /api/{type}s/{repo}/settings and
+	// same-Namespace /api/repos/move use it. It needs the admin Role and,
+	// for Token requests, the write scope (decided by James, 2026-10-17).
+	ActionHubAdmin Action = "hub_admin"
 	// ActionCreateRepo creates a Repo in a Namespace.
 	ActionCreateRepo Action = "create_repo"
 	// ActionManageNamespace manages an Organisation's Members and settings.

@@ -53,7 +53,7 @@ func outcome(err error) string {
 
 // repoActions are the columns of the permission table in 05-auth.md, in
 // the order the matrix strings use.
-var repoActions = []auth.Action{auth.ActionRead, auth.ActionReadFiles, auth.ActionPullMirror, auth.ActionWrite, auth.ActionDiscuss, auth.ActionAdmin}
+var repoActions = []auth.Action{auth.ActionRead, auth.ActionReadFiles, auth.ActionPullMirror, auth.ActionWrite, auth.ActionDiscuss, auth.ActionAdmin, auth.ActionHubAdmin}
 
 type matrixWorld struct {
 	s       *auth.Service
@@ -118,30 +118,32 @@ func buildWorld(t *testing.T, d *db.DB, anonymousRead bool) *matrixWorld {
 // and restrictions, on SQLite and Postgres.
 func TestPermissionMatrix(t *testing.T) {
 	// persona -> visibility -> outcomes for read, read_files, pull_mirror,
-	// write, discuss, admin.
+	// write, discuss, admin, hub_admin. A write Token gets hub_admin (the
+	// Hub API's delete, settings and same-Namespace move) on Repos its user
+	// administers, and never admin (decided by James, 2026-10-17).
 	type row map[model.Visibility]string
 	pub, internal, private := model.VisibilityPublic, model.VisibilityInternal, model.VisibilityPrivate
 	matrix := map[bool]map[string]row{
 		true: { // anonymous_read on
-			"anonymous":                   {pub: "AAFFFF", internal: "NNNNNN", private: "NNNNNN"},
-			"outsider":                    {pub: "AAFFAF", internal: "AAFFAF", private: "NNNNNN"},
-			"member-read":                 {pub: "AAFFAF", internal: "AAFFAF", private: "AAFFAF"},
-			"member-write":                {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},
-			"member-admin":                {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
-			"collab-read":                 {pub: "AAFFAF", internal: "AAFFAF", private: "AAFFAF"},
-			"collab-write":                {pub: "AAFAAF", internal: "AAFAAF", private: "AAFAAF"},
-			"instance-admin":              {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
-			"member-write+read-token":     {pub: "AAFFFF", internal: "AAFFFF", private: "AAFFFF"},
-			"member-admin+write-token":    {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
-			"member-admin+admin-token":    {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
-			"member-write+token-other-ns": {pub: "NNNNNN", internal: "NNNNNN", private: "NNNNNN"},
-			"member-write+token-acme":     {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},
-			"member-write+token-one-repo": {pub: "NNNNNN", internal: "NNNNNN", private: "AAAAAF"},
-			"ollama-registry-token":       {pub: "NNNNNN", internal: "AAFFFF", private: "NNNNNN"},
+			"anonymous":                   {pub: "AAFFFFF", internal: "NNNNNNN", private: "NNNNNNN"},
+			"outsider":                    {pub: "AAFFAFF", internal: "AAFFAFF", private: "NNNNNNN"},
+			"member-read":                 {pub: "AAFFAFF", internal: "AAFFAFF", private: "AAFFAFF"},
+			"member-write":                {pub: "AAAAAFF", internal: "AAAAAFF", private: "AAAAAFF"},
+			"member-admin":                {pub: "AAAAAAA", internal: "AAAAAAA", private: "AAAAAAA"},
+			"collab-read":                 {pub: "AAFFAFF", internal: "AAFFAFF", private: "AAFFAFF"},
+			"collab-write":                {pub: "AAFAAFF", internal: "AAFAAFF", private: "AAFAAFF"},
+			"instance-admin":              {pub: "AAAAAAA", internal: "AAAAAAA", private: "AAAAAAA"},
+			"member-write+read-token":     {pub: "AAFFFFF", internal: "AAFFFFF", private: "AAFFFFF"},
+			"member-admin+write-token":    {pub: "AAAAAFA", internal: "AAAAAFA", private: "AAAAAFA"},
+			"member-admin+admin-token":    {pub: "AAAAAAA", internal: "AAAAAAA", private: "AAAAAAA"},
+			"member-write+token-other-ns": {pub: "NNNNNNN", internal: "NNNNNNN", private: "NNNNNNN"},
+			"member-write+token-acme":     {pub: "AAAAAFF", internal: "AAAAAFF", private: "AAAAAFF"},
+			"member-write+token-one-repo": {pub: "NNNNNNN", internal: "NNNNNNN", private: "AAAAAFF"},
+			"ollama-registry-token":       {pub: "NNNNNNN", internal: "AAFFFFF", private: "NNNNNNN"},
 		},
 		false: { // anonymous_read off: only the anonymous row changes
-			"anonymous": {pub: "NNNNNN", internal: "NNNNNN", private: "NNNNNN"},
-			"outsider":  {pub: "AAFFAF", internal: "AAFFAF", private: "NNNNNN"},
+			"anonymous": {pub: "NNNNNNN", internal: "NNNNNNN", private: "NNNNNNN"},
+			"outsider":  {pub: "AAFFAFF", internal: "AAFFAFF", private: "NNNNNNN"},
 		},
 	}
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
@@ -157,7 +159,7 @@ func TestPermissionMatrix(t *testing.T) {
 						got += outcome(w.s.Authorizer.Can(context.Background(), p, a, auth.Target{Repo: w.repos[vis]}))
 						cells++
 					}
-					require.Equal(t, want, got, "anonymous_read=%v persona=%s visibility=%s (read, read_files, pull_mirror, write, discuss, admin)", anonRead, persona, vis)
+					require.Equal(t, want, got, "anonymous_read=%v persona=%s visibility=%s (read, read_files, pull_mirror, write, discuss, admin, hub_admin)", anonRead, persona, vis)
 				}
 			}
 			t.Logf("anonymous_read=%v: %d cells checked", anonRead, cells)

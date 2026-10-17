@@ -145,9 +145,9 @@ func (a *Authz) roleIn(p model.Principal, nsID uuid.UUID, nsName string, repoUUI
 
 func scopeFor(action auth.Action) model.Scope {
 	switch action {
-	case auth.ActionWrite, auth.ActionPullMirror, auth.ActionDiscuss, auth.ActionCreateRepo, auth.ActionAdmin:
+	case auth.ActionWrite, auth.ActionPullMirror, auth.ActionDiscuss, auth.ActionCreateRepo, auth.ActionHubAdmin:
 		return model.ScopeWrite
-	case auth.ActionManageNamespace, auth.ActionInstanceAdmin:
+	case auth.ActionAdmin, auth.ActionManageNamespace, auth.ActionInstanceAdmin:
 		return model.ScopeAdmin
 	default:
 		return model.ScopeRead
@@ -232,7 +232,7 @@ func (a *Authz) canRepo(p model.Principal, action auth.Action, r *auth.RepoTarge
 		if a.roleIn(p, r.NamespaceID, r.ID.Namespace, uuid.Nil).Includes(model.RoleWrite) {
 			return nil
 		}
-	case auth.ActionAdmin:
+	case auth.ActionAdmin, auth.ActionHubAdmin:
 		if role.Includes(model.RoleAdmin) {
 			return nil
 		}
