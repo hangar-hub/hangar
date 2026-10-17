@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Records the 30-second demo on the docs Home page (docs/spec/12): sign-in,
-# a Pull from huggingface.co, then the hf CLI downloading through Hangar.
+# Records the 30-second terminal demo on the docs Home page (docs/spec/12):
+# hangar whoami, a Pull from huggingface.co, the hf CLI downloading through
+# Hangar and hangar info. It shows no web UI, so it does not change with the
+# UI's look.
 # It writes docs/assets/demo.gif, so run it against a real Instance that can
 # reach huggingface.co.
 #
@@ -44,7 +46,7 @@ if [[ "${1:-}" == "--play" ]]; then
 fi
 
 case "${1:-}" in
-  -h|--help|"") sed -n '2,13p' "$0"; exit 0 ;;
+  -h|--help|"") sed -n '2,15p' "$0"; exit 0 ;;
 esac
 url="${1%/}"
 : "${HANGAR_DEMO_TOKEN:?set HANGAR_DEMO_TOKEN to a write Token for $url}"
@@ -65,4 +67,4 @@ asciinema rec --overwrite --quiet --cols 100 --rows 28 \
 mkdir -p "$root/docs/assets"
 agg --font-size 16 "$work/demo.cast" "$root/docs/assets/demo.gif"
 echo "Wrote docs/assets/demo.gif. Show it on the Home page under the introduction:"
-echo '![Hangar in 30 seconds: sign in, pull a model, download it with the hf CLI](assets/demo.gif)'
+echo '![Hangar in 30 seconds in a terminal: check the sign-in, pull a model from huggingface.co, download it with the hf CLI and show its details](assets/demo.gif)'
