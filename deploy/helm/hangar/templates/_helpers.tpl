@@ -73,6 +73,77 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "web.replicas must be at least 1" }}
 {{- end }}
 {{- end }}
+{{- if not (has .Values.migrations.mode (list "hook" "initContainer")) }}
+{{- fail (printf "migrations.mode is %q; use hook (a Helm pre-install and pre-upgrade Job) or initContainer (for Argo CD and other GitOps tools)" (toString .Values.migrations.mode)) }}
+{{- end }}
+{{- include "hangar.validateCache" . }}
+{{- end }}
+
+{{/*
+Fail when the git pack cache can outgrow its emptyDir. The cache trims
+itself to git.cache_size only after a Repo is released, and git also writes
+views and staging directories next to it, so the volume needs room above
+the cache: the kubelet evicts a Pod whose emptyDir passes its sizeLimit.
+Only checked when the cache is on the chart's cache volume.
+*/}}
+{{- define "hangar.validateCache" -}}
+{{- $git := default dict .Values.config.git }}
+{{- $dir := default "/var/cache/hangar/git" $git.cache_dir }}
+{{- if and .Values.cacheSizeLimit (hasPrefix "/var/cache/hangar/" $dir) }}
+{{- $cache := include "hangar.bytes" (default "10GiB" $git.cache_size | toString) | float64 }}
+{{- $volume := include "hangar.bytes" (toString .Values.cacheSizeLimit) | float64 }}
+{{- if gt (mulf $cache 1.25) $volume }}
+{{- fail (printf "cacheSizeLimit (%s) leaves too little room for git.cache_size (%s): the pack cache goes over its limit while Repos are in use, and the kubelet evicts the Pod when the volume fills. Make cacheSizeLimit at least a quarter larger than git.cache_size" (toString .Values.cacheSizeLimit) (default "10GiB" $git.cache_size | toString)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+A size in bytes, from a Kubernetes quantity (16Gi, 500M) or a Hangar size
+(10GiB, 64MB, 1048576).
+*/}}
+{{- define "hangar.bytes" -}}
+{{- $s := trim . }}
+{{- $num := regexFind "^[0-9]+(\\.[0-9]+)?" $s }}
+{{- if not $num }}
+{{- fail (printf "invalid size %q" $s) }}
+{{- end }}
+{{- $unit := lower (trimPrefix $num $s) }}
+{{- $units := dict "" 1.0 "b" 1.0 "k" 1000.0 "kb" 1000.0 "m" 1e6 "mb" 1e6 "g" 1e9 "gb" 1e9 "t" 1e12 "tb" 1e12 "ki" 1024.0 "kib" 1024.0 "mi" 1048576.0 "mib" 1048576.0 "gi" 1073741824.0 "gib" 1073741824.0 "ti" 1099511627776.0 "tib" 1099511627776.0 }}
+{{- if not (hasKey $units $unit) }}
+{{- fail (printf "invalid size %q: use a unit such as Mi, Gi, MiB or GiB" $s) }}
+{{- end }}
+{{- mulf (float64 $num) (get $units $unit) }}
+{{- end }}
+
+{{/*
+Non-empty when templates can read the cluster with lookup. They cannot under
+helm template, helm lint, --dry-run=client or Argo CD, where lookup returns
+nothing. The default ServiceAccount exists in every namespace; on a first
+install with --create-namespace the namespace does not exist yet, so the
+default namespace stands in.
+*/}}
+{{- define "hangar.lookupWorks" -}}
+{{- if lookup "v1" "ServiceAccount" .Release.Namespace "default" }}true
+{{- else if lookup "v1" "Namespace" "" "default" }}true
+{{- end }}
+{{- end }}
+
+{{/*
+The checksum that restarts Pods when their secrets change: the `secrets`
+values, the existingSecret name and, when the chart can read the cluster,
+the existingSecret's data, so a rotated Secret rolls the Pods on the next
+helm upgrade.
+*/}}
+{{- define "hangar.secretChecksum" -}}
+{{- $existing := dict }}
+{{- if .Values.existingSecret }}
+{{- $s := lookup "v1" "Secret" .Release.Namespace .Values.existingSecret }}
+{{- if $s }}
+{{- $existing = default dict $s.data }}
+{{- end }}
+{{- end }}
+{{- dict "secrets" .Values.secrets "existingSecret" .Values.existingSecret "existingData" $existing | toYaml | sha256sum }}
 {{- end }}
 
 {{/* hangar.yaml: the user's config with the chart's keys on top. */}}
@@ -107,6 +178,38 @@ password.
 {{- if and (include "hangar.generate" .) (not (hasKey .Values.secrets "HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD")) }}true{{ end }}
 {{- end }}
 
+{{/* Non-empty when web and worker Pods run migrations in an init container. */}}
+{{- define "hangar.migrateInit" -}}
+{{- if and .Values.migrations.enabled (not .Values.persistence.enabled) (eq .Values.migrations.mode "initContainer") }}true{{ end }}
+{{- end }}
+
+{{/* Non-empty when a pre-install and pre-upgrade hook Job runs migrations. */}}
+{{- define "hangar.migrateHook" -}}
+{{- if and .Values.migrations.enabled (not .Values.persistence.enabled) (eq .Values.migrations.mode "hook") }}true{{ end }}
+{{- end }}
+
+{{/* env and envFrom of the Hangar container and the migrate init container. */}}
+{{- define "hangar.env" -}}
+env:
+  - name: HANGAR_CONFIG
+    value: /etc/hangar/hangar.yaml
+  {{- with .Values.extraEnv }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+envFrom:
+  {{- if or .Values.existingSecret .Values.secrets }}
+  - secretRef:
+      name: {{ include "hangar.secretName" . }}
+  {{- end }}
+  {{- if include "hangar.generate" . }}
+  - secretRef:
+      name: {{ include "hangar.fullname" . }}-generated
+  {{- end }}
+  {{- with .Values.extraEnvFrom }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+
 {{/*
 Pod template shared by the all, web and worker Deployments.
 Takes a dict: ctx (the root context), component, role, values (web or worker).
@@ -123,7 +226,7 @@ metadata:
     {{- end }}
   annotations:
     checksum/config: {{ include "hangar.config" $ | sha256sum }}
-    checksum/secret: {{ toYaml $.Values.secrets | sha256sum }}
+    checksum/secret: {{ include "hangar.secretChecksum" $ }}
     {{- with $v.podAnnotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -143,29 +246,32 @@ spec:
   securityContext:
     {{- toYaml $.Values.podSecurityContext | nindent 4 }}
   terminationGracePeriodSeconds: 45
+  {{- if include "hangar.migrateInit" $ }}
+  initContainers:
+    # Brings the schema up to date before Hangar starts. It needs no Helm
+    # hook, so GitOps tools such as Argo CD can apply the database in the
+    # same sync: until the database answers, the container fails and the
+    # kubelet retries it. Migrations take a lock in the database, so Pods
+    # that start together wait for one another.
+    - name: migrate
+      image: {{ include "hangar.image" $ }}
+      imagePullPolicy: {{ $.Values.image.pullPolicy }}
+      args: ["admin", "migrate"]
+      {{- include "hangar.env" $ | nindent 6 }}
+      resources:
+        {{- toYaml $.Values.migrations.resources | nindent 8 }}
+      securityContext:
+        {{- toYaml $.Values.securityContext | nindent 8 }}
+      volumeMounts:
+        - {name: config, mountPath: /etc/hangar, readOnly: true}
+        - {name: tmp, mountPath: /tmp}
+  {{- end }}
   containers:
     - name: hangar
       image: {{ include "hangar.image" $ }}
       imagePullPolicy: {{ $.Values.image.pullPolicy }}
       args: ["server", "--role", {{ .role | quote }}]
-      env:
-        - name: HANGAR_CONFIG
-          value: /etc/hangar/hangar.yaml
-        {{- with $.Values.extraEnv }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-      envFrom:
-        {{- if or $.Values.existingSecret $.Values.secrets }}
-        - secretRef:
-            name: {{ include "hangar.secretName" $ }}
-        {{- end }}
-        {{- if include "hangar.generate" $ }}
-        - secretRef:
-            name: {{ include "hangar.fullname" $ }}-generated
-        {{- end }}
-        {{- with $.Values.extraEnvFrom }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- include "hangar.env" $ | nindent 6 }}
       ports:
         - name: http
           containerPort: {{ $.Values.service.port }}
