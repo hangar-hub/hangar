@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,13 +18,19 @@ import (
 const completeRoute = "POST /api/hangar/v1/repos/{type}/{ns}/{name}/uploads/{id}/complete"
 
 // recordWaits replaces waitRetry for one test and returns the waits asked
-// for.
+// for. Parts upload in parallel, so the record is locked; read it once the
+// command has returned.
 func recordWaits(t *testing.T) *[]time.Duration {
 	t.Helper()
-	var waits []time.Duration
+	var (
+		mu    sync.Mutex
+		waits []time.Duration
+	)
 	orig := waitRetry
 	waitRetry = func(ctx context.Context, d time.Duration) error {
+		mu.Lock()
 		waits = append(waits, d)
+		mu.Unlock()
 		return ctx.Err()
 	}
 	t.Cleanup(func() { waitRetry = orig })
