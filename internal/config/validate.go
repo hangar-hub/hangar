@@ -123,6 +123,9 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	if c.Storage.S3.StallTimeout < 10*time.Second {
 		e.addf("storage.s3.stall_timeout must be at least 10s")
 	}
+	if c.Storage.S3.StartupWait < 0 || c.Storage.S3.StartupWait > time.Hour {
+		e.addf("storage.s3.startup_wait must be between 0 and 1h")
+	}
 
 	// security
 	if c.Security.InstanceKey == "" {

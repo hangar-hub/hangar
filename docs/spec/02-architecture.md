@@ -268,6 +268,7 @@ storage:
     presign_ttl: 1h
     retries: 5                              # resend a failed part or object upload; 0 = never
     stall_timeout: 2m                       # cancel and retry a request that makes no progress
+    startup_wait: 5m                        # keep trying to reach the bucket at start; 0 = exit at once
 
 security:
   instance_key: ""                          # 32-byte base64; encrypts stored secrets; required

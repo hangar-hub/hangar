@@ -31,11 +31,13 @@ storage:
     presign_ttl: 1h
     retries: 5                             # resend a failed part or object upload; 0 = never
     stall_timeout: 2m                      # cancel and retry a request that makes no progress
+    startup_wait: 5m                       # keep trying to reach the bucket at start; 0 = exit at once
 ```
 
 - In `redirect` mode, LFS downloads and zip exports answer with a presigned URL, so file bytes go straight from the store to the client. Clients must reach the store's endpoint; if they cannot, use `proxy`, which streams through Hangar.
 - In `direct` upload mode, large-file uploads from git-lfs, `huggingface_hub`, `hangar push` and the web UI go straight to presigned URLs, and the UI's Content Security Policy allows the store's origin. Clients must reach the store's endpoint; if they cannot, set `upload_mode: proxy`, and uploads stream through Hangar into the store. Presigned upload URLs sign no headers, because `huggingface_hub` sends none, and write to a staging key under `tmp/uploads/`; Hangar checks the SHA-256 and size of what arrives and copies it into place server-side before anyone can download it.
 - Ollama downloads always stream through Hangar, because Ollama refuses redirects to other hosts.
+- At start, a server or worker that cannot reach the bucket keeps trying for `startup_wait`, logging `waiting for the Blob store` with the endpoint, the bucket and the error on each attempt, and then exits. While it waits, `/healthz` answers 200 and `/readyz` answers 503, so an object store that starts after Hangar, as in some GitOps installs, does not put Hangar into a restart back-off. The filesystem backend is not retried.
 
 | Provider | Settings | Notes |
 |---|---|---|

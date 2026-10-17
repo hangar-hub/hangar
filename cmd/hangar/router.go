@@ -36,6 +36,12 @@ import (
 // the expected version, and the Blob store sentinel readable, followed by
 // any extra checks, such as the start-up check that serve adds.
 func newHealth(d *db.DB, blobs blob.Store, extra ...httpx.Check) *httpx.Health {
+	return newHealthFor(d, func() blob.Store { return blobs }, extra...)
+}
+
+// newHealthFor is newHealth for a Blob store that may not be open yet:
+// until blobs returns one, the blob_store check fails.
+func newHealthFor(d *db.DB, blobs func() blob.Store, extra ...httpx.Check) *httpx.Health {
 	checks := []httpx.Check{
 		{Name: "database", Run: func(ctx context.Context) error {
 			if err := d.PingContext(ctx); err != nil {
@@ -51,7 +57,14 @@ func newHealth(d *db.DB, blobs blob.Store, extra ...httpx.Check) *httpx.Health {
 			return nil
 		}},
 		{Name: "blob_store", CacheFor: 10 * time.Second, Run: func(ctx context.Context) error {
-			_, err := blobs.Stat(ctx, blob.SentinelKey)
+			s := blobs()
+			if s == nil {
+				// Not open yet. The startup check keeps /readyz at 503 and
+				// says why; failing here instead would cache the failure
+				// for CacheFor after the store opens.
+				return nil
+			}
+			_, err := s.Stat(ctx, blob.SentinelKey)
 			return err
 		}},
 	}
@@ -63,11 +76,23 @@ func newHealth(d *db.DB, blobs blob.Store, extra ...httpx.Check) *httpx.Health {
 // being built and no load balancer sends API traffic to the health-only
 // handler.
 func startupCheck(started *atomic.Bool) httpx.Check {
+	return startupCheckWaiting(started, nil)
+}
+
+// startupCheckWaiting is startupCheck that also names what start-up is
+// waiting for while waiting holds a reason, such as a Blob store that does
+// not answer yet.
+func startupCheckWaiting(started *atomic.Bool, waiting *atomic.Pointer[string]) httpx.Check {
 	return httpx.Check{Name: "startup", Run: func(context.Context) error {
-		if !started.Load() {
-			return errors.New("the server is still starting")
+		if started.Load() {
+			return nil
 		}
-		return nil
+		if waiting != nil {
+			if w := waiting.Load(); w != nil {
+				return fmt.Errorf("the server is still starting: %s", *w)
+			}
+		}
+		return errors.New("the server is still starting")
 	}}
 }
 
