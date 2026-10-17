@@ -15,7 +15,10 @@ function answer(status: number, body?: unknown) {
   vi.stubGlobal("fetch", async () =>
     status === 204
       ? new Response(null, { status })
-      : new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }),
+      : new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
   );
 }
 

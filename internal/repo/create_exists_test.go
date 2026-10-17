@@ -9,6 +9,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/jamesagarside/hangar/internal/db/dbtest"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
 )
@@ -36,9 +37,12 @@ func (f *failedQueries) AfterQuery(_ context.Context, ev *bun.QueryEvent) {
 // to create a Repo that exists on every upload, and each request made the
 // insert fail with a unique violation, an ERROR line in the Postgres log.
 func TestCreateExistingRepoCausesNoDatabaseError(t *testing.T) {
-	forEach(t, func(t *testing.T, e *env) {
+	t.Parallel()
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		hook := &failedQueries{}
-		e.d.AddQueryHook(hook)
+		hooked := *d
+		hooked.DB = d.WithQueryHook(hook)
+		e := newEnv(t, &hooked)
 		alice := e.addUser("alice")
 		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "again"}
 		e.create(repo.CreateParams{ID: id, Actor: alice})

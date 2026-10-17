@@ -614,7 +614,7 @@ func (s *Store) Copy(ctx context.Context, srcKey, dstKey string) error {
 	}
 	srcs := []minio.CopySrcOptions{{Bucket: s.bucket, Object: src, MatchETag: oi.ETag}}
 	if oi.Size > s.copyPartSize {
-		dest.PartSize = uint64(s.copyPartSize)
+		dest.PartSize = uint64(s.copyPartSize) //nolint:gosec // New keeps it between 5 MiB and 5 GiB.
 		srcs = srcs[:0]
 		for off := int64(0); off < oi.Size; off += s.copyPartSize {
 			srcs = append(srcs, minio.CopySrcOptions{Bucket: s.bucket, Object: src, MatchETag: oi.ETag,
