@@ -73,6 +73,24 @@ func TestSymlinksIntoACacheRepoAreFollowed(t *testing.T) {
 	require.NotContains(t, got, "token.txt")
 }
 
+// TestSymlinksToCacheBlobsAreFollowed checks that a folder hangar lmstudio
+// filled with links into the Hugging Face cache still imports.
+func TestSymlinksToCacheBlobsAreFollowed(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	cache := filepath.Join(e.home, "hf-cache")
+	id := mustID(t, model.RepoTypeModel, "acme/linked-gguf")
+	commit := strings.Repeat("12", 20)
+	weights := blobOf("q4", 4000)
+	cacheSnapshot(t, cache, id, commit, map[string][]byte{"m-Q4_K_M.gguf": weights})
+	lm := filepath.Join(e.home, "lmstudio", "acme", "linked-gguf")
+	require.NoError(t, os.MkdirAll(lm, 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(cache, repoFolderName(id), "blobs", sha(weights)), filepath.Join(lm, "m-Q4_K_M.gguf")))
+	r := e.ok("push", lm, "acme/from-lm", "--create")
+	require.NotContains(t, r.stderr, "Skipped")
+	require.Equal(t, weights, e.inst.Files(mustID(t, model.RepoTypeModel, "acme/from-lm"), "main")["m-Q4_K_M.gguf"])
+}
+
 func TestWithin(t *testing.T) {
 	for _, c := range []struct {
 		path, dir string

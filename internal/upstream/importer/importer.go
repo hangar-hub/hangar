@@ -195,7 +195,9 @@ func linkScope(root string) (string, error) {
 	return real, nil
 }
 
-// linkInScope reports whether the symbolic link p resolves inside scope.
+// linkInScope reports whether the symbolic link p resolves inside scope,
+// or to a blob of a Hugging Face cache, as files hangar lmstudio links
+// into LM Studio's folder do.
 func linkInScope(p, scope string) bool {
 	real, err := filepath.EvalSymlinks(p)
 	if err != nil {
@@ -203,6 +205,9 @@ func linkInScope(p, scope string) bool {
 	}
 	if real, err = filepath.Abs(real); err != nil {
 		return false
+	}
+	if blobs := filepath.Dir(real); filepath.Base(blobs) == "blobs" && cacheDirRe.MatchString(filepath.Base(filepath.Dir(blobs))) {
+		return true
 	}
 	rel, err := filepath.Rel(scope, real)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)

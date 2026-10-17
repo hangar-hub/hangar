@@ -8,11 +8,12 @@ import (
 
 // Symbolic links in folders the CLI uploads are followed only when they
 // point inside the folder, or, in a Hugging Face cache snapshot, inside
-// the Repo's cache folder, whose blobs folder the snapshot links into
-// (06-upstreams-and-pulls.md "Bulk import"). A link to anything else, such
-// as ../../.ssh/id_ed25519 in a cloned model folder, is skipped and named,
-// so pushing or importing a folder never uploads a file from elsewhere on
-// the machine.
+// the Repo's cache folder, whose blobs folder the snapshot links into, or
+// at a blob of any Hugging Face cache, as the files hangar lmstudio links
+// into LM Studio's folder are (06-upstreams-and-pulls.md "Bulk import"). A
+// link to anything else, such as ../../.ssh/id_ed25519 in a cloned model
+// folder, is skipped and named, so pushing or importing a folder never
+// uploads a file from elsewhere on the machine.
 
 // linkScope returns the folder that symbolic links under dir may resolve
 // into, with symbolic links in its own path resolved.
@@ -46,7 +47,18 @@ func resolveInScope(p, scope string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return real, within(real, scope)
+	return real, within(real, scope) || isCacheBlob(real)
+}
+
+// isCacheBlob reports whether path is a blob in a Hugging Face cache:
+// <cache>/<type>s--<ns>--<name>/blobs/<etag>.
+func isCacheBlob(path string) bool {
+	blobs := filepath.Dir(path)
+	if filepath.Base(blobs) != "blobs" {
+		return false
+	}
+	_, ok := parseRepoFolderName(filepath.Base(filepath.Dir(blobs)))
+	return ok
 }
 
 // within reports whether path is dir or inside it. Both must be clean,
