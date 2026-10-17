@@ -135,7 +135,7 @@ func (s *Store) ApplyPack(ctx context.Context, p ApplyPackParams) error {
 	if err != nil {
 		return err
 	}
-	if err := s.checkTrees(ctx, st.Dir, commits); err != nil {
+	if err := s.checkTrees(ctx, st.Dir, commits, true); err != nil {
 		return err
 	}
 	if s.opts.Quota != nil && p.Source == SourcePush && added > 0 {

@@ -43,11 +43,11 @@ type treeStat struct {
 
 // checkTrees checks the tree of every Commit in commits, which are in the
 // git repository at dir: every name is one model.ValidPathComponent
-// accepts, no path is longer than model.MaxPathLength, and the Commit holds
-// at most Options.MaxTreePaths files and folders. Each tree is read once,
-// however often it is named, so the check costs what the distinct trees
-// cost, not what they expand to.
-func (s *Store) checkTrees(ctx context.Context, dir string, commits []string) error {
+// accepts (when names is set), no path is longer than model.MaxPathLength,
+// and the Commit holds at most Options.MaxTreePaths files and folders.
+// Each tree is read once, however often it is named, so the check costs
+// what the distinct trees cost, not what they expand to.
+func (s *Store) checkTrees(ctx context.Context, dir string, commits []string, names bool) error {
 	if len(commits) == 0 {
 		return nil
 	}
@@ -83,7 +83,7 @@ func (s *Store) checkTrees(ctx context.Context, dir string, commits []string) er
 			if info.Missing || info.Type != "tree" {
 				return fmt.Errorf("%w: tree %s is missing", ErrInvalid, info.OID)
 			}
-			ents, err := parseTreeObject(content)
+			ents, err := parseTreeObject(content, names)
 			if err != nil {
 				return err
 			}
@@ -145,8 +145,8 @@ func commitTreeOID(content []byte) (string, bool) {
 }
 
 // parseTreeObject parses a git tree object ("<mode> <name>\0<20-byte ID>"
-// per entry) and refuses names a Repo cannot hold.
-func parseTreeObject(b []byte) ([]treeEntry, error) {
+// per entry) and, when names is set, refuses names a Repo cannot hold.
+func parseTreeObject(b []byte, names bool) ([]treeEntry, error) {
 	var out []treeEntry
 	for len(b) > 0 {
 		sp := bytes.IndexByte(b, ' ')
@@ -157,7 +157,7 @@ func parseTreeObject(b []byte) ([]treeEntry, error) {
 		mode, name := string(b[:sp]), string(b[sp+1:nul])
 		oid := hex.EncodeToString(b[nul+1 : nul+21])
 		b = b[nul+21:]
-		if err := model.ValidPathComponent(name); err != nil {
+		if err := model.ValidPathComponent(name); names && err != nil {
 			return nil, &PolicyError{Message: fmt.Sprintf("the push has a file or folder named %q, which a Repo cannot hold: it %s", name, err.Error())}
 		}
 		e := treeEntry{name: name}

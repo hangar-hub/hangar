@@ -766,6 +766,13 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 			return nil, err
 		}
 		sha := model.CommitSHA(strings.TrimSpace(string(out)))
+		// The paths added were checked one by one; this bounds the whole
+		// Commit, as for pushes. Names already in the parent are not
+		// checked again, so a Repo that holds one from before the check
+		// still takes Commits.
+		if err := s.checkTrees(ctx, st.Dir, []string{string(sha)}, false); err != nil {
+			return nil, err
+		}
 		pack, _, err := st.PackLoose(ctx)
 		if err != nil {
 			return nil, err

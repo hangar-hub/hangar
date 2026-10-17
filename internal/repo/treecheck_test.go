@@ -172,6 +172,17 @@ func TestApplyPackPathLimitIsConfigurable(t *testing.T) {
 		var pe *repo.PolicyError
 		require.ErrorAs(t, err, &pe)
 		require.Contains(t, pe.Message, "has more than 100 files and folders")
+
+		// Server-side Commits are bounded the same way.
+		ops := make([]repo.Operation, 0, 101)
+		for i := range 101 {
+			ops = append(ops, add(fmt.Sprintf("many/f%03d.txt", i), "x"))
+		}
+		_, err = small.Commit(e.ctx, repo.CommitParams{Repo: id, Summary: "too many", Operations: ops, Actor: alice})
+		require.ErrorAs(t, err, &pe)
+		require.Contains(t, pe.Message, "has more than 100 files and folders")
+		_, err = small.Commit(e.ctx, repo.CommitParams{Repo: id, Summary: "few", Operations: ops[:10], Actor: alice})
+		require.NoError(t, err)
 	})
 }
 
