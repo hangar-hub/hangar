@@ -31,7 +31,7 @@ hangar pull Qwen/Qwen3-0.6B --server-only
 hangar pull datasets/lhoestq/demo1 --to ./demo1
 ```
 
-If the files are not in the Arsenal, `hangar pull` asks the Instance to Pull them and shows the progress, then downloads them into the Hugging Face cache (`$HF_HUB_CACHE`, default `~/.cache/huggingface/hub`), in the same layout Python libraries use, so they reuse the files and so does the CLI. Downloads resume after an interruption and are checked against their SHA-256 or git object ID.
+If the files are not in the Arsenal, `hangar pull` asks the Instance to Pull them and shows the progress, then downloads them into the Hugging Face cache (`$HF_HUB_CACHE`, default `~/.cache/huggingface/hub`), in the same layout Python libraries use, so they reuse the files and so does the CLI. Downloads resume after an interruption, retry by themselves after a dropped connection or a busy proxy, and are checked against their SHA-256 or git object ID.
 
 ## Upload and import
 

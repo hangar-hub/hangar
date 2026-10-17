@@ -78,6 +78,8 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 
 	// The native API is the generated router over the real handlers.
 	resp, body = get("/api/hangar/v1/me")
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "nobody is signed in: %s", body)
+	resp, body = get("/api/hangar/v1/me/tokens")
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode, body)
 	require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
 	resp, _ = get("/api/hangar/v1/repos?limit=lots")
@@ -390,7 +392,7 @@ func TestFirstReadyAnswerServesEveryRoute(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	resp, err := client.Get(base + "/api/hangar/v1/me")
+	resp, err := client.Get(base + "/api/hangar/v1/me/tokens")
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode, "the native API is served once /readyz answers 200")

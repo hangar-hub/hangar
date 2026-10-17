@@ -145,9 +145,9 @@ func (a *Authz) roleIn(p model.Principal, nsID uuid.UUID, nsName string, repoUUI
 
 func scopeFor(action auth.Action) model.Scope {
 	switch action {
-	case auth.ActionWrite, auth.ActionPullMirror, auth.ActionDiscuss, auth.ActionCreateRepo:
+	case auth.ActionWrite, auth.ActionPullMirror, auth.ActionDiscuss, auth.ActionCreateRepo, auth.ActionAdmin:
 		return model.ScopeWrite
-	case auth.ActionAdmin, auth.ActionManageNamespace, auth.ActionInstanceAdmin:
+	case auth.ActionManageNamespace, auth.ActionInstanceAdmin:
 		return model.ScopeAdmin
 	default:
 		return model.ScopeRead

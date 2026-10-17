@@ -9,7 +9,7 @@
 Clients send a Token as a bearer token (Hub API and native API) or as the git password.
 
 1. Open **Settings**, **Tokens**, and select **Create token**.
-2. Choose a scope: `read` downloads, `write` also uploads and starts Pulls, `admin` also manages Namespaces you administer. You can limit a Token to some Namespaces or Repos, and give it an expiry.
+2. Choose a scope: `read` downloads, `write` also uploads, starts Pulls and administers Repos you are an admin of (settings, rename, delete), `admin` also manages the Members of Organisations you administer. You can limit a Token to some Namespaces or Repos, and give it an expiry.
 3. Copy the secret, which starts with `hgr_`. It is shown once.
 
 Or let the CLI create one with a device-code sign-in:

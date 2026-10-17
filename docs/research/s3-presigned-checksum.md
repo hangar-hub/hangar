@@ -30,6 +30,10 @@ Evidence labels:
 - For git-lfs clients, signing is safe and gives a server-side check: pass the oid's bytes as `sum` and copy `PresignedRequest.Headers` into `actions.upload.header`. Telling the two clients apart needs the batch request's `User-Agent` (`git-lfs/...`); if that is not worth the branching, leave the checksum out for everyone.
 - `blob.PutVerified` covers uploads that pass through Hangar on any backend: the object becomes visible only when its SHA-256 matches.
 
+### What Hangar does (2026-10-17)
+
+`repo.LFS.PresignPut` used to pass the oid as `sum` for every client, so `huggingface_hub` uploads of 10 to 64 MiB without Xet failed on MinIO with finding 4's `AccessDenied` (bellatrix preview, 2026-10-16). It now signs no headers for any client and writes to a staging key, `tmp/uploads/<id>`, recorded in an `uploads` row of kind `lfs-put`. `Verify` hashes the staged object, copies it to its key with `blob.Store.Copy` when it matches, and discards it when it does not, so a client still cannot put other bytes under an object's key. [test] `compat/hf` `TestHubBasicUploadToMinIOWithoutXet` (huggingface_hub 2.2.0, `HF_HUB_DISABLE_XET=1`, a 20 MiB file, the binary on MinIO) fails with that `AccessDenied` before the change and passes after it; `internal/repo` `TestPresignedPutWorksWithoutHeaders`, `TestPresignedPutCannotReplaceAVerifiedObject`.
+
 ## Not tested
 
 - Other S3-compatible stores (Ceph RGW, R2, B2, Garage) [untested]. Stores that ignore the checksum would accept a corrupt body, which `verify` still catches.

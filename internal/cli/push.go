@@ -42,9 +42,12 @@ func (a *app) pushCommand() *cobra.Command {
 		Long: `Uploads every file under a folder as one Commit. Large files go up in parts,
 straight to the Blob store where the Instance allows it, and an interrupted
 upload resumes from the parts already stored when you run the command again.
-When finishing an upload fails for a reason that may pass, the Instance
-answers 503 with Retry-After and the command waits and tries again, up to
-10 times.
+A part that fails for a reason that may pass, such as a dropped connection
+or a 503 from a proxy, is sent again up to 6 times with a growing wait, and
+part URLs that expired are renewed. When finishing an upload fails for a
+reason that may pass, the Instance answers 503 with Retry-After, or a proxy
+cuts the request off, and the command waits and tries again, up to 10
+times.
 Files the Instance already has anywhere are not sent again.
 
 The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,
@@ -143,7 +146,7 @@ func (a *app) commitFiles(ctx context.Context, c *client, id model.RepoID, files
 		return nil, err
 	}
 	hp.finish()
-	up := &uploader{c: c, id: id, revision: o.Branch, prog: newProgress(a.stderr, "Uploading", total, a.json)}
+	up := &uploader{c: c, id: id, revision: o.Branch, prog: newProgress(a.stderr, "Uploading", total, a.json), waiting: a.waitStatus}
 	ops, err := up.upload(ctx, files)
 	up.prog.finish()
 	if err != nil {

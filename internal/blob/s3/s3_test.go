@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/require"
@@ -316,4 +317,43 @@ func TestPartRetriesOnMinIO(t *testing.T) {
 	entries, err := os.ReadDir(opts.SpoolDir)
 	require.NoError(t, err)
 	require.Empty(t, entries, "no spool file is left behind")
+}
+
+// TestCopyLargeObjectsInParts checks that Copy splits an object larger
+// than the copy part size into several server-side copy requests, so no
+// single request copies gigabytes (bellatrix finding 13b), and that the
+// copy has the source's bytes and the safe Content-Type.
+func TestCopyLargeObjectsInParts(t *testing.T) {
+	if !s3Enabled(t) {
+		return
+	}
+	ctx := context.Background()
+	srv := blobtest.S3TestServer(t)
+	opts := srv.Options()
+	opts.Prefix = "copy-" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	opts.CopyPartSize = blob.MinPartSize
+	st, err := s3.New(opts)
+	require.NoError(t, err)
+	require.NoError(t, st.EnsureBucket(ctx, srv.Region))
+	t.Cleanup(func() {
+		_ = st.List(context.Background(), "", func(i blob.Info) error { return st.Delete(context.Background(), i.Key) })
+	})
+
+	data := make([]byte, 2*blob.MinPartSize+12345)
+	_, err = rand.Read(data)
+	require.NoError(t, err)
+	require.NoError(t, st.Put(ctx, "tmp/uploads/big", bytes.NewReader(data), int64(len(data))))
+	require.NoError(t, st.Copy(ctx, "tmp/uploads/big", "lfs/sha256/big"))
+	rc, info, err := st.Get(ctx, "lfs/sha256/big", nil)
+	require.NoError(t, err)
+	got, err := io.ReadAll(rc)
+	require.NoError(t, rc.Close())
+	require.NoError(t, err)
+	require.Equal(t, int64(len(data)), info.Size)
+	require.True(t, bytes.Equal(data, got), "the copy has the source's bytes")
+	require.True(t, strings.HasSuffix(info.ETag, "-3"), "a multipart copy of three parts, not one request: ETag %s", info.ETag)
+
+	require.ErrorIs(t, st.Copy(ctx, "tmp/uploads/missing", "lfs/sha256/x"), blob.ErrNotFound)
+	_, err = s3.New(s3.Options{Bucket: "b", CopyPartSize: 1 << 20})
+	require.Error(t, err, "a copy part size below S3's minimum part size")
 }

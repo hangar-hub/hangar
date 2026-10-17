@@ -80,5 +80,8 @@ type redactingDoer struct {
 // when a redirect fails; the response body is then already closed.
 func (d redactingDoer) Do(req *http.Request) (*http.Response, error) {
 	resp, err := d.hc.Do(req) // #nosec G704 -- the Instance the user chose, and URLs it hands out.
-	return resp, redactURLError(err)
+	if err != nil {
+		return resp, &transportError{err: redactURLError(err)}
+	}
+	return resp, nil
 }

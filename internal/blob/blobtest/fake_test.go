@@ -109,13 +109,60 @@ func TestFakeServesPresignedURLsLikeS3(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, send(http.MethodPut, strings.Replace(part, "partNumber=1", "partNumber=x", 1), "p", nil).StatusCode)
 	require.Equal(t, http.StatusBadRequest, send(http.MethodPut, strings.Replace(part, "partNumber=1", "partNumber=0", 1), "p", nil).StatusCode)
 	require.Equal(t, http.StatusNotFound, send(http.MethodPut, strings.Replace(part, id, "gone", 1), "p", nil).StatusCode)
-	require.Equal(t, 4, f.Calls("ServePut"))
+	require.Equal(t, 3, f.Calls("ServePut"))
+	require.Equal(t, 1, f.Calls("ServeRefused"), "the PUT without the signed checksum header")
 	require.Equal(t, 2, f.Calls("ServeGet"))
 
 	disabled := blobtest.NewFake()
 	rec := httptest.NewRecorder()
 	disabled.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/bucket/lfs/obj", nil))
 	require.Equal(t, http.StatusNotImplemented, rec.Code, "a Fake without presigning")
+}
+
+// TestFakeEnforcesSignedHeaderRules checks the Fake refuses presigned
+// requests the way MinIO and AWS do (docs/research/s3-presigned-checksum.md),
+// so a URL that signs a header a client does not send fails in tests, as
+// it does against a real store.
+func TestFakeEnforcesSignedHeaderRules(t *testing.T) {
+	ctx := context.Background()
+	f := serveFake(t)
+	put := func(u, body string, headers map[string]string) int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, strings.NewReader(body))
+		require.NoError(t, err)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode
+	}
+	sum := sha256.Sum256([]byte("abc"))
+	signed, err := f.PresignPut(ctx, "lfs/signed", 3, sum[:], time.Hour)
+	require.NoError(t, err)
+	checksum := map[string]string{"x-amz-checksum-sha256": signed.Headers["x-amz-checksum-sha256"]}
+	require.Equal(t, http.StatusForbidden, put(signed.URL, "abc", nil), "no headers, as huggingface_hub sends on a basic upload")
+	require.Equal(t, http.StatusForbidden, put(signed.URL, "abc", checksum), "the signed Content-Type is missing")
+	wrongType := map[string]string{"Content-Type": "text/html", "x-amz-checksum-sha256": checksum["x-amz-checksum-sha256"]}
+	require.Equal(t, http.StatusForbidden, put(signed.URL, "abc", wrongType), "another Content-Type than the signed one")
+	require.Equal(t, http.StatusOK, put(signed.URL, "abc", signed.Headers))
+
+	plain, err := f.PresignPut(ctx, "lfs/plain", 3, nil, time.Hour)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusForbidden, put(plain.URL, "abc", checksum), "an x-amz header the URL did not sign")
+	require.Equal(t, http.StatusForbidden, put(plain.URL, "abc", map[string]string{"X-Amz-Meta-Owner": "eve"}), "any x-amz header")
+	require.Equal(t, http.StatusOK, put(plain.URL, "abc", map[string]string{"Content-Type": "application/octet-stream"}), "Content-Type need not be signed")
+	require.Equal(t, http.StatusOK, put(plain.URL, "abc", nil))
+
+	id, err := f.CreateMultipart(ctx, "lfs/multi")
+	require.NoError(t, err)
+	part, err := f.PresignPart(ctx, "lfs/multi", id, 1, time.Hour)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusForbidden, put(part, "p", checksum), "part URLs sign no x-amz headers either")
+	require.Equal(t, http.StatusOK, put(part, "p", nil))
+	require.Equal(t, 6, f.Calls("ServeRefused"))
 }
 
 func TestRunStreamingPassesAStreamingStore(t *testing.T) {

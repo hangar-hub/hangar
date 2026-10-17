@@ -68,6 +68,20 @@ def test_delete_repo(api, repo_name):
     api.delete_repo(repo, missing_ok=True)
 
 
+@pytest.mark.endpoint("DELETE /api/repos/delete", "PUT /api/{type}s/{repo}/settings")
+def test_write_token_administers_own_repos(hub, no_xet, repo_name):
+    """The Hub's Tokens are read or write; a write Token deletes and
+    configures Repos its user administers (bellatrix finding 7)."""
+    from huggingface_hub import HfApi
+
+    bob = HfApi(endpoint=hub.endpoint, token=hub.token("bob"))
+    repo = bob.create_repo(repo_name).repo_id
+    bob.update_repo_settings(repo, private=True)
+    assert bob.model_info(repo).private
+    bob.delete_repo(repo)
+    assert not bob.repo_exists(repo)
+
+
 @pytest.mark.endpoint("GET /api/models/{repo}/revision/{rev}", "GET /api/{type}s/{repo}/revision/{rev}")
 def test_exists_checks(api, repo_name):
     repo = api.create_repo(repo_name).repo_id

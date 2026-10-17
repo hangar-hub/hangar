@@ -196,7 +196,10 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		e.user("alice", false)
 		anon := e.anon()
 
-		anon.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusUnauthorized, nil)
+		// Nobody signed in is not an error for /me (bellatrix finding 6),
+		// so the UI's check before sign-in leaves the console clean.
+		anon.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusNoContent, nil)
+		anon.do(http.MethodGet, "/api/hangar/v1/me/tokens", nil, http.StatusUnauthorized, nil)
 		var providers gen.AuthProviders
 		anon.do(http.MethodGet, "/api/hangar/v1/auth/providers", nil, http.StatusOK, &providers)
 		require.True(t, providers.LocalLogin)
@@ -268,7 +271,9 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 			}
 		}
 		alice.do(http.MethodDelete, "/api/hangar/v1/me/sessions/"+otherID.String(), nil, http.StatusNoContent, nil)
-		other.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusUnauthorized, nil)
+		// The revoked session is signed out.
+		other.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusNoContent, nil)
+		other.do(http.MethodGet, "/api/hangar/v1/me/sessions", nil, http.StatusUnauthorized, nil)
 
 		// Ollama keys.
 		key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q me@laptop"
@@ -297,7 +302,8 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		// Logout ends the session.
 		alice.do(http.MethodPost, "/api/hangar/v1/auth/logout", nil, http.StatusNoContent, nil)
 		alice.csrf = ""
-		alice.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusUnauthorized, nil)
+		alice.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusNoContent, nil)
+		alice.do(http.MethodGet, "/api/hangar/v1/me/sessions", nil, http.StatusUnauthorized, nil)
 	})
 }
 
@@ -469,7 +475,9 @@ func TestAdminEndpoints(t *testing.T) {
 		require.True(t, u.IsAdmin)
 		rootID := mustPrincipal(t, e, "root").UserID
 		root.do(http.MethodPatch, "/api/hangar/v1/admin/users/"+rootID.String(), map[string]any{"disabled": true}, http.StatusOK, nil)
-		root.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusUnauthorized, nil)
+		// A disabled user's session counts as nobody signed in.
+		root.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusNoContent, nil)
+		root.do(http.MethodGet, "/api/hangar/v1/me/tokens", nil, http.StatusUnauthorized, nil)
 		dave := mustPrincipal(t, e, "dave")
 		_, err := e.svc.Users.Update(context.Background(), rootID, auth.UserUpdate{Disabled: new(bool)}, model.System())
 		require.NoError(t, err)

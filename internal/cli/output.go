@@ -170,3 +170,72 @@ func (pr progressReader) Read(b []byte) (int, error) {
 	}
 	return n, err
 }
+
+// countingProgress counts bytes read into a progress and can take them off
+// again, for a request body that may be sent more than once.
+type countingProgress struct {
+	r io.Reader
+	p *progress
+	n int64
+}
+
+func (c *countingProgress) Read(b []byte) (int, error) {
+	n, err := c.r.Read(b)
+	if n > 0 {
+		c.n += int64(n)
+		c.p.add(int64(n))
+	}
+	return n, err
+}
+
+// undo takes the bytes counted so far off the progress.
+func (c *countingProgress) undo() {
+	if c.n != 0 {
+		c.p.add(-c.n)
+		c.n = 0
+	}
+}
+
+// statusTick is how often a status line on a terminal redraws its timer,
+// and statusTerminal tells whether stderr is one. Tests replace them.
+var (
+	statusTick     = time.Second
+	statusTerminal = isTerminal
+)
+
+// waitStatus shows msg on stderr while something slow happens that has no
+// progress of its own, such as an Upstream lookup or a check of a large
+// upload, and returns a function that ends it. On a terminal the line
+// counts the seconds and is cleared at the end; otherwise msg is printed
+// once. With --json nothing is shown.
+func (a *app) waitStatus(msg string) func() {
+	if a.json {
+		return func() {}
+	}
+	if !statusTerminal(a.stderr) {
+		a.logf("%s\n", msg)
+		return func() {}
+	}
+	start := time.Now()
+	draw := func() { a.logf("\r\033[K%s (%s)", msg, formatDuration(time.Since(start))) }
+	draw()
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		t := time.NewTicker(statusTick)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				draw()
+			}
+		}
+	})
+	return func() {
+		close(done)
+		wg.Wait()
+		a.logf("\r\033[K")
+	}
+}

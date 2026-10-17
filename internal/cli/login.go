@@ -234,6 +234,9 @@ func (c *client) me(ctx context.Context) (*gen.Me, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reach %s: %w", c.base.Host, err)
 	}
+	if r.StatusCode() == http.StatusNoContent {
+		return nil, authf("not signed in: run hangar login, or pass --token")
+	}
 	if err := check(r.HTTPResponse, r.Body, http.StatusOK); err != nil {
 		return nil, err
 	}

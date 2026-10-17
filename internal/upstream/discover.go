@@ -288,12 +288,23 @@ func (s *Service) DiscoverDetail(ctx context.Context, p model.Principal, upstrea
 		}
 		out.Quants = append(out.Quants, qs)
 	}
-	if body, err := s.readUpstreamFile(ctx, up, cred, id, info.SHA, "README.md", sizes, maxCardBytes); err == nil {
-		out.Card = string(body)
+	// The card, the files Dependencies come from and a dataset's Viewer
+	// answers are separate Upstream requests, each a round trip that can
+	// take seconds over a home link, so they run at once (bellatrix
+	// finding 10: a lookup took 40 seconds).
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		if body, err := s.readUpstreamFile(ctx, up, cred, id, info.SHA, "README.md", sizes, maxCardBytes); err == nil {
+			out.Card = string(body)
+		}
+	})
+	if id.Type == model.RepoTypeDataset {
+		wg.Go(func() { out.Configs, out.Preview = s.upstreamDatasetInfo(ctx, up, cred, id) })
 	}
 	ds, err := deps.Parse(ctx, id, files, func(ctx context.Context, path string) ([]byte, error) {
 		return s.readUpstreamFile(ctx, up, cred, id, info.SHA, path, sizes, deps.MaxFileSize)
 	})
+	wg.Wait()
 	if err != nil {
 		return nil, err
 	}
@@ -303,9 +314,6 @@ func (s *Service) DiscoverDetail(ctx context.Context, p model.Principal, upstrea
 			return nil, err
 		}
 		out.Dependencies = append(out.Dependencies, DependencyState{Dependency: d, Arsenal: st})
-	}
-	if id.Type == model.RepoTypeDataset {
-		out.Configs, out.Preview = s.upstreamDatasetInfo(ctx, up, cred, id)
 	}
 	return out, nil
 }

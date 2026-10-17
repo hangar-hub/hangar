@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -117,7 +118,8 @@ func (s *server) apiRepo(repo *Repo) gen.Repo {
 func (s *server) GetMe(w http.ResponseWriter, r *http.Request) {
 	u := s.i.user(r)
 	if u == "" {
-		problem(w, http.StatusUnauthorized, "Sign in or send a Token.")
+		// As Hangar does: nobody signed in is not an error.
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	writeJSON(w, http.StatusOK, gen.Me{Id: uuid.New(), Username: u, DisplayName: strings.ToUpper(u[:1]) + u[1:],
@@ -433,9 +435,14 @@ func (s *server) PlanUploads(w http.ResponseWriter, r *http.Request, t gen.RepoT
 				n = 1
 			}
 			urls := make([]string, n)
+			expires := "never"
+			if s.i.Presign && s.i.stalePlans > 0 {
+				s.i.stalePlans--
+				expires = "past"
+			}
 			for k := range urls {
 				if s.i.Presign {
-					urls[k] = fmt.Sprintf("%s/presigned/%s/%d?sig=fake", s.i.PresignBase, up.id, k+1)
+					urls[k] = fmt.Sprintf("%s/presigned/%s/%d?sig=fake&expires=%s", s.i.PresignBase, up.id, k+1, expires)
 				} else {
 					urls[k] = fmt.Sprintf("%s/api/hangar/v1/repos/%s/%s/%s/uploads/%s/parts/%d", s.i.URL, t, url.PathEscape(ns), url.PathEscape(name), up.id, k+1)
 				}
@@ -506,6 +513,38 @@ func (s *server) GetUpload(w http.ResponseWriter, r *http.Request, _ gen.RepoTyp
 	writeJSON(w, http.StatusOK, s.status(up))
 }
 
+// resetPart reads half of a part's body and closes the connection without
+// an answer, if ResetPart asked for it, and reports whether it did.
+func (i *Instance) resetPart(w http.ResponseWriter, r *http.Request, id uuid.UUID, n int) bool {
+	i.mu.Lock()
+	up := i.uploads[id]
+	reset := false
+	if up != nil {
+		key := fmt.Sprintf("%s/%d", up.sha, n)
+		if f := i.failedParts[key]; f.times > 0 && f.reset {
+			f.times--
+			i.failedParts[key] = f
+			reset = true
+		}
+	}
+	i.mu.Unlock()
+	if !reset {
+		return false
+	}
+	_, _ = io.CopyN(io.Discard, r.Body, max(r.ContentLength/2, 1))
+	hangUp(w)
+	return true
+}
+
+// hangUp closes the connection without an answer.
+func hangUp(w http.ResponseWriter) {
+	conn, _, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		panic(http.ErrAbortHandler)
+	}
+	_ = conn.Close()
+}
+
 // storePart stores a part, or fails it if FailPart or FailPartLast asked
 // to.
 func (i *Instance) storePart(w http.ResponseWriter, r *http.Request, id uuid.UUID, n int, body []byte) {
@@ -517,13 +556,17 @@ func (i *Instance) storePart(w http.ResponseWriter, r *http.Request, id uuid.UUI
 		return
 	}
 	key := fmt.Sprintf("%s/%d", up.sha, n)
-	if f := i.failedParts[key]; f.times > 0 {
+	if f := i.failedParts[key]; f.times > 0 && !f.reset {
 		f.times--
 		i.failedParts[key] = f
 		if f.afterOthers {
 			i.waitForOtherParts(r, up, n)
 		}
-		problem(w, http.StatusInternalServerError, "Injected part failure.")
+		status := f.status
+		if status == 0 {
+			status = http.StatusInternalServerError
+		}
+		problem(w, status, "Injected part failure.")
 		return
 	}
 	up.parts[n] = body
@@ -569,6 +612,9 @@ func (s *server) PutUploadPart(w http.ResponseWriter, r *http.Request, _ gen.Rep
 	if !s.authed(w, r) {
 		return
 	}
+	if s.i.resetPart(w, r, id, n) {
+		return
+	}
 	body, ok := readBody(r)
 	if !ok {
 		problem(w, http.StatusBadRequest, "Incomplete part body.")
@@ -579,6 +625,33 @@ func (s *server) PutUploadPart(w http.ResponseWriter, r *http.Request, _ gen.Rep
 
 // presignedObject serves an LFS object at a presigned URL, with Range
 // support.
+// failDownload answers a download that FailDownload asked to fail, and
+// reports whether it did. It counts every download.
+func (i *Instance) failDownload(w http.ResponseWriter, file string, content []byte) bool {
+	i.mu.Lock()
+	i.downloads[file]++
+	f, fail := i.failedDownloads[file]
+	fail = fail && f.times > 0
+	if fail {
+		f.times--
+		i.failedDownloads[file] = f
+	}
+	i.mu.Unlock()
+	if !fail {
+		return false
+	}
+	if f.status != 0 {
+		problem(w, f.status, "Injected download failure.")
+		return true
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content[:len(content)/2])
+	_ = http.NewResponseController(w).Flush()
+	hangUp(w)
+	return true
+}
+
 func (i *Instance) presignedObject(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Authorization") != "" || r.URL.Query().Get("sig") != "fake" {
 		problem(w, http.StatusForbidden, "Presigned URLs take no Authorization header.")
@@ -604,6 +677,13 @@ func (i *Instance) presignedPart(w http.ResponseWriter, r *http.Request) {
 	n, nerr := strconv.Atoi(chi.URLParam(r, "n"))
 	if err != nil || nerr != nil {
 		problem(w, http.StatusBadRequest, "Bad part URL.")
+		return
+	}
+	if r.URL.Query().Get("expires") == "past" {
+		problem(w, http.StatusForbidden, "Request has expired.")
+		return
+	}
+	if i.resetPart(w, r, id, n) {
 		return
 	}
 	body, ok := readBody(r)
@@ -654,6 +734,13 @@ func (s *server) CompleteUpload(w http.ResponseWriter, r *http.Request, _ gen.Re
 	}
 	s.i.objects[up.sha] = all.Bytes()
 	up.done = true
+	if n := s.i.droppedCompletes[up.sha]; n > 0 {
+		s.i.droppedCompletes[up.sha] = n - 1
+		// Like Hangar, the completed upload is removed.
+		delete(s.i.uploads, up.id)
+		hangUp(w)
+		return
+	}
 	writeJSON(w, http.StatusOK, s.status(up))
 }
 
@@ -1124,6 +1211,9 @@ func (i *Instance) resolve(t model.RepoType) http.HandlerFunc {
 		}
 		w.Header().Set("ETag", `"`+etag+`"`)
 		w.Header().Set("X-Linked-Etag", `"`+etag+`"`)
+		if i.failDownload(w, file, f.Content) {
+			return
+		}
 		if redirect && f.LFS {
 			w.Header().Set("X-Linked-Size", strconv.Itoa(len(f.Content)))
 			http.Redirect(w, r, base+"/presigned-objects/"+etag+"?sig=fake", http.StatusFound)

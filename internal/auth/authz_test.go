@@ -132,7 +132,7 @@ func TestPermissionMatrix(t *testing.T) {
 			"collab-write":                {pub: "AAFAAF", internal: "AAFAAF", private: "AAFAAF"},
 			"instance-admin":              {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
 			"member-write+read-token":     {pub: "AAFFFF", internal: "AAFFFF", private: "AAFFFF"},
-			"member-admin+write-token":    {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},
+			"member-admin+write-token":    {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
 			"member-admin+admin-token":    {pub: "AAAAAA", internal: "AAAAAA", private: "AAAAAA"},
 			"member-write+token-other-ns": {pub: "NNNNNN", internal: "NNNNNN", private: "NNNNNN"},
 			"member-write+token-acme":     {pub: "AAAAAF", internal: "AAAAAF", private: "AAAAAF"},

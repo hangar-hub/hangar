@@ -255,6 +255,26 @@ func TestDiscoverDetail(t *testing.T) {
 	})
 }
 
+// TestDiscoverDetailFetchesFromTheUpstreamAtOnce is the regression test
+// for bellatrix finding 10: hangar import waited 40 seconds for a lookup
+// over a home link, partly because the card and the files Dependencies
+// come from were fetched one after another.
+func TestDiscoverDetailFetchesFromTheUpstreamAtOnce(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "slow-link"}
+		e.Seed(id, map[string][]byte{"README.md": []byte("# Slow link"),
+			"config.json": []byte(`{"auto_map":{"AutoModel":"acme/code--m.M"}}`)}, nil)
+		e.Remote.SlowDownloads(200 * time.Millisecond)
+		det, err := e.Service.DiscoverDetail(e.Ctx, alice, "huggingface", id, "")
+		require.NoError(t, err)
+		require.Contains(t, det.Card, "# Slow link")
+		require.Len(t, det.Dependencies, 1)
+		require.GreaterOrEqual(t, e.Remote.MaxConcurrentDownloads(), 2, "the card and config.json are fetched at the same time")
+	})
+}
+
 func TestPullThroughRepoAndFile(t *testing.T) {
 	forEachDB(t, func(t *testing.T, d *db.DB) {
 		e := newEnv(t, d, upstreamtest.HarnessOptions{})

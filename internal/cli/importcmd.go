@@ -2,12 +2,9 @@ package cli
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -333,7 +330,13 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	repo, err := c.getRepo(ctx, id)
 	switch {
 	case IsNotFound(err):
-		if _, err := c.discoverDetail(ctx, id, upstream, commit); err != nil {
+		// The Instance asks the Upstream, which can take a while over a
+		// slow link: say what is happening, so the command does not look
+		// stuck (bellatrix finding 10).
+		stop := a.waitStatus(fmt.Sprintf("Looking up %s on %s", display(id), upstream))
+		_, err := c.discoverDetail(ctx, id, upstream, commit)
+		stop()
+		if err != nil {
 			return res, err
 		}
 		body := gen.PullCreate{Upstream: upstream, Repo: id.String(), Type: singular(id),
@@ -345,7 +348,7 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		if err != nil {
 			return res, err
 		}
-		if _, err := a.watchJob(ctx, c, job.Id, "Planning "+display(id)); err != nil {
+		if _, err := a.watchJob(ctx, c, job.Id, "Creating a Mirror of "+display(id)); err != nil {
 			return res, err
 		}
 	case err != nil:
@@ -373,17 +376,31 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 			wanted[e.Path] = e
 		}
 	}
-	var upload []localFile
+	var candidates, unhashed []localFile
+	var hashBytes int64
 	for _, f := range files {
-		e, ok := wanted[f.Path]
-		if !ok {
+		if _, ok := wanted[f.Path]; !ok {
 			continue
 		}
 		if f.SHA256 == "" {
-			if f.SHA256, err = sha256File(f.Disk); err != nil {
-				return res, err
-			}
+			unhashed = append(unhashed, f)
+			hashBytes += f.Size
+			continue
 		}
+		candidates = append(candidates, f)
+	}
+	if len(unhashed) > 0 {
+		hp := newProgress(a.stderr, "Hashing "+display(id), hashBytes, a.json)
+		if err := hashFiles(ctx, unhashed, hp); err != nil {
+			return res, err
+		}
+		hp.finish()
+		candidates = append(candidates, unhashed...)
+		sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
+	}
+	var upload []localFile
+	for _, f := range candidates {
+		e := wanted[f.Path]
 		if f.SHA256 != e.Lfs.Oid || f.Size != e.Lfs.Size {
 			res.Skipped = append(res.Skipped, f.Path)
 			continue
@@ -394,7 +411,10 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	for _, f := range upload {
 		total += f.Size
 	}
-	up := &uploader{c: c, id: id, prog: newProgress(a.stderr, "Uploading "+display(id), total, a.json)}
+	if len(upload) > 0 && !a.json {
+		a.logf("Uploading %s to %s.\n", countFiles(len(upload), total), display(id))
+	}
+	up := &uploader{c: c, id: id, prog: newProgress(a.stderr, "Uploading "+display(id), total, a.json), waiting: a.waitStatus}
 	if _, err := up.upload(ctx, upload); err != nil {
 		return res, err
 	}
@@ -416,17 +436,13 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	return res, nil
 }
 
-func sha256File(p string) (string, error) {
-	f, err := os.Open(p) // #nosec G304 -- a file the user asked to import.
-	if err != nil {
-		return "", err
+// countFiles describes a number of files and their size, such as
+// "3 files, 15.0 GiB".
+func countFiles(n int, size int64) string {
+	if n == 1 {
+		return "1 file, " + formatBytes(size)
 	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return fmt.Sprintf("%d files, %s", n, formatBytes(size))
 }
 
 // importLMStudio imports every <publisher>/<repo> folder in LM Studio's

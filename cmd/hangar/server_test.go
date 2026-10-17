@@ -74,7 +74,7 @@ func TestReadyzWaitsForTheFullHandler(t *testing.T) {
 		}
 	}
 	// The first 200 means the API is served, not the start-up handler.
-	code, body, err := get("/api/hangar/v1/me")
+	code, body, err := get("/api/hangar/v1/me/tokens")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, code, string(body))
 	code, _, err = get("/api/models/a/b")

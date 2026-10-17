@@ -34,12 +34,18 @@ type Authorizer struct{ s *Service }
 
 var _ Authz = (*Authorizer)(nil)
 
-// requiredScope is the Token scope an action needs.
+// requiredScope is the Token scope an action needs. Administering a Repo
+// (settings, rename, transfer, delete, webhooks, access requests) needs
+// the write scope, as on the Hugging Face Hub, whose Tokens are read or
+// write and take the rest from the user's Role: delete_repo with a write
+// Token works there (docs/research/hf-hub-api-contract.md §7.2). The Role
+// still has to be admin. Managing an Organisation's Members and the
+// Instance needs the admin scope.
 func requiredScope(a Action) model.Scope {
 	switch a {
-	case ActionWrite, ActionPullMirror, ActionDiscuss, ActionCreateRepo:
+	case ActionWrite, ActionPullMirror, ActionDiscuss, ActionCreateRepo, ActionAdmin:
 		return model.ScopeWrite
-	case ActionAdmin, ActionManageNamespace, ActionInstanceAdmin:
+	case ActionManageNamespace, ActionInstanceAdmin:
 		return model.ScopeAdmin
 	default:
 		return model.ScopeRead

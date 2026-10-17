@@ -10,7 +10,15 @@ import (
 )
 
 // GetMe implements GET /me. Session callers also get their CSRF token.
+// Nobody signed in gets 204, not 401: the web UI asks on every page load,
+// and a 401 shows as an error in the browser console before anyone has
+// signed in (bellatrix finding 6). Bad credentials never get here; the
+// authentication middleware answers them with 401.
 func (h *Identity) GetMe(w http.ResponseWriter, r *http.Request) {
+	if !httpx.Principal(r.Context()).IsUser() {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	p, ok := h.signedIn(w, r)
 	if !ok {
 		return

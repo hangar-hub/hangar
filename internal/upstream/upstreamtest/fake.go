@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -40,6 +41,50 @@ type Fake struct {
 	viewer   map[string]json.RawMessage
 	failures map[string]error
 	calls    map[string]int
+	// downloadDelay makes each Download wait, like a request over a slow
+	// link; inFlight and maxInFlight count Downloads running at once.
+	downloadDelay         time.Duration
+	inFlight, maxInFlight int
+}
+
+// SlowDownloads makes every file download, through Download or the fake
+// Hub's resolve route, take at least d, as a request to huggingface.co
+// over a home link does.
+func (f *Fake) SlowDownloads(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.downloadDelay = d
+}
+
+// slowFile waits as SlowDownloads asks before a file is served, through
+// Download or the fake Hub's resolve route, and counts it as in flight.
+func (f *Fake) slowFile(ctx context.Context) error {
+	f.mu.Lock()
+	f.inFlight++
+	f.maxInFlight = max(f.maxInFlight, f.inFlight)
+	delay := f.downloadDelay
+	f.mu.Unlock()
+	defer func() {
+		f.mu.Lock()
+		f.inFlight--
+		f.mu.Unlock()
+	}()
+	if delay <= 0 {
+		return nil
+	}
+	select {
+	case <-time.After(delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// MaxConcurrentDownloads returns the most file downloads that ran at once.
+func (f *Fake) MaxConcurrentDownloads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.maxInFlight
 }
 
 var _ upstream.Client = (*Fake)(nil)
@@ -179,6 +224,9 @@ func (f *Fake) Tree(ctx context.Context, _ upstream.Upstream, cred upstream.Cred
 // Download implements upstream.Client.
 func (f *Fake) Download(ctx context.Context, _ upstream.Upstream, cred upstream.Credentials, id model.RepoID, commit model.CommitSHA, path string, rng *blob.Range) (io.ReadCloser, upstream.FileMeta, error) {
 	if err := f.enter("Download"); err != nil {
+		return nil, upstream.FileMeta{}, err
+	}
+	if err := f.slowFile(ctx); err != nil {
 		return nil, upstream.FileMeta{}, err
 	}
 	if _, err := f.access(ctx, cred, id); err != nil {

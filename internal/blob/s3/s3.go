@@ -71,6 +71,10 @@ type Options struct {
 	// SpoolDir holds upload parts while they are sent, so a failed request
 	// can be retried. Empty means the system temporary directory.
 	SpoolDir string
+	// CopyPartSize is the most one server-side copy request copies (Copy).
+	// Zero means 512 MiB; tests lower it to reach the multipart copy with
+	// small objects. It must be at least blob.MinPartSize.
+	CopyPartSize int64
 	// Transport overrides the HTTP transport, for tests.
 	Transport http.RoundTripper
 }
@@ -93,6 +97,8 @@ type Store struct {
 	retryBackoff time.Duration
 	stallTimeout time.Duration
 	spoolDir     string
+	// copyPartSize is the most one server-side copy request copies.
+	copyPartSize int64
 
 	// bucketSeen is when a request last showed that the bucket exists, in
 	// Unix nanoseconds, so Stat can tell a missing object from a missing
@@ -137,6 +143,13 @@ func New(opts Options) (*Store, error) {
 		bucket: opts.Bucket, region: opts.Region,
 		retries: opts.Retries, retryBackoff: opts.RetryBackoff, stallTimeout: opts.StallTimeout, spoolDir: opts.SpoolDir,
 		proxyUploads: opts.ProxyUploads, proxyDownloads: opts.ProxyDownloads,
+		copyPartSize: opts.CopyPartSize,
+	}
+	if st.copyPartSize <= 0 {
+		st.copyPartSize = defaultCopyPartSize
+	}
+	if st.copyPartSize < blob.MinPartSize || st.copyPartSize > blob.MaxPartSize {
+		return nil, fmt.Errorf("s3 blob store: the copy part size must be from %d to %d bytes", blob.MinPartSize, blob.MaxPartSize)
 	}
 	switch {
 	case st.retries == 0:
@@ -573,10 +586,15 @@ func (s *Store) List(ctx context.Context, prefix string, fn func(blob.Info) erro
 	return ctx.Err()
 }
 
-// Copy implements blob.Store. ComposeObject copies server-side, in parts
-// for objects over 5 GiB. The copy's Content-Type is replaced with
-// blob.SafeContentType rather than copied, so a source stored with another
-// type does not pass it on.
+// Copy implements blob.Store. It copies server-side: objects up to
+// copyPartSize with one CopyObject, larger ones as a multipart upload of
+// UploadPartCopy requests of copyPartSize each. S3 allows one copy request
+// up to 5 GiB, but MinIO sends nothing until such a copy is done, and on a
+// slow disk 5 GiB can take longer than the stall timeout that bounds every
+// response. Every request names the source's ETag, so a source that changes
+// during the copy fails it instead of producing a mixed object. The copy's
+// Content-Type is replaced with blob.SafeContentType rather than copied,
+// so a source stored with another type does not pass it on.
 func (s *Store) Copy(ctx context.Context, srcKey, dstKey string) error {
 	src, err := s.objectKey(srcKey)
 	if err != nil {
@@ -586,14 +604,30 @@ func (s *Store) Copy(ctx context.Context, srcKey, dstKey string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.client.ComposeObject(ctx,
-		minio.CopyDestOptions{
-			Bucket: s.bucket, Object: dst, ContentType: blob.SafeContentType,
-			ReplaceMetadata: true, UserMetadata: map[string]string{"Content-Type": blob.SafeContentType},
-		},
-		minio.CopySrcOptions{Bucket: s.bucket, Object: src})
+	oi, err := s.client.StatObject(ctx, s.bucket, src, minio.StatObjectOptions{})
+	if err != nil {
+		return mapErr(err, srcKey)
+	}
+	dest := minio.CopyDestOptions{
+		Bucket: s.bucket, Object: dst, ContentType: blob.SafeContentType,
+		ReplaceMetadata: true, UserMetadata: map[string]string{"Content-Type": blob.SafeContentType},
+	}
+	srcs := []minio.CopySrcOptions{{Bucket: s.bucket, Object: src, MatchETag: oi.ETag}}
+	if oi.Size > s.copyPartSize {
+		dest.PartSize = uint64(s.copyPartSize) //nolint:gosec // New keeps it between 5 MiB and 5 GiB.
+		srcs = srcs[:0]
+		for off := int64(0); off < oi.Size; off += s.copyPartSize {
+			srcs = append(srcs, minio.CopySrcOptions{Bucket: s.bucket, Object: src, MatchETag: oi.ETag,
+				MatchRange: true, Start: off, End: min(off+s.copyPartSize, oi.Size) - 1})
+		}
+	}
+	_, err = s.client.ComposeObject(ctx, dest, srcs...)
 	return mapErr(err, srcKey)
 }
+
+// defaultCopyPartSize is the size of each server-side copy request for
+// large objects (Copy).
+const defaultCopyPartSize int64 = 512 << 20
 
 // CreateMultipart implements blob.Store. The upload's Content-Type is set
 // here, by Hangar, so clients uploading parts through presigned URLs cannot

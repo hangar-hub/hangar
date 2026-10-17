@@ -66,7 +66,8 @@ type APIError struct {
 	RequestID string
 	// Retryable is true for a 503 with a Retry-After header, which the
 	// native API sends when it kept the request's state and the same
-	// request may be sent again after RetryAfter.
+	// request may be sent again after RetryAfter. RetryAfter is also set
+	// for a 429 with Retry-After.
 	Retryable  bool
 	RetryAfter time.Duration
 }
@@ -97,8 +98,12 @@ func IsNotFound(err error) bool {
 // exit code: 401 and 403 exit with 4, 404 with 3, everything else with 1.
 func apiError(status int, header http.Header, body []byte) error {
 	ae := &APIError{Status: status, Message: errorMessage(header, body), RequestID: requestID(header, body)}
-	if status == http.StatusServiceUnavailable {
+	switch status {
+	case http.StatusServiceUnavailable:
 		ae.RetryAfter, ae.Retryable = parseRetryAfter(header.Get("Retry-After"), time.Now())
+	case http.StatusTooManyRequests:
+		// Honoured when a transfer is retried; Retryable stays a 503's.
+		ae.RetryAfter, _ = parseRetryAfter(header.Get("Retry-After"), time.Now())
 	}
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
