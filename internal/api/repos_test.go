@@ -270,6 +270,16 @@ func TestRepoLifecycleEndpoints(t *testing.T) {
 	require.Equal(t, gen.Visibility("public"), updated.Visibility)
 	require.Equal(t, []string{"csv"}, *updated.Tags)
 	require.Equal(t, gen.RepoGated("manual"), updated.Gated)
+	// The web UI saves the mode and the message only. That keeps the
+	// request form fields set above (docs/guides/gated.md), and a mode
+	// alone keeps the message too.
+	auto := gen.GatingMode("auto")
+	prompt := "Tell us what you will use it for."
+	f.expect(http.StatusOK, http.MethodPatch, "alice", "/repos/models/alice/tiny", gen.RepoUpdate{Gating: &gen.Gating{Mode: &auto, Prompt: &prompt}})
+	f.expect(http.StatusOK, http.MethodPatch, "alice", "/repos/models/alice/tiny", gen.RepoUpdate{Gating: &gen.Gating{Mode: &mode}})
+	stored, err := f.real.Get(f.ctx, model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "tiny"})
+	require.NoError(t, err)
+	require.Equal(t, repo.Gating{Mode: "manual", Prompt: prompt, Fields: []repo.GatingField{{Name: "why", Type: "text", Required: true}}}, stored.Gating)
 	branch := "nope"
 	f.expect(http.StatusNotFound, http.MethodPatch, "alice", "/repos/models/alice/tiny", gen.RepoUpdate{DefaultBranch: &branch})
 	f.expect(http.StatusOK, http.MethodGet, "bob", "/repos/models/alice/tiny", nil)

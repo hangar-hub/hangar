@@ -491,7 +491,10 @@ func (a *ReposAPI) UpdateRepo(w http.ResponseWriter, r *http.Request, pType gen.
 		u.Visibility = &v
 	}
 	if body.Gating != nil {
-		g := repo.Gating{}
+		// A PATCH changes only the gating keys it sends: the web UI's
+		// Settings tab sends the mode and the message, and must not clear
+		// request form fields set through this API.
+		g := rp.Gating
 		if body.Gating.Mode != nil {
 			g.Mode = string(*body.Gating.Mode)
 		}
@@ -499,6 +502,7 @@ func (a *ReposAPI) UpdateRepo(w http.ResponseWriter, r *http.Request, pType gen.
 			g.Prompt = *body.Gating.Prompt
 		}
 		if body.Gating.Fields != nil {
+			g.Fields = nil
 			for _, f := range *body.Gating.Fields {
 				g.Fields = append(g.Fields, repo.GatingField{Name: f.Name, Type: string(f.Type), Required: f.Required != nil && *f.Required})
 			}
