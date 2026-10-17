@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -138,6 +139,8 @@ type TokenInfo struct {
 	Name         string
 	Scope        Scope
 	Restrictions TokenRestrictions
+	// ExpiresAt is when the Token stops working, if it expires.
+	ExpiresAt *time.Time
 }
 
 // Principal is the caller of a request or the actor of a Job.

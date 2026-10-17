@@ -199,6 +199,7 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 		for _, d := range direct {
 			if strings.HasPrefix(p, d.Prefix) {
 				httpx.SetProtocol(r.Context(), d.Protocol)
+				httpx.SetRoute(r.Context(), d.Route)
 				d.Handler.ServeHTTP(w, r)
 				return
 			}
@@ -214,7 +215,9 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 // directRoute is a path prefix served before authentication and protocol
 // dispatch, because its URLs carry their own credential: a signature.
 type directRoute struct {
-	Prefix   string
+	Prefix string
+	// Route is the route template for the access log and the span name.
+	Route    string
 	Protocol telemetry.Protocol
 	Handler  http.Handler
 }
@@ -224,8 +227,10 @@ type directRoute struct {
 // scan.block_unsafe_downloads when the link is used.
 func directRoutes(in *instance) []directRoute {
 	return []directRoute{
-		{Prefix: api.ExportPath, Protocol: telemetry.ProtocolNative, Handler: api.ExportHandler(in.blobs, in.signer, exportCheck(in))},
-		{Prefix: upstream.PullThroughPath, Protocol: telemetry.ProtocolLFS, Handler: in.pulls.PullThrough().Handler()},
+		{Prefix: api.ExportPath, Route: api.ExportPath + "{file}", Protocol: telemetry.ProtocolNative,
+			Handler: api.ExportHandler(in.blobs, in.signer, exportCheck(in))},
+		{Prefix: upstream.PullThroughPath, Route: upstream.PullThroughPath + "{repo}/{oid}", Protocol: telemetry.ProtocolLFS,
+			Handler: in.pulls.PullThrough().Handler()},
 	}
 }
 

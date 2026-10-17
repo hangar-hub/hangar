@@ -138,7 +138,7 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 			req.Header.Set("Accept", "application/vnd.git-lfs+json")
 		}
 		if authed {
-			req.SetBasicAuth("alice", token)
+			setToken(req, "alice", token)
 		}
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
@@ -251,13 +251,24 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 	require.Equal(t, string(scantest.OSSystemProtocol0()), body)
 }
 
-// do0 sends a request with Basic credentials, for set-up before the
-// test's own helper exists.
+// setToken sends a Token the way each client does: git-lfs as a Basic
+// password, which Hangar accepts only on git and LFS routes, and every
+// other client as a Bearer token.
+func setToken(req *http.Request, username, token string) {
+	if strings.Contains(req.URL.Path, ".git/") {
+		req.SetBasicAuth(username, token)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+// do0 sends a request with a Token, for set-up before the test's own
+// helper exists.
 func do0(t *testing.T, p model.Principal, token, method, url, body string) (*http.Response, string) {
 	t.Helper()
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
 	require.NoError(t, err)
-	req.SetBasicAuth(p.Username, token)
+	setToken(req, p.Username, token)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

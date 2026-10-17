@@ -70,7 +70,9 @@ func TestAuthenticateTokens(t *testing.T) {
 		require.Equal(t, []string{"alice"}, p.Token.Restrictions.Namespaces)
 		require.Equal(t, tok.ID, p.Token.ID)
 
-		p, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.SetBasicAuth("anything", secret) })
+		gitReq := httptest.NewRequest(http.MethodGet, "http://hangar.test/alice/m.git/info/refs?service=git-upload-pack", nil)
+		gitReq.SetBasicAuth("anything", secret)
+		p, err = s.Authenticate(gitReq)
 		require.NoError(t, err, "git sends the token as a Basic password with any username")
 		require.Equal(t, alice.ID, p.UserID)
 
@@ -270,6 +272,11 @@ func TestWriteAuthError(t *testing.T) {
 		header string
 	}{
 		{"/api/hangar/v1/me", auth.ErrCSRF, http.StatusForbidden, ""},
+		{"/api/hangar/v1/me", auth.ErrCrossOrigin, http.StatusForbidden, ""},
+		{"/api/repos/delete", auth.ErrCrossOrigin, http.StatusForbidden, ""},
+		{"/a/b.git/git-receive-pack", auth.ErrCrossOrigin, http.StatusForbidden, ""},
+		{"/api/hangar/v1/me", auth.ErrBasicNotAccepted, http.StatusUnauthorized, ""},
+		{"/api/models/a/b", auth.ErrBasicNotAccepted, http.StatusUnauthorized, ""},
 		{"/api/models/a/b", auth.ErrInvalidCredentials, http.StatusUnauthorized, ""},
 		{"/a/b.git/info/refs", auth.ErrInvalidCredentials, http.StatusUnauthorized, `Basic realm="Hangar"`},
 		{"/api/hangar/v1/me", context.Canceled, http.StatusInternalServerError, ""},

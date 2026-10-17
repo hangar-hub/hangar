@@ -63,6 +63,9 @@ func CSP(connectSrc []string, nonce string) string {
 	}, "; ")
 }
 
+// PermissionsPolicy turns off the browser features the UI never uses.
+const PermissionsPolicy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), bluetooth=()"
+
 // newNonce returns 128 random bits, base64 encoded, for one response.
 func newNonce() string {
 	b := make([]byte, 16)
@@ -135,6 +138,10 @@ func Handler(opts Options) http.Handler {
 		h.Set("Cache-Control", "no-cache")
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("X-Frame-Options", "DENY")
+		// No other window keeps a handle on the UI, and the page asks for
+		// no device features.
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Permissions-Policy", PermissionsPolicy)
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
 			_, _ = w.Write(withNonce(index, nonce))

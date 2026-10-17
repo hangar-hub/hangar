@@ -3,7 +3,7 @@
 ## Stack and rules
 
 - React with TypeScript (strict), Vite, TanStack Router (file-based routes), TanStack Query, Tailwind CSS, shadcn/ui on Radix primitives, `openapi-fetch` with types from `openapi-typescript` generated from `api/openapi.yaml`. pnpm. Biome for lint and format. Vitest and Testing Library for units, Playwright for end-to-end.
-- Built into `internal/web/dist` and embedded with `go:embed`. The Go server serves `index.html` for UI routes and sets a strict Content Security Policy (no inline scripts, `connect-src 'self'` plus the presign host for uploads).
+- Built into `internal/web/dist` and embedded with `go:embed`. The Go server serves `index.html` for UI routes and sets a strict Content Security Policy (no inline scripts, `connect-src 'self'` plus the presign host for uploads), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin` and a `Permissions-Policy` that turns off camera, microphone, geolocation, payment and device APIs. HSTS is left to the reverse proxy that terminates TLS.
 - The UI only uses the native API (`/api/hangar/v1`) plus `resolve` URLs for file content. It never calls Upstreams directly.
 - Model cards and other user Markdown: `react-markdown` with `remark-gfm` and `rehype-sanitize`; code highlighting with Shiki, loaded lazily. Raw HTML in cards is sanitised to the Hub's allowed subset. Images from external hosts load only if the Instance setting `ui.external_images` is on (default on), so air-gapped Instances do not try to reach the internet.
 - Accessibility: WCAG 2.2 AA. Every action works by keyboard, focus is visible, colour is never the only signal, and Playwright runs `@axe-core/playwright` on every page.

@@ -115,14 +115,20 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	endpoint := strings.TrimSuffix(escaped, "/")
-	httpx.SetRoute(r.Context(), "/datasets-server"+endpoint)
+	known := map[string]bool{"/is-valid": true, "/splits": true, "/first-rows": true, "/rows": true, "/search": true, "/filter": true,
+		"/parquet": true, "/info": true, "/size": true, "/statistics": true, "/opt-in-out-urls": true, "/presidio-entities": true}
+	// The route template names only known endpoints, so the access log,
+	// span names and metrics never carry a raw path.
+	if known[endpoint] || endpoint == "/healthcheck" {
+		httpx.SetRoute(r.Context(), "/datasets-server"+endpoint)
+	} else {
+		httpx.SetRoute(r.Context(), "/datasets-server/{endpoint}")
+	}
 	if endpoint == "/healthcheck" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok"))
 		return
 	}
-	known := map[string]bool{"/is-valid": true, "/splits": true, "/first-rows": true, "/rows": true, "/search": true, "/filter": true,
-		"/parquet": true, "/info": true, "/size": true, "/statistics": true, "/opt-in-out-urls": true, "/presidio-entities": true}
 	if !known[endpoint] {
 		writeError(w, r, http.StatusNotFound, "ResponseNotFound", "Not found.")
 		return

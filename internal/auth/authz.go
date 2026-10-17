@@ -22,6 +22,10 @@ import (
 //	write                   write                write           write
 //	discuss                 signed in            signed in       readers
 //	admin                   Namespace admin      same            same
+//	hub_admin               Namespace admin      same            same
+//
+// admin needs the admin Token scope; hub_admin, which only the Hub API's
+// delete, settings and same-Namespace move endpoints use, needs write.
 //
 // Callers who cannot read a Repo get ErrNotFound for every action, so
 // private Repo names do not leak. Gated Repos need an accepted access
@@ -35,17 +39,17 @@ type Authorizer struct{ s *Service }
 var _ Authz = (*Authorizer)(nil)
 
 // requiredScope is the Token scope an action needs. Administering a Repo
-// (settings, rename, transfer, delete, webhooks, access requests) needs
-// the write scope, as on the Hugging Face Hub, whose Tokens are read or
-// write and take the rest from the user's Role: delete_repo with a write
-// Token works there (docs/research/hf-hub-api-contract.md §7.2). The Role
-// still has to be admin. Managing an Organisation's Members and the
-// Instance needs the admin scope.
+// needs the admin scope, except hub_admin: the Hub's Tokens are read or
+// write and take the rest from the user's Role, so huggingface_hub's
+// delete_repo, update_repo_settings and move_repo work there with a write
+// Token (docs/research/hf-hub-api-contract.md §7.2). hub_admin covers only
+// those Hub API calls, and the Role still has to be admin. Decided by
+// James on 2026-10-17 ("Hub actions only"), narrowing commit 54e5307.
 func requiredScope(a Action) model.Scope {
 	switch a {
-	case ActionWrite, ActionPullMirror, ActionDiscuss, ActionCreateRepo, ActionAdmin:
+	case ActionWrite, ActionPullMirror, ActionDiscuss, ActionCreateRepo, ActionHubAdmin:
 		return model.ScopeWrite
-	case ActionManageNamespace, ActionInstanceAdmin:
+	case ActionAdmin, ActionManageNamespace, ActionInstanceAdmin:
 		return model.ScopeAdmin
 	default:
 		return model.ScopeRead
@@ -58,7 +62,7 @@ func requiredRole(a Action) model.Role {
 	switch a {
 	case ActionWrite, ActionPullMirror, ActionCreateRepo:
 		return model.RoleWrite
-	case ActionAdmin, ActionManageNamespace:
+	case ActionAdmin, ActionHubAdmin, ActionManageNamespace:
 		return model.RoleAdmin
 	default:
 		return model.RoleRead
@@ -68,7 +72,7 @@ func requiredRole(a Action) model.Role {
 // Can implements Authz.
 func (a *Authorizer) Can(ctx context.Context, p model.Principal, action Action, t Target) error {
 	switch action {
-	case ActionRead, ActionReadFiles, ActionPullMirror, ActionWrite, ActionDiscuss, ActionAdmin,
+	case ActionRead, ActionReadFiles, ActionPullMirror, ActionWrite, ActionDiscuss, ActionAdmin, ActionHubAdmin,
 		ActionCreateRepo, ActionManageNamespace, ActionInstanceAdmin:
 	default:
 		return fmt.Errorf("%w: unknown action %q", ErrForbidden, action)

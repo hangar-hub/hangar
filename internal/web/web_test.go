@@ -54,6 +54,11 @@ func TestServesIndexForUIRoutesWithCSP(t *testing.T) {
 		require.Contains(t, csp, "frame-ancestors 'none'")
 		require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
 		require.Equal(t, "DENY", rec.Header().Get("X-Frame-Options"))
+		require.Equal(t, "same-origin", rec.Header().Get("Cross-Origin-Opener-Policy"))
+		require.Equal(t, web.PermissionsPolicy, rec.Header().Get("Permissions-Policy"))
+		require.Contains(t, rec.Header().Get("Permissions-Policy"), "camera=()")
+		require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+		require.Equal(t, "strict-origin-when-cross-origin", rec.Header().Get("Referrer-Policy"))
 	}
 	rec := serve(h, http.MethodGet, "/assets/index-AbCdEf12.js")
 	require.Equal(t, 200, rec.Code)

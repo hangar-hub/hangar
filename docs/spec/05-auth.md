@@ -26,6 +26,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 - Users without read access to a private Repo get **404**, not 403, everywhere (Hub API, git, UI, Ollama), so private Repo names do not leak.
 - Gated Repos: metadata is readable, files need an approved access request.
 - Token restrictions narrow these rules and never widen them.
+- **Token scope for Repo administration:** the last row needs the `admin` scope, with one exception that matches the Hub, whose Tokens are only read or write. A `write` Token may delete a Repo, change its visibility or gating, and rename it within its Namespace, only through the Hub API endpoints `huggingface_hub` calls (`DELETE /api/repos/delete`, `PUT /api/{type}s/{repo}/settings`, and `POST /api/repos/move` when the Namespace does not change), and only when the user is the Repo's `admin`. Transfers to another Namespace, webhooks, collaborators, access requests and every native API admin action need the `admin` scope (decided by James, 2026-10-17). `internal/auth` calls the exception `hub_admin`.
 - **Personal Namespace:** the User is its `admin`.
 
 ## Local accounts
@@ -51,6 +52,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 
 - Cookie `hangar_session`: random 32 bytes, stored hashed, `HttpOnly`, `Secure` when `public_url` is HTTPS, `SameSite=Lax`.
 - CSRF: double-submit token in a header for every state-changing native API call from the UI. Token-authenticated requests are exempt.
+- Cross-origin requests: a request with a method other than `GET`, `HEAD` or `OPTIONS` that carries a credential the browser adds by itself (the session cookie, or HTTP Basic credentials) is refused with 403 when `Sec-Fetch-Site` is present and is not `same-origin` or `none`, or, without `Sec-Fetch-Site`, when `Origin` is present and names neither the request's host nor `public_url`. Password sign-in, registration, invites and resets get the same check without a cookie, so other sites cannot sign a browser in. Clients that send neither header, such as git, git-lfs, `huggingface_hub`, the CLI and Ollama, are unaffected. This follows Go's `net/http.CrossOriginProtection`.
 - Users can list and revoke their sessions.
 
 ## Tokens
@@ -61,7 +63,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 - Optional expiry; `last_used_at` updated at most once a minute.
 - Accepted as:
   - `Authorization: Bearer <token>` (Hub API, native API, Ollama token endpoint)
-  - HTTP Basic password with any username (git, git-lfs)
+  - HTTP Basic password with any username, on git and git-lfs routes only. Other API routes answer 401 to Basic credentials; the static UI and health routes ignore them, because a browser that once signed in to a git URL can replay them.
 - The Hub API's `whoami-v2` returns the token's name and role so `hf auth login` and `hf auth whoami` work ([03](03-hf-api.md)).
 - Instance admins can list and revoke any token.
 

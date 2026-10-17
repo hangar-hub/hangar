@@ -206,7 +206,9 @@ func (h *Handler) deleteRepo(w http.ResponseWriter, r *http.Request) {
 		httpx.HubRepoNotFound(w, r, model.RepoID{Type: t, Namespace: ns, Name: req.Name})
 		return
 	}
-	rp, ok := h.managedRepo(w, r, id, auth.ActionAdmin)
+	// A write Token may delete Repos its user administers, as on the Hub
+	// (auth.ActionHubAdmin).
+	rp, ok := h.managedRepo(w, r, id, auth.ActionHubAdmin)
 	if !ok {
 		return
 	}
@@ -245,12 +247,20 @@ func (h *Handler) moveRepo(w http.ResponseWriter, r *http.Request) {
 		h.writeBadRequest(w, r, errMessage(err))
 		return
 	}
-	rp, ok := h.managedRepo(w, r, from, auth.ActionAdmin)
+	// A rename within the Repo's Namespace needs what huggingface_hub's
+	// move_repo needs on the Hub, a write Token (auth.ActionHubAdmin). A
+	// transfer to another Namespace also needs auth.ActionAdmin, and so the
+	// admin scope. The check uses the Namespace the Repo is in now, not the
+	// one fromRepo names, which can be an old ID that redirects.
+	rp, ok := h.managedRepo(w, r, from, auth.ActionHubAdmin)
 	if !ok {
 		return
 	}
 	cur := rp
 	if !strings.EqualFold(cur.ID.Namespace, to.Namespace) {
+		if !h.can(w, r, cur, auth.ActionAdmin) {
+			return
+		}
 		nt, ok := h.namespaceTarget(w, r, to.Namespace)
 		if !ok {
 			return
@@ -278,8 +288,10 @@ func (h *Handler) moveRepo(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateSettings serves PUT /api/{type}s/{repo}/settings (contract §7.3).
+// It changes only visibility and gating, which a write Token may do on
+// Repos its user administers, as on the Hub (auth.ActionHubAdmin).
 func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request, ref repoRef) {
-	rp, ok := h.load(w, r, ref, auth.ActionAdmin)
+	rp, ok := h.load(w, r, ref, auth.ActionHubAdmin)
 	if !ok {
 		return
 	}

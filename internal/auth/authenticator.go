@@ -25,10 +25,18 @@ var ErrCSRF = fmt.Errorf("%w: missing or wrong %s header", ErrInvalidCredentials
 //
 //   - `Authorization: Bearer hgr_...`: a Token.
 //   - `Authorization: Bearer <JWT>`: an Ollama registry token.
-//   - `Authorization: Basic` with a Token as the password (any username): git.
+//   - `Authorization: Basic` with a Token as the password (any username),
+//     on git and git-lfs routes only. Other routes answer 401, except the
+//     static UI and health routes, which ignore it.
 //   - the `hangar_session` cookie: a UI session. Requests with a method
 //     other than GET, HEAD or OPTIONS must also send the session's CSRF
 //     token in X-CSRF-Token, except the calls that start a new session.
+//
+// A request with a method other than GET, HEAD or OPTIONS that carries
+// Basic credentials or a valid session cookie is refused with
+// ErrCrossOrigin when the browser marks it as cross-origin (see
+// originGuard). Browsers add both credentials on their own, so this stops
+// other sites from using them.
 //
 // With no credentials, or only a stale session cookie, it returns an
 // anonymous Principal and no error. A bad Authorization header returns an
@@ -60,7 +68,24 @@ func (s *Service) Authenticate(r *http.Request) (model.Principal, error) {
 
 func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
 	ctx := r.Context()
-	if h := r.Header.Get("Authorization"); h != "" {
+	h := r.Header.Get("Authorization")
+	if scheme, _, _ := strings.Cut(h, " "); strings.EqualFold(scheme, "basic") {
+		// A browser replays cached Basic credentials on its own, so they
+		// are accepted only where git and git-lfs need them, and never on
+		// a cross-origin state-changing request.
+		allowed, ignore := basicAllowed(httpx.Classify(r, s.viewerHost))
+		switch {
+		case ignore:
+			h = ""
+		case !allowed:
+			return model.Principal{}, ErrBasicNotAccepted
+		default:
+			if err := s.origins.check(r); err != nil {
+				return model.Principal{}, err
+			}
+		}
+	}
+	if h != "" {
 		scheme, cred, _ := strings.Cut(h, " ")
 		cred = strings.TrimSpace(cred)
 		switch strings.ToLower(scheme) {
@@ -83,6 +108,13 @@ func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
 			return s.tokenPrincipal(ctx, pw)
 		default:
 			return model.Principal{}, fmt.Errorf("%w: unsupported Authorization scheme", ErrInvalidCredentials)
+		}
+	}
+	if isSignInCall(r) {
+		// Signing in from another site would sign the browser in to an
+		// account the other site chose.
+		if err := s.origins.check(r); err != nil {
+			return model.Principal{}, err
 		}
 	}
 	c, _ := r.Cookie(SessionCookie)
@@ -109,6 +141,10 @@ func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
 	}
 	if u.Disabled() {
 		return staleSession(ctx), nil
+	}
+	// Defence in depth on top of SameSite=Lax and the CSRF header.
+	if err := s.origins.check(r); err != nil {
+		return model.Principal{}, err
 	}
 	if !safeMethod(r.Method) && !checkCSRF(r, sess) {
 		if isSignInCall(r) {
@@ -229,6 +265,14 @@ func WriteAuthError(publicURL string) func(w http.ResponseWriter, r *http.Reques
 		httpx.SetProtocol(r.Context(), httpx.Classify(r, viewerHost).Protocol())
 		if errors.Is(err, ErrCSRF) {
 			httpx.WriteError(w, r, http.StatusForbidden, "", "The request needs the X-CSRF-Token header from your session. Reload the page and try again.")
+			return
+		}
+		if errors.Is(err, ErrCrossOrigin) {
+			httpx.WriteError(w, r, http.StatusForbidden, "", "Hangar refuses changes sent from another site with your browser's credentials. Make the change from Hangar itself, or send a Token as a Bearer token.")
+			return
+		}
+		if errors.Is(err, ErrBasicNotAccepted) {
+			httpx.WriteError(w, r, http.StatusUnauthorized, "", "HTTP Basic credentials are accepted only by git and git-lfs. Send the Token in an Authorization: Bearer header.")
 			return
 		}
 		if !errors.Is(err, ErrInvalidCredentials) && r.Context().Err() != nil {
