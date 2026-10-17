@@ -377,6 +377,17 @@ func TestSigner(t *testing.T) {
 		require.ErrorIs(t, err, httpx.ErrBadSignature)
 	}
 
+	// A signed value that contains a newline cannot be split into other
+	// parameters, such as a later expiry that Verify would read first.
+	smuggled, err := s.Sign("https://h/x?a="+url.QueryEscape("x\nexp=10000000000000"), "s", time.Hour)
+	require.NoError(t, err)
+	su, _ := url.Parse(smuggled)
+	sq := su.Query()
+	forged := url.Values{"a": {"x"}, "scope": sq["scope"], "sig": sq["sig"]}
+	su.RawQuery = forged.Encode() + "&exp=10000000000000&exp=" + sq.Get("exp")
+	_, err = s.Verify(su)
+	require.ErrorIs(t, err, httpx.ErrBadSignature, "a newline in a signed value forged a later expiry")
+
 	later := s.WithClock(func() time.Time { return time.Now().Add(2 * time.Hour) })
 	_, err = later.Verify(u)
 	require.ErrorIs(t, err, httpx.ErrBadSignature)

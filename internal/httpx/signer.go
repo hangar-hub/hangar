@@ -95,13 +95,16 @@ func (s *Signer) mac(escapedPath string, q url.Values) string {
 		}
 	}
 	sort.Strings(keys)
+	// Keys and values are query-escaped, so a value that contains a
+	// newline or `=` cannot pass for another parameter: otherwise a signed
+	// URL with `a=x%0Aexp%3D<later>` would also sign `a=x&exp=<later>`.
 	var b strings.Builder
 	b.WriteString(escapedPath)
 	for _, k := range keys {
 		vals := append([]string(nil), q[k]...)
 		sort.Strings(vals)
 		for _, v := range vals {
-			b.WriteString("\n" + k + "=" + v)
+			b.WriteString("\n" + url.QueryEscape(k) + "=" + url.QueryEscape(v))
 		}
 	}
 	m := hmac.New(sha256.New, s.key)
