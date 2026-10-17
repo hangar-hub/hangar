@@ -107,7 +107,7 @@ func TestUnsafeDownloadGateCatchesScannerBypasses(t *testing.T) {
 			req.Header.Set("Content-Type", "application/vnd.git-lfs+json")
 			req.Header.Set("Accept", "application/vnd.git-lfs+json")
 		}
-		req.SetBasicAuth("alice", token)
+		setToken(req, "alice", token)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
