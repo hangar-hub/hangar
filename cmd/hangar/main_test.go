@@ -265,6 +265,15 @@ func TestCommands(t *testing.T) {
 	require.Equal(t, 0, code, out)
 	require.Contains(t, out, "valid")
 
+	// Help puts every command under a heading in sentence case (house
+	// style), not cobra's "Additional Commands".
+	out, code = execute(t, "--help")
+	require.Equal(t, 0, code)
+	for _, heading := range []string{"Client commands:", "Server commands:", "Other commands:"} {
+		require.Contains(t, out, heading)
+	}
+	require.NotContains(t, out, "Additional Commands")
+
 	require.Equal(t, 2, run([]string{"version", "--no-such-flag"}))
 	require.Equal(t, 1, run([]string{"healthcheck", "--listen", "127.0.0.1:1"}))
 	require.Equal(t, 0, run([]string{"version"}))
