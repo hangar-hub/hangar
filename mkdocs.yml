@@ -133,6 +133,7 @@ nav:
       - Backup and restore: operate/backup.md
       - Upgrades: operate/upgrades.md
       - Security hardening: operate/security.md
+      - Threat model: security/threat-model.md
       - Troubleshooting: operate/troubleshooting.md
   - Reference:
       - reference/index.md

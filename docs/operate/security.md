@@ -1,5 +1,7 @@
 # Security hardening
 
+This page lists what to do to run Hangar securely. For what Hangar protects, its trust boundaries and the threats it mitigates or leaves to you, see the [threat model](../security/threat-model.md).
+
 ## Checklist
 
 - Serve Hangar over HTTPS only, with `server.public_url` set to the `https://` address, and set `server.trusted_proxies` to your proxy's addresses.
