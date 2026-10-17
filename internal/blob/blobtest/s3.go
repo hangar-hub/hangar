@@ -22,6 +22,13 @@ import (
 // Docker). HANGAR_TEST_S3_ENDPOINT, with HANGAR_TEST_S3_ACCESS_KEY,
 // HANGAR_TEST_S3_SECRET_KEY and optionally HANGAR_TEST_S3_BUCKET and
 // HANGAR_TEST_S3_REGION, uses an existing S3-compatible server instead.
+//
+// For runs of many packages, such as `go test ./...`, start the tests
+// through scripts/with-test-minio.sh, as `make test` does: it runs one
+// MinIO for the whole run and sets the HANGAR_TEST_S3_* variables. A
+// testcontainers MinIO lives only as long as testcontainers' reaper keeps
+// it, and the reaper can remove it while the package's tests still run
+// when the package's reaper handshake fails.
 const (
 	EnvMinIO       = "HANGAR_TEST_MINIO"
 	EnvMinIOImage  = "HANGAR_TEST_MINIO_IMAGE"
@@ -59,7 +66,7 @@ var (
 // S3TestServer returns the shared test S3 server, starting MinIO on first
 // use. It fails the test if S3 tests are not enabled or the server does not
 // start. Testcontainers' reaper removes the container when the test
-// process exits.
+// process exits; see the note on EnvMinIO.
 func S3TestServer(t testing.TB) S3Server {
 	t.Helper()
 	if !S3Enabled() {
