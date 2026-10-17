@@ -9,6 +9,7 @@ import crypto from "k6/crypto";
 import { check, fail } from "k6";
 import { Trend } from "k6/metrics";
 import { BASE, NS, auth } from "./lib/config.js";
+import { eachChunk, newBase, part } from "./lib/payload.js";
 
 const SIZE = Number(__ENV.UPLOAD_SIZE || 1 << 30);
 const REPO = __ENV.UPLOAD_REPO || `${NS}/uploads`;
@@ -25,42 +26,17 @@ const json = (extra) => auth(Object.assign({ "Content-Type": "application/json" 
 
 export function setup() {
   const [ns, name] = REPO.split("/");
-  const r = http.post(`${BASE}/api/hangar/v1/repos`, JSON.stringify({ type: "model", namespace: ns, name }), json());
+  // 409 means the Repo is there from an earlier run, so it is not a failed request.
+  const params = Object.assign(json(), { responseCallback: http.expectedStatuses(201, 409) });
+  const r = http.post(`${BASE}/api/hangar/v1/repos`, JSON.stringify({ type: "model", namespace: ns, name }), params);
   if (r.status !== 201 && r.status !== 409) fail(`create ${REPO}: ${r.status} ${r.body}`);
-}
-
-const CHUNK = 1 << 20;
-
-// chunk returns the bytes at chunk index i of this VU's object: a fixed
-// pattern with a header that makes every chunk of every object distinct, so
-// nothing is deduplicated.
-function chunk(buf, iter, i) {
-  const header = `vu=${__VU} iter=${iter} chunk=${i} `;
-  for (let k = 0; k < header.length; k++) buf[k] = header.charCodeAt(k);
-  return buf;
-}
-
-// part returns part n (1-based) of the object, built from chunks.
-function part(base, iter, n, partSize) {
-  const off = (n - 1) * partSize;
-  const len = Math.min(partSize, SIZE - off);
-  const out = new Uint8Array(len);
-  for (let o = 0; o < len; o += CHUNK) {
-    const c = chunk(base, iter, (off + o) / CHUNK);
-    out.set(c.subarray(0, Math.min(CHUNK, len - o)), o);
-  }
-  return out.buffer;
 }
 
 export default function () {
   const path = `blobs/vu${__VU}-iter${__ITER}-${Date.now()}.bin`;
-  const base = new Uint8Array(CHUNK);
-  for (let i = 0; i < CHUNK; i++) base[i] = (i * 31 + __VU) & 0xff;
+  const base = newBase(__VU);
   const hasher = crypto.createHash("sha256");
-  for (let off = 0; off < SIZE; off += CHUNK) {
-    const c = chunk(base, __ITER, off / CHUNK);
-    hasher.update(c.slice(0, Math.min(CHUNK, SIZE - off)).buffer);
-  }
+  eachChunk(base, __VU, __ITER, SIZE, (c) => hasher.update(c.slice().buffer));
   const sha256 = hasher.digest("hex");
 
   const start = Date.now();
@@ -75,7 +51,7 @@ export default function () {
     for (let n = 1; n <= parts; n++) {
       const params = item.presigned ? { headers: {} } : auth({ "Content-Type": "application/octet-stream" });
       params.tags = { name: "upload part" };
-      const r = http.put(item.part_urls[n - 1], part(base, __ITER, n, partSize), params);
+      const r = http.put(item.part_urls[n - 1], part(base, __VU, __ITER, n, partSize, SIZE), params);
       check(r, { "part 200": (res) => res.status === 200 }) || fail(`part ${n}: ${r.status}`);
       done.push({ number: n, etag: r.headers.Etag || r.json("etag") });
     }

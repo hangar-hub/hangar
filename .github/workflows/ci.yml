@@ -86,6 +86,8 @@ jobs:
         run: pnpm run typecheck
       - working-directory: ui
         run: pnpm run test
+      - name: Load test payload helpers
+        run: make test-loadtest
 
   generated:
     name: Generated code is current
