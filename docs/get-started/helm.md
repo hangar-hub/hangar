@@ -65,8 +65,9 @@ A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `wo
 
 Argo CD, Flux and other GitOps tools render the chart with `helm template` and apply the result. Two things differ from `helm install`:
 
-- **Hooks run first.** Argo CD runs Helm's pre-install and pre-upgrade hooks as `PreSync` hooks, before anything else in the Application. If Postgres is in the same Application, the migrate Job waits for a database that Argo CD has not created yet, and the first sync never finishes. Set `migrations.mode: initContainer`: every `web` and `worker` Pod then runs `hangar admin migrate` in an init container, which fails and is retried until the database answers. Migrations take a lock in the database, so Pods that start together wait for one another.
+- **Hooks run first.** Argo CD runs Helm's pre-install and pre-upgrade hooks as `PreSync` hooks, before anything else in the Application. If Postgres is in the same Application, the migrate Job waits for a database that Argo CD has not created yet, and the first sync never finishes. Set `migrations.mode: initContainer`: every `web` and `worker` Pod then runs `hangar admin migrate` in an init container, which fails and is retried until the database answers. Migrations hold a lock in the database, so when several Pods start together, one migrates and the others wait for it instead of failing. Postgres releases the lock when the migrating Pod's connection ends, so a Pod killed mid-migration does not block the next one.
 - **No cluster access while rendering.** `lookup` returns nothing, so the chart cannot keep generated secrets and stops with an error if `generateSecrets` would generate them. Create the Secret yourself and name it in `existingSecret`.
+- **The test Pod is a hook too.** The chart's `helm test` Pod carries `helm.sh/hook: test`. Argo CD skips it, but `helm template` renders it as an ordinary Pod. A tool that applies the render as it is, such as `kubectl apply` or Kustomize's `helmCharts`, starts it before Hangar is up, and it stays in `Error`. Pass `--skip-tests` to `helm template`, or set `skipTests: true` in Kustomize's `helmCharts` entry.
 
 Create the namespace and the Secret once, outside Git or with a secrets operator such as Sealed Secrets or External Secrets:
 
@@ -121,10 +122,10 @@ spec:
 
 Argo CD pulls OCI charts from a Helm repository with `enableOCI: true`; add `ghcr.io/jamesagarside/charts` as one, as the [Argo CD Helm guide](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/) describes. Set `releaseName: hangar` so resource names match the rest of this guide. Argo CD skips the chart's `helm test` Pod, and the PersistentVolumeClaim and generated Secret keep `helm.sh/resource-policy: keep`, which Argo CD treats as `Delete=false`.
 
-To check a render before you commit it, run the same command Argo CD runs:
+To check a render before you commit it, render the chart as Argo CD does. `--skip-tests` leaves out the test Pod, as Argo CD does:
 
 ```sh
-helm template hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml
+helm template hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml --skip-tests
 ```
 
 To rotate a credential in the Secret, create a Secret with a new name and change `existingSecret`: the Pods' `checksum/secret` annotation covers the name, so the Pods restart and read it. Under `helm upgrade`, the chart also reads the Secret's data, so changing it in place restarts the Pods on the next upgrade.

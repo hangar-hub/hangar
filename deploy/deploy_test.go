@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -365,6 +366,42 @@ func TestHelmInstallCommandsSetPublicURL(t *testing.T) {
 	}
 	if found == 0 {
 		t.Fatal("found no helm install commands; is the pattern still right?")
+	}
+}
+
+// helmTemplateCommand matches a helm template command of Hangar's chart in
+// a shell block, with its continuation lines joined.
+var helmTemplateCommand = regexp.MustCompile(`(?m)^helm template [^\n]*(?:oci://ghcr\.io/jamesagarside/charts/hangar|deploy/helm/hangar)[^\n]*`)
+
+// TestHelmTemplateCommandsSkipTests checks the helm template commands in the
+// GitOps docs and the GitOps example values. helm template renders the
+// chart's helm test Pod as an ordinary Pod, so a render applied as it is
+// runs it before Hangar is up and leaves it in Error; Argo CD skips it, and
+// --skip-tests does the same for every other tool.
+func TestHelmTemplateCommandsSkipTests(t *testing.T) {
+	b, err := os.ReadFile("../docs/get-started/helm.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ReplaceAll(string(b), "\\\n", " ")
+	cmds := helmTemplateCommand.FindAllString(text, -1)
+	if len(cmds) == 0 {
+		t.Fatal("found no helm template commands in docs/get-started/helm.md; is the pattern still right?")
+	}
+	for _, cmd := range cmds {
+		if !slices.Contains(strings.Fields(cmd), "--skip-tests") {
+			t.Errorf("docs/get-started/helm.md: %q does not pass --skip-tests", cmd)
+		}
+	}
+	if !strings.Contains(text, "skipTests: true") {
+		t.Error("docs/get-started/helm.md does not give Kustomize's skipTests for helmCharts")
+	}
+	values, err := os.ReadFile("helm/examples/gitops-values.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(values), "--skip-tests") {
+		t.Error("helm/examples/gitops-values.yaml does not say to render with --skip-tests")
 	}
 }
 

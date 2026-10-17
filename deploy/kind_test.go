@@ -256,7 +256,9 @@ func randomHex(t *testing.T, n int) string {
 // and applied in one step together with the Postgres and MinIO it needs.
 // Nothing runs first, so Hangar's Pods start before Postgres answers; the
 // migrate init containers must wait for it, migrate once between them, and
-// let web and worker Pods become ready.
+// let web and worker Pods become ready. The render passes --skip-tests, as
+// the GitOps docs say: applied as it is, the helm test Pod would run before
+// Hangar is up and stay in Error. No Pod may end up failed.
 func TestKindGitOpsInstall(t *testing.T) {
 	img := kindImage(t)
 	const ns = "chart-gitops"
@@ -282,13 +284,23 @@ func TestKindGitOpsInstall(t *testing.T) {
 		"--set", "publicURL=http://hangar." + ns + ".svc:8080",
 		"--set", "config.storage.s3.endpoint=http://minio:9000",
 		"--set", "config.storage.s3.download_mode=proxy",
-		"--set", "config.storage.s3.upload_mode=proxy"}, img...)
+		"--set", "config.storage.s3.upload_mode=proxy",
+		// Several migrate init containers race, as in a scaled install.
+		"--set", "web.replicas=3", "--set", "worker.replicas=3",
+		"--skip-tests"}, img...)
 	rendered, errOut, err := helmCmd(t, args...)
 	if err != nil {
 		t.Fatalf("helm template without cluster access: %v\n%s", err, errOut)
 	}
-	if got := hooked(decodeDocs(t, rendered)); len(got) > 0 {
+	docs := decodeDocs(t, rendered)
+	if got := hooked(docs); len(got) > 0 {
 		t.Fatalf("GitOps render has Helm hooks %v, which Argo CD would run before Postgres", got)
+	}
+	for _, doc := range docs {
+		if doc["kind"] == "Pod" {
+			md, _ := doc["metadata"].(map[string]any)
+			t.Fatalf("GitOps render has a bare Pod %v, which kubectl apply would run as it is", md["name"])
+		}
 	}
 	// helm template --namespace does not set metadata.namespace, as with
 	// Argo CD, which applies into the Application's destination namespace.
@@ -305,5 +317,21 @@ func TestKindGitOpsInstall(t *testing.T) {
 		"hangar", "admin", "migrate")
 	if err != nil {
 		t.Fatalf("hangar admin migrate in the web Pod after install: %v\n%s", err, out)
+	}
+	// Migrators wait for one another on an advisory lock. Without it, the
+	// losers failed on bun's CREATE TABLE IF NOT EXISTS or its lock row, and
+	// each failure cost the Pod a kubelet back-off (10 s, 20 s, and so on).
+	pgLog := mustCluster(t, "", "kubectl", "logs", "--namespace", ns, "deployment/postgres")
+	for _, race := range []string{"pg_type_typname_nsp_index", "pg_class_relname_nsp_index", "bun_migration_locks"} {
+		if strings.Contains(pgLog, race) {
+			t.Errorf("concurrent migrations collided in Postgres (%s):\n%s", race, pgLog)
+		}
+	}
+	phases := mustCluster(t, "", "kubectl", "get", "pods", "--namespace", ns,
+		"-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}`)
+	for _, line := range strings.Split(strings.TrimSpace(phases), "\n") {
+		if name, phase, _ := strings.Cut(line, " "); phase == "Failed" {
+			t.Errorf("Pod %s failed after a GitOps install", name)
+		}
 	}
 }
