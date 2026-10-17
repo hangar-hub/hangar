@@ -36,17 +36,19 @@ import (
 // function in the binary that reads a Repo file's bytes, so a new download
 // path fails until it is mapped to one of these routes and checked.
 const (
-	routeResolve     = "GET /{repo}/resolve/{rev}/{path}"
-	routeLFSBatch    = "POST /{repo}.git/info/lfs/objects/batch (download)"
-	routeLFSObject   = "GET /{repo}.git/info/lfs/objects/{oid} (signed)"
-	routeOllamaBlob  = "GET /v2/{ns}/{name}/blobs/{digest}"
-	routeZipStart    = "POST /api/hangar/v1/repos/{type}/{ns}/{name}/zip"
-	routeZipDownload = "GET /api/hangar/v1/exports/{file} (signed)"
-	routePullThrough = "GET /api/hangar/v1/pull-through/{repo}/{oid} (signed)"
+	routeResolve       = "GET /{repo}/resolve/{rev}/{path}"
+	routeLFSBatch      = "POST /{repo}.git/info/lfs/objects/batch (download)"
+	routeLFSObject     = "GET /{repo}.git/info/lfs/objects/{oid} (signed)"
+	routeOllamaBlob    = "GET /v2/{ns}/{name}/blobs/{digest}"
+	routeZipStart      = "POST /api/hangar/v1/repos/{type}/{ns}/{name}/zip"
+	routeZipDownload   = "GET /api/hangar/v1/exports/{file} (signed)"
+	routePullThrough   = "GET /api/hangar/v1/pull-through/{repo}/{oid} (signed)"
+	routeGitUploadPack = "POST /{repo}.git/git-upload-pack (fetch)"
 )
 
 var unsafeDownloadRoutes = []string{
 	routeResolve, routeLFSBatch, routeLFSObject, routeOllamaBlob, routeZipStart, routeZipDownload, routePullThrough,
+	routeGitUploadPack,
 }
 
 func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
@@ -72,10 +74,20 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 	_, err = in.repos.Commit(ctx, repo.CommitParams{Repo: id, Revision: "main", Summary: "Add a pickle", Actor: p,
 		Operations: []repo.Operation{{Kind: repo.OpAdd, Path: "evil.pkl", Content: bytes.NewReader(scantest.OSSystemProtocol0())}}})
 	require.NoError(t, err)
+	// A pickle stored in git, not LFS, which a git clone sends.
+	_, err = in.repos.Commit(ctx, repo.CommitParams{Repo: id, Revision: "main", Summary: "Track nothing with LFS", Actor: p,
+		Operations: []repo.Operation{{Kind: repo.OpAdd, Path: ".gitattributes", Content: strings.NewReader("*.txt -text\n")}}})
+	require.NoError(t, err)
+	_, err = in.repos.Commit(ctx, repo.CommitParams{Repo: id, Revision: "main", Summary: "Add a pickle to git", Actor: p,
+		Operations: []repo.Operation{{Kind: repo.OpAdd, Path: "in-git.pkl", Content: bytes.NewReader(scantest.OSSystemProtocol0())}}})
+	require.NoError(t, err)
 	r, err := in.repos.Get(ctx, id)
 	require.NoError(t, err)
 	head, err := in.repos.Resolve(ctx, id, "")
 	require.NoError(t, err)
+	inGit, err := in.repos.Entry(ctx, id, head, "in-git.pkl")
+	require.NoError(t, err)
+	require.Nil(t, inGit.LFS)
 	e, err := in.repos.Entry(ctx, id, head, "evil.pkl")
 	require.NoError(t, err)
 	require.NotNil(t, e.LFS, "the Hub's default .gitattributes stores pickles in LFS")
@@ -217,6 +229,19 @@ func TestUnsafeDownloadGateCoversEveryRoute(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode, body)
 			require.Contains(t, body, "evil.pkl is marked unsafe")
 			require.Contains(t, body, "cannot include it")
+		},
+		routeGitUploadPack: func() {
+			req, err := http.NewRequest(http.MethodPost, pub+"/alice/m.git/git-upload-pack", strings.NewReader("0032want "+string(head)+"\n00000009done\n"))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/x-git-upload-pack-request")
+			req.SetBasicAuth("alice", token)
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			raw, _ := io.ReadAll(resp.Body)
+			require.Equal(t, http.StatusForbidden, resp.StatusCode, string(raw))
+			require.Contains(t, string(raw), "in-git.pkl is marked unsafe")
+			require.Contains(t, string(raw), "git clone and fetch")
 		},
 		routePullThrough: func() {
 			cdn := upSrv.Requests("cdn")
