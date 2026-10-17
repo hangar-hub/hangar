@@ -366,6 +366,9 @@ func (s *Server) serveResolve(w http.ResponseWriter, r *http.Request, id model.R
 		hubError(w, err, sha)
 		return
 	}
+	if err := s.Fake.slowFile(ctx); err != nil {
+		return
+	}
 	w.Header().Set("X-Repo-Commit", string(sha))
 	if e.LFS != nil {
 		w.Header().Set("X-Linked-Etag", `"`+e.LFS.OID+`"`)
