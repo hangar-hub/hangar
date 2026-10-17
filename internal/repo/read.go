@@ -411,10 +411,17 @@ func (s *Store) entry(ctx context.Context, repoID uuid.UUID, commit model.Commit
 	if err != nil {
 		return model.Entry{}, fmt.Errorf("%w: %w", ErrEntryNotFound, err)
 	}
-	if err := s.ensureTree(ctx, repoID, commit); err != nil {
-		return model.Entry{}, err
-	}
+	// Look the path up first: the tree cache of a Commit is filled in one
+	// transaction, so a row means it is complete, and the hot path of
+	// resolve costs one query instead of two. A miss is a path that does
+	// not exist or a cache not filled yet, so fill it and look again.
 	r, err := s.treeRow(ctx, repoID, commit, clean)
+	if errors.Is(err, ErrEntryNotFound) {
+		if err := s.ensureTree(ctx, repoID, commit); err != nil {
+			return model.Entry{}, err
+		}
+		r, err = s.treeRow(ctx, repoID, commit, clean)
+	}
 	if err != nil {
 		return model.Entry{}, err
 	}
