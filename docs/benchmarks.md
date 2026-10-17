@@ -11,7 +11,7 @@ The numbers come from one shared laptop, not dedicated hardware, so read them as
 | `HEAD /resolve` p99 under 50 ms at 200 requests per second per replica | p99 7 to 28 ms with the host lightly loaded; 87 to 206 ms when other workloads saturated the host | Pass, with the host lightly loaded |
 | Model info p99 under 100 ms | p99 12.5 to 62.7 ms | Pass |
 | Full listing of a 100,000-file Repo under 10 seconds at p95 | p95 6.15 to 6.79 s | Pass |
-| Clone of a 10,000-Commit Repo under 30 seconds at p95 | p95 0.60 to 1.13 s | Pass, see [Clone errors](#clone-errors) |
+| Clone of a 10,000-Commit Repo under 30 seconds at p95 | p95 0.60 to 1.13 s in the four runs with a kept p95 (five runs) | Pass, see [Clone errors](#clone-errors) |
 | Web replica memory flat and under 256 MiB during uploads | peak 66 and 81 MiB during four concurrent 1 GiB uploads | Pass (4 GiB uploaded, not 50 GiB) |
 | Web replica memory flat and under 256 MiB during downloads | peak 104 and 115 MiB while downloading 140 GiB | Pass |
 | Download throughput in `proxy` mode limited by network and storage, not CPU | 1.2 GB/s in total with each replica using 0.35 of its 2 CPUs | Pass |
@@ -121,11 +121,11 @@ Four clients listing all 100,000 files of `many-files` for 2 minutes, 101 pages 
 
 ### Clone
 
-Four clients cloning `many-commits` (4.4 MB pack) for 3 minutes: p95 995.59 ms, 1.13 s and 829.95 ms with the host busy, 599 ms with it quiet.
+Four clients cloning `many-commits` (4.4 MB pack) for 3 minutes, in five runs: p95 995.59 ms, 1.13 s and 829.95 ms with the host busy, 599 ms with it quiet. The fifth run, with the host busy, is the one in [Clone errors](#clone-errors); its p95 was not kept with the results, so it is not listed here or in the summary.
 
 #### Clone errors
 
-One busy run had 2 of 904 pack responses end early: k6 reported `unexpected EOF`, and the replica logged `git upload-pack ended early` with `context canceled`, which means the connection from Traefik closed first. That run failed its `http_req_failed` threshold (0.11 % against 0.1 %). The other four clone runs, about 3,900 clones, had none, and nothing in Hangar's logs explains the closed connections. Treat it as unexplained until it happens on a quiet host.
+One busy run had 2 of 904 pack responses end early: k6 reported `unexpected EOF`, and the replica logged `git upload-pack ended early` with `context canceled`, which means the connection from Traefik closed first. That run failed its `http_req_failed` threshold (0.11 % against 0.1 %). The other four clone runs, the ones listed in [Clone](#clone), had none in about 3,900 clones, and nothing in Hangar's logs explains the closed connections. Treat it as unexplained until it happens on a quiet host.
 
 During clones, a replica's memory peaked at 285 and 496 MiB, mostly the `git upload-pack` and `pack-objects` processes in its cgroup, under the 1 GiB limit. The 256 MiB target covers uploads and downloads of files, not git clones.
 

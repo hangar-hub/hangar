@@ -10,12 +10,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -240,6 +242,40 @@ func execute(t *testing.T, args ...string) (string, int) {
 		return out.String() + err.Error(), 1
 	}
 	return out.String(), 0
+}
+
+// TestHelpHeadingsInSentenceCase walks every command, hidden ones included,
+// and checks its help headings are in sentence case (house style). Commit
+// 73b7664 fixed only the root help; every subcommand still printed cobra's
+// "Available Commands:" and "Global Flags:".
+func TestHelpHeadingsInSentenceCase(t *testing.T) {
+	var paths [][]string
+	var walk func(c *cobra.Command, path []string)
+	walk = func(c *cobra.Command, path []string) {
+		paths = append(paths, path)
+		for _, sub := range c.Commands() {
+			walk(sub, append(slices.Clone(path), sub.Name()))
+		}
+	}
+	walk(newRootCommand(), nil)
+	require.Greater(t, len(paths), 20, "the walk should reach the client and admin subcommands")
+
+	heading := regexp.MustCompile(`^[A-Z][A-Za-z ]*:$`)
+	for _, path := range paths {
+		name := strings.Join(append([]string{"hangar"}, path...), " ")
+		out, code := execute(t, append(slices.Clone(path), "--help")...)
+		require.Equal(t, 0, code, "%s: %s", name, out)
+		require.Contains(t, out, "Usage:", name)
+		for _, line := range strings.Split(out, "\n") {
+			if !heading.MatchString(line) {
+				continue
+			}
+			words := strings.Fields(strings.TrimSuffix(line, ":"))
+			for _, w := range words[1:] {
+				require.False(t, unicode.IsUpper([]rune(w)[0]), "%s: heading %q is not in sentence case", name, line)
+			}
+		}
+	}
 }
 
 func TestCommands(t *testing.T) {
