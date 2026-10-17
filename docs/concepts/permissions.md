@@ -14,7 +14,7 @@ A Repo can also have collaborators with `read` or `write`, for people outside it
 
 ## Tokens
 
-A Token has one scope, `read`, `write` or `admin`, which caps what it can do on top of the user's own permissions. It can be limited to some Namespaces or Repos, and given an expiry. Clients send it as `Authorization: Bearer hgr_...` (HTTP) or as the git password. Hangar stores only a hash, and shows when each Token was last used.
+A Token has one scope, `read`, `write` or `admin`, which caps what it can do on top of the user's own permissions. `read` downloads; `write` also uploads, pushes, starts Pulls, and changes the settings of, renames, transfers and deletes Repos the user administers, as a write Token does on huggingface.co; `admin` also manages Organisation Members and, for Instance admins, the Instance. It can be limited to some Namespaces or Repos, and given an expiry. Clients send it as `Authorization: Bearer hgr_...` (HTTP) or as the git password. Hangar stores only a hash, and shows when each Token was last used.
 
 ## Private Repos stay hidden
 
