@@ -1,6 +1,7 @@
 package gitserver
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -20,6 +21,7 @@ import (
 	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/jamesagarside/hangar/internal/scan"
 	"github.com/jamesagarside/hangar/internal/telemetry"
 )
 
@@ -251,6 +253,17 @@ func (s *Server) uploadPack(w http.ResponseWriter, r *http.Request, rp repoPath)
 		return
 	}
 	defer body.Close()
+	in, fetch := fetchRequest(body)
+	if fetch {
+		if err := s.deps.Downloads.CheckGit(r.Context(), rec.UUID, rec.ID); scan.IsBlocked(err) {
+			s.gitError(w, r, http.StatusForbidden, err.Error()+
+				" git clone and fetch send every file in the Repo's history, so they are refused. Download files with huggingface_hub or the web UI instead.")
+			return
+		} else if err != nil {
+			s.gitFailure(w, r, fmt.Errorf("check unsafe downloads: %w", err))
+			return
+		}
+	}
 
 	ctx, span := s.deps.Tracer.Start(r.Context(), "git.upload_pack")
 	defer span.End()
@@ -267,7 +280,7 @@ func (s *Server) uploadPack(w http.ResponseWriter, r *http.Request, rp repoPath)
 	noCache(h)
 	h.Set("Content-Type", "application/x-git-upload-pack-result")
 	out := &lazyHeaderWriter{w: w}
-	err = s.runGit(ctx, view.Dir, gitProtocol(r), body, out, "--stateless-rpc")
+	err = s.runGit(ctx, view.Dir, gitProtocol(r), in, out, "--stateless-rpc")
 	s.recordPackDuration(ctx, "upload-pack", start)
 	if err != nil {
 		span.SetStatus(codes.Error, "upload-pack")
@@ -279,6 +292,21 @@ func (s *Server) uploadPack(w http.ResponseWriter, r *http.Request, rp repoPath)
 		// stream is cut short and git reports the error itself.
 		s.log.WarnContext(ctx, "git upload-pack ended early", "error", err)
 	}
+}
+
+// fetchRequest reports whether an upload-pack request may send a pack: any
+// protocol v0 or v1 request, and a protocol v2 request whose command is
+// fetch. A v2 ls-refs request only lists refs. It returns a reader of the
+// whole body.
+func fetchRequest(body io.Reader) (io.Reader, bool) {
+	br := bufio.NewReader(body)
+	head, _ := br.Peek(4 + len("command=ls-refs"))
+	if len(head) >= 4 {
+		if cmd, ok := bytes.CutPrefix(head[4:], []byte("command=")); ok && bytes.HasPrefix(cmd, []byte("ls-refs")) {
+			return br, false
+		}
+	}
+	return br, true
 }
 
 // lazyHeaderWriter writes the 200 status on the first byte, so an error

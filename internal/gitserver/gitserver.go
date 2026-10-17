@@ -127,7 +127,8 @@ type Deps struct {
 	// PullThrough is optional; without it objects that are not in the
 	// Arsenal get a 404 with instructions.
 	PullThrough PullThrough
-	// Downloads enforces scan.block_unsafe_downloads on LFS downloads. It
+	// Downloads enforces scan.block_unsafe_downloads on LFS downloads and git
+	// fetches. It
 	// is optional; without it every object downloads.
 	Downloads *scan.Gate
 	// Log defaults to slog.Default().

@@ -306,3 +306,90 @@ func ZipWithDescriptors(dataPkl []byte) []byte {
 	_ = w.Close()
 	return b.Bytes()
 }
+
+// JoblibArray describes one array a joblib pickle stores with
+// joblib.numpy_pickle.NumpyArrayWrapper: its NumPy type string, shape and
+// the bytes joblib writes to the file after the wrapper is built.
+type JoblibArray struct {
+	TypeString string
+	Shape      []int
+	// Align writes numpy_array_alignment_bytes as joblib 1.2 and later
+	// do; the data then starts with a padding length byte.
+	Align bool
+	// Object marks an object array, whose data is a pickle.
+	Object bool
+	// MmapObject writes allow_mmap True for an object array, which joblib
+	// never does.
+	MmapObject bool
+	Data       []byte
+}
+
+// wrapper writes the opcodes that build a NumpyArrayWrapper for a, up to
+// and including BUILD, in protocol 2.
+func (p *Pickle) wrapper(a JoblibArray) *Pickle {
+	p.Global("joblib.numpy_pickle", "NumpyArrayWrapper").Op(")\x81")
+	p.Op("}(")
+	p.BinUnicode("subclass").Global("numpy", "ndarray")
+	p.BinUnicode("shape").Op("(")
+	for _, d := range a.Shape {
+		p.Int(d)
+	}
+	p.Op("t")
+	p.BinUnicode("order").BinUnicode("C")
+	p.BinUnicode("dtype").Global("numpy", "dtype").BinUnicode(a.TypeString).Raw(0x89, 0x88, 0x87).Op("R")
+	flags, size := 0, -1
+	if a.Object {
+		flags = 63
+	}
+	p.Op("(").Int(3).BinUnicode("|").Op("NNN").Int(size).Int(size).Int(flags).Op("tb")
+	if a.Object && !a.MmapObject {
+		p.BinUnicode("allow_mmap").Raw(0x89)
+	} else {
+		p.BinUnicode("allow_mmap").Raw(0x88)
+	}
+	if a.Align {
+		p.BinUnicode("numpy_array_alignment_bytes").Int(16)
+	}
+	return p.Op("ub")
+}
+
+// JoblibPickle returns a protocol 2 pickle shaped like joblib.dump of a
+// dict {"a": array}: the wrapper opcodes, the array data joblib writes
+// after them, then rest, which must finish the dict and STOP.
+func JoblibPickle(a JoblibArray, rest []byte) []byte {
+	p := NewPickle(2).Op("}(").BinUnicode("a").wrapper(a)
+	p.Raw(a.Data...)
+	p.Raw(rest...)
+	return p.Bytes()
+}
+
+// JoblibHiddenOSSystem hides os.system from a reader that does not know
+// joblib's array data: the five bytes of a uint8 array are a BINBYTES
+// opcode and length that swallow the call, so pickle.load sees bytes,
+// while joblib.load skips the five bytes and runs the call.
+func JoblibHiddenOSSystem() []byte {
+	hidden := NewPickle(0).Global("os", "system").Op("(").String("echo pwned").Op("tR0u.").Bytes()
+	data := append([]byte{'B'}, binary.LittleEndian.AppendUint32(nil, uint32(len(hidden)))...) //nolint:gosec // a short test pickle.
+	p := NewPickle(2).Op("}(").BinUnicode("a").wrapper(JoblibArray{TypeString: "u1", Shape: []int{5}})
+	p.Raw(data...).Raw(hidden...)
+	// After joblib's STOP: what pickle.load reads once the bytes end.
+	p.Op("0u.")
+	return p.Bytes()
+}
+
+// JoblibFramedOSSystem puts a wrapper and os.system in one protocol 4
+// frame, with the array data after the frame. joblib's unpickler reads
+// opcodes from the frame and array data from the file after it, so it
+// runs os.system; a reader that took the array data from the frame would
+// skip over the call.
+func JoblibFramedOSSystem() []byte {
+	inner := NewPickle(0).Op("}(").BinUnicode("a").wrapper(JoblibArray{TypeString: "u1", Shape: []int{4}})
+	inner.Global("os", "system").Op("(").String("echo pwned").Op("tR0u.")
+	frame := inner.Bytes()
+	var b bytes.Buffer
+	b.Write([]byte{0x80, 4, 0x95})
+	_ = binary.Write(&b, binary.LittleEndian, uint64(len(frame)))
+	b.Write(frame)
+	b.Write([]byte{0, 0, 0, 0})
+	return b.Bytes()
+}

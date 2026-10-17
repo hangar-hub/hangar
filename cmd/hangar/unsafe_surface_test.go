@@ -33,8 +33,7 @@ var protocolUses = map[string]byteUse{
 	"LFS":    {routes: []string{routeLFSBatch, routeLFSObject}},
 	"Ollama": {routes: []string{routeOllamaBlob}},
 	"Native": {routes: []string{routeZipStart}},
-	"Git": {reason: "git-upload-pack sends whole Commits and is not gated (scan.Gate); " +
-		"the Hub's default .gitattributes keeps every pickle format in LFS"},
+	"Git":    {routes: []string{routeGitUploadPack}},
 	"Xet":    {reason: "the CAS takes uploads and answers chunk dedupe lookups; Hangar never offers Xet downloads (no xet-read-token)"},
 	"Viewer": {reason: "serves Dataset Viewer responses and Parquet exports, which Hangar derives; never a Repo file"},
 	"Auth":   {reason: "sign-in, sign-out and OIDC callbacks"},
@@ -65,7 +64,7 @@ var fileByteReaders = map[string]byteUse{
 	"internal/api.ExportHandler":                       {routes: []string{routeZipDownload}},
 	"internal/upstream.(*PullThrough).stream":          {routes: []string{routePullThrough, routeResolve}},
 	"internal/upstream.(*PullThrough).afterTransfer":   {routes: []string{routePullThrough, routeResolve}},
-	"internal/gitstore.(*Store).download":              {reason: "reads git packs; git-upload-pack is not gated (scan.Gate)"},
+	"internal/gitstore.(*Store).download":              {routes: []string{routeGitUploadPack}},
 	"internal/datasets/viewer.(*Service).cached":       {reason: "serves derived Dataset Viewer data"},
 	"internal/datasets/pipeline.(*Store).Info":         {reason: "reads the metadata of a derived Parquet export"},
 	"internal/hfapi.(*Handler).readRepoFile":           {reason: "reads .gitattributes and .gitignore to answer preupload"},

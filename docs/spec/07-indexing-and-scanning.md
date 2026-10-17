@@ -43,9 +43,19 @@ All parsers are fuzz-tested (`go test -fuzz`) with seed corpora in `testdata/`. 
 
 ### Pickle scanner
 
-Scans `.bin`, `.pt`, `.pth`, `.ckpt`, `.pkl`, `.pickle`, `.joblib`, `.npy` (when `allow_pickle` data is present) and zip-based PyTorch archives (`*/data.pkl` and other `.pkl` members). Reads the pickle opcode stream without executing it. Large files are read in full but streamed; the scanner stops at the pickle `STOP` opcode, and tensor data members of zip archives are skipped.
+Scans `.bin`, `.pt`, `.pth`, `.ckpt`, `.pkl`, `.pickle`, `.joblib`, `.npy` and `.npz`, and those names with a compression or archive suffix (`.gz`, `.bz2`, `.xz`, `.lzma`, `.z`, `.zst`, `.lz4`, `.zip`, `.tar`), such as `model.joblib.gz` or `checkpoint.pth.tar`, because `joblib.load` and `pandas.read_pickle` decompress them. Reads the pickle opcode stream without executing it. The content, not the name, decides how a file is read, the way `torch.load`, `joblib.load`, `numpy.load` and `pandas.read_pickle` read it:
 
-- Collect every import from `GLOBAL`, `STACK_GLOBAL` (tracking the preceding string pushes and memo) and `INST`.
+- Zip archives: PyTorch archives (`*/data.pkl` and other `.pkl` members; tensor data members are skipped), `.npz` members and the member of a pandas zip.
+- Compressed files (gzip, zlib, bz2, lz4, zstd): the raw bytes and the decompressed stream are both read. xz and lzma are not read, so their result is partial.
+- `.npy` files: the pickle after the header when the dtype may hold objects; a file without the `.npy` magic is read as a pickle, as `numpy.load(allow_pickle=True)` does.
+- Raw pickles, read as CPython's unpickler reads them, and also as `joblib.load` reads them when the stream names `NumpyArrayWrapper`: joblib reads NumPy array data from the file after each wrapper is built, and a pickle after it for object arrays.
+- Data that is not a pickle at all (it fails at its first opcode), such as OpenVINO weights in a `.bin` file, is safe: no loader runs anything.
+- Large files are read in full but streamed; the scanner stops where the unpickler stops.
+
+A file whose content the scanner cannot follow to where every loader stops (an unsupported compressor, an old PyTorch tar archive, a joblib array it cannot measure, a stream beyond its limits) gets a **partial** result: its status is at least error and `partial` is set.
+
+- Collect every import from `GLOBAL`, `STACK_GLOBAL` (tracking the preceding string pushes and memo), `INST` and the extension opcodes (`EXT1`, `EXT2`, `EXT4`, which name a registered global the scanner cannot see, so they count as an unsafe import).
+- Classify each import under the name the pickle gives and the name `fix_imports` maps it to (`cPickle.loads` is `pickle.loads`). A dotted name, which protocol 4 resolves attribute by attribute, is unsafe when any part is a dunder or any tail of it is on the denylist (`collections.abc.sys.modules`).
 - Classify each `module.name`:
   - **safe:** an allowlist of known tensor rebuild and container functions (for example `torch._utils._rebuild_tensor_v2`, `torch._utils._rebuild_parameter`, `collections.OrderedDict`, `torch.*Storage`, `numpy.core.multiarray._reconstruct`, `numpy.dtype`, `numpy.ndarray`, `builtins.set`, `_codecs.encode`).
   - **unsafe:** a denylist (for example `os.*`, `posix.*`, `nt.*`, `subprocess.*`, `builtins.eval`, `builtins.exec`, `builtins.compile`, `builtins.__import__`, `builtins.getattr`, `builtins.open`, `socket.*`, `shutil.*`, `sys.*`, `runpy.*`, `importlib.*`, `pickle.*`, `webbrowser.*`, `pty.*`, `requests.*`, `urllib.*`, `httplib.*`, `bdb.*`, `pdb.*`, `asyncio.*`, `torch.load`, `torch.hub.*`, `operator.attrgetter`, `functools.partial` when wrapping an unsafe target).
@@ -64,4 +74,4 @@ Scans `.bin`, `.pt`, `.pth`, `.ckpt`, `.pkl`, `.pickle`, `.joblib`, `.npy` (when
 - UI: a badge on the file and the Repo (**Safe**, **Suspicious imports**, **Unsafe imports**), with the import list on the file page.
 - Hub API: `securityStatus` on model info when requested ([03](03-hf-api.md)) and per-file `securityFileStatus` in tree expansions where the Hub has them.
 - Native API and webhook event `scan.completed`.
-- Instance setting `scan.block_unsafe_downloads` (default false): when true, downloads of files marked unsafe need `?accept_risk=1` (UI) or return 403 with a clear message for API clients.
+- Instance setting `scan.block_unsafe_downloads` (default false): when true, downloads of files marked unsafe need `?accept_risk=1` (UI) or return 403 with a clear message for API clients. Files that can run code when loaded (the names the pickle scanner reads) are also refused when their result is partial or they have no result yet. Every protocol that serves file bytes applies it through one gate (`scan.Gate`): the Hub API, git-lfs, git clone and fetch, Pull-through links, the Ollama registry and zip exports. Objects asked for by OID are decided from every file in the Repo's history that holds them; a git fetch is refused while any reachable Commit holds a refused file stored in git rather than LFS.

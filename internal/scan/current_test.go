@@ -37,8 +37,9 @@ func TestCurrentCarriesResultsForUnchangedFiles(t *testing.T) {
 	_, err := s.ScanCommit(ctx, r.UUID, id, scanned)
 	require.NoError(t, err)
 
-	// The next Commit changes one pickle, adds another and turns the .bin
-	// into OpenVINO weights by adding its graph. Its scan has not run.
+	// The next Commit changes one pickle, adds another and adds an
+	// OpenVINO graph beside the .bin, which once made the scanner skip the
+	// .bin as raw weights (phase 3 finding 6a). Its scan has not run.
 	next := indextest.Commit(t, fake, id, map[string][]byte{
 		"changed.pkl":        scantest.SubprocessInst(),
 		"new.pkl":            scantest.TorchStateDict(),
@@ -59,7 +60,10 @@ func TestCurrentCarriesResultsForUnchangedFiles(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, scan.StatusSafe, ckpt.Status)
 	require.Equal(t, scan.StatusUnsafe, v.Status)
-	for _, p := range []string{"changed.pkl", "new.pkl", "openvino/model.bin"} {
+	bin, ok := v.File("openvino/model.bin")
+	require.True(t, ok, "an .xml beside a pickle does not change what the pickle is")
+	require.Equal(t, scan.StatusUnsafe, bin.Status)
+	for _, p := range []string{"changed.pkl", "new.pkl"} {
 		_, ok := v.File(p)
 		require.False(t, ok, "%s changed, so its old result does not apply", p)
 		require.True(t, v.Pending(p), p)
@@ -81,6 +85,7 @@ func TestCurrentCarriesResultsForUnchangedFiles(t *testing.T) {
 	require.NoError(t, g.CheckFile(ctx, r.UUID, id, next, "model.ckpt"))
 	require.Equal(t, scan.BlockNotScanned, blockedReason(t, g.CheckFile(ctx, r.UUID, id, next, "changed.pkl")))
 	require.Equal(t, scan.BlockNotScanned, blockedReason(t, g.CheckFile(ctx, r.UUID, id, next, "new.pkl")))
+	require.Equal(t, scan.BlockUnsafe, blockedReason(t, g.CheckFile(ctx, r.UUID, id, next, "openvino/model.bin")))
 	require.Error(t, g.CheckTree(ctx, r.UUID, id, next, ""))
 
 	// Carrying looks past ancestors that are not scanned either.
@@ -103,8 +108,10 @@ func TestCurrentCarriesResultsForUnchangedFiles(t *testing.T) {
 	changed, ok := v.File("changed.pkl")
 	require.True(t, ok)
 	require.Equal(t, scan.StatusUnsafe, changed.Status)
-	_, ok = v.File("openvino/model.bin")
-	require.False(t, ok, "the scanner skips OpenVINO weights")
+	bin, ok = v.File("openvino/model.bin")
+	require.True(t, ok, "the scanner reads a .bin by its content, whatever is beside it")
+	require.Equal(t, scan.StatusUnsafe, bin.Status)
+	require.Equal(t, scan.BlockUnsafe, blockedReason(t, g.CheckFile(ctx, r.UUID, id, next, "openvino/model.bin")))
 	require.False(t, v.Pending("openvino/model.bin"), "a scanned Commit has nothing pending")
 }
 
