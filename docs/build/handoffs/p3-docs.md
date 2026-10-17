@@ -43,3 +43,10 @@ Spec and decision records: `docs/build/decisions.md` ("Decisions from the phase 
 - **Partial-mirror HEAD answers 200.** A HEAD of a file that is not pulled answers 200 with its size, and the GET answers 409, so `has_file` and size checks treat the file as present. That is by design (planning and progress need sizes) but clients that HEAD then GET see a late failure.
 - **Not covered.** vLLM (no GPU here), Homebrew (tap unpublished), the Windows and macOS archives, Argo CD itself (the kind suite stands in for its render-and-apply), HTTPS for Ollama and DuckDB, and the bellatrix-scale guides at 2 GiB and above (smaller Repos stood in).
 - **Traefik in `scale.yaml`** answered one 504 while the web replicas started. It cleared once they were healthy; the Compose example has no Traefik health-based routing, so a request in that window can fail.
+
+## Round 2 fixes
+
+Branch `fix/p3-2-docs`, from `132da07`, for two audit findings in `docs/build/decisions.md`.
+
+- **Broken link.** An open question linked `../spec/03-hub-api.md`; the file is `03-hf-api.md`. Nothing caught it because MkDocs builds neither `docs/build` nor `docs/spec`. `scripts/check-doc-links.py` now checks every relative Markdown link under `docs/` and in the root Markdown files, and `make lint-style` runs it. `TestDocLinkCheck` in `deploy/scripts_test.go` covers it, and the check fails on `decisions.md` as it was at `132da07`.
+- **Heading case.** The section headings now say "Phase 3", as [15](../../spec/15-build-plan.md) does. Body text that names agents ("the phase 3 scan agent") is unchanged.

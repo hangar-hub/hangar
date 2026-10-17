@@ -78,3 +78,46 @@ func TestSilentSkipCheck(t *testing.T) {
 		})
 	}
 }
+
+// TestDocLinkCheck checks that scripts/check-doc-links.py catches a relative
+// Markdown link to a file that does not exist, such as docs/build linking
+// 03-hub-api.md for 03-hf-api.md, and accepts links that resolve, external
+// links, anchors and links inside code.
+func TestDocLinkCheck(t *testing.T) {
+	for name, tc := range map[string]struct {
+		src  string
+		fail bool
+	}{
+		"links a missing spec file":           {fail: true, src: "Intro.\n\nSee [03](spec/03-hub-api.md).\n"},
+		"links a missing file with an anchor": {fail: true, src: "Intro.\n\nSee [03](spec/03-hub-api.md#xet).\n"},
+		"links a missing image":               {fail: true, src: "Intro.\n\nThe ![diagram](missing.svg).\n"},
+		"links files that exist":              {src: "See [03](spec/03-hf-api.md), [03 Xet](spec/03-hf-api.md#xet) and [the folder](spec/).\n"},
+		"links elsewhere":                     {src: "See [the Hub](https://huggingface.co), [mail](mailto:a@example.com) and [above](#intro).\n"},
+		"links inside code":                   {src: "Use `[x](missing.md)`.\n\n```markdown\n[x](missing.md)\n```\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, "spec"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "spec", "03-hf-api.md"), []byte("# 03\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			page := filepath.Join(dir, "page.md")
+			if err := os.WriteFile(page, []byte(tc.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			out, err := exec.Command("python3", "../scripts/check-doc-links.py", page).CombinedOutput()
+			if tc.fail {
+				if err == nil {
+					t.Fatalf("the check passed:\n%s", out)
+				}
+				if !strings.Contains(string(out), "page.md:3: broken link") {
+					t.Errorf("the check did not name the line:\n%s", out)
+				}
+			} else if err != nil {
+				t.Fatalf("the check failed: %v\n%s", err, out)
+			}
+		})
+	}
+}
