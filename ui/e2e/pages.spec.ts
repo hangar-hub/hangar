@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
   callApi,
+  chooseFiles,
   expectAccessible,
   expectGlossaryTerms,
   expectNoHorizontalOverflow,
@@ -291,9 +292,8 @@ test("the upload panel with staged files passes axe", async ({ page }) => {
   await page.goto("/ada/bert-tiny-finetune/tree/main");
   await settled(page);
   await page.getByRole("button", { name: "Upload files" }).click();
-  await page.getByLabel("Choose files").setInputFiles({
+  await chooseFiles(page.getByLabel("Choose files"), {
     name: "notes.txt",
-    mimeType: "text/plain",
     buffer: Buffer.from("hello"),
   });
   await expect(page.getByRole("list", { name: "Files to upload" })).toBeVisible();

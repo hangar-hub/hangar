@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import {
   type APIResponse,
@@ -6,6 +8,7 @@ import {
   type Page,
   type Request,
   type Response,
+  test,
 } from "@playwright/test";
 
 /**
@@ -150,6 +153,32 @@ export function pullRequestDiffResponse(page: Page, repo: string): Promise<Respo
   return page.waitForResponse(
     (r) => r.request().method() === "GET" && path.test(new URL(r.url()).pathname),
   );
+}
+
+/** A file for `chooseFiles`: its name and content. */
+export type PickedFile = { name: string; buffer: Buffer };
+
+let picks = 0;
+
+/**
+ * Chooses files in a file input, as a user picking them would. Specs pick
+ * files through this, never with `setInputFiles` and in-memory buffers
+ * (pick-files.spec.ts checks): Playwright sends a buffer to the page as
+ * base64 and rebuilds it there one byte at a time, which takes over a
+ * second for a 20 MiB file on an idle host and long enough under load to
+ * stall the page past the test's timeout. A file on disk is handed to the
+ * browser by path, which takes milliseconds at any size.
+ */
+export async function chooseFiles(input: Locator, files: PickedFile | PickedFile[]): Promise<void> {
+  picks += 1;
+  const dir = test.info().outputPath("picked", String(picks));
+  mkdirSync(dir, { recursive: true });
+  const paths = (Array.isArray(files) ? files : [files]).map(({ name, buffer }) => {
+    const path = join(dir, name);
+    writeFileSync(path, buffer);
+    return path;
+  });
+  await input.setInputFiles(paths);
 }
 
 /** Fails the test on Content Security Policy violations and uncaught errors. */
