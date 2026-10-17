@@ -1,6 +1,7 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
 import {
   callApi,
+  chooseFiles,
   commitResponse,
   expectAccessible,
   parseBytes,
@@ -150,9 +151,9 @@ test.describe("upload", () => {
     buffer.write(id);
     await page.goto("/ada/bert-tiny-finetune/tree/main");
     await page.getByRole("button", { name: "Upload files" }).click();
-    await page.getByLabel("Choose files").setInputFiles([
-      { name: notes, mimeType: "text/plain", buffer: Buffer.from(`hello from the browser ${id}`) },
-      { name: weights, mimeType: "application/octet-stream", buffer },
+    await chooseFiles(page.getByLabel("Choose files"), [
+      { name: notes, buffer: Buffer.from(`hello from the browser ${id}`) },
+      { name: weights, buffer },
     ]);
     const list = page.getByRole("list", { name: "Files to upload" });
     await expect(list.getByRole("listitem")).toHaveCount(2);
@@ -183,11 +184,7 @@ test.describe("upload", () => {
     // turning the upload into "exists".
     const buffer = Buffer.alloc(20 * 1024 * 1024, 9);
     buffer.write(unique());
-    const weights = {
-      name: "resume.safetensors",
-      mimeType: "application/octet-stream",
-      buffer,
-    };
+    const weights = { name: "resume.safetensors", buffer };
     // Hold part 2 so the page is reloaded with part 1 stored and part 2 not.
     let held: Route | undefined;
     await page.route("**/uploads/*/parts/2", (route) => {
@@ -197,7 +194,7 @@ test.describe("upload", () => {
       (r) => r.request().method() === "PUT" && /\/uploads\/[^/]+\/parts\/1$/.test(r.url()),
     );
     await page.getByRole("button", { name: "Upload files" }).click();
-    await page.getByLabel("Choose files").setInputFiles(weights);
+    await chooseFiles(page.getByLabel("Choose files"), weights);
     await page.getByRole("button", { name: "Upload and commit" }).click();
     const first = await part1;
     expect(first.ok()).toBe(true);
@@ -220,7 +217,7 @@ test.describe("upload", () => {
       if (r.method() === "PUT") puts.push(new URL(r.url()).pathname);
     });
     await page.getByRole("button", { name: "Upload files" }).click();
-    await page.getByLabel("Choose files").setInputFiles(weights);
+    await chooseFiles(page.getByLabel("Choose files"), weights);
     await page.getByRole("button", { name: "Upload and commit" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Files committed." })).toBeVisible({
       timeout: 20_000,
@@ -239,9 +236,8 @@ test.describe("upload", () => {
     await signIn(page);
     await page.goto("/ada/bert-tiny-finetune/tree/main");
     await page.getByRole("button", { name: "Upload files" }).click();
-    await page.getByLabel("Choose files").setInputFiles({
+    await chooseFiles(page.getByLabel("Choose files"), {
       name: "extra.md",
-      mimeType: "text/markdown",
       buffer: Buffer.from("# Extra\n"),
     });
     await page.getByLabel("Open as pull request").check();

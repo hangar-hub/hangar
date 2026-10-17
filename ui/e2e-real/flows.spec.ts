@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+  chooseFiles,
   commitResponse,
   expectAccessible,
   parseBytes,
@@ -143,11 +144,10 @@ test("uploads a file in the browser and commits it", async ({ page }) => {
   await page.goto(`/${modelRepo}/tree/main`);
   const name = `notes-${Date.now()}.txt`;
   await page.getByRole("button", { name: "Upload files" }).click();
-  await page
-    .getByLabel("Choose files")
-    .setInputFiles([
-      { name, mimeType: "text/plain", buffer: Buffer.from("hello from the browser") },
-    ]);
+  await chooseFiles(page.getByLabel("Choose files"), {
+    name,
+    buffer: Buffer.from("hello from the browser"),
+  });
   await page.getByLabel("Commit message").fill(`Add ${name}`);
   const committed = commitResponse(page, `models/${modelRepo}`);
   await page.getByRole("button", { name: "Upload and commit" }).click();
@@ -222,9 +222,8 @@ test("opens a pull request from an upload and shows its diff", async ({ page }) 
   await page.goto(`/${modelRepo}/tree/main`);
   const name = `proposal-${Date.now()}.md`;
   await page.getByRole("button", { name: "Upload files" }).click();
-  await page.getByLabel("Choose files").setInputFiles({
+  await chooseFiles(page.getByLabel("Choose files"), {
     name,
-    mimeType: "text/markdown",
     buffer: Buffer.from("# Proposal\n"),
   });
   await page.getByLabel("Open as pull request").check();
