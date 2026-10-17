@@ -41,39 +41,58 @@ type Fake struct {
 	viewer   map[string]json.RawMessage
 	failures map[string]error
 	calls    map[string]int
-	// downloadDelay makes each Download wait, like a request over a slow
-	// link; inFlight and maxInFlight count Downloads running at once.
-	downloadDelay         time.Duration
+	// holdFor makes each download wait until that many are in flight at
+	// once, or holdTimeout passes; released closes when they are.
+	// inFlight and maxInFlight count downloads running at once.
+	holdFor               int
+	holdTimeout           time.Duration
+	released              chan struct{}
 	inFlight, maxInFlight int
 }
 
-// SlowDownloads makes every file download, through Download or the fake
-// Hub's resolve route, take at least d, as a request to huggingface.co
-// over a home link does.
-func (f *Fake) SlowDownloads(d time.Duration) {
+// HoldDownloads makes every file download, through Download or the fake
+// Hub's resolve route, wait until n downloads are in flight at once, then
+// lets them all through. A test uses it to show that requests run
+// concurrently without depending on how fast the machine is: code that
+// downloads one file after another never gets n in flight, so each
+// download waits the full timeout and MaxConcurrentDownloads stays below
+// n. Pick a timeout well beyond any scheduling delay, such as 15 seconds.
+func (f *Fake) HoldDownloads(n int, timeout time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.downloadDelay = d
+	f.holdFor, f.holdTimeout, f.released = n, timeout, make(chan struct{})
 }
 
-// slowFile waits as SlowDownloads asks before a file is served, through
-// Download or the fake Hub's resolve route, and counts it as in flight.
+// slowFile holds a file as HoldDownloads asks before it is served,
+// through Download or the fake Hub's resolve route, and counts it as in
+// flight.
 func (f *Fake) slowFile(ctx context.Context) error {
 	f.mu.Lock()
 	f.inFlight++
 	f.maxInFlight = max(f.maxInFlight, f.inFlight)
-	delay := f.downloadDelay
+	released, timeout := f.released, f.holdTimeout
+	if released != nil && f.inFlight >= f.holdFor {
+		select {
+		case <-released:
+		default:
+			close(released)
+		}
+	}
 	f.mu.Unlock()
 	defer func() {
 		f.mu.Lock()
 		f.inFlight--
 		f.mu.Unlock()
 	}()
-	if delay <= 0 {
+	if released == nil {
 		return nil
 	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
-	case <-time.After(delay):
+	case <-released:
+		return nil
+	case <-timer.C:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

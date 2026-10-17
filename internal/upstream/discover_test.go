@@ -266,7 +266,11 @@ func TestDiscoverDetailFetchesFromTheUpstreamAtOnce(t *testing.T) {
 		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "slow-link"}
 		e.Seed(id, map[string][]byte{"README.md": []byte("# Slow link"),
 			"config.json": []byte(`{"auto_map":{"AutoModel":"acme/code--m.M"}}`)}, nil)
-		e.Remote.SlowDownloads(200 * time.Millisecond)
+		// Each download waits until both are in flight, so the test
+		// does not depend on two goroutines meeting inside a short
+		// window on a loaded machine. Downloads made one after another
+		// each wait out the timeout and leave the maximum at 1.
+		e.Remote.HoldDownloads(2, 15*time.Second)
 		det, err := e.Service.DiscoverDetail(e.Ctx, alice, "huggingface", id, "")
 		require.NoError(t, err)
 		require.Contains(t, det.Card, "# Slow link")
