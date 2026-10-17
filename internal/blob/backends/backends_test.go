@@ -41,10 +41,7 @@ func TestS3OptionsProxyModes(t *testing.T) {
 }
 
 func TestOpenS3(t *testing.T) {
-	if !blobtest.S3Enabled() {
-		t.Logf("S3 tests not registered: set %s=1 (needs Docker)", blobtest.EnvMinIO)
-		return
-	}
+	blobtest.RequireS3(t)
 	srv := blobtest.S3TestServer(t)
 	_ = blobtest.S3(t) // creates the bucket
 	cfg := config.StorageConfig{Backend: config.BackendS3, S3: config.S3Config{

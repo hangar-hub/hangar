@@ -235,10 +235,7 @@ func TestS3Enabled(t *testing.T) {
 // the S3 backend's tests, it is registered only when S3 tests are enabled
 // (`make test` enables them).
 func TestS3Helpers(t *testing.T) {
-	if !blobtest.S3Enabled() {
-		t.Logf("S3 tests not registered: set %s=1 (needs Docker) or %s", blobtest.EnvMinIO, blobtest.EnvS3Endpoint)
-		return
-	}
+	blobtest.RequireS3(t)
 	ctx := context.Background()
 	srv := blobtest.S3TestServer(t)
 	require.Equal(t, srv, blobtest.S3TestServer(t), "one shared server per test process")

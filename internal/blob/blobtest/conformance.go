@@ -32,6 +32,9 @@ type Capabilities struct {
 	// ChecksumPresign is true when the store rejects a presigned PUT whose
 	// body does not match the signed x-amz-checksum-sha256.
 	ChecksumPresign bool
+	// ListUploads is true for backends that list incomplete multipart
+	// uploads (blob.UploadLister); the others must say they cannot.
+	ListUploads bool
 }
 
 // RunConformance runs the Blob store conformance suite. newStore must

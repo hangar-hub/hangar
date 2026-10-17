@@ -28,10 +28,7 @@ func TestTemplateNameFollowsTheMigrations(t *testing.T) {
 // a killed process left behind is dropped and rebuilt, and that processes
 // asking for the same template at once get one migrated database.
 func TestEnsureTemplateReplacesAnUnfinishedBuild(t *testing.T) {
-	if !PostgresEnabled() {
-		t.Logf("Postgres test not registered: set %s=1 or %s", EnvPostgres, EnvPostgresDSN)
-		return
-	}
+	RequirePostgres(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	admin := adminDSN(t)

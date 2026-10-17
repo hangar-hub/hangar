@@ -470,10 +470,7 @@ func TestDoctorChecksReportProblems(t *testing.T) {
 
 func TestPresignCheckAgainstMinIO(t *testing.T) {
 	t.Parallel()
-	if !blobtest.S3Enabled() {
-		t.Logf("S3 tests not registered: set %s=1 (needs Docker)", blobtest.EnvMinIO)
-		return
-	}
+	blobtest.RequireS3(t)
 	d := dbtest.SQLite(t)
 	s := blobtest.S3(t)
 	checks := api.DoctorChecks(d, api.DoctorOptions{Store: s, Downloads: blob.Downloads{Mode: blob.DownloadRedirect}, GitBinary: "-"})

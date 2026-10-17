@@ -104,7 +104,9 @@ lint-ui: ui-deps
 	cd ui && $(PNPM) run lint && $(PNPM) run typecheck
 
 # House style: no em dashes in code, UI copy or docs we write, and British
-# spellings in the docs (scripts/check-spelling.sh).
+# spellings in the docs (scripts/check-spelling.sh). It also runs the checks
+# on how tests run, such as no test passing by returning early
+# (scripts/check-silent-skips.sh).
 .PHONY: lint-style
 lint-style:
 	@if grep -rn --binary-files=without-match $$'\xe2\x80\x94' \
@@ -117,6 +119,7 @@ lint-style:
 	@./scripts/check-spelling.sh
 	@./scripts/check-test-timeouts.sh
 	@./scripts/check-test-targets.sh
+	@./scripts/check-silent-skips.sh
 	@python3 scripts/check-hub-matrix.py
 
 ## Test ------------------------------------------------------------------------------

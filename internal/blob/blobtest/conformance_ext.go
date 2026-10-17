@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -170,15 +169,15 @@ func runExtended(t *testing.T, caps Capabilities, newStore func(t *testing.T) bl
 	t.Run("ListUploads", func(t *testing.T) {
 		s := newStore(t)
 		ul, ok := s.(blob.UploadLister)
-		if ok {
-			if err := ul.ListUploads(ctx, func(blob.IncompleteUpload) error { return nil }); errors.Is(err, blob.ErrNotSupported) {
-				ok = false
+		if !caps.ListUploads {
+			// Garbage collection then relies on upload rows alone.
+			if ok {
+				err := ul.ListUploads(ctx, func(blob.IncompleteUpload) error { return nil })
+				require.ErrorIs(t, err, blob.ErrNotSupported, "%T lists uploads; set Capabilities.ListUploads", s)
 			}
-		}
-		if !ok {
-			t.Logf("%T does not list incomplete uploads; garbage collection relies on upload rows", s)
 			return
 		}
+		require.True(t, ok, "%T does not implement blob.UploadLister", s)
 		before := time.Now().Add(-time.Minute)
 		id, err := s.CreateMultipart(ctx, "lfs/sha256/inc/one")
 		require.NoError(t, err)

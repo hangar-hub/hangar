@@ -27,7 +27,7 @@ func newStore(t *testing.T) *blobfs.Store {
 }
 
 func TestConformance(t *testing.T) {
-	blobtest.RunConformance(t, blobtest.Capabilities{}, func(t *testing.T) blob.Store { return newStore(t) })
+	blobtest.RunConformance(t, blobtest.Capabilities{ListUploads: true}, func(t *testing.T) blob.Store { return newStore(t) })
 }
 
 func TestLayoutIsPlainFiles(t *testing.T) {
