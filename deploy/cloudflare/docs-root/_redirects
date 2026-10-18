@@ -1,0 +1,20 @@
+# Redirects for https://hangar.page/, read by Cloudflare Pages from the root of
+# the gh-pages branch, where scripts/docs-root-files.sh copies this file.
+#
+# mike publishes each version in its own directory (/dev/, /1.0/, /latest/),
+# and mike's index.html sends the root to /latest/. MkDocs builds each
+# version's 404.html with links from the site root and no version, such as
+# /assets/... and /get-started/, and Pages serves that 404.html for any missing
+# page under the version. These rules send such paths, and links that leave
+# out the version, to the latest version. Every top-level section of docs/
+# needs a line (deploy/scripts_test.go TestDocsRedirectsCoverEverySection).
+/assets/*        /latest/assets/:splat        200
+/search/*        /latest/search/:splat        200
+/benchmarks/*    /latest/benchmarks/:splat    301
+/concepts/*      /latest/concepts/:splat      301
+/get-started/*   /latest/get-started/:splat   301
+/guides/*        /latest/guides/:splat        301
+/operate/*       /latest/operate/:splat       301
+/project/*       /latest/project/:splat       301
+/reference/*     /latest/reference/:splat     301
+/security/*      /latest/security/:splat      301

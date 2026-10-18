@@ -223,7 +223,7 @@ jobs:
           uv run --no-project --with-requirements docs/requirements.txt \
             mike deploy --push --update-aliases "${version%.*}" latest
           uv run --no-project --with-requirements docs/requirements.txt mike set-default --push latest
-          ./scripts/docs-cname.sh --push
+          ./scripts/docs-root-files.sh --push
 
   demo:
     name: Demo

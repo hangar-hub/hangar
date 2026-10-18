@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -199,5 +200,97 @@ func TestPercentSpacingCheck(t *testing.T) {
 				t.Fatalf("the check failed: %v\n%s", err, out)
 			}
 		})
+	}
+}
+
+// TestDocsRootFiles checks that scripts/docs-root-files.sh puts the files in
+// deploy/cloudflare/docs-root at the root of gh-pages, which Cloudflare Pages
+// serves, without touching mike's version directories, the checked-out branch
+// or the working tree, and commits nothing when they are already there.
+func TestDocsRootFiles(t *testing.T) {
+	repo := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com", "GIT_CONFIG_GLOBAL=/dev/null")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(name, body string) {
+		t.Helper()
+		path := filepath.Join(repo, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script, err := os.ReadFile("../scripts/docs-root-files.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q", "-b", "main")
+	write("scripts/docs-root-files.sh", string(script))
+	rootFiles, err := os.ReadDir(filepath.Join("cloudflare", "docs-root"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"dev/index.html", "index.html"}
+	for _, f := range rootFiles {
+		body, err := os.ReadFile(filepath.Join("cloudflare", "docs-root", f.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(filepath.Join("deploy/cloudflare/docs-root", f.Name()), string(body))
+		want = append(want, f.Name())
+	}
+	slices.Sort(want)
+	git("add", ".")
+	git("commit", "-q", "-m", "main")
+	// What mike leaves: a version directory and the root redirect.
+	git("checkout", "-q", "--orphan", "gh-pages")
+	git("rm", "-q", "-r", "--cached", ".")
+	write("dev/index.html", "dev")
+	write("index.html", "redirect")
+	git("add", "dev/index.html", "index.html")
+	git("commit", "-q", "-m", "Deployed dev")
+	git("checkout", "-q", "-f", "main")
+
+	run := func() string {
+		t.Helper()
+		out, err := exec.Command(filepath.Join(repo, "scripts/docs-root-files.sh")).CombinedOutput()
+		if err != nil {
+			t.Fatalf("the script failed: %v\n%s", err, out)
+		}
+		return string(out)
+	}
+	if out := run(); !strings.Contains(out, "gh-pages now has the root files") {
+		t.Fatalf("the script did not commit:\n%s", out)
+	}
+	files := strings.Fields(git("ls-tree", "-r", "--name-only", "gh-pages"))
+	if !slices.Equal(files, want) {
+		t.Errorf("gh-pages has %v, want %v", files, want)
+	}
+	if got := git("show", "gh-pages:_headers"); !strings.Contains(got, "Content-Security-Policy:") {
+		t.Errorf("gh-pages:_headers is not the one in deploy/cloudflare/docs-root:\n%s", got)
+	}
+	if branch := git("branch", "--show-current"); branch != "main" {
+		t.Errorf("the script left %s checked out", branch)
+	}
+	if status := git("status", "--porcelain"); status != "" {
+		t.Errorf("the script changed the working tree:\n%s", status)
+	}
+	head := git("rev-parse", "gh-pages")
+	if out := run(); !strings.Contains(out, "already has the root files") {
+		t.Errorf("the second run did not see the files:\n%s", out)
+	}
+	if again := git("rev-parse", "gh-pages"); again != head {
+		t.Errorf("the second run committed %s", again)
 	}
 }
