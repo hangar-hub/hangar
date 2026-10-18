@@ -834,10 +834,18 @@ Pull a GGUF model into Ollama from the Instance.
 
 ```text
 Runs ollama pull <host>/<namespace>/<name>:<quant> against the Instance, adding
---insecure for an http:// Instance. Before that, checks that your Ollama key
-(~/.ollama/id_ed25519.pub) is registered with the Instance, and offers to
-register it. Ollama needs the key for every Repo unless the Repo is public and
-the Instance allows anonymous reads (security.anonymous_read, off by default).
+--insecure for an http:// Instance.
+
+Before that, checks that the quant is in the Arsenal. Without a quant, Ollama
+asks for "latest", which is Q4_K_M or the closest quant. Ollama shows only
+"file does not exist" for a quant the Instance has not pulled, so when it is
+missing this command says so, prints the hangar pull command that pulls it
+into the Instance, and offers to run it (--pull runs it without asking).
+
+Then checks that your Ollama key (~/.ollama/id_ed25519.pub) is registered with
+the Instance, and offers to register it. Ollama needs the key for every Repo
+unless the Repo is public and the Instance allows anonymous reads
+(security.anonymous_read, off by default).
 ```
 
 Usage:
@@ -850,6 +858,7 @@ Examples:
 
 ```sh
 hangar ollama install bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
+hangar ollama install bartowski/Llama-3.2-3B-Instruct-GGUF:Q8_0 --pull
 hangar ollama install acme/private-model --yes
 ```
 
@@ -857,6 +866,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
+| `--pull` | pull the quant into the Instance first, without asking, if it is not in the Arsenal |  |
 | `--skip-key-check` | do not check the Ollama key, for public Repos on an Instance that allows anonymous reads |  |
 | `-y`, `--yes` | register the Ollama key without asking |  |
 

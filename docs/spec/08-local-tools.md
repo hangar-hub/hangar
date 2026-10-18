@@ -15,7 +15,7 @@ The Ollama client code is the reference: `server/images.go`, `server/auth.go`, `
 - Ollama names are `host/namespace/model:tag`, so the URL is `/v2/{ns}/{name}/manifests/{tag}`.
 - `tag` is matched case-insensitively against the Repo's GGUF quant groups ([06](06-upstreams-and-pulls.md)), or against a full GGUF filename.
 - `latest` (Ollama's default) picks `Q4_K_M` if present, otherwise the closest quant by this order: `Q4_K_M, Q4_K_S, Q5_K_M, Q4_0, Q5_K_S, Q6_K, Q8_0, IQ4_XS, Q3_K_M, BF16, F16`, otherwise the smallest file.
-- The chosen file must be present. In a Partial mirror, a missing quant returns `404` with error code `MANIFEST_UNKNOWN` and a message naming the Pull to run; with Pull-through on, it starts the Pull and returns `503` with `Retry-After`.
+- The chosen file must be present. In a Partial mirror, a missing quant returns `404` with error code `MANIFEST_UNKNOWN` and a message naming the Pull to run; with Pull-through on, it starts the Pull and returns `503` with `Retry-After`. Ollama 0.31 shows only `file does not exist` for any manifest 404 and drops the message; the 404 stays, because another status makes Ollama print the raw JSON instead. `hangar ollama install` checks the quant before it runs Ollama (decided by James on 2026-10-18; see "The `hangar` CLI" below).
 - Split GGUF files: check whether the pinned Ollama version can pull multi-file models. If it cannot, return a clear error naming the limit.
 
 ### Manifest
@@ -85,7 +85,7 @@ One binary for server and client. Client commands talk to an Instance through th
 | `hangar push <dir> <repo> [--branch ...] [--message ...] [--create] [--private]` | Uploads a folder as one Commit with resumable multipart uploads. |
 | `hangar import ...` | Bulk import ([06](06-upstreams-and-pulls.md)). |
 | `hangar lmstudio install\|list\|remove` | See above. |
-| `hangar ollama install <repo>[:<quant>]` | Runs `ollama pull <host>/<repo>:<quant>` (adding `--insecure` for `http://` Instances) and checks the Ollama key is registered first, offering to register it. |
+| `hangar ollama install <repo>[:<quant>]` | Runs `ollama pull <host>/<repo>:<quant>` (adding `--insecure` for `http://` Instances). First it checks that the quant the registry would serve for the tag (`latest` without one) is in the Arsenal, with its projector: if not, it says so, prints `hangar pull <repo>:<quant> --server-only` and offers to run it (`--pull` runs it without asking; a refusal exits 3 and runs nothing). Then it checks the Ollama key is registered, offering to register it. |
 | `hangar ollama key register` | Reads `~/.ollama/id_ed25519.pub` and registers it with the Instance. |
 | `hangar jobs [list\|watch\|cancel]` | The user's Pulls and other Jobs. |
 | `hangar admin ...` | Server-side admin: `migrate`, `create-user`, `reset-password`, `rotate-key`, `gc`, `backup`, `restore`, `reindex`, `doctor` (checks config, database, Blob store, presign, clock skew). These connect to the database and Blob store directly using the server config. |
