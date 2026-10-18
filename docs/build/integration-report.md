@@ -111,12 +111,34 @@ No test failed and none was flaky. Earlier in Phase 3, before the audit rounds, 
 
 ### Still open after Phase 3
 
-- **Rerun the unit suite at `6610f45` (must).** `make test` (7 to 30 minutes on this machine), then `make cover` and `make check-generate`. Until then Phase 3 is not finished and `main` stays at `382cc88`.
-- **Tag case of security input 6c through the full server (normal, scan).** `TestGateChecksObjectsOfTags` covers an object held only by a tag at gate level, but `TestUnsafeDownloadGateCatchesScannerBypasses` creates no tag, so no full-server test checks that LFS batch and Ollama refuse such an object. Fix: in that test, tag a Commit holding a pickle, delete the pickle from `main`, and assert 403 from the LFS batch and from `/v2/.../blobs/sha256:<oid>`.
-- **Dark-theme axe coverage.** The real-Instance suite runs axe in the light theme only, and the mock suite checks 10 pages in dark. Spec 09 asks for axe in both themes and on every page; whether every page needs a dark check is for James.
-- **Viewer scan timing flake (low).** `TestScanLimitsMakeResultsPartial` failed once at a load average near 50 because `internal/datasets/viewer/scan.go` checks `MaxScanTime` when the row count is a multiple of 4,096, which is already true before the first row ([`p3-authz.md`](handoffs/p3-authz.md), "Not done"). Not fixed.
-- **No kind run starts the Blob store late.** `TestKindGitOpsInstall` passed with `storage.s3.startup_wait` in the build, but no test starts MinIO after Hangar on kind.
-- **Load-sensitive compat tests.** `TestOllamaClient/in-process` and `TestPullThroughFromHuggingFace` failed once at a load average of 30 to 40 during the gaps review; both passed in round 4.
+Branch `fix/p3-5-lead`, from `55ee4e2`, closed every item below on 2026-10-18 and fixed two problems found on the bellatrix preview. Results are in [Suite results on `fix/p3-5-lead`](#suite-results-on-fixp3-5-lead).
+
+- **Rerun the unit suite (must). Closed.** `make test`, `make cover` and `make check-generate` all passed on `fix/p3-5-lead`; see the results table.
+- **Tag case of security input 6c through the full server. Closed** (`e83e5f2`). `TestUnsafeDownloadGateRefusesObjectsHeldOnlyByATag` in `cmd/hangar/unsafe_bypass_test.go` tags a Commit holding a pickle, with a lightweight tag and with an annotated tag, deletes the pickle from `main`, and checks 403 from the Hub API resolve on the tag, the LFS batch and `/v2/.../blobs/sha256:<oid>`. The server already refused all three; no gate change was needed.
+- **Dark-theme axe coverage. Closed** (`e7770dc`). Both Playwright suites now run axe in the dark theme on every signed-in and signed-out page they check in light, and check that the page follows the emulated scheme. No violation was found in the teal dark palette.
+- **Viewer scan timing flake. Closed** (`0733bd8`). `internal/datasets/viewer/scan.go` now reads the clock once every 4,096 rows read, never before the first row, and uses the Viewer's injected clock. `TestScanTimeLimitMakesResultsPartial` drives the limit with a clock that moves a minute per read and fails on the old check. `TestScanLimitsMakeResultsPartial` and `TestScanTimeLimitMakesResultsPartial` passed 200 of 200 runs each with `-race -count=200`.
+- **No kind run starts the Blob store late. Closed** (`21bcaaf`). `TestKindBlobStoreStartsLate` in `deploy/kind_test.go` installs Hangar and Postgres without MinIO, checks that the web Pod answers `/healthz`, is not ready on `/readyz` and logs that it waits for the Blob store, then starts MinIO and checks that the web and worker Pods become ready with no container restart.
+- **Load-sensitive compat tests.** Not rerun on this branch; no change.
+
+Found on the bellatrix preview and fixed:
+
+- **A Postgres DSN with the default SQLite driver (medium).** With `database.driver` left at `sqlite`, a DSN such as `postgres://user:pass@host:5432/hangar` passed validation, and Hangar created a SQLite database and `hangar.lock` at the relative path `postgres:/user:pass@host:5432/hangar`. Validation now refuses a SQLite DSN with any URL scheme other than `file:`, names `database.driver` and suggests `postgres`, and names only the scheme, so the password never reaches the error; `db.Open` refuses it too and creates nothing (`04678aa`). Tests: `TestValidateRefusesURLDSNsForSQLite`, `TestSQLiteRefusesURLDSNs`. Every script and test helper in the tree that sets a Postgres DSN also sets the driver; the only caller that did not was the `instance-postgres` backend of `compat/viewer`, fixed in `16fef27`, which created `compat/viewer/postgres:/...`.
+- **The CLI waited silently on long upload completions (medium).** On a 19.85 GB GGUF the CLI's fixed 5-minute response timeout cut off the upload completion while the Instance was still verifying the file; the Instance logged 499 and carried on, the retry got 200 after 63 seconds, and the CLI printed nothing. The completion now waits 5 minutes or 40 seconds per GiB, whichever is longer, shows `Verifying <file> (<size>) on the Instance` with the time taken, prints one line when it asks again after a timeout or a dropped connection, and repeats the status line every minute when stderr is not a terminal (`8a78d5c`). Tests: `TestLongCompletionsSayWhatTheyWaitFor` (push and import against a slow fake Instance), `TestCompletionTimeoutGrowsWithTheFile`, `TestResponseTimeoutIsPerRequest`, `TestWaitStatusRepeatsInALog`. [Uploading](../guides/uploading.md) and the `hangar push` help describe it.
+
+### Suite results on `fix/p3-5-lead`
+
+Run on 2026-10-18 at `21bcaaf` (before this report change), Go 1.27.2 and Node 24.19.0, on a shared machine.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `make lint` | Exit 0: golangci-lint, `go vet` for the compat tag sets, Biome 219 files, `tsc -b`, `lint-style` |
+| Unit and integration | `make test` (SQLite, Postgres 18 and MinIO) | Exit 0: 78 Go packages ok, 0 failed; Vitest 113 of 113; load test helpers 3 of 3 |
+| Coverage | `make cover` | Exit 0: every package at or above its floor |
+| Generated files | `make check-generate` | Exit 0, no differences |
+| UI against the mock | `pnpm exec playwright test` (no retries) | Exit 0: 536 passed, 43 skipped by design. Axe in light and dark on every page at each width |
+| UI against a real Instance | `pnpm exec playwright test -c playwright.real.config.ts` against two `make build` binaries | Exit 0: 369 passed. No `WARN` or `ERROR` line in either server's log |
+| Helm on kind | `make test-kind IMAGE=hangar-fix-p3-5:test` | Exit 0: 9 PASS, 0 FAIL, including `TestKindBlobStoreStartsLate` and `TestKindGitOpsInstall` |
+| Viewer scan | `go test -race -count=200 -tags integration -run '^(TestScanLimitsMakeResultsPartial\|TestScanTimeLimitMakesResultsPartial)$' ./internal/datasets/viewer` | Exit 0: 200 of 200 each |
 
 ## Preview feedback round (2026-10-17)
 
