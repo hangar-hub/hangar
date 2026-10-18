@@ -4,34 +4,31 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
+# The job acts with the release app's token, not GITHUB_TOKEN.
+permissions: {}
 
 jobs:
   release-please:
     runs-on: ubuntu-24.04
-    outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v5
-        id: rp
+      # release-please acts as the hangar-hub-release GitHub App, not with
+      # GITHUB_TOKEN: pull requests and tags that GITHUB_TOKEN creates start
+      # no workflows, so its release pull requests would get no CI. With the
+      # app's token they do, and the tag it pushes for a release starts
+      # release.yml through that workflow's tag trigger. That trigger is the
+      # only way a release runs, so this workflow does not also call
+      # release.yml, which would publish the release twice. It also covers a
+      # tag that a maintainer pushes by hand, and keeps the release's signing
+      # identity release.yml at refs/tags/v*.
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  # Tags that release-please pushes with GITHUB_TOKEN do not start other
-  # workflows, so the release runs from here when it creates a release.
-  release:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    uses: ./.github/workflows/release.yml
-    with:
-      tag: ${{ needs.release-please.outputs.tag_name }}
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-      attestations: write
-    secrets: inherit

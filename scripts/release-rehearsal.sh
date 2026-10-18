@@ -79,7 +79,7 @@ rehearse_binaries() {
     .goreleaser.yaml >"$work/goreleaser.yaml"
   # The Homebrew cask is rendered but not pushed (--skip=publish); its token
   # template needs a value.
-  HOMEBREW_TAP_TOKEN="${HOMEBREW_TAP_TOKEN:-unused-without-publish}" \
+  HOMEBREW_TAP_GITHUB_TOKEN="${HOMEBREW_TAP_GITHUB_TOKEN:-unused-without-publish}" \
     goreleaser release --snapshot --clean --skip=publish --config "$work/goreleaser.yaml" "$@"
 
   local bundle=dist/checksums.txt.sigstore.json

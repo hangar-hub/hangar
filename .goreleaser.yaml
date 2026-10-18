@@ -60,7 +60,7 @@ signs:
   # transparency log entry into one Sigstore bundle; it ignores
   # --output-certificate and fails without --bundle. Verify a release with:
   #   cosign verify-blob --bundle checksums.txt.sigstore.json \
-  #     --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@' \
+  #     --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
   #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
   # scripts/release-rehearsal.sh runs this block with a throwaway key.
   - cmd: cosign
@@ -93,7 +93,7 @@ homebrew_casks:
     repository:
       owner: hangar-hub
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: https://hangar.page/
     description: Self-hosted home for your arsenal of models, compatible with the Hugging Face Hub

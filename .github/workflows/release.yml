@@ -6,27 +6,23 @@ name: Release
 # the Helm chart as an OCI artefact, the documentation site, and the demo
 # branch that Cloudflare deploys the mock demo from.
 #
-# release-please.yml calls it when it creates a release; a tag pushed by a
-# person also starts it.
+# The tag starts it: release-please.yml pushes one with the release app's
+# token when it creates a release (tags pushed with GITHUB_TOKEN would start
+# nothing), and a maintainer may push one by hand. Nothing else starts it,
+# so a release runs once.
 on:
   push:
     tags: ["v*"]
-  workflow_call:
-    inputs:
-      tag:
-        description: The release tag, such as v1.0.0.
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
-  TAG: ${{ inputs.tag || github.ref_name }}
+  TAG: ${{ github.ref_name }}
   IMAGE: ghcr.io/hangar-hub/hangar
   CHARTS: oci://ghcr.io/hangar-hub/charts
 
@@ -52,13 +48,24 @@ jobs:
         with:
           cosign-release: v3.0.6
       - uses: anchore/sbom-action/download-syft@v0
+      # GoReleaser pushes the cask to hangar-hub/homebrew-tap, which
+      # GITHUB_TOKEN cannot write to. The release app's token, minted for
+      # that repository only, can; it expires when the job ends.
+      - id: tap-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: hangar-hub
+          repositories: homebrew-tap
+          permission-contents: write
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.tap-token.outputs.token }}
           GORELEASER_CURRENT_TAG: ${{ env.TAG }}
 
   image:
