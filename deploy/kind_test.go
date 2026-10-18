@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -170,7 +171,10 @@ func TestKindNotesReadOnlyRenderedSecretKeys(t *testing.T) {
 
 // kindBackends is Postgres and MinIO with a bucket, as plain manifests. The
 // Postgres image takes a while to start, so Hangar's Pods start first.
-const kindBackends = `
+const kindBackends = kindPostgres + "\n---\n" + kindMinIO
+
+// kindPostgres is the Postgres half of kindBackends.
+const kindPostgres = `
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: postgres}
@@ -196,7 +200,11 @@ metadata: {name: postgres}
 spec:
   selector: {app: postgres}
   ports: [{port: 5432}]
----
+`
+
+// kindMinIO is the MinIO half of kindBackends, with a Job that creates the
+// bucket.
+const kindMinIO = `
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: minio}
@@ -260,38 +268,13 @@ func randomHex(t *testing.T, n int) string {
 // the GitOps docs say: applied as it is, the helm test Pod would run before
 // Hangar is up and stay in Error. No Pod may end up failed.
 func TestKindGitOpsInstall(t *testing.T) {
-	img := kindImage(t)
+	kindImage(t)
 	const ns = "chart-gitops"
 	namespace(t, ns)
 	defer dump(t, ns)
 
-	pgPassword, minioPassword := randomHex(t, 16), randomHex(t, 16)
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		t.Fatal(err)
-	}
-	mustCluster(t, "", "kubectl", "create", "secret", "generic", "backends", "--namespace", ns,
-		"--from-literal=POSTGRES_PASSWORD="+pgPassword, "--from-literal=MINIO_ROOT_PASSWORD="+minioPassword)
-	mustCluster(t, "", "kubectl", "create", "secret", "generic", "hangar-secrets", "--namespace", ns,
-		"--from-literal=HANGAR_DATABASE_DSN=postgres://hangar:"+pgPassword+"@postgres:5432/hangar?sslmode=disable",
-		"--from-literal=HANGAR_STORAGE_S3_ACCESS_KEY_ID=hangar",
-		"--from-literal=HANGAR_STORAGE_S3_SECRET_ACCESS_KEY="+minioPassword,
-		"--from-literal=HANGAR_SECURITY_INSTANCE_KEY="+base64.StdEncoding.EncodeToString(key),
-		"--from-literal=HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD="+randomHex(t, 12))
-
-	args := append([]string{"template", releaseName, "helm/hangar", "--namespace", ns,
-		"-f", "helm/examples/gitops-values.yaml",
-		"--set", "publicURL=http://hangar." + ns + ".svc:8080",
-		"--set", "config.storage.s3.endpoint=http://minio:9000",
-		"--set", "config.storage.s3.download_mode=proxy",
-		"--set", "config.storage.s3.upload_mode=proxy",
-		// Several migrate init containers race, as in a scaled install.
-		"--set", "web.replicas=3", "--set", "worker.replicas=3",
-		"--skip-tests"}, img...)
-	rendered, errOut, err := helmCmd(t, args...)
-	if err != nil {
-		t.Fatalf("helm template without cluster access: %v\n%s", err, errOut)
-	}
+	// Several migrate init containers race, as in a scaled install.
+	rendered := gitopsRender(t, ns, "--set", "web.replicas=3", "--set", "worker.replicas=3")
 	docs := decodeDocs(t, rendered)
 	if got := hooked(docs); len(got) > 0 {
 		t.Fatalf("GitOps render has Helm hooks %v, which Argo CD would run before Postgres", got)
@@ -333,5 +316,127 @@ func TestKindGitOpsInstall(t *testing.T) {
 		if name, phase, _ := strings.Cut(line, " "); phase == "Failed" {
 			t.Errorf("Pod %s failed after a GitOps install", name)
 		}
+	}
+}
+
+// gitopsRender renders the chart from the GitOps example values for ns,
+// with one web and one worker Pod unless extra says otherwise, after
+// creating the Secrets those values name.
+func gitopsRender(t *testing.T, ns string, extra ...string) string {
+	t.Helper()
+	img := kindImage(t)
+	pgPassword, minioPassword := randomHex(t, 16), randomHex(t, 16)
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	mustCluster(t, "", "kubectl", "create", "secret", "generic", "backends", "--namespace", ns,
+		"--from-literal=POSTGRES_PASSWORD="+pgPassword, "--from-literal=MINIO_ROOT_PASSWORD="+minioPassword)
+	mustCluster(t, "", "kubectl", "create", "secret", "generic", "hangar-secrets", "--namespace", ns,
+		"--from-literal=HANGAR_DATABASE_DSN=postgres://hangar:"+pgPassword+"@postgres:5432/hangar?sslmode=disable",
+		"--from-literal=HANGAR_STORAGE_S3_ACCESS_KEY_ID=hangar",
+		"--from-literal=HANGAR_STORAGE_S3_SECRET_ACCESS_KEY="+minioPassword,
+		"--from-literal=HANGAR_SECURITY_INSTANCE_KEY="+base64.StdEncoding.EncodeToString(key),
+		"--from-literal=HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD="+randomHex(t, 12))
+	args := append([]string{"template", releaseName, "helm/hangar", "--namespace", ns,
+		"-f", "helm/examples/gitops-values.yaml",
+		"--set", "publicURL=http://hangar." + ns + ".svc:8080",
+		"--set", "config.storage.s3.endpoint=http://minio:9000",
+		"--set", "config.storage.s3.download_mode=proxy",
+		"--set", "config.storage.s3.upload_mode=proxy",
+		"--skip-tests"}, extra...)
+	rendered, errOut, err := helmCmd(t, append(args, img...)...)
+	if err != nil {
+		t.Fatalf("helm template without cluster access: %v\n%s", err, errOut)
+	}
+	return rendered
+}
+
+// podProxy GETs path on port 8080 of a Pod through the API server, and
+// returns the error kubectl reports for an answer other than 2xx.
+func podProxy(t *testing.T, ns, pod, path string) (string, error) {
+	t.Helper()
+	return cluster(t, "", "kubectl", "get", "--raw", "/api/v1/namespaces/"+ns+"/pods/"+pod+":8080/proxy"+path)
+}
+
+// TestKindBlobStoreStartsLate installs Hangar with its S3 Blob store, MinIO,
+// not running yet, as when an object store Pod starts after Hangar or is
+// briefly down during a node drain. Hangar must wait for it for up to
+// storage.s3.startup_wait: the web Pod starts, answers /healthz and stays
+// not ready on /readyz, and once MinIO and its bucket exist, the web and
+// worker Pods become ready with no container restart.
+func TestKindBlobStoreStartsLate(t *testing.T) {
+	const ns = "chart-late-blobs"
+	kindImage(t)
+	namespace(t, ns)
+	defer dump(t, ns)
+	rendered := gitopsRender(t, ns, "--set", "config.storage.s3.startup_wait=10m")
+	mustCluster(t, kindPostgres+"\n---\n"+rendered, "kubectl", "apply", "--namespace", ns, "-f", "-")
+
+	// Wait until the web Pod's hangar container has started: its startup
+	// probe on /healthz passed, after the migrate init container ran.
+	webPod := func() string {
+		return strings.TrimSpace(mustCluster(t, "", "kubectl", "get", "pods", "--namespace", ns,
+			"-l", "app.kubernetes.io/component=web", "-o", "jsonpath={.items[0].metadata.name}"))
+	}
+	deadline := time.Now().Add(6 * time.Minute)
+	var pod string
+	for {
+		pod = webPod()
+		started, _ := cluster(t, "", "kubectl", "get", "pod", pod, "--namespace", ns,
+			"-o", `jsonpath={.status.containerStatuses[?(@.name=="hangar")].started}`)
+		if strings.TrimSpace(started) == "true" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the web Pod's hangar container did not start while the Blob store was missing")
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	// It is waiting for the Blob store: alive, not ready, and saying why.
+	if out, err := podProxy(t, ns, pod, "/healthz"); err != nil {
+		t.Fatalf("/healthz while the Blob store is missing: %v\n%s", err, out)
+	}
+	if out, err := podProxy(t, ns, pod, "/readyz"); err == nil {
+		t.Fatalf("/readyz answered 2xx while the Blob store is missing:\n%s", out)
+	}
+	ready := mustCluster(t, "", "kubectl", "get", "pod", pod, "--namespace", ns,
+		"-o", `jsonpath={.status.conditions[?(@.type=="Ready")].status}`)
+	if strings.TrimSpace(ready) == "True" {
+		t.Fatalf("the web Pod is Ready while the Blob store is missing")
+	}
+	logs := mustCluster(t, "", "kubectl", "logs", "--namespace", ns, pod, "-c", "hangar")
+	if !strings.Contains(logs, "waiting for the Blob store") {
+		t.Fatalf("the web Pod does not log that it waits for the Blob store:\n%s", logs)
+	}
+
+	// Start MinIO and make the bucket; Hangar must find it without a restart.
+	mustCluster(t, kindMinIO, "kubectl", "apply", "--namespace", ns, "-f", "-")
+	if _, err := cluster(t, "", "kubectl", "wait", "--namespace", ns, "job/minio-bucket",
+		"--for=condition=complete", "--timeout", "5m"); err != nil {
+		t.Fatalf("the MinIO bucket was not created: %v", err)
+	}
+	for _, d := range []string{"deployment/hangar-web", "deployment/hangar-worker"} {
+		if _, err := cluster(t, "", "kubectl", "rollout", "status", "--namespace", ns, d, "--timeout", "4m"); err != nil {
+			t.Fatalf("%s did not become ready once the Blob store answered: %v", d, err)
+		}
+	}
+	if got := webPod(); got != pod {
+		t.Errorf("the web Pod was replaced (%s, then %s)", pod, got)
+	}
+	if out, err := podProxy(t, ns, pod, "/readyz"); err != nil {
+		t.Fatalf("/readyz once the Blob store answered: %v\n%s", err, out)
+	}
+	restarts := mustCluster(t, "", "kubectl", "get", "pods", "--namespace", ns, "-l", "app.kubernetes.io/component in (web,worker)",
+		"-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[?(@.name=="hangar")].restartCount}{"\n"}{end}`)
+	for _, line := range strings.Split(strings.TrimSpace(restarts), "\n") {
+		if name, n, _ := strings.Cut(line, " "); n != "0" {
+			t.Errorf("Pod %s restarted its hangar container %s times while it waited for the Blob store", name, n)
+		}
+	}
+	logs = mustCluster(t, "", "kubectl", "logs", "--namespace", ns, pod, "-c", "hangar")
+	if !strings.Contains(logs, "the Blob store answered") {
+		t.Errorf("the web Pod does not log that the Blob store answered:\n%s", logs)
 	}
 }
