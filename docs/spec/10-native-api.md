@@ -16,7 +16,7 @@ The native API serves the web UI, the CLI and automation. It lives under `/api/h
 
 | Area | Endpoints |
 |---|---|
-| Session | `GET /me`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/providers`, `GET/DELETE /me/sessions[/{id}]` |
+| Session | `GET/PATCH /me` (display name, email), `POST /me/password` (UI session only), `POST /auth/login`, `POST /auth/logout`, `GET /auth/providers`, `GET/DELETE /me/sessions[/{id}]` |
 | Tokens | `GET/POST /me/tokens`, `DELETE /me/tokens/{id}` |
 | Keys | `GET/POST /me/ollama-keys`, `DELETE /me/ollama-keys/{id}`; `GET/PUT/DELETE /me/upstream-tokens/{upstream}` |
 | Search | `GET /search?q=&types=repos,namespaces,collections` |

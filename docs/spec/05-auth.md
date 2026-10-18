@@ -37,12 +37,14 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 - Registration: `closed` (admins create users or issue invite links), `invite` (invite links only), `open`.
 - Invite and reset links: single use, expire in 72 hours, created in the admin UI and copied by the admin.
 - Login throttling: per username and per IP, with exponential backoff after 5 failures, stored in the database so it works across replicas.
+- Self-service changes (decided by James, 2026-10-18): signed-in users change their display name and email with `PATCH /me`, with the checks and errors of the admin user editor (a display name of at most 100 bytes, a valid email address, and 409 for an email another User has); changing the email marks it unverified. They change their password with `POST /me/password`, which needs a UI session (every Token is refused), the current password and a new password that meets the rules above. A wrong current password counts towards the sign-in throttle for the username and IP, and a locked throttle answers 429. Success ends the User's other sessions, keeps the current one and the User's Tokens, and resets the username's throttle. A `write` Token may `PATCH /me`, as it may change the user's other `/me` settings; a `read` Token may not.
 
 ## OIDC
 
 - Multiple providers, each with discovery, authorisation code flow with PKCE and `state` and `nonce` checks.
 - Claim mapping per provider (username, email, display name, groups).
 - First login: if `auto_create_users`, create the User from the claims (de-duplicating the username with a numeric suffix if it is taken). If an existing local User has the same verified email, link only after that User signs in locally and confirms, never automatically.
+- Display name and email are copied from the claims only when the User is created. After that they belong to the User, who can change them (`PATCH /me`); later logins do not overwrite them. Users created by OIDC have no password and cannot set one with `POST /me/password` (403); a local User who links a provider keeps their password.
 - `admin_groups`: users in these groups are Instance admins; re-evaluated at every login.
 - `org_mappings`: group membership grants Organisation Roles; re-evaluated at every login. Memberships granted by mappings are marked as such, and removed when the group goes away. Manual memberships are never touched.
 - Providers with no groups claim work; mappings are then skipped.
@@ -54,7 +56,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 - Cookie `hangar_session`: random 32 bytes, stored hashed, `HttpOnly`, `Secure` when `public_url` is HTTPS, `SameSite=Lax`.
 - CSRF: double-submit token in a header for every state-changing native API call from the UI. Token-authenticated requests are exempt.
 - Cross-origin requests: a request with a method other than `GET`, `HEAD` or `OPTIONS` that carries a credential the browser adds by itself (the session cookie, or HTTP Basic credentials) is refused with 403 when `Sec-Fetch-Site` is present and is not `same-origin` or `none`, or, without `Sec-Fetch-Site`, when `Origin` is present and names neither the request's host nor `public_url`. Password sign-in, registration, invites and resets get the same check without a cookie, so other sites cannot sign a browser in. Clients that send neither header, such as git, git-lfs, `huggingface_hub`, the CLI and Ollama, are unaffected. This follows Go's `net/http.CrossOriginProtection`.
-- Users can list and revoke their sessions.
+- Users can list and revoke their sessions. Changing their password ends every session but the current one.
 
 ## Tokens
 
@@ -82,4 +84,4 @@ Users can store a token per Upstream (for example their huggingface.co token) in
 
 ## Audit events
 
-Record at least: logins (success and failure), logouts, token create and revoke, user create, disable and admin change, Membership changes, Repo create, visibility change, rename, transfer, delete and restore, gated access decisions, Upstream and settings changes, webhook changes, and admin impersonation (not supported in v1.0; listed so nobody adds it without an audit event).
+Record at least: logins (success and failure), logouts, token create and revoke, user create, disable and admin change, a user changing their own password (success and failure) or profile, Membership changes, Repo create, visibility change, rename, transfer, delete and restore, gated access decisions, Upstream and settings changes, webhook changes, and admin impersonation (not supported in v1.0; listed so nobody adds it without an audit event).

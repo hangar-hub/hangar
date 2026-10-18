@@ -51,7 +51,7 @@ Warnings stay amber (`--hg-warn`), so the accent never reads as a warning. Every
 | `/new` and `/new-dataset` | New Repo: owner, name, visibility, licence, optional initial upload. |
 | `/{ns}` | Namespace profile: Repos (models and datasets as separate lists), Collections, members (Organisations). While `anonymous_read` is off, a signed-out visitor sees **Sign in to see this profile** and a **Sign in** button that returns to the page ([05](05-auth.md) "Permission rules"). |
 | `/collections/{ns}/{slug}` | Collection view and editor (drag to reorder). |
-| `/settings/...` | Profile, Tokens (create with scope, restrictions, expiry; shown once), Ollama keys, Upstream tokens, sessions, Organisations. |
+| `/settings/...` | Profile (display name and email; password change with the current, new and confirmed password, or a note that users who sign in with OIDC change it with their provider; linked sign-in providers), Tokens (create with scope, restrictions, expiry; shown once), Ollama keys, Upstream tokens, sessions, Organisations. |
 | `/admin/...` | Users (create, disable, make admin, reset link), Organisations, Upstreams (add, test connection, Instance token), Pull settings (bandwidth, concurrency, windows, Pull-through), storage (usage by Namespace, quotas, **Run GC**), Jobs (all Jobs, filters, cancel, retry), webhooks, audit log (filter, export CSV), Instance settings (anonymous read, registration, local login, OIDC providers read from config, scan blocking), system info (version, database, Blob store, telemetry status, `doctor` results). |
 | `/auth/login`, `/auth/invite/{code}`, `/auth/reset/{code}` | Sign-in (password form and one button per OIDC provider), invite acceptance, password reset. |
 
