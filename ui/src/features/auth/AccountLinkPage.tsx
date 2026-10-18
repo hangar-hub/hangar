@@ -89,7 +89,11 @@ export function AccountLinkPage({ mode, code }: { mode: "invite" | "reset"; code
                 />
               )}
             </Field>
-            <Field label="Email" error={errs.email}>
+            <Field
+              label="Email"
+              hint="Optional. Unless your invite names an email, it takes effect when you open the confirmation link an admin sends to it."
+              error={errs.email}
+            >
               {(p) => (
                 <Input
                   {...p}

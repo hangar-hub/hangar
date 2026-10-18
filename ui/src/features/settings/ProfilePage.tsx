@@ -76,7 +76,10 @@ export function ProfilePage() {
   );
 }
 
-/** Display name and email, saved with PATCH /me. */
+/**
+ * Display name and email, saved with PATCH /me. A new email waits as
+ * `pending_email` until the confirmation link an admin sends to it is used.
+ */
 function ProfileForm({ me }: { me: Me }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -90,15 +93,17 @@ function ProfileForm({ me }: { me: Me }) {
     setEmail(savedEmail);
   }, [savedName, savedEmail]);
   const save = useMutation({
-    mutationFn: async () =>
-      unwrap(
-        await api.PATCH("/me", {
-          body: { display_name: name.trim(), email: email.trim() },
-        }),
-      ),
-    onSuccess: (updated) => {
+    mutationFn: async (body: { display_name?: string; email?: string }) =>
+      unwrap(await api.PATCH("/me", { body })),
+    onSuccess: (updated, body) => {
       qc.setQueryData(meKey, updated);
-      toast("Profile saved.");
+      // The field shows the email in use; a new one shows as pending.
+      setEmail(updated.email ?? "");
+      toast(
+        body.email !== undefined && updated.pending_email
+          ? "Profile saved. Your new email waits for confirmation."
+          : "Profile saved.",
+      );
     },
   });
   const errs = fieldErrors(save.error);
@@ -109,12 +114,38 @@ function ProfileForm({ me }: { me: Me }) {
       className="max-w-xl space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        save.mutate();
+        // Send only what changed: sending the current email would cancel
+        // a pending change.
+        save.mutate({
+          ...(name.trim() !== savedName ? { display_name: name.trim() } : {}),
+          ...(email.trim() !== savedEmail ? { email: email.trim() } : {}),
+        });
       }}
     >
       <h2 id="profile-details" className="font-semibold">
         Name and email
       </h2>
+      {me.pending_email ? (
+        <div
+          role="status"
+          className="space-y-2 rounded-md border border-line bg-raised px-3 py-2 text-sm"
+        >
+          <p>
+            Your new email, <span className="font-mono">{me.pending_email}</span>, waits for
+            confirmation. Ask an admin to send a confirmation link to it, then open the link. Until
+            then your email stays{" "}
+            {me.email ? <span className="font-mono">{me.email}</span> : "unset"}.
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={save.isPending}
+            onClick={() => save.mutate({ email: savedEmail })}
+          >
+            Cancel the change
+          </Button>
+        </div>
+      ) : null}
       <Field
         label="Display name"
         hint="Shown instead of your username. Leave it empty to show your username."
@@ -130,7 +161,11 @@ function ProfileForm({ me }: { me: Me }) {
           />
         )}
       </Field>
-      <Field label="Email" hint="Optional. Admins use it to recognise you." error={errs.email}>
+      <Field
+        label="Email"
+        hint="Optional. A new address takes effect when you open the confirmation link an admin sends to it."
+        error={errs.email}
+      >
         {(p) => (
           <Input
             {...p}

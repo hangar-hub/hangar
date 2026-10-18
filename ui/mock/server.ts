@@ -314,6 +314,33 @@ async function authHandler(
     res.end();
     return true;
   }
+  // Like W5's ConfirmEmail: a single-use link applies the pending email.
+  const confirm = /^\/auth\/email\/([^/]+)$/.exec(path);
+  if (confirm && method === "POST") {
+    const code = confirm[1] ?? "";
+    const username = state.emailLinks[code];
+    const user = state.users.find((u) => u.username === username);
+    if (state.links[code] !== "email" || !user?.pending_email) {
+      send(
+        res,
+        problem(
+          404,
+          "Not found: the link is invalid, used or expired; ask an admin for a new one.",
+        ),
+      );
+      return true;
+    }
+    delete state.links[code];
+    delete state.emailLinks[code];
+    user.email = user.pending_email;
+    user.pending_email = undefined;
+    if (state.me.username === username) {
+      state.me = { ...state.me, email: user.email, pending_email: undefined };
+    }
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
   const m = /^\/auth\/(register|invite\/([^/]+)|reset\/([^/]+))$/.exec(path);
   if (!m || method !== "POST") return false;
   const raw = await readBody(req);

@@ -602,13 +602,15 @@ test("changes the display name, email and password on the Profile page", async (
   const first = "a-long-enough-password";
   const second = "an-even-longer-passphrase";
   let elsewhere: Awaited<ReturnType<typeof session>> | undefined;
+  const ids: Record<string, string> = {};
   try {
     for (const [username, email] of [
       [name, `${name}@example.com`],
       [other, `${other}@example.com`],
-    ]) {
+    ] as const) {
       const made = await admin.call("POST", "/admin/users", { username, password: first, email });
       expect(made.status(), await made.text()).toBe(201);
+      ids[username] = (await made.json()).id as string;
     }
     // Another browser signed in as the same user, which the change signs out.
     elsewhere = await session(env("HANGAR_URL"), name, first);
@@ -628,6 +630,21 @@ test("changes the display name, email and password on the Profile page", async (
     await expect(page.getByRole("status").filter({ hasText: "Profile saved." })).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("Display name")).toHaveValue("Kit Marlowe");
+    // The new address waits for the confirmation link an admin sends it.
+    await expect(page.getByRole("textbox", { name: "Email" })).toHaveValue(`${name}@example.com`);
+    await expect(
+      page.getByRole("status").filter({ hasText: "waits for confirmation" }),
+    ).toContainText(`${name}@home.example`);
+    const link = await admin.call("POST", `/admin/users/${ids[name]}/email-link`);
+    expect(link.status(), await link.text()).toBe(201);
+    const confirmPath = new URL((await link.json()).url as string).pathname;
+    await page.goto(confirmPath);
+    await page.getByRole("button", { name: "Confirm email" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Email confirmed." })).toBeVisible();
+    await page.goto(confirmPath);
+    await page.getByRole("button", { name: "Confirm email" }).click();
+    await expect(page.getByRole("alert")).toContainText("invalid, used or expired");
+    await page.goto("/settings/profile");
     await expect(page.getByRole("textbox", { name: "Email" })).toHaveValue(`${name}@home.example`);
 
     const current = page.getByLabel("Current password");

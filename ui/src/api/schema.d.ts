@@ -23,7 +23,7 @@ export interface paths {
         head?: never;
         /**
          * Change my display name or email
-         * @description Changes the signed-in user's display name and email address, with the same checks as the admin user editor: a display name of at most 100 characters, and an email address that is valid and not used by another user (409). An empty string clears the field; a field left out is unchanged. Changing the email address marks it unverified. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+         * @description Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
          */
         patch: operations["updateMe"];
         trace?: never;
@@ -1651,6 +1651,26 @@ export interface paths {
         patch: operations["adminUpdateUser"];
         trace?: never;
     };
+    "/admin/users/{id}/email-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a link that confirms a user's pending email
+         * @description Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. It is single use, expires in 72 hours and replaces any earlier link for the user. A user with no pending email gets 422.
+         */
+        post: operations["adminCreateEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users/{id}/reset-link": {
         parameters: {
             query?: never;
@@ -1914,15 +1934,17 @@ export interface components {
             avatar_url?: string;
             is_admin: boolean;
             orgs: components["schemas"]["OrgMembership"][];
+            /** @description An email address the user asked for that waits for its confirmation link. It is not the user's email until then. */
+            pending_email?: string;
             /** @description Whether the user has a Hangar password. Users who sign in only with OIDC have none and cannot change it in Hangar. */
             has_password: boolean;
             /** @description Send as X-CSRF-Token on state-changing calls. */
             csrf_token?: string;
         };
         MeUpdate: {
-            /** @description The name shown instead of the username */
+            /** @description The name shown instead of the username, at most 100 bytes. An empty string clears it. */
             display_name?: string;
-            /** @description The email address. An empty string clears it. */
+            /** @description The new email address, which waits for confirmation. The current address cancels a pending change; an empty string removes the email. */
             email?: string;
         };
         PasswordChange: {
@@ -2838,6 +2860,8 @@ export interface components {
             username: string;
             display_name?: string;
             email?: string;
+            /** @description An email address the user asked for that waits for its confirmation link. */
+            pending_email?: string;
             is_admin: boolean;
             disabled: boolean;
             oidc_providers?: string[];
@@ -5794,6 +5818,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    adminCreateEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A single-use link that expires in 72 hours. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Link"];
                 };
             };
             default: components["responses"]["Problem"];

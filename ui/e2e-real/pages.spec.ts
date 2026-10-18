@@ -110,7 +110,7 @@ const signedIn: Route[] = [
   { path: "/admin/settings", as: "admin" },
 ];
 
-const signedOut = ["/", "/auth/login", "/auth/login?error=oidc_denied"];
+const signedOut = ["/", "/auth/login", "/auth/login?error=oidc_denied", "/auth/email/abc123"];
 
 // Spec 09 asks for axe in both themes on every page: the light theme runs
 // every check, and the dark theme runs axe on the same pages.

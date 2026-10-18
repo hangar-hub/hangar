@@ -345,9 +345,10 @@ export function slugify(title: string): string {
 }
 
 /** Stores a single-use invite or reset link code and returns it. */
-function newLink(state: MockState, kind: "invite" | "reset"): string {
+function newLink(state: MockState, kind: "invite" | "reset" | "email", username?: string): string {
   const code = randomBytes(24).toString("base64url");
   state.links[code] = kind;
+  if (username) state.emailLinks[code] = username;
   return code;
 }
 
@@ -397,13 +398,28 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       if (email && clash) {
         return problem(409, "Already exists: the email address is already used.");
       }
-      state.me = { ...state.me, email: email || undefined };
+      // Like W5's UpdateProfile: a new address waits for its confirmation
+      // link, the current one cancels a pending change, and an empty one
+      // removes the email at once.
+      if (!email) {
+        state.me = { ...state.me, email: undefined, pending_email: undefined };
+      } else if (email.toLowerCase() === state.me.email?.toLowerCase()) {
+        state.me = { ...state.me, pending_email: undefined };
+      } else {
+        state.me = { ...state.me, pending_email: email };
+      }
     }
     if (p.display_name !== undefined) {
       state.me = { ...state.me, display_name: p.display_name || state.me.username };
     }
     const self = state.users.find((u) => u.username === state.me.username);
-    if (self) Object.assign(self, { display_name: state.me.display_name, email: state.me.email });
+    if (self) {
+      Object.assign(self, {
+        display_name: state.me.display_name,
+        email: state.me.email,
+        pending_email: state.me.pending_email,
+      });
+    }
     return ok(state.me);
   },
   changeMyPassword: (ctx) => {
@@ -1589,6 +1605,23 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     return ok(
       {
         url: `${ctx.origin}/auth/reset/${newLink(ctx.state, "reset")}`,
+        expires_at: iso(-72 * 3_600_000),
+      },
+      201,
+    );
+  },
+  adminCreateEmailLink: (ctx) => {
+    const u = ctx.state.users.find((x) => x.id === ctx.params.id);
+    if (!u) return problem(404, "User not found.");
+    if (!u.pending_email) {
+      return problem(
+        422,
+        "Invalid request: this user has no email change waiting for confirmation.",
+      );
+    }
+    return ok(
+      {
+        url: `${ctx.origin}/auth/email/${newLink(ctx.state, "email", u.username)}`,
         expires_at: iso(-72 * 3_600_000),
       },
       201,

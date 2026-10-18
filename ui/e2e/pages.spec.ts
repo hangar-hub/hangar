@@ -96,6 +96,7 @@ const signedOut = [
   "/auth/login",
   "/auth/invite/abc123",
   "/auth/reset/abc123",
+  "/auth/email/abc123",
   "/auth/login?error=oidc_denied",
 ];
 

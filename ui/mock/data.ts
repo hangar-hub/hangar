@@ -85,7 +85,9 @@ export type MockState = {
   >;
   lfsObjects: Set<string>;
   /** Unused invite and reset link codes, as W5's Invites table holds them. */
-  links: Record<string, "invite" | "reset">;
+  links: Record<string, "invite" | "reset" | "email">;
+  /** The user each email confirmation link is for. */
+  emailLinks: Record<string, string>;
   started: number;
 };
 
@@ -1305,6 +1307,7 @@ export function createState(): MockState {
     uploads: {},
     lfsObjects: new Set(),
     links: {},
+    emailLinks: {},
     started: Date.now(),
   };
 }

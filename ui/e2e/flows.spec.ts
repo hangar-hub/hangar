@@ -391,28 +391,62 @@ async function expectAccessibleInBothThemes(page: Page): Promise<void> {
 }
 
 test.describe("account", () => {
-  test("edits the display name and email, with errors", async ({ page }) => {
+  test("edits the display name, and a new email waits for its confirmation link", async ({
+    page,
+  }) => {
     const problems = watchConsole(page);
     await signIn(page);
     await page.goto("/settings/profile");
-    await expect(page.getByText(/ask an admin/i)).toHaveCount(0);
+    await expect(page.getByText(/ask an admin for a reset link/i)).toHaveCount(0);
     const save = page.getByRole("button", { name: "Save profile" });
+    const email = page.getByRole("textbox", { name: "Email" });
     await expect(save).toBeDisabled();
     await page.getByLabel("Display name").fill("Ada King");
-    await page.getByRole("textbox", { name: "Email" }).fill("ada.king@example.com");
+    await email.fill("ada.king@example.com");
     await save.click();
-    await expect(page.getByRole("status").filter({ hasText: "Profile saved." })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Account menu for ada" })).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Your new email waits for confirmation." }),
+    ).toBeVisible();
+    // The address in use stays until the link is used.
+    await expect(email).toHaveValue("ada@example.com");
+    const pending = page
+      .getByRole("status")
+      .filter({ hasText: "waits for confirmation. Ask an admin" });
+    await expect(pending).toContainText("ada.king@example.com");
     await page.reload();
     await expect(page.getByLabel("Display name")).toHaveValue("Ada King");
-    await expect(page.getByRole("textbox", { name: "Email" })).toHaveValue("ada.king@example.com");
+    await expect(pending).toContainText("ada.king@example.com");
     // Another user's email: the admin editor's error.
-    await page.getByRole("textbox", { name: "Email" }).fill("grace@example.com");
+    await email.fill("grace@example.com");
     await save.click();
     await expect(page.getByRole("alert")).toHaveText(
       "Already exists: the email address is already used.",
     );
     await expectAccessibleInBothThemes(page);
+
+    // An admin creates the confirmation link and sends it to the address.
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/admin/users");
+    const row = page.getByRole("row").filter({ hasText: "ada.king@example.com" });
+    await expect(row).toContainText("Waiting for confirmation");
+    await row.getByRole("button", { name: "Email link" }).click();
+    const dialog = page.getByRole("dialog", { name: /Email confirmation link for ada/ });
+    const url = (await dialog.locator("code").textContent()) ?? "";
+    expect(url).toContain("/auth/email/");
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    // Opening the link asks before it confirms; it works once.
+    await page.goto(new URL(url).pathname);
+    await expect(page.getByRole("heading", { level: 1, name: "Confirm your email" })).toBeVisible();
+    await expectAccessibleInBothThemes(page);
+    await page.getByRole("button", { name: "Confirm email" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Email confirmed." })).toBeVisible();
+    await page.goto("/settings/profile");
+    await expect(email).toHaveValue("ada.king@example.com");
+    await expect(pending).toHaveCount(0);
+    await page.goto(new URL(url).pathname);
+    await page.getByRole("button", { name: "Confirm email" }).click();
+    await expect(page.getByRole("alert")).toContainText("invalid, used or expired");
     expect(problems).toEqual([]);
   });
 

@@ -43,6 +43,7 @@ import { Route as SettingsTokensRouteImport } from './routes/settings.tokens'
 import { Route as SettingsUpstreamTokensRouteImport } from './routes/settings.upstream-tokens'
 import { Route as NsNameIndexRouteImport } from './routes/$ns.$name.index'
 import { Route as NsNameSettingsRouteImport } from './routes/$ns.$name.settings'
+import { Route as AuthEmailCodeRouteImport } from './routes/auth.email.$code'
 import { Route as AuthInviteCodeRouteImport } from './routes/auth.invite.$code'
 import { Route as AuthResetCodeRouteImport } from './routes/auth.reset.$code'
 import { Route as CollectionsNsSlugRouteImport } from './routes/collections.$ns.$slug'
@@ -234,6 +235,11 @@ const NsNameSettingsRoute = NsNameSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => NsNameRoute,
 } as any)
+const AuthEmailCodeRoute = AuthEmailCodeRouteImport.update({
+  id: '/auth/email/$code',
+  path: '/auth/email/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthInviteCodeRoute = AuthInviteCodeRouteImport.update({
   id: '/auth/invite/$code',
   path: '/auth/invite/$code',
@@ -376,6 +382,7 @@ export interface FileRoutesByFullPath {
   '/datasets/': typeof DatasetsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/$ns/$name/settings': typeof NsNameSettingsRoute
+  '/auth/email/$code': typeof AuthEmailCodeRoute
   '/auth/invite/$code': typeof AuthInviteCodeRoute
   '/auth/reset/$code': typeof AuthResetCodeRoute
   '/collections/$ns/$slug': typeof CollectionsNsSlugRoute
@@ -429,6 +436,7 @@ export interface FileRoutesByTo {
   '/datasets': typeof DatasetsIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/$ns/$name/settings': typeof NsNameSettingsRoute
+  '/auth/email/$code': typeof AuthEmailCodeRoute
   '/auth/invite/$code': typeof AuthInviteCodeRoute
   '/auth/reset/$code': typeof AuthResetCodeRoute
   '/collections/$ns/$slug': typeof CollectionsNsSlugRoute
@@ -485,6 +493,7 @@ export interface FileRoutesById {
   '/datasets/': typeof DatasetsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/$ns/$name/settings': typeof NsNameSettingsRoute
+  '/auth/email/$code': typeof AuthEmailCodeRoute
   '/auth/invite/$code': typeof AuthInviteCodeRoute
   '/auth/reset/$code': typeof AuthResetCodeRoute
   '/collections/$ns/$slug': typeof CollectionsNsSlugRoute
@@ -543,6 +552,7 @@ export interface FileRouteTypes {
     | '/datasets/'
     | '/settings/'
     | '/$ns/$name/settings'
+    | '/auth/email/$code'
     | '/auth/invite/$code'
     | '/auth/reset/$code'
     | '/collections/$ns/$slug'
@@ -596,6 +606,7 @@ export interface FileRouteTypes {
     | '/datasets'
     | '/settings'
     | '/$ns/$name/settings'
+    | '/auth/email/$code'
     | '/auth/invite/$code'
     | '/auth/reset/$code'
     | '/collections/$ns/$slug'
@@ -651,6 +662,7 @@ export interface FileRouteTypes {
     | '/datasets/'
     | '/settings/'
     | '/$ns/$name/settings'
+    | '/auth/email/$code'
     | '/auth/invite/$code'
     | '/auth/reset/$code'
     | '/collections/$ns/$slug'
@@ -688,6 +700,7 @@ export interface RootRouteChildren {
   NsIndexRoute: typeof NsIndexRoute
   CollectionsIndexRoute: typeof CollectionsIndexRoute
   DatasetsIndexRoute: typeof DatasetsIndexRoute
+  AuthEmailCodeRoute: typeof AuthEmailCodeRoute
   AuthInviteCodeRoute: typeof AuthInviteCodeRoute
   AuthResetCodeRoute: typeof AuthResetCodeRoute
   CollectionsNsSlugRoute: typeof CollectionsNsSlugRoute
@@ -933,6 +946,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$ns/$name/settings'
       preLoaderRoute: typeof NsNameSettingsRouteImport
       parentRoute: typeof NsNameRoute
+    }
+    '/auth/email/$code': {
+      id: '/auth/email/$code'
+      path: '/auth/email/$code'
+      fullPath: '/auth/email/$code'
+      preLoaderRoute: typeof AuthEmailCodeRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/auth/invite/$code': {
       id: '/auth/invite/$code'
@@ -1202,6 +1222,7 @@ const rootRouteChildren: RootRouteChildren = {
   NsIndexRoute: NsIndexRoute,
   CollectionsIndexRoute: CollectionsIndexRoute,
   DatasetsIndexRoute: DatasetsIndexRoute,
+  AuthEmailCodeRoute: AuthEmailCodeRoute,
   AuthInviteCodeRoute: AuthInviteCodeRoute,
   AuthResetCodeRoute: AuthResetCodeRoute,
   CollectionsNsSlugRoute: CollectionsNsSlugRoute,
