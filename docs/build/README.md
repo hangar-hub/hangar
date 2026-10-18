@@ -11,6 +11,7 @@ Working notes for the agents building Hangar v1.0 from [`docs/spec/15-build-plan
 
 - [`interface-coverage.md`](interface-coverage.md): which interface methods serve each part of the Hub, git and Xet contracts. `internal/contracttest` checks it against the code.
 - [`decisions.md`](decisions.md): decisions phase 0 made where the spec was silent or inconsistent, and open questions for James.
+- [`release-dry-run.md`](release-dry-run.md): the v1.0.0 release dry run: artefacts, the checklist in spec 12 and what James needs to do.
 
 ## Working rules
 

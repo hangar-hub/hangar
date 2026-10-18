@@ -11,6 +11,8 @@ hangar
 hangar.exe
 tmp
 coverage*
+# GoReleaser output, about 400 MB after a snapshot or make release-rehearsal.
+dist
 compat/.venv
 compat/.fixtures
 **/__pycache__

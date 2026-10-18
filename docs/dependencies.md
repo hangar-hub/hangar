@@ -40,7 +40,7 @@ Every direct dependency and why Hangar uses it. Add a line here when you add a d
 | `github.com/zeebo/blake3` | v0.2.4 | Keyed BLAKE3 for Xet chunk, xorb, file and verification hashes (UP-7); CC0-1.0. |
 | `github.com/oapi-codegen/runtime` | v1.7.0 | Runtime helpers for the generated native API code. |
 | `github.com/oapi-codegen/oapi-codegen/v2` (tool) | v2.8.0 | Generates `internal/api/gen` from `api/openapi.yaml`. |
-| `github.com/getkin/kin-openapi` | v0.144.0 | OpenAPI document model used by the generated embedded spec. |
+| `github.com/getkin/kin-openapi` | v0.151.0 | OpenAPI document model used by the generated embedded spec. |
 | `github.com/stretchr/testify` | v1.12.1 | Test assertions. |
 | `github.com/zalando/go-keyring` | v0.2.8 | Keeps the CLI's Token in the OS keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux) for `hangar login` (08-local-tools.md). |
 | `go.yaml.in/yaml/v3` | v3.0.5 | Model card front matter in the Hub API's validate-yaml (W4), Upstream card metadata for Dependencies (W6), ordered dataset card metadata so `configs` and features keep their order (W10), and the CLI's `~/.config/hangar/config.yaml` and `secrets.yaml` in `hangar admin rotate-key` (W9) (Apache-2.0, MIT). |
