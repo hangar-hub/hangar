@@ -247,9 +247,14 @@ const (
 	blobRetryMax   = 10 * time.Second
 )
 
+// blobAttemptTimeout bounds one attempt in openBlobStoreWaiting, so that an
+// endpoint that hangs rather than refusing is retried and logged like one
+// that refuses. A variable so tests can shorten it.
+var blobAttemptTimeout = 10 * time.Second
+
 // openBlobStoreWaiting opens the Blob store with open, and while an S3
 // store does not answer, keeps trying for up to storage.s3.startup_wait,
-// logging each attempt. A web or worker Pod that starts before its object
+// logging each attempt. Each attempt has blobAttemptTimeout. A web or worker Pod that starts before its object
 // store then waits, with /healthz answering and /readyz not ready, instead
 // of exiting into the kubelet's growing restart back-off. The filesystem
 // backend is never retried: its errors do not go away.
@@ -261,7 +266,11 @@ func openBlobStoreWaiting(ctx context.Context, cfg *config.Config, open func(con
 	deadline := time.Now().Add(wait)
 	retry := blobRetryFirst
 	for attempt := 1; ; attempt++ {
-		actx, cancel := context.WithDeadline(ctx, deadline)
+		attemptDeadline := time.Now().Add(blobAttemptTimeout)
+		if deadline.Before(attemptDeadline) {
+			attemptDeadline = deadline
+		}
+		actx, cancel := context.WithDeadline(ctx, attemptDeadline)
 		s, err := open(actx)
 		cancel()
 		if err == nil {
