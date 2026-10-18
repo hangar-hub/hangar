@@ -350,7 +350,7 @@ func TestCommitOperationsAndErrors(t *testing.T) {
 
 // TestRefCASUnderConcurrency checks that concurrent ref updates from the
 // same old value let exactly one win, and that concurrent Commits with the
-// same parent Commit lose cleanly, while Commits without one retry.
+// same parent Commit lose cleanly, while Commits without one retry and land.
 func TestRefCASUnderConcurrency(t *testing.T) {
 	forEach(t, func(t *testing.T, e *env) {
 		alice := e.addUser("alice")
@@ -415,14 +415,91 @@ func TestRefCASUnderConcurrency(t *testing.T) {
 		head, err = e.svc.Resolve(e.ctx, id, "main")
 		require.NoError(t, err)
 		for i, err := range errs {
-			if err != nil {
-				require.ErrorIs(t, err, repo.ErrRefConflict)
-				continue
-			}
+			require.NoError(t, err, "Commits without a parent Commit retry until they land")
 			_, err = e.svc.Entry(e.ctx, id, head, fmt.Sprintf("retry%d.txt", i))
 			require.NoError(t, err, "a successful Commit's file is on the branch")
 		}
 		gitCmd(t, e.export(id), "fsck", "--strict", "--no-dangling")
+	})
+}
+
+// concurrentCommits is how many Commits TestConcurrentCommitsToOneBranch
+// sends to one branch at once: twice the four uploads of the load test in
+// docs/benchmarks.md that got 409 with three retries and no backoff.
+const concurrentCommits = 8
+
+// TestConcurrentCommitsToOneBranch checks the decision of 2026-10-18
+// (04-git.md "Server-side Commits"): Commits to one branch without a
+// parent Commit all succeed when they arrive together, because a Commit
+// that loses the compare-and-swap waits a jittered, growing time before it
+// retries on the new tip. Commits that name a parent Commit still fail at
+// once, with no wait, when the branch has moved.
+func TestConcurrentCommitsToOneBranch(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "busy"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		base := e.commit(id, alice, add("base.txt", "base"))
+		waits := repo.CountRetryWaits(e.svc)
+
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		results := make([]*repo.CommitResult, concurrentCommits)
+		errs := make([]error, concurrentCommits)
+		for i := range concurrentCommits {
+			wg.Go(func() {
+				<-start
+				results[i], errs[i] = e.svc.Commit(context.Background(), repo.CommitParams{Repo: id, Summary: fmt.Sprintf("upload %d", i),
+					Operations: []repo.Operation{add(fmt.Sprintf("uploads/%d.txt", i), strings.Repeat("x", i+1))}, Actor: alice})
+			})
+		}
+		close(start)
+		wg.Wait()
+		for i, err := range errs {
+			require.NoError(t, err, "Commit %d of %d to one branch", i+1, concurrentCommits)
+		}
+		head, err := e.svc.Resolve(e.ctx, id, "main")
+		require.NoError(t, err)
+		for i := range concurrentCommits {
+			_, err := e.svc.Entry(e.ctx, id, head, fmt.Sprintf("uploads/%d.txt", i))
+			require.NoError(t, err, "Commit %d's file is on the branch", i+1)
+		}
+		// Every Commit is in the history once, so none was lost.
+		log, err := e.svc.Log(e.ctx, id, "main", repo.LogOpts{Limit: concurrentCommits + 10})
+		require.NoError(t, err)
+		require.Len(t, log, concurrentCommits+2, "the initial Commit, base.txt and one Commit per upload")
+		t.Logf("%d concurrent Commits waited %d times before retrying", concurrentCommits, waits.Load())
+
+		// A Commit whose parent Commit is no longer the tip fails with no
+		// retry and no wait.
+		before := waits.Load()
+		started := time.Now()
+		_, err = e.svc.Commit(e.ctx, repo.CommitParams{Repo: id, Summary: "stale", ParentCommit: base.SHA,
+			Operations: []repo.Operation{add("stale.txt", "x")}, Actor: alice})
+		require.ErrorIs(t, err, repo.ErrParentMismatch)
+		require.Equal(t, before, waits.Load(), "a parent Commit mismatch must not wait")
+		require.Less(t, time.Since(started), 5*time.Second)
+
+		// Commits racing with the same parent Commit: one wins and the
+		// others fail at once, without waiting to retry.
+		errs = make([]error, concurrentCommits)
+		for i := range errs {
+			wg.Go(func() {
+				_, errs[i] = e.svc.Commit(context.Background(), repo.CommitParams{Repo: id, Summary: "p", ParentCommit: head,
+					Operations: []repo.Operation{add(fmt.Sprintf("parent%d.txt", i), "x")}, Actor: alice})
+			})
+		}
+		wg.Wait()
+		won := 0
+		for _, err := range errs {
+			if err == nil {
+				won++
+				continue
+			}
+			require.ErrorIs(t, err, repo.ErrParentMismatch)
+		}
+		require.Equal(t, 1, won)
+		require.Equal(t, before, waits.Load(), "Commits with a parent Commit never wait to retry")
 	})
 }
 

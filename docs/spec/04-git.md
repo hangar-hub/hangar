@@ -83,7 +83,7 @@ The single function `gitstore.UpdateRefs(ctx, repoID, []RefUpdate{Name, Old, New
 2. Build blobs (pointer files for LFS paths), trees and the Commit with the git binary in a staging repository. LFS pointer files must be byte-exact with what `git lfs pointer` produces (see the research doc, section 3.6). Author and committer come from the user's display name and email, and the time is the server time in UTC.
 3. Decide LFS or regular per path using the Repo's `.gitattributes` at the parent Commit, falling back to the Hub's default patterns.
 4. Encode a pack of the new objects only, then follow push steps 2 to 4 with `Old = parent`.
-5. A compare-and-swap conflict when the client sent `parent_commit` returns the Hub's 412 error. Without `parent_commit`, retry up to 3 times on the new tip if the change still applies cleanly (no path in the Commit was changed in between), else 409.
+5. A compare-and-swap conflict when the client sent `parent_commit` returns the Hub's 412 error at once, with no retry. Without `parent_commit`, retry up to 7 times on the new tip if the change still applies cleanly (no path in the Commit was changed in between), else 409. Before each retry, wait a random time between 0 and `min(2 s, base × 2^(n-1))` for retry `n`, where `base` is the longer of 20 ms and the time the failed attempt took, so Commits that collided retry apart instead of colliding again ("full jitter" exponential backoff). Decided by James on 2026-10-18; see [decisions](../build/decisions.md).
 
 New Repos get an initial Commit on `main` with `.gitattributes` (the Hub's default LFS patterns, copied in `internal/repo/gitattributes_default.txt`) and, for UI-created Repos, a starter `README.md`.
 

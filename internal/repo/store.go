@@ -109,6 +109,9 @@ type Store struct {
 	verifies singleflight.Group
 	// blobs keeps small git blobs in memory.
 	blobs *blobCache
+	// retryWait waits between attempts of a Commit without a parent
+	// Commit (commitBackoff). Tests count the waits.
+	retryWait func(context.Context, time.Duration) error
 }
 
 var _ Service = (*Store)(nil)
@@ -145,7 +148,7 @@ func NewStore(opts Options) (*Store, error) {
 		now = db.Now
 	}
 	return &Store{db: opts.DB, git: opts.Git, lfs: opts.LFS, ns: opts.Namespaces, opts: opts, log: log, now: now,
-		blobs: newBlobCache(blobCacheSize)}, nil
+		blobs: newBlobCache(blobCacheSize), retryWait: sleepCtx}, nil
 }
 
 // repoRow is a repos row with its Namespace name.
