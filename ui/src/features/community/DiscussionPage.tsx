@@ -38,7 +38,8 @@ function Event({ e }: { e: DiscussionEvent }) {
         <Avatar name={e.author} />
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-line bg-surface">
           <p className="border-b border-line bg-raised/40 px-4 py-2 text-xs text-muted">
-            <span className="font-medium text-ink">{e.author}</span> commented <When iso={e.created_at} />
+            <span className="font-medium text-ink">{e.author}</span> commented{" "}
+            <When iso={e.created_at} />
           </p>
           <div className="px-4 py-3">
             {e.hidden ? (
@@ -154,30 +155,34 @@ export function DiscussionPage({
               if (comment.trim()) post.mutate();
             }}
           >
-          <Field label="Add a comment" hint="Markdown is supported.">
-            {(p) => (
-              <Textarea
-                {...p}
-                rows={5}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-            )}
-          </Field>
-          <InlineError error={post.error ?? setStatus.error} />
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary" disabled={!comment.trim() || post.isPending}>
-              Comment
-            </Button>
-            {canClose && x.status !== "merged" ? (
-              <Button
-                onClick={() => setStatus.mutate(x.status === "closed" ? "open" : "closed")}
-                disabled={setStatus.isPending}
-              >
-                {x.status === "closed" ? "Reopen" : comment.trim() ? "Close with comment" : "Close"}
+            <Field label="Add a comment" hint="Markdown is supported.">
+              {(p) => (
+                <Textarea
+                  {...p}
+                  rows={5}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+              )}
+            </Field>
+            <InlineError error={post.error ?? setStatus.error} />
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" variant="primary" disabled={!comment.trim() || post.isPending}>
+                Comment
               </Button>
-            ) : null}
-          </div>
+              {canClose && x.status !== "merged" ? (
+                <Button
+                  onClick={() => setStatus.mutate(x.status === "closed" ? "open" : "closed")}
+                  disabled={setStatus.isPending}
+                >
+                  {x.status === "closed"
+                    ? "Reopen"
+                    : comment.trim()
+                      ? "Close with comment"
+                      : "Close"}
+                </Button>
+              ) : null}
+            </div>
           </form>
         </div>
       ) : null}

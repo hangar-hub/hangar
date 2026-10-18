@@ -57,7 +57,10 @@ function Members({ ns, canAdmin }: { ns: string; canAdmin: boolean }) {
       <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
         {list.data.items.map((m) => (
           <li key={m.username} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
-            <AppLink href={`/${m.username}`} className="min-w-0 font-mono underline-offset-2 wrap-anywhere hover:underline">
+            <AppLink
+              href={`/${m.username}`}
+              className="min-w-0 font-mono underline-offset-2 wrap-anywhere hover:underline"
+            >
               {m.username}
             </AppLink>
             {m.display_name ? <span className="text-muted">{m.display_name}</span> : null}
