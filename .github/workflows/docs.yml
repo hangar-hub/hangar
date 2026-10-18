@@ -31,3 +31,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin gh-pages --depth=1 || true
           uv run --no-project --with-requirements docs/requirements.txt mike deploy --push dev
+          ./scripts/docs-cname.sh --push

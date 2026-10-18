@@ -27,4 +27,4 @@ To reach it from this machine:
 {{- end }}
 
 Point Hugging Face tools at it with: export HF_ENDPOINT={{ .Values.publicURL }}
-Documentation: https://jamesagarside.github.io/hangar/
+Documentation: https://hangar.page/

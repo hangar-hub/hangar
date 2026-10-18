@@ -44,7 +44,7 @@ GoReleaser builds `hangar` for linux, darwin and windows on amd64 and arm64, wit
 
 ## Documentation site
 
-MkDocs Material in `docs/`, published to GitHub Pages at `https://jamesagarside.github.io/hangar/` on every release (and `dev` from `main`). House style throughout. Pages:
+MkDocs Material in `docs/`, published to GitHub Pages with the custom domain `hangar.page`, so the site is `https://hangar.page/`, on every release (and `dev` from `main`). mike publishes each version to its own directory on the `gh-pages` branch (`/dev/`, `/1.0/`, with `/latest/` as an alias), and the root redirects to `latest`. Canonical URLs and each version's sitemap use `https://hangar.page/<version>/`, built from `site_url` in `mkdocs.yml`; nothing hard-codes a path prefix. Links from outside the site (README, chart, image, Homebrew cask, `SECURITY.md`) point at `https://hangar.page/` or, for a page, `https://hangar.page/latest/<page>/`, because only the root redirects. GitHub Pages reads the domain from a `CNAME` file at the root of `gh-pages`, not from `docs/`, so after each publish `scripts/docs-cname.sh` commits one if it is missing. House style throughout. Pages:
 
 - **Home**: what Hangar is, a 30-second demo (asciinema or GIF), quickstart.
 - **Get started**: Docker, Compose, Helm, binary; first login; pull your first model; point `HF_ENDPOINT` at Hangar.
@@ -82,4 +82,8 @@ Elastic License 2.0, matching Crockery. The README says what it means in plain w
 4. Load test targets in [02](02-architecture.md) met on the reference setup ([13](13-testing.md)), with results committed to `docs/benchmarks.md`.
 5. Security review done (threat model in `docs/security/threat-model.md`, findings fixed or recorded).
 6. Docs complete with no "TODO" or placeholder pages; screenshots current.
-7. James creates the public GitHub repository, enables GitHub Pages, private vulnerability reporting and the CLA app, then pushes the tag.
+7. James buys `hangar.page` and, in Cloudflare, adds DNS-only (grey cloud) records for the apex: `A` records `185.199.108.153`, `185.199.109.153`, `185.199.110.153` and `185.199.111.153`, and `AAAA` records `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153` and `2606:50c0:8003::153`; and a `CNAME` record for `www` to `jamesagarside.github.io`, also DNS only.
+8. James verifies `hangar.page` under **Settings**, **Pages** of the `jamesagarside` GitHub account, so no other account can claim it.
+9. James creates the public GitHub repository, enables private vulnerability reporting and the CLA app, and pushes `main`; the `docs.yml` run that follows (start it by hand if it does not) creates the `gh-pages` branch with the `CNAME`.
+10. James enables GitHub Pages for the repository from the `gh-pages` branch (root), checks that the custom domain shows `hangar.page` (set it if not), waits for the DNS check to pass and the certificate to be issued, then turns on **Enforce HTTPS**.
+11. James pushes the tag.
