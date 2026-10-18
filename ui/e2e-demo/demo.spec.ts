@@ -121,3 +121,46 @@ test("request bodies over 1 MiB get 413 and smaller ones work", async ({ page })
   const small = await commit(64 * 1024);
   expect(small.status(), await small.text()).toBe(201);
 });
+
+test("the OIDC sign-in redirects only to paths on the demo", async ({ request }) => {
+  const location = async (to: string) =>
+    (
+      await request.get(`/auth/oidc/unifi?redirect=${encodeURIComponent(to)}`, { maxRedirects: 0 })
+    ).headers().location;
+  expect(await location("/datasets")).toBe("/datasets");
+  for (const evil of ["https://evil.example/", "//evil.example/", "/\\evil.example/"]) {
+    expect(await location(evil), evil).toBe("/");
+  }
+});
+
+test("one visitor's changes never reach another", async ({ browser }) => {
+  const visitor = async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto("/");
+    const me = await page.request.get("/api/hangar/v1/me");
+    const csrf = ((await me.json()) as { csrf_token: string }).csrf_token;
+    return { context, page, csrf };
+  };
+  const a = await visitor();
+  const b = await visitor();
+  const name = `planted-${unique()}`;
+  const planted = await callApi(a.page, a.csrf, "POST", "/repos", {
+    type: "model",
+    namespace: "ada",
+    name,
+  });
+  expect(planted.status()).toBe(201);
+  const renamed = await callApi(a.page, a.csrf, "PATCH", "/orgs/ml-team", {
+    display_name: "Click this link",
+  });
+  expect(renamed.status()).toBe(200);
+  expect((await callApi(a.page, a.csrf, "POST", "/auth/logout")).ok()).toBe(true);
+
+  expect((await callApi(b.page, b.csrf, "GET", `/repos/models/ada/${name}`)).status()).toBe(404);
+  await b.page.goto("/ml-team");
+  await expect(b.page.getByRole("heading", { level: 1 })).toHaveText("ML team");
+  await expect(b.page.getByRole("button", { name: "Account menu for ada" })).toBeVisible();
+  await a.context.close();
+  await b.context.close();
+});

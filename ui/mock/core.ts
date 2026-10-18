@@ -62,6 +62,37 @@ const publicOps = new Set<keyof operations>(["login", "listAuthProviders", "getM
 
 type Session = { state: MockState; bytes: number; seen: number };
 
+/**
+ * Keeps only paths on this site, as internal/auth.SafeRedirect does, so the
+ * OIDC sign-in cannot send a visitor to another site: the target must start
+ * with "/" but not "//" or "/\\", have no control characters, be at most
+ * 2000 characters, and still have this origin once resolved against it.
+ * Anything else becomes "/".
+ */
+export function safeRedirect(to: string | null | undefined, origin: string): string {
+  if (
+    !to?.startsWith("/") ||
+    to.startsWith("//") ||
+    to.startsWith("/\\") ||
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it refuses.
+    /[\u0000-\u001f\u007f]/.test(to) ||
+    to.length > 2000
+  ) {
+    return "/";
+  }
+  try {
+    return new URL(to, origin).origin === origin ? to : "/";
+  } catch {
+    return "/";
+  }
+}
+
+/** Drops the characters that would end or break a quoted header value. */
+function headerSafe(s: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it drops.
+  return s.replace(/["\\\u0000-\u001f\u007f]/g, "");
+}
+
 function cookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const part of (header ?? "").split(/;\s*/)) {
@@ -194,7 +225,7 @@ export function createMockCore(
         reply.set("Content-Type", "application/zip");
         reply.set(
           "Content-Disposition",
-          `attachment; filename="${decodeURIComponent(path.split("/").pop() ?? "export.zip")}"`,
+          `attachment; filename="${headerSafe(decodeURIComponent(path.split("/").pop() ?? "")) || "export.zip"}"`,
         );
         reply.body = new Uint8Array([0x50, 0x4b, 0x05, 0x06, ...new Array(18).fill(0)]);
         return reply.done();
@@ -356,7 +387,7 @@ export function createMockCore(
     if (oidc && method === "GET") {
       state.signedIn = true;
       reply.status = 302;
-      reply.set("Location", url.searchParams.get("redirect") || "/");
+      reply.set("Location", safeRedirect(url.searchParams.get("redirect"), url.origin));
       return reply.done();
     }
     const m = /^\/auth\/(register|invite\/([^/]+)|reset\/([^/]+))$/.exec(path);

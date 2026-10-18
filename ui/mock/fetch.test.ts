@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMockCore, type MockOptions, stateBytes } from "./core.ts";
+import { createMockCore, type MockOptions, safeRedirect, stateBytes } from "./core.ts";
 import { createFetchMock, readCapped } from "./fetch.ts";
 import { compileValidators, loadSpec } from "./openapi.ts";
 
@@ -233,5 +233,91 @@ describe("session limits", () => {
     // Another visitor's request prunes the idle session.
     await client(fetchMock).call("GET", `${api}/me`);
     expect((await idle.call("GET", `${api}/repos/models/ada/idle`)).status).toBe(404);
+  });
+});
+
+describe("redirects", () => {
+  it("follows only paths on this site after an OIDC sign-in", async () => {
+    const fetchMock = mockWith();
+    const location = async (to: string) =>
+      (
+        await fetchMock(
+          new Request(`http://demo.test/auth/oidc/unifi?redirect=${encodeURIComponent(to)}`),
+        )
+      )?.headers.get("location");
+    expect(await location("/ada/bert-tiny-finetune?tab=files")).toBe(
+      "/ada/bert-tiny-finetune?tab=files",
+    );
+    for (const evil of [
+      "https://evil.example/",
+      "//evil.example/",
+      "/\\evil.example/",
+      "/\\/evil.example/",
+      "http:evil.example",
+      "javascript:alert(1)",
+      "/a\r\nSet-Cookie: x=1",
+      "evil.example",
+      "",
+    ]) {
+      expect(await location(evil), evil).toBe("/");
+    }
+  });
+
+  it("checks the target resolves to the same origin", () => {
+    expect(safeRedirect("/models", "https://demo.hangar.page")).toBe("/models");
+    expect(safeRedirect("/\t/evil.example", "https://demo.hangar.page")).toBe("/");
+    expect(safeRedirect(`/${"a".repeat(2000)}`, "https://demo.hangar.page")).toBe("/");
+    expect(safeRedirect(null, "https://demo.hangar.page")).toBe("/");
+  });
+
+  it("keeps quotes and line breaks out of the export file name", async () => {
+    const res = await mockWith()(
+      new Request(`${api}/exports/${encodeURIComponent('a"b\r\nX-Evil: 1.zip')}`),
+    );
+    expect(res?.headers.get("content-disposition")).toBe('attachment; filename="abX-Evil: 1.zip"');
+    expect(res?.headers.get("x-evil")).toBeNull();
+  });
+});
+
+describe("visitors", () => {
+  it("each get their own data, so nobody changes what another sees", async () => {
+    const fetchMock = mockWith({ signedIn: true });
+    const alice = client(fetchMock);
+    const bob = client(fetchMock);
+    await bob.call("GET", `${api}/me`);
+    expect(alice.cookie).not.toBe(bob.cookie);
+
+    // Alice plants a Repo, renames an Organisation and signs out.
+    const planted = await alice.call(
+      "POST",
+      `${api}/repos`,
+      json({ type: "model", namespace: "ada", name: "planted" }),
+    );
+    expect(planted.status).toBe(201);
+    expect(
+      (await alice.call("PATCH", `${api}/orgs/ml-team`, json({ display_name: "Click this link" })))
+        .status,
+    ).toBe(200);
+    expect((await alice.call("POST", `${api}/auth/logout`)).status).toBeLessThan(300);
+    expect((await alice.call("GET", `${api}/repos/models/ada/planted`)).status).toBe(401);
+
+    // Bob is still signed in, and sees neither change.
+    const me = await bob.call("GET", `${api}/me`);
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ display_name: "Ada Lovelace" });
+    const org = await bob.call("GET", `${api}/namespaces/ml-team`);
+    expect(org.status, await org.clone().text()).toBe(200);
+    expect(await org.json()).toMatchObject({ display_name: "ML team" });
+    expect((await bob.call("GET", `${api}/repos/models/ada/planted`)).status).toBe(404);
+
+    // A visitor with no cookie, or a made-up one, starts from the fixtures.
+    const carol = client(fetchMock);
+    expect((await carol.call("GET", `${api}/repos/models/ada/planted`)).status).toBe(404);
+    const forged = await fetchMock(
+      new Request(`${api}/repos/models/ada/planted`, {
+        headers: { Cookie: "mock_session=not-a-session" },
+      }),
+    );
+    expect(forged?.status).toBe(404);
   });
 });
