@@ -1,9 +1,11 @@
-# Keeps dependencies current (docs/spec/12-packaging-and-release.md).
+# Keeps dependencies current (docs/spec/12-packaging-and-release.md). Each
+# update waits 14 days after its release, the same rule as the action pins.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule: {interval: weekly}
+    cooldown: {default-days: 14}
     groups:
       opentelemetry:
         patterns: ["go.opentelemetry.io/*"]
@@ -13,6 +15,7 @@ updates:
   - package-ecosystem: npm
     directory: /ui
     schedule: {interval: weekly}
+    cooldown: {default-days: 14}
     groups:
       ui-minor-and-patch:
         update-types: [minor, patch]
@@ -20,6 +23,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    cooldown: {default-days: 14}
     groups:
       actions:
         patterns: ["*"]
@@ -27,14 +31,17 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule: {interval: weekly}
+    cooldown: {default-days: 14}
     commit-message: {prefix: deps}
   - package-ecosystem: docker-compose
     directory: /deploy/compose
     schedule: {interval: weekly}
+    cooldown: {default-days: 14}
     commit-message: {prefix: deps}
   - package-ecosystem: uv
     directory: /compat
     schedule: {interval: weekly}
+    cooldown: {default-days: 14}
     groups:
       compat:
         patterns: ["*"]
@@ -42,4 +49,5 @@ updates:
   - package-ecosystem: pip
     directory: /docs
     schedule: {interval: monthly}
+    cooldown: {default-days: 14}
     commit-message: {prefix: deps}

@@ -16,7 +16,7 @@ Every packaging step that can run locally passed, after five fixes on this branc
 | 4 | Load test targets met on the reference setup, results in `docs/benchmarks.md` | NEEDS JAMES | [Benchmarks](../benchmarks.md) passes 9 targets and does not measure "100,000 Repos per Instance". The runs were on a shared laptop, not the reference setup, with 4 × 1 GiB uploads instead of 50 GiB. James decides whether this is enough for v1.0.0 or wants the missing target measured. |
 | 5 | Security review done, threat model, findings fixed or recorded | PASS | [Threat model](../security/threat-model.md) written; Phase 3 fixed 61 findings and the threat model records every residual risk; James decided the open questions on 2026-10-18. In this run `govulncheck` v1.9.0 found no vulnerability that the code calls, and Trivy found no critical CVE in the image. Trivy found 5 high CVEs in `github.com/getkin/kin-openapi` v0.144.0 that the code never reaches (only the unused generated `GetSpec` loads a spec); the module is updated to v0.151.0 on this branch, see [Fixes](#fixes). |
 | 6 | Docs complete, no TODO or placeholder pages, screenshots current | PASS, after a fix | `make docs` (`mkdocs build --strict`) builds 64 pages with no warning. No published page contains a TODO or placeholder text, and none links to the excluded `spec/`, `research/` or `build/` pages; the threat model and contributing pages link to the spec on GitHub on purpose (`9ca750d`). The screenshots were not current: the landing page changed after they were taken (`4f57f3f`). `pnpm run screenshots` regenerated all 30 (`aad25d7`). |
-| 7 | James creates the public repository, enables Pages, private vulnerability reporting and the CLA app, then pushes the tag | NEEDS JAMES | Release steps; see [What James needs to do](#what-james-needs-to-do). |
+| 7 | James creates the public repository, enables private vulnerability reporting and the CLA app, connects Cloudflare (originally: enables Pages), then pushes the tag | NEEDS JAMES | Release steps; see [What James needs to do](#what-james-needs-to-do). |
 
 ## Fixes
 
@@ -142,7 +142,7 @@ Nothing here points at Hangar: every failure was an upload that could not finish
 Before the release:
 
 1. Create the public repository `github.com/hangar-hub/hangar` in the `hangar-hub` organisation and push `main`.
-2. Enable GitHub Pages from the `gh-pages` branch (the first `docs.yml` or release run creates it), private vulnerability reporting and the CLA Assistant app.
+2. Enable private vulnerability reporting and connect the CLA Assistant app. The docs and demo are served by Cloudflare, not GitHub Pages; spec 12 has the Cloudflare steps (decided after this dry run).
 3. Give the release GitHub App access to the repository. Updated 2026-10-18: the workflows use the organisation's app `hangar-hub-release` instead of tokens, and James has already set it up, with the organisation Actions variable `RELEASE_APP_ID`, the secret `RELEASE_APP_PRIVATE_KEY` and the tap `hangar-hub/homebrew-tap`. At release, add the `hangar` repository to the app's installation and to the selected repositories of the variable and the secret. Without them release-please cannot open its pull request and GoReleaser cannot publish the cask.
 4. Decide whether item 4 stands as it is, or whether 100,000 Repos per Instance must be measured first.
 5. ~~Decide whether to pin the actions in `release.yml` to commit SHAs.~~ Decided 2026-10-18: every workflow pins every action to a commit SHA ([decisions](decisions.md), "GitHub organisation `hangar-hub`").
