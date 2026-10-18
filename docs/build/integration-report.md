@@ -2,7 +2,7 @@
 
 Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the test that proves it, the Hub API contract MUSTs, the suite results, the request resolutions and the open issues.
 
-It describes branch `integration/v1` at `a998d78`, after the Phase 3 hardening and James's decisions on its open questions. [Phase 3 decisions and final check (2026-10-18)](#phase-3-decisions-and-final-check-2026-10-18) has the merges since Phase 3 and the final run of every suite, all green, after which `main` was fast-forwarded. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and its round 4 results at `6610f45`; [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) and the later sections describe earlier rounds.
+It describes branch `integration/v1` at `97d17c1`, ready for release. [Pre-release check (2026-10-18)](#pre-release-check-2026-10-18) has the last run of every suite, all green; earlier sections describe earlier rounds. [Phase 3 decisions and final check (2026-10-18)](#phase-3-decisions-and-final-check-2026-10-18) has the merges since Phase 3 and the final run of every suite, all green, after which `main` was fast-forwarded. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and its round 4 results at `6610f45`; [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) and the later sections describe earlier rounds.
 
 ## Summary
 
@@ -13,6 +13,30 @@ It describes branch `integration/v1` at `a998d78`, after the Phase 3 hardening a
 - James decided the five Phase 3 questions on 2026-10-18 (see [decisions](decisions.md)). He decided the last product question, self-service profile and password changes (W8 8), the same day; it is closed on branch `feat/self-service-account` (see [W8 8 closed](#w8-8-closed-self-service-profile-and-password)). The release is on hold until he says go.
 - AWS S3 passed in full on 2026-10-15 after the fixes for the 2026-10-14 failures.
 - The preview Instance's large import, red in earlier rounds, passed on `382cc88` on 2026-10-17: a 19.85 GB GGUF imported with its SHA-256 matching huggingface.co (bellatrix PRs #121 and #122). The preview has not yet been updated past `382cc88`.
+
+## Pre-release check (2026-10-18)
+
+After the final check at `a998d78`, `integration/v1` took the self-service account changes (W8 8, closed), the release dry run's fixes and [report](release-dry-run.md), the Cloudflare docs hosting and mock demo, the move to `github.com/hangar-hub/hangar`, the release GitHub App, the action SHA pins and a 14-day Dependabot cooldown (see [decisions](decisions.md), 2026-10-18). The lead then ran every suite one after another at `97d17c1`:
+
+| Suite | Command | Exit | Result |
+|---|---|---|---|
+| Lint | `make lint` | 0 | |
+| Unit, SQLite and Postgres, S3 on MinIO | `make test` | 0 | 451 s |
+| Coverage | `make cover` | 0 | every package at or above its floor |
+| Generated code | `make check-generate` | 0 | no differences |
+| Client compatibility | `make test-compat` | 0 | 7 Go packages ok; pytest 71 passed, 2 skipped |
+| UI, mock server | `CI=1 make e2e` | 0 | 557 passed, 43 skipped by design |
+| UI, demo Worker under `wrangler dev` | `CI=1 make test-demo` | 0 | 563 passed, 43 skipped by design |
+| UI, two real Instances | `playwright test -c playwright.real.config.ts` | 0 | 378 passed; 0 `WARN` or `ERROR` lines in either server log |
+| GoReleaser configuration | `goreleaser check` | 0 | |
+| Chart, Compose and workflow checks | `make lint-deploy` | 0 | all 28 action refs pinned to the commit their tag names |
+| Image | `make image` | 0 | |
+| Compose examples | `scripts/compose-smoke.sh <example> --skip pull` | 0 | quickstart, postgres-minio, scale, oidc-keycloak |
+| Helm on kind | `make test-kind` | 0 | |
+| Docs site | `make docs` | 0 | `mkdocs build --strict` |
+| Signing and SBOM rehearsal | `make release-rehearsal` | 0 | checksum and image signatures verify, a wrong key fails, SPDX attestation verifies (158 packages) |
+
+Still open before or at release: the AWS S3 suite needs a rerun from a fast connection (the dry run's was cut short at 3 to 5 KB/s); the "100,000 Repos per Instance" target was not measured; the preview on bellatrix still runs `382cc88`; and James's release steps in spec 12.
 
 ## Phase 3 decisions and final check (2026-10-18)
 
