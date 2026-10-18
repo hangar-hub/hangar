@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/model"
@@ -26,6 +27,9 @@ type BlockReason string
 const (
 	// BlockUnsafe: the scan found imports that run code.
 	BlockUnsafe BlockReason = "unsafe"
+	// BlockSuspicious: the scan found imports on neither the allow nor the
+	// deny list, and scan.block_level is suspicious.
+	BlockSuspicious BlockReason = "suspicious"
 	// BlockNotScanned: the file can run code when loaded and has no scan
 	// result: the scan is pending, or its Job failed.
 	BlockNotScanned BlockReason = "not_scanned"
@@ -57,6 +61,9 @@ func (e *BlockedError) Error() string {
 	case BlockPartial:
 		return name + " could not be read in full by Hangar's security scan, and loading it can run code. " +
 			"An admin blocks unsafe downloads on this Instance."
+	case BlockSuspicious:
+		return name + " imports code that Hangar's security scan does not know to be safe, and loading it can run code. " +
+			"An admin blocks suspicious downloads on this Instance."
 	case BlockNotScanned:
 		return name + " has not been scanned by Hangar's security scan yet, and loading it can run code. " +
 			"An admin blocks unsafe downloads on this Instance, so it downloads once the scan finds it safe."
@@ -66,18 +73,43 @@ func (e *BlockedError) Error() string {
 	}
 }
 
+// Level is how strict the Gate is when blocking is on: the Instance
+// setting scan.block_level.
+type Level string
+
+// Levels.
+const (
+	// LevelUnsafe refuses files the scan marked unsafe: imports on the
+	// deny list. The default.
+	LevelUnsafe Level = "unsafe"
+	// LevelSuspicious also refuses files the scan marked suspicious:
+	// imports on neither the allow nor the deny list, which
+	// torch.load(weights_only=True) refuses too.
+	LevelSuspicious Level = "suspicious"
+)
+
+// ParseLevel returns the Level named by s, or false.
+func ParseLevel(s string) (Level, bool) {
+	switch Level(s) {
+	case LevelUnsafe, LevelSuspicious:
+		return Level(s), true
+	}
+	return "", false
+}
+
 // IsBlocked reports whether err is a refusal from the Gate.
 func IsBlocked(err error) bool {
 	var be *BlockedError
 	return errors.As(err, &be)
 }
 
-// Gate enforces the Instance setting scan.block_unsafe_downloads
-// (07-indexing-and-scanning.md "Where results show") for every protocol
+// Gate enforces the Instance settings scan.block_unsafe_downloads and
+// scan.block_level (07-indexing-and-scanning.md "Where results show") for every protocol
 // that serves file bytes: the Hub API, git-lfs, git-upload-pack, signed
 // Pull-through links, the Ollama registry and zip exports, so the setting
 // has no way around it. Signed links are checked again when they are
 // used. With the setting on it refuses files the scan marked unsafe, and
+// files it marked suspicious when scan.block_level is suspicious, and it
 // fails closed for files that can run code when loaded (pickle, joblib and
 // NumPy files, by name) that have no result, because their scan is pending
 // or its Job failed, or whose result is partial, because the scan could
@@ -107,14 +139,17 @@ func IsBlocked(err error) bool {
 type Gate struct {
 	// Block reads scan.block_unsafe_downloads. Nil never blocks.
 	Block func(ctx context.Context) (bool, error)
+	// Level reads scan.block_level, how strict blocking is. Nil means
+	// LevelUnsafe.
+	Level func(ctx context.Context) (Level, error)
 	// Results returns a Commit's stored results, or ErrNotScanned.
 	Results func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) (*CommitResult, error)
 	// Repos resolves paths to Entries, lists refs and reads history.
 	Repos repo.Service
 	// Flagged returns the Commits of a Repo with a file the scan marked
-	// unsafe, so object downloads are checked against every scanned Commit,
-	// not only ref tips. Optional.
-	Flagged func(ctx context.Context, repoUUID uuid.UUID) ([]model.CommitSHA, error)
+	// with one of the statuses, so object downloads are checked against
+	// every scanned Commit, not only ref tips. Optional.
+	Flagged func(ctx context.Context, repoUUID uuid.UUID, statuses ...Status) ([]model.CommitSHA, error)
 	// Scanned returns the stored results for a path in the Commits of a
 	// Repo, so a Commit without one takes the result of the same file in
 	// another Commit. Optional.
@@ -149,23 +184,69 @@ func (s *Service) NewGate(block func(ctx context.Context) (bool, error)) *Gate {
 // the Gate fails closed for it.
 func runsCode(p string) bool { return KindOf(p).RunsCode() }
 
-// refusal returns why a file's result refuses it, or "" when it may
-// download.
-func refusal(p string, status Status, partial bool) BlockReason {
+// refusal returns why a file's result refuses it at level, or "" when it
+// may download.
+func refusal(level Level, p string, status Status, partial bool) BlockReason {
 	switch {
 	case status == StatusUnsafe:
 		return BlockUnsafe
+	case status == StatusSuspicious && level == LevelSuspicious:
+		return BlockSuspicious
 	case partial && runsCode(p):
 		return BlockPartial
 	}
 	return ""
 }
 
-func (g *Gate) enabled(ctx context.Context) (bool, error) {
-	if g == nil || g.Block == nil {
-		return false, nil
+// worse reports whether reason a is worse than b, so a check that finds
+// several refused files reports the worst.
+func worse(a, b BlockReason) bool {
+	rank := func(r BlockReason) int {
+		switch r {
+		case BlockUnsafe:
+			return 2
+		case BlockSuspicious:
+			return 1
+		}
+		return 0
 	}
-	return g.Block(ctx)
+	return rank(a) > rank(b)
+}
+
+// policy is what one check enforces: whether blocking is on and how
+// strict it is.
+type policy struct {
+	on    bool
+	level Level
+}
+
+func (g *Gate) enabled(ctx context.Context) (policy, error) {
+	if g == nil || g.Block == nil {
+		return policy{}, nil
+	}
+	on, err := g.Block(ctx)
+	if err != nil || !on {
+		return policy{}, err
+	}
+	level := LevelUnsafe
+	if g.Level != nil {
+		l, err := g.Level(ctx)
+		if err != nil {
+			return policy{}, err
+		}
+		if l == LevelSuspicious {
+			level = l
+		}
+	}
+	return policy{on: true, level: level}, nil
+}
+
+// flaggedStatuses are the statuses whose Commits Flagged returns at level.
+func flaggedStatuses(level Level) []Status {
+	if level == LevelSuspicious {
+		return []Status{StatusUnsafe, StatusSuspicious}
+	}
+	return []Status{StatusUnsafe}
 }
 
 // isMissing reports whether err says a Commit or path does not exist.
@@ -176,9 +257,9 @@ func isMissing(err error) bool {
 // verdict decides one file from its Commit's results (nil when the Commit
 // is not scanned). blobOID is the file's git object (for LFS files, the
 // pointer's); when empty it is read only if needed.
-func (g *Gate) verdict(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, res *CommitResult, p, blobOID string) (*BlockedError, error) {
+func (g *Gate) verdict(ctx context.Context, level Level, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, res *CommitResult, p, blobOID string) (*BlockedError, error) {
 	if f, ok := res.file(p); ok {
-		if r := refusal(p, f.Status, f.Partial); r != "" {
+		if r := refusal(level, p, f.Status, f.Partial); r != "" {
 			return &BlockedError{Path: p, Reason: r}, nil
 		}
 		return nil, nil
@@ -194,7 +275,7 @@ func (g *Gate) verdict(ctx context.Context, repoUUID uuid.UUID, id model.RepoID,
 		return nil, err
 	}
 	if found {
-		if r := refusal(p, sf.Status, sf.Partial); r != "" {
+		if r := refusal(level, p, sf.Status, sf.Partial); r != "" {
 			return &BlockedError{Path: p, Reason: r}, nil
 		}
 		return nil, nil
@@ -284,15 +365,15 @@ func (g *Gate) current(ctx context.Context, repoUUID uuid.UUID, id model.RepoID,
 // CheckFile returns a *BlockedError when the file at p of commit must not
 // download, nil when it may, and other errors when the check failed.
 func (g *Gate) CheckFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, p string) error {
-	on, err := g.enabled(ctx)
-	if err != nil || !on {
+	pol, err := g.enabled(ctx)
+	if err != nil || !pol.on {
 		return err
 	}
 	res, err := g.current(ctx, repoUUID, id, commit, []string{p})
 	if err != nil {
 		return err
 	}
-	blocked, err := g.verdict(ctx, repoUUID, id, commit, res, p, "")
+	blocked, err := g.verdict(ctx, pol.level, repoUUID, id, commit, res, p, "")
 	if err != nil || blocked == nil {
 		return err
 	}
@@ -302,8 +383,8 @@ func (g *Gate) CheckFile(ctx context.Context, repoUUID uuid.UUID, id model.RepoI
 // CheckTree checks every present file under dir of commit, for a zip
 // export, and returns the first refusal.
 func (g *Gate) CheckTree(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, commit model.CommitSHA, dir string) error {
-	on, err := g.enabled(ctx)
-	if err != nil || !on {
+	pol, err := g.enabled(ctx)
+	if err != nil || !pol.on {
 		return err
 	}
 	res, err := g.current(ctx, repoUUID, id, commit, nil)
@@ -318,7 +399,7 @@ func (g *Gate) CheckTree(ctx context.Context, repoUUID uuid.UUID, id model.RepoI
 		if e.Type != model.EntryFile || (e.LFS != nil && !e.Present) {
 			continue
 		}
-		blocked, err := g.verdict(ctx, repoUUID, id, commit, res, e.Path, e.OID)
+		blocked, err := g.verdict(ctx, pol.level, repoUUID, id, commit, res, e.Path, e.OID)
 		if err != nil {
 			return err
 		}
@@ -350,8 +431,8 @@ func refTips(refs *repo.Refs) []model.CommitSHA {
 // download. See Gate for how an object is decided.
 func (g *Gate) CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.RepoID, oids []string) (map[string]error, error) {
 	out := map[string]error{}
-	on, err := g.enabled(ctx)
-	if err != nil || !on || len(oids) == 0 {
+	pol, err := g.enabled(ctx)
+	if err != nil || !pol.on || len(oids) == 0 {
 		return out, err
 	}
 	want := make(map[string]bool, len(oids))
@@ -369,7 +450,7 @@ func (g *Gate) CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.Re
 		isTip[c] = true
 	}
 	if g.Flagged != nil {
-		flagged, err := g.Flagged(ctx, repoUUID)
+		flagged, err := g.Flagged(ctx, repoUUID, flaggedStatuses(pol.level)...)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +460,7 @@ func (g *Gate) CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.Re
 			}
 		}
 	}
-	d := &objectDecider{g: g, repoUUID: repoUUID, id: id, results: map[model.CommitSHA]*CommitResult{}, places: map[string][]filePlace{}, seen: map[filePlace]bool{}}
+	d := &objectDecider{g: g, level: pol.level, repoUUID: repoUUID, id: id, results: map[model.CommitSHA]*CommitResult{}, places: map[string][]filePlace{}, seen: map[filePlace]bool{}}
 	for _, commit := range commits {
 		entries, err := g.Repos.Tree(ctx, id, commit, "", repo.TreeOpts{Recursive: true})
 		if !isTip[commit] && errors.Is(err, repo.ErrRevisionNotFound) {
@@ -428,6 +509,7 @@ func (g *Gate) CheckObjects(ctx context.Context, repoUUID uuid.UUID, id model.Re
 // object from them.
 type objectDecider struct {
 	g        *Gate
+	level    Level
 	repoUUID uuid.UUID
 	id       model.RepoID
 	results  map[model.CommitSHA]*CommitResult
@@ -490,7 +572,7 @@ func (d *objectDecider) fromScan(ctx context.Context, oid string) (*BlockedError
 			continue
 		}
 		known = true
-		if r := refusal(pl.path, f.Status, f.Partial); r != "" && (refused == nil || r == BlockUnsafe) {
+		if r := refusal(d.level, pl.path, f.Status, f.Partial); r != "" && (refused == nil || worse(r, refused.Reason)) {
 			refused = &BlockedError{Path: pl.path, Reason: r}
 		}
 	}
@@ -523,11 +605,11 @@ func (d *objectDecider) decide(ctx context.Context, oid string) (*BlockedError, 
 		if err != nil {
 			return nil, err
 		}
-		b, err := d.g.verdict(ctx, d.repoUUID, d.id, pl.commit, res, pl.path, pl.pointer)
+		b, err := d.g.verdict(ctx, d.level, d.repoUUID, d.id, pl.commit, res, pl.path, pl.pointer)
 		if err != nil {
 			return nil, err
 		}
-		if b != nil && (first == nil || b.Reason == BlockUnsafe) {
+		if b != nil && (first == nil || worse(b.Reason, first.Reason)) {
 			first = b
 		}
 	}
@@ -566,8 +648,8 @@ func (d *objectDecider) addHistory(ctx context.Context, tips []model.CommitSHA, 
 // in the pack; git-lfs fetches them by OID, which CheckObjects checks.
 // History too long for the Gate to walk fails closed.
 func (g *Gate) CheckGit(ctx context.Context, repoUUID uuid.UUID, id model.RepoID) error {
-	on, err := g.enabled(ctx)
-	if err != nil || !on {
+	pol, err := g.enabled(ctx)
+	if err != nil || !pol.on {
 		return err
 	}
 	refs, err := g.Repos.Refs(ctx, id)
@@ -577,7 +659,7 @@ func (g *Gate) CheckGit(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 	tips := refTips(refs)
 	commits := slices.Clone(tips)
 	if g.Flagged != nil {
-		flagged, err := g.Flagged(ctx, repoUUID)
+		flagged, err := g.Flagged(ctx, repoUUID, flaggedStatuses(pol.level)...)
 		if err != nil {
 			return err
 		}
@@ -590,7 +672,7 @@ func (g *Gate) CheckGit(ctx context.Context, repoUUID uuid.UUID, id model.RepoID
 			return nil
 		}
 		seen[key] = true
-		blocked, err := g.verdict(ctx, repoUUID, id, commit, res, p, blobOID)
+		blocked, err := g.verdict(ctx, pol.level, repoUUID, id, commit, res, p, blobOID)
 		if err != nil {
 			return err
 		}
@@ -755,14 +837,21 @@ walk:
 	return h, nil
 }
 
-// Flagged returns the Commits of a Repo with a file the scan marked
-// unsafe, in any stored scanner version; the Gate reads each Commit's
-// newest results.
-func (s *Service) Flagged(ctx context.Context, repoUUID uuid.UUID) ([]model.CommitSHA, error) {
+// Flagged returns the Commits of a Repo with a file the scan marked with
+// one of statuses (unsafe when none are given), in any stored scanner
+// version; the Gate reads each Commit's newest results.
+func (s *Service) Flagged(ctx context.Context, repoUUID uuid.UUID, statuses ...Status) ([]model.CommitSHA, error) {
+	if len(statuses) == 0 {
+		statuses = []Status{StatusUnsafe}
+	}
+	names := make([]string, 0, len(statuses))
+	for _, st := range statuses {
+		names = append(names, string(st))
+	}
 	var commits []string
 	err := s.o.DB.NewSelect().Model((*db.ScanResult)(nil)).ColumnExpr("DISTINCT commit_sha").
 		Where("repo_id = ?", repoUUID).Where("path <> ?", commitRow).
-		Where("status = ?", string(StatusUnsafe)).Scan(ctx, &commits)
+		Where("status IN (?)", bun.List(names)).Scan(ctx, &commits)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("scan results of %s: %w", repoUUID, err)
 	}

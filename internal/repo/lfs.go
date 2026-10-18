@@ -21,12 +21,15 @@ import (
 )
 
 // LFS stores LFS objects once per Instance (UP-6), addressed by SHA-256,
-// with lfs_objects rows for verified objects and uploads rows for uploads in
-// progress. It implements LFSStore.
+// with lfs_objects rows for verified objects, uploads rows for uploads in
+// progress and lfs_uploaders rows for the Users who sent each object's
+// bytes. It implements LFSStore.
 //
 // An object is only recorded once its SHA-256 and size have been checked,
 // and Ingest never writes unverified bytes to an object's key, so a corrupt
-// upload is never visible.
+// upload is never visible. An upload of an object that is already stored
+// is checked the same way but not stored again: it proves the uploader
+// holds the bytes (04-git.md "LFS objects"), without a second copy.
 type LFS struct {
 	db    *db.DB
 	blobs blob.Store
@@ -127,22 +130,23 @@ func (h *hashingReader) Read(p []byte) (int, error) {
 }
 
 // Ingest implements LFSStore. An object that is already stored is not
-// stored again (UP-6): r is not read and the stored object is returned.
-// Small objects are written to a temporary key, checked and copied into
-// place; large ones stream into a multipart upload at the final key that
-// completes only if the SHA-256 and size match, so nothing is buffered and
-// a corrupt object never appears.
+// stored again (UP-6), but r is still read to its end and checked against
+// the SHA-256 and size, so a successful Ingest always means the caller sent
+// the object's bytes. Small objects are written to a temporary key, checked
+// and copied into place; large ones stream into a multipart upload at the
+// final key that completes only if the SHA-256 and size match, so nothing
+// is buffered and a corrupt object never appears.
 func (l *LFS) Ingest(ctx context.Context, oid string, size int64, r io.Reader) (LFSObject, error) {
 	if !model.IsSHA256(oid) || size < 0 {
 		return LFSObject{}, fmt.Errorf("%w: invalid oid or size", ErrInvalid)
 	}
+	hr := &hashingReader{r: r, h: sha256.New()}
 	if obj, err := l.Stat(ctx, oid); err == nil {
-		if obj.Size != size {
-			return LFSObject{}, fmt.Errorf("%w: %s is stored with size %d, not %d", ErrChecksumMismatch, oid, obj.Size, size)
+		if err := checkStream(hr, oid, size); err != nil {
+			return LFSObject{}, err
 		}
 		return obj, nil
 	}
-	hr := &hashingReader{r: r, h: sha256.New()}
 	key := model.LFSObjectKey(oid)
 	if size > l.streamThreshold {
 		if err := l.streamMultipart(ctx, key, oid, size, hr); err != nil {
@@ -165,6 +169,54 @@ func (l *LFS) Ingest(ctx context.Context, oid string, size int64, r io.Reader) (
 		return LFSObject{}, fmt.Errorf("repo: store lfs object: %w", err)
 	}
 	return l.record(ctx, oid, size)
+}
+
+// checkStream reads the rest of hr, at most one byte past size, and checks
+// that it held exactly size bytes with SHA-256 oid. It reports a mismatch
+// without the stored object's size, so the answer says nothing about an
+// object the caller may not be able to read.
+func checkStream(hr *hashingReader, oid string, size int64) error {
+	if _, err := io.Copy(io.Discard, io.LimitReader(hr, size-hr.n+1)); err != nil {
+		return fmt.Errorf("repo: read lfs object: %w", err)
+	}
+	if hr.n != size || hex.EncodeToString(hr.h.Sum(nil)) != oid {
+		return fmt.Errorf("%w: the content does not match SHA-256 %s and %d bytes", ErrChecksumMismatch, oid, size)
+	}
+	return nil
+}
+
+// RecordUploader implements LFSStore: it records that userID sent the
+// bytes of the stored object oid. uuid.Nil, for uploads Hangar makes
+// itself, is ignored.
+func (l *LFS) RecordUploader(ctx context.Context, oid string, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return nil
+	}
+	row := &db.LFSUploader{OID: oid, UserID: userID}
+	if _, err := l.db.NewInsert().Model(row).On("CONFLICT (oid, user_id) DO NOTHING").Exec(ctx); err != nil {
+		return fmt.Errorf("repo: record lfs uploader: %w", err)
+	}
+	return nil
+}
+
+// Uploaded implements LFSStore.
+func (l *LFS) Uploaded(ctx context.Context, userID uuid.UUID, oids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if userID == uuid.Nil || len(oids) == 0 {
+		return out, nil
+	}
+	for start := 0; start < len(oids); start += 500 {
+		chunk := oids[start:min(start+500, len(oids))]
+		var got []string
+		if err := l.db.NewSelect().Model((*db.LFSUploader)(nil)).Column("oid").Where("user_id = ?", userID).
+			Where("oid IN (?)", bun.List(chunk)).Scan(ctx, &got); err != nil && !db.IsNotFound(err) {
+			return nil, fmt.Errorf("repo: read lfs uploaders: %w", err)
+		}
+		for _, o := range got {
+			out[o] = true
+		}
+	}
+	return out, nil
 }
 
 // PartSize returns the multipart part size for an object: at least 16 MiB,
@@ -493,10 +545,12 @@ func (l *LFS) completeUpload(ctx context.Context, id uuid.UUID, parts []blob.Par
 	if err := multipartOnly(row); err != nil {
 		return LFSObject{}, err
 	}
-	if obj, err := l.Stat(ctx, row.OID); err == nil {
-		// Another upload stored the object meanwhile.
+	stored, statErr := l.Stat(ctx, row.OID)
+	if statErr == nil && !l.needsProof(ctx, row) {
+		// Another upload stored the object meanwhile, and this upload's
+		// User sent its bytes before, or Hangar uploads it itself.
 		_ = l.AbortUpload(ctx, id)
-		return obj, nil
+		return stored, nil
 	}
 	done, err := l.assembled(ctx, row)
 	if err != nil {
@@ -523,9 +577,20 @@ func (l *LFS) completeUpload(ctx context.Context, id uuid.UUID, parts []blob.Par
 			return LFSObject{}, fmt.Errorf("%w: repo: record assembled upload: %w", ErrRetryable, err)
 		}
 	}
-	obj, err := l.promote(ctx, row.StorageKey, row.OID, row.Size)
+	var obj LFSObject
+	if statErr == nil {
+		// The object is stored: the parts prove the User holds its bytes,
+		// and are discarded rather than stored again.
+		err = l.prove(ctx, row.StorageKey, row.OID, row.Size)
+		obj = stored
+	} else {
+		obj, err = l.promote(ctx, row.StorageKey, row.OID, row.Size)
+	}
 	switch {
 	case err == nil:
+		if err := l.recordUploaderOf(ctx, row); err != nil {
+			return LFSObject{}, fmt.Errorf("%w: %w", ErrRetryable, err)
+		}
 	case errors.Is(err, blob.ErrNotFound):
 		// The assembled object is gone, so the parts are too.
 		_ = l.discard(context.WithoutCancel(ctx), row)
@@ -534,7 +599,7 @@ func (l *LFS) completeUpload(ctx context.Context, id uuid.UUID, parts []blob.Par
 		_ = l.discard(context.WithoutCancel(ctx), row)
 		return LFSObject{}, err
 	default:
-		if stored, serr := l.Stat(context.WithoutCancel(ctx), row.OID); serr == nil && stored.Size == row.Size {
+		if stored, serr := l.Stat(context.WithoutCancel(ctx), row.OID); serr == nil && stored.Size == row.Size && !l.needsProof(ctx, row) {
 			// A concurrent completion of the same object stored it.
 			_ = l.discard(context.WithoutCancel(ctx), row)
 			return stored, nil
@@ -545,6 +610,26 @@ func (l *LFS) completeUpload(ctx context.Context, id uuid.UUID, parts []blob.Par
 		return obj, fmt.Errorf("repo: remove completed upload: %w", derr)
 	}
 	return obj, nil
+}
+
+// needsProof reports whether completing an upload of an object that is
+// already stored must check its parts: when the upload has a User who is
+// not recorded as an uploader of the object yet.
+func (l *LFS) needsProof(ctx context.Context, row *db.Upload) bool {
+	if row.UserID == nil || *row.UserID == uuid.Nil {
+		return false
+	}
+	up, err := l.Uploaded(ctx, *row.UserID, []string{row.OID})
+	return err != nil || !up[row.OID]
+}
+
+// recordUploaderOf records the User of an upload as an uploader of its
+// object.
+func (l *LFS) recordUploaderOf(ctx context.Context, row *db.Upload) error {
+	if row.UserID == nil {
+		return nil
+	}
+	return l.RecordUploader(ctx, row.OID, *row.UserID)
 }
 
 // discard removes an upload's row and its assembled object.
@@ -612,7 +697,7 @@ func (l *LFS) ExpireUploads(ctx context.Context) (int, error) {
 // then checks the staged object's SHA-256 and size and copies it into
 // place server-side, so no client can write unverified bytes to an
 // object's key, where other Repos may already reference it.
-func (l *LFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration) (blob.PresignedRequest, error) {
+func (l *LFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration, userID uuid.UUID) (blob.PresignedRequest, error) {
 	if !model.IsSHA256(oid) || size < 0 {
 		return blob.PresignedRequest{}, fmt.Errorf("%w: invalid oid or size", ErrInvalid)
 	}
@@ -627,6 +712,9 @@ func (l *LFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.D
 	// just before the URL expired finish and be verified.
 	row := &db.Upload{ID: id, OID: oid, Size: size, Kind: uploadKindPut, StorageKey: key,
 		Parts: []db.UploadPart{}, ExpiresAt: l.now().Add(max(ttl, 0) + stagedPutGrace)}
+	if userID != uuid.Nil {
+		row.UserID = &userID
+	}
 	if _, err := l.db.NewInsert().Model(row).Exec(ctx); err != nil {
 		return blob.PresignedRequest{}, fmt.Errorf("repo: record upload: %w", err)
 	}
@@ -640,31 +728,50 @@ const stagedPutGrace = time.Hour
 // stagedPutKey is where a presigned single PUT writes.
 func stagedPutKey(id uuid.UUID) string { return blob.PrefixTmp + "uploads/" + id.String() }
 
-// Verify implements LFSStore: it checks what presigned PUTs staged for the
-// object, newest first, promotes the first that matches the SHA-256 and
-// size, and discards those that do not. An object written straight to its
-// key, by a URL issued before uploads were staged, is re-hashed in place,
-// recorded if it matches and deleted if it does not.
-func (l *LFS) Verify(ctx context.Context, oid string, size int64) (LFSObject, error) {
-	if obj, err := l.Stat(ctx, oid); err == nil {
-		if obj.Size != size {
-			return LFSObject{}, fmt.Errorf("%w: %s has size %d, not %d", ErrChecksumMismatch, oid, obj.Size, size)
-		}
-		return obj, nil
-	}
+// Verify implements LFSStore: it checks what userID staged for the object
+// with presigned PUTs (what anyone staged, for uuid.Nil), newest first,
+// takes the first that matches the SHA-256 and size, and discards those
+// that do not. When the object is not stored yet the match is promoted to
+// it; when it is, the match only proves the User holds the bytes and is
+// discarded, so no second copy is kept. Either way the User of the staged
+// upload is recorded as an uploader. With nothing staged, an object that
+// is stored gives ErrNotFound, as one that is not, so Verify never says
+// whether an object exists or how large it is; an object written straight
+// to its key, by a URL issued before uploads were staged, is re-hashed in
+// place, recorded if it matches and deleted if it does not.
+func (l *LFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UUID) (LFSObject, error) {
 	if !model.IsSHA256(oid) || size < 0 {
 		return LFSObject{}, fmt.Errorf("%w: invalid oid or size", ErrInvalid)
 	}
+	stored, statErr := l.Stat(ctx, oid)
+	if statErr != nil && !errors.Is(statErr, ErrNotFound) {
+		return LFSObject{}, statErr
+	}
 	var rows []db.Upload
-	if err := l.db.NewSelect().Model(&rows).Where("oid = ?", oid).Where("size = ?", size).Where("kind = ?", uploadKindPut).
-		Where("expires_at > ?", l.now()).OrderExpr("created_at DESC").Limit(100).Scan(ctx); err != nil {
+	q := l.db.NewSelect().Model(&rows).Where("oid = ?", oid).Where("size = ?", size).Where("kind = ?", uploadKindPut).
+		Where("expires_at > ?", l.now())
+	if userID != uuid.Nil {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.OrderExpr("created_at DESC").Limit(100).Scan(ctx); err != nil {
 		return LFSObject{}, fmt.Errorf("repo: find staged uploads: %w", err)
 	}
 	mismatch := false
 	for i := range rows {
-		obj, err := l.promote(ctx, rows[i].StorageKey, oid, size)
+		var (
+			obj LFSObject
+			err error
+		)
+		if statErr == nil {
+			obj, err = stored, l.prove(ctx, rows[i].StorageKey, oid, size)
+		} else {
+			obj, err = l.promote(ctx, rows[i].StorageKey, oid, size)
+		}
 		switch {
 		case err == nil:
+			if err := l.recordUploaderOf(ctx, &rows[i]); err != nil {
+				return LFSObject{}, err
+			}
 			_ = l.discard(context.WithoutCancel(ctx), &rows[i])
 			return obj, nil
 		case errors.Is(err, blob.ErrNotFound):
@@ -675,6 +782,12 @@ func (l *LFS) Verify(ctx context.Context, oid string, size int64) (LFSObject, er
 		default:
 			return LFSObject{}, err
 		}
+	}
+	if statErr == nil {
+		if mismatch {
+			return LFSObject{}, fmt.Errorf("%w: %s", ErrChecksumMismatch, oid)
+		}
+		return LFSObject{}, fmt.Errorf("%w: no upload of lfs object %s to verify", ErrNotFound, oid)
 	}
 	obj, err := l.verifyInPlace(ctx, oid, size)
 	if errors.Is(err, ErrNotFound) && mismatch {
@@ -706,31 +819,39 @@ func (l *LFS) verifyInPlace(ctx context.Context, oid string, size int64) (LFSObj
 	return l.record(ctx, oid, size)
 }
 
-// promote hashes the object staged at key and, if its SHA-256 and size
-// match, copies it to the object's key server-side and records it. The
-// bytes are read once and never sent back through Hangar. It returns
+// prove hashes the object staged at key and checks its SHA-256 and size.
+// The bytes are read once and never sent back through Hangar. It returns
 // blob.ErrNotFound if nothing is staged, ErrChecksumMismatch if the
 // content is wrong, and ErrRetryable for a failure that may pass, such as a
 // read that broke more often than resumingReader retries.
-func (l *LFS) promote(ctx context.Context, key, oid string, size int64) (LFSObject, error) {
+func (l *LFS) prove(ctx context.Context, key, oid string, size int64) error {
 	rr, info, err := openResuming(ctx, l.blobs, key, l.readRetries, l.readBackoff)
 	if err != nil {
 		if errors.Is(err, blob.ErrNotFound) {
-			return LFSObject{}, err
+			return err
 		}
-		return LFSObject{}, fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
+		return fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
 	}
 	h := sha256.New()
 	n, err := io.Copy(h, rr)
 	_ = rr.Close()
 	if err != nil {
-		return LFSObject{}, fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
+		return fmt.Errorf("%w: repo: read upload: %w", ErrRetryable, err)
 	}
 	if n != size || info.Size != size {
-		return LFSObject{}, fmt.Errorf("%w: %s has %d bytes, not %d", ErrChecksumMismatch, oid, n, size)
+		return fmt.Errorf("%w: %s has %d bytes, not %d", ErrChecksumMismatch, oid, n, size)
 	}
 	if hex.EncodeToString(h.Sum(nil)) != oid {
-		return LFSObject{}, fmt.Errorf("%w: sha256 does not match %s", ErrChecksumMismatch, oid)
+		return fmt.Errorf("%w: sha256 does not match %s", ErrChecksumMismatch, oid)
+	}
+	return nil
+}
+
+// promote proves the object staged at key (prove) and copies it to the
+// object's key server-side and records it.
+func (l *LFS) promote(ctx context.Context, key, oid string, size int64) (LFSObject, error) {
+	if err := l.prove(ctx, key, oid, size); err != nil {
+		return LFSObject{}, err
 	}
 	if err := l.blobs.Copy(ctx, key, model.LFSObjectKey(oid)); err != nil {
 		return LFSObject{}, fmt.Errorf("%w: repo: store lfs object: %w", ErrRetryable, err)

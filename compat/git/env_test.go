@@ -53,6 +53,7 @@ type suite struct {
 	t        *testing.T
 	repos    repo.Service
 	owner    model.Principal
+	other    model.Principal
 	lfs      repo.LFSStore
 	blobs    *blobtest.Fake
 	replicas [2]*gitservertest.Instance
@@ -74,17 +75,17 @@ func newSuite(t *testing.T, factory BackendFactory, o suiteOptions) *suite {
 		blobs.PresignBaseURL = sim.URL + "/bucket"
 		blobs.MaxPresignPut = 5 << 30
 	}
-	b := factory(t, blobs, []string{"owner", "writer", "other"})
+	authz := authtest.NewAuthz()
+	authz.AnonymousRead = true
+	b := factory(t, blobs, []string{"owner", "writer", "other"}, authz)
 	owner, writer, other := b.Users["owner"], b.Users["writer"], b.Users["other"]
-	s := &suite{t: t, repos: b.Replica(t), owner: owner, lfs: b.LFS, blobs: blobs, git: gitservertest.NewGit(t)}
+	s := &suite{t: t, repos: b.Replica(t), owner: owner, other: other, lfs: b.LFS, blobs: blobs, git: gitservertest.NewGit(t)}
 
 	authn := authtest.NewAuthenticator()
 	authn.Add(tokOwner, token(owner, model.ScopeWrite))
 	authn.Add(tokWriter, token(writer, model.ScopeWrite))
 	authn.Add(tokReader, token(owner, model.ScopeRead))
 	authn.Add(tokOther, token(other, model.ScopeWrite))
-	authz := authtest.NewAuthz()
-	authz.AnonymousRead = true
 	for _, p := range []repo.CreateParams{
 		{ID: modelID, Visibility: model.VisibilityPublic, Actor: owner, InitialReadme: true},
 		{ID: privateID, Visibility: model.VisibilityPrivate, Actor: owner, InitialReadme: true},

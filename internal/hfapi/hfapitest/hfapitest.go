@@ -204,6 +204,12 @@ func New(t testing.TB, o Options) *Env {
 	if o.Deps != nil {
 		o.Deps(&deps)
 	}
+	if e.RepoFake != nil {
+		// Commits may reference only LFS objects the caller uploaded or
+		// can read, as with repo.Store.
+		e.RepoFake.CheckLFSReferences = true
+		e.RepoFake.CanReadFiles = repotest.CanReadFilesWith(deps.Authz)
+	}
 	h, err := hfapi.New(deps)
 	if err != nil {
 		t.Fatalf("hfapi.New: %v", err)

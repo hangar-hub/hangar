@@ -83,6 +83,11 @@ type Options struct {
 	// CompactThreshold is git.compact_threshold: a Commit or push that
 	// leaves more live packs than this enqueues a git.compact Job.
 	CompactThreshold int
+	// CanReadFiles reports whether p can read the files of r (the
+	// read_files permission), so a Commit may reference an LFS object that
+	// p can already read in another Repo (Referable). Nil means only
+	// objects the Repo holds or p uploaded are referable.
+	CanReadFiles func(ctx context.Context, p model.Principal, r *Repo) (bool, error)
 	// VerifyWait is lfs.verify_wait: how long a Commit or push waits for an
 	// LFS object written through a presigned URL to be verified before it
 	// fails. Zero means 10 minutes.

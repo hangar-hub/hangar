@@ -195,7 +195,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 		Webhooks: in.webhooks, Audit: in.audit, Quota: repoQuota{in.accounting}, Index: idx, Community: comm,
 		AnonymousRead: anonymousRead(in.auth), RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
 		MaxPackSize: cfg.Git.MaxPackSize.Int64(), AllowForcePush: cfg.Git.AllowForcePush, CompactThreshold: cfg.Git.CompactThreshold,
-		VerifyWait: cfg.LFS.VerifyWait, Log: in.log})
+		VerifyWait: cfg.LFS.VerifyWait, CanReadFiles: canReadFiles(in.auth.Authz()), Log: in.log})
 	if err != nil {
 		return nil, err
 	}
@@ -207,13 +207,25 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	in.datasets = &pipeline.Store{DB: d, Blobs: in.blobs}
 
 	// The security scan (W7). One gate enforces scan.block_unsafe_downloads
-	// for every protocol that serves file bytes, Pull-through links
-	// included, so it exists before the Upstream service.
+	// and scan.block_level for every protocol that serves file bytes,
+	// Pull-through links included, so it exists before the Upstream service.
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
 	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
 		s, err := in.auth.Settings.Get(ctx)
 		return s.ScanBlockUnsafeDownloads, err
 	})
+	in.unsafeGate.Level = func(ctx context.Context) (scan.Level, error) {
+		s, err := in.auth.Settings.Get(ctx)
+		if err != nil {
+			return "", err
+		}
+		level, ok := scan.ParseLevel(s.ScanBlockLevel)
+		if !ok {
+			// An unreadable stored value: the default.
+			return scan.LevelUnsafe, nil
+		}
+		return level, nil
+	}
 
 	// Upstreams and Pulls (W6).
 	in.client = upstream.NewHTTPClient(upstream.HTTPOptions{Version: version, Tracer: tel.Tracer()})
@@ -464,6 +476,22 @@ func anonymousRead(a *auth.Service) func(context.Context) (bool, error) {
 	return func(ctx context.Context) (bool, error) {
 		s, err := a.Settings.Get(ctx)
 		return s.AnonymousRead, err
+	}
+}
+
+// canReadFiles answers repo.Options.CanReadFiles with the read_files
+// permission, so a Commit may reference an LFS object its author can
+// already download from another Repo.
+func canReadFiles(az auth.Authz) func(context.Context, model.Principal, *repo.Repo) (bool, error) {
+	return func(ctx context.Context, p model.Principal, r *repo.Repo) (bool, error) {
+		err := az.Can(ctx, p, auth.ActionReadFiles, auth.Target{Repo: api.AuthRepoTarget(r)})
+		switch {
+		case err == nil:
+			return true, nil
+		case errors.Is(err, auth.ErrNotFound), errors.Is(err, auth.ErrForbidden), errors.Is(err, auth.ErrGated):
+			return false, nil
+		}
+		return false, err
 	}
 }
 

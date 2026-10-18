@@ -31,6 +31,7 @@ type InstanceSettings struct {
 	LocalLogin                  bool     `json:"local_login"`
 	UIExternalImages            bool     `json:"ui_external_images"`
 	ScanBlockUnsafeDownloads    bool     `json:"scan_block_unsafe_downloads"`
+	ScanBlockLevel              string   `json:"scan_block_level"`
 	WebhooksAllowPrivateTargets bool     `json:"webhooks_allow_private_targets"`
 	PullBandwidthLimit          int64    `json:"pull_bandwidth_limit"`
 	PullConcurrency             int      `json:"pull_concurrency"`
@@ -48,6 +49,7 @@ type SettingsPatch struct {
 	LocalLogin                  *bool     `json:"local_login,omitempty"`
 	UIExternalImages            *bool     `json:"ui_external_images,omitempty"`
 	ScanBlockUnsafeDownloads    *bool     `json:"scan_block_unsafe_downloads,omitempty"`
+	ScanBlockLevel              *string   `json:"scan_block_level,omitempty"`
 	WebhooksAllowPrivateTargets *bool     `json:"webhooks_allow_private_targets,omitempty"`
 	PullBandwidthLimit          *int64    `json:"pull_bandwidth_limit,omitempty"`
 	PullConcurrency             *int      `json:"pull_concurrency,omitempty"`
@@ -65,6 +67,7 @@ const (
 	SettingLocalLogin               = "security.local_login"
 	SettingUIExternalImages         = "ui.external_images"
 	SettingScanBlockUnsafe          = "scan.block_unsafe_downloads"
+	SettingScanBlockLevel           = "scan.block_level"
 	SettingWebhooksAllowPrivate     = "webhooks.allow_private_targets"
 	SettingPullBandwidthLimit       = "pull.bandwidth_limit"
 	SettingPullConcurrency          = "pull.concurrency"
@@ -73,6 +76,15 @@ const (
 	SettingPullThroughEnabled       = "pull.pull_through.enabled"
 	SettingPullThroughAllow         = "pull.pull_through.allow"
 	SettingPullThroughMinRole       = "pull.pull_through.min_role"
+)
+
+// Values of scan.block_level: how strict scan.block_unsafe_downloads is.
+// unsafe refuses files the scan marked unsafe; suspicious also refuses
+// files whose imports are on neither the allow nor the deny list. The
+// values match scan.Level.
+const (
+	ScanBlockLevelUnsafe     = "unsafe"
+	ScanBlockLevelSuspicious = "suspicious"
 )
 
 // settingsCacheTTL bounds how long another replica's change takes to apply.
@@ -93,7 +105,7 @@ func (st *SettingsStore) Defaults() InstanceSettings {
 	c := st.s.cfg
 	return InstanceSettings{
 		AnonymousRead: c.Security.AnonymousRead, Registration: c.Security.Registration, LocalLogin: c.Security.LocalLogin,
-		UIExternalImages: true, ScanBlockUnsafeDownloads: false, WebhooksAllowPrivateTargets: true,
+		UIExternalImages: true, ScanBlockUnsafeDownloads: false, ScanBlockLevel: ScanBlockLevelUnsafe, WebhooksAllowPrivateTargets: true,
 		PullBandwidthLimit: c.Pull.BandwidthLimit.Int64(), PullConcurrency: c.Pull.Concurrency,
 		PullWindows: slices.Clone(c.Pull.Windows), PullAllowOverrideWindows: true,
 		PullThroughEnabled: c.Pull.PullThrough.Enabled, PullThroughAllow: slices.Clone(c.Pull.PullThrough.Allow),
@@ -142,8 +154,8 @@ func settingTargets(s *InstanceSettings) map[string]any {
 	return map[string]any{
 		SettingAnonymousRead: &s.AnonymousRead, SettingRegistration: &s.Registration, SettingLocalLogin: &s.LocalLogin,
 		SettingUIExternalImages: &s.UIExternalImages, SettingScanBlockUnsafe: &s.ScanBlockUnsafeDownloads,
-		SettingWebhooksAllowPrivate: &s.WebhooksAllowPrivateTargets, SettingPullBandwidthLimit: &s.PullBandwidthLimit,
-		SettingPullConcurrency: &s.PullConcurrency, SettingPullWindows: &s.PullWindows,
+		SettingScanBlockLevel: &s.ScanBlockLevel, SettingWebhooksAllowPrivate: &s.WebhooksAllowPrivateTargets,
+		SettingPullBandwidthLimit: &s.PullBandwidthLimit, SettingPullConcurrency: &s.PullConcurrency, SettingPullWindows: &s.PullWindows,
 		SettingPullAllowOverrideWindows: &s.PullAllowOverrideWindows, SettingPullThroughEnabled: &s.PullThroughEnabled,
 		SettingPullThroughAllow: &s.PullThroughAllow, SettingPullThroughMinRole: &s.PullThroughMinRole,
 	}
@@ -175,6 +187,14 @@ func (p SettingsPatch) changes() (map[string]any, error) {
 	}
 	if p.ScanBlockUnsafeDownloads != nil {
 		set(SettingScanBlockUnsafe, *p.ScanBlockUnsafeDownloads)
+	}
+	if p.ScanBlockLevel != nil {
+		switch *p.ScanBlockLevel {
+		case ScanBlockLevelUnsafe, ScanBlockLevelSuspicious:
+			set(SettingScanBlockLevel, *p.ScanBlockLevel)
+		default:
+			errs = append(errs, fmt.Errorf("scan_block_level must be unsafe or suspicious"))
+		}
 	}
 	if p.WebhooksAllowPrivateTargets != nil {
 		set(SettingWebhooksAllowPrivate, *p.WebhooksAllowPrivateTargets)

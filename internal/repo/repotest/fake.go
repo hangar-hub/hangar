@@ -42,6 +42,14 @@ type Fake struct {
 	// LFS stores LFS objects. Commits with OpAddLFS need the object in it,
 	// and OpAdd stores paths that .gitattributes tracks with LFS in it.
 	LFS *FakeLFS
+	// CheckLFSReferences makes Commits and pushes refuse pointers to LFS
+	// objects the actor may not reference (Referable), as repo.Store does.
+	// Off by default, so tests can seed objects with FakeLFS.Put and
+	// commit pointers to them as any user.
+	CheckLFSReferences bool
+	// CanReadFiles reports whether p can read r's files, for Referable.
+	// Nil means only objects the Repo holds or p uploaded are referable.
+	CanReadFiles func(ctx context.Context, p model.Principal, r *repo.Repo) (bool, error)
 
 	root string
 	git  git
@@ -737,6 +745,9 @@ func (f *Fake) commitLocked(ctx context.Context, r *fakeRepo, p repo.CommitParam
 				if err != nil {
 					return nil, err
 				}
+				if err := f.LFS.RecordUploader(ctx, obj.OID, p.Actor.UserID); err != nil {
+					return nil, err
+				}
 				lfsRefs = append(lfsRefs, repo.LFSRef{OID: obj.OID, Size: obj.Size, Present: true})
 				content = bytes.NewReader(model.LFSPointer{OID: obj.OID, Size: obj.Size}.Bytes())
 			}
@@ -744,6 +755,15 @@ func (f *Fake) commitLocked(ctx context.Context, r *fakeRepo, p repo.CommitParam
 				return nil, err
 			}
 		case repo.OpAddLFS:
+			if !r.Mirror || !p.AllowMirror {
+				refused, err := f.checkReferencesLocked(ctx, p.Actor, r, []model.LFSPointer{{OID: op.OID, Size: op.Size}})
+				if err != nil {
+					return nil, err
+				}
+				if len(refused) > 0 {
+					return nil, fmt.Errorf("%w: %s (%s)", repo.ErrLFSObjectMissing, op.OID, op.Path)
+				}
+			}
 			obj, err := f.LFS.Stat(ctx, op.OID)
 			size := op.Size
 			switch {
@@ -1298,6 +1318,11 @@ func (f *Fake) ApplyPack(ctx context.Context, p repo.ApplyPackParams) error {
 			return fmt.Errorf("%w: unpack failed: %w", repo.ErrInvalid, err)
 		}
 	}
+	if p.Source == repo.SourcePush && f.CheckLFSReferences {
+		if err := f.checkPushedPointersLocked(ctx, r, p); err != nil {
+			return err
+		}
+	}
 	if p.Source == repo.SourcePush {
 		for _, u := range p.Updates {
 			if !strings.HasPrefix(u.Name, model.RefHeads) && !strings.HasPrefix(u.Name, model.RefTags) {
@@ -1319,6 +1344,46 @@ func (f *Fake) ApplyPack(ctx context.Context, p repo.ApplyPackParams) error {
 		return err
 	}
 	r.LastModified = f.now()
+	return nil
+}
+
+// checkPushedPointersLocked refuses a push whose new Commits add LFS
+// pointers to objects the pusher may not reference, with repo.Store's
+// message for objects that were not uploaded.
+func (f *Fake) checkPushedPointersLocked(ctx context.Context, r *fakeRepo, p repo.ApplyPackParams) error {
+	var ptrs []model.LFSPointer
+	for _, u := range p.Updates {
+		if u.New.IsZero() {
+			continue
+		}
+		args := []string{"rev-list", "--objects", string(u.New), "--not", "--all"}
+		out, err := f.git.run(ctx, r.dir, nil, nil, args...)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			oid, _, _ := strings.Cut(line, " ")
+			if oid == "" {
+				continue
+			}
+			content, err := f.git.run(ctx, r.dir, nil, nil, "cat-file", "-p", oid)
+			if err != nil || len(content) > model.MaxLFSPointerSize {
+				continue
+			}
+			if ptr, err := model.ParseLFSPointer(content); err == nil {
+				ptrs = append(ptrs, ptr)
+			}
+		}
+	}
+	refused, err := f.checkReferencesLocked(ctx, p.Actor, r, ptrs)
+	if err != nil {
+		return err
+	}
+	for _, ptr := range ptrs {
+		if slices.Contains(refused, ptr.OID) {
+			return &repo.PolicyError{Message: fmt.Sprintf("the push refers to LFS object %s (%d bytes), which has not been uploaded; run git lfs push --all and push again", ptr.OID, ptr.Size)}
+		}
+	}
 	return nil
 }
 
@@ -1522,6 +1587,120 @@ func (f *Fake) LFSRefs(ctx context.Context, id model.RepoID, oids []string) (map
 	if err != nil {
 		return nil, err
 	}
+	return f.lfsRefsLocked(ctx, r, oids)
+}
+
+// Referable implements repo.Service with repo.Store's rules: the system
+// user may reference anything; others may reference objects the Repo
+// holds, objects they uploaded, and objects held by another Repo whose
+// files CanReadFiles says they can read.
+func (f *Fake) Referable(ctx context.Context, p model.Principal, target *repo.Repo, oids []string) (map[string]bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var r *fakeRepo
+	if target != nil {
+		r = f.repos[target.UUID]
+	}
+	return f.referableLocked(ctx, p, r, oids)
+}
+
+func (f *Fake) referableLocked(ctx context.Context, p model.Principal, target *fakeRepo, oids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if p.Kind == model.PrincipalSystem {
+		for _, o := range oids {
+			out[o] = true
+		}
+		return out, nil
+	}
+	holds := func(r *fakeRepo) (map[string]bool, error) {
+		refs, err := f.lfsRefsLocked(ctx, r, oids)
+		if err != nil {
+			return nil, err
+		}
+		held := map[string]bool{}
+		for o, ref := range refs {
+			held[o] = ref.Present
+		}
+		return held, nil
+	}
+	if target != nil {
+		held, err := holds(target)
+		if err != nil {
+			return nil, err
+		}
+		for o, ok := range held {
+			out[o] = out[o] || ok
+		}
+	}
+	up, err := f.LFS.Uploaded(ctx, p.UserID, oids)
+	if err != nil {
+		return nil, err
+	}
+	for o, ok := range up {
+		out[o] = out[o] || ok
+	}
+	if f.CanReadFiles == nil {
+		return out, nil
+	}
+	for _, r := range f.repos {
+		if r == target || r.DeletedAt != nil {
+			continue
+		}
+		held, err := holds(r)
+		if err != nil {
+			return nil, err
+		}
+		fresh := false
+		for o, ok := range held {
+			fresh = fresh || (ok && !out[o])
+		}
+		if !fresh {
+			continue
+		}
+		ok, err := f.CanReadFiles(ctx, p, copyRepo(r))
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			for o, h := range held {
+				out[o] = out[o] || h
+			}
+		}
+	}
+	return out, nil
+}
+
+// checkReferencesLocked returns the objects of oids that p may not
+// reference in r and did not upload, after verifying p's presigned PUTs of
+// them, when CheckLFSReferences is on.
+func (f *Fake) checkReferencesLocked(ctx context.Context, p model.Principal, r *fakeRepo, ptrs []model.LFSPointer) ([]string, error) {
+	if !f.CheckLFSReferences || len(ptrs) == 0 {
+		return nil, nil
+	}
+	oids := make([]string, 0, len(ptrs))
+	for _, ptr := range ptrs {
+		oids = append(oids, ptr.OID)
+	}
+	ok, err := f.referableLocked(ctx, p, r, oids)
+	if err != nil {
+		return nil, err
+	}
+	var refused []string
+	for _, ptr := range ptrs {
+		if ok[ptr.OID] {
+			continue
+		}
+		if ptr.Size > 0 {
+			if _, err := f.LFS.Verify(ctx, ptr.OID, ptr.Size, p.UserID); err == nil {
+				continue
+			}
+		}
+		refused = append(refused, ptr.OID)
+	}
+	return refused, nil
+}
+
+func (f *Fake) lfsRefsLocked(ctx context.Context, r *fakeRepo, oids []string) (map[string]repo.LFSRef, error) {
 	refs, err := f.refsLocked(ctx, r)
 	if err != nil {
 		return nil, err

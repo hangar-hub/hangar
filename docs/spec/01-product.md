@@ -74,7 +74,7 @@ Every feature below is in scope for v1.0. IDs are referenced from the build plan
 - **UP-4** Upload with `hangar push <dir> <repo>`.
 - **UP-5** Large files: a single file up to 5 TiB (the S3 object limit); no request buffers a whole file in memory or on local disk.
 - **UP-7** Xet uploads: `huggingface_hub` with `hf_xet` installed (the default) uploads with no client setup. Hangar accepts the Xet protocol and stores whole files ([03](03-hf-api.md)).
-- **UP-6** Deduplication: an LFS object that already exists anywhere in the Instance is never stored twice.
+- **UP-6** Deduplication: an LFS object that already exists anywhere in the Instance is never stored twice. A Commit may still reference it only when its author uploaded the bytes or can read a Repo that holds it ([04](04-git.md) "Who may reference an LFS object").
 
 ### Downloading (DOWN)
 

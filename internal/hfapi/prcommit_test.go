@@ -100,15 +100,16 @@ func TestCreatePRVerifiesPresignedLFSObjects(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	rp, base := seed(t, e, "alice", modelID("alice", "presigned"), model.VisibilityPublic, map[string]string{"a.txt": "a"})
+	bob := e.Users["bob"].Principal.UserID
 	put := func(content string) string {
 		oid := sha256hex(content)
-		require.NoError(t, e.RepoFake.LFS.Store.Put(ctx, model.LFSObjectKey(oid), strings.NewReader(content), int64(len(content))))
+		require.NoError(t, e.RepoFake.LFS.Stage(ctx, oid, []byte(content), bob))
 		return oid
 	}
 
-	// An object stored with the wrong content fails verification.
+	// An object bob staged with the wrong content fails verification.
 	bad := sha256hex("expected")
-	require.NoError(t, e.RepoFake.LFS.Store.Put(ctx, model.LFSObjectKey(bad), strings.NewReader("tampered"), int64(len("tampered"))))
+	require.NoError(t, e.RepoFake.LFS.Stage(ctx, bad, []byte("tampered"), bob))
 	r := e.Request(t, http.MethodPost, "/api/models/alice/presigned/commit/main?create_pr=1", "bob",
 		ndjson(t, header("Bad", string(base)), lfsLine("m.bin", bad, len("tampered"))))
 	require.Equal(t, http.StatusBadRequest, r.StatusCode, string(readBody(t, r)))
@@ -129,9 +130,9 @@ type slowLFS struct {
 	release chan struct{}
 }
 
-func (s slowLFS) Verify(ctx context.Context, oid string, size int64) (repo.LFSObject, error) {
+func (s slowLFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UUID) (repo.LFSObject, error) {
 	<-s.release
-	return s.LFSStore.Verify(ctx, oid, size)
+	return s.LFSStore.Verify(ctx, oid, size, userID)
 }
 
 func TestCreatePRVerifyWait(t *testing.T) {
@@ -145,7 +146,7 @@ func TestCreatePRVerifyWait(t *testing.T) {
 	rp, base := seed(t, e, "alice", modelID("alice", "slow"), model.VisibilityPublic, map[string]string{"a.txt": "a"})
 	content := "slow object"
 	oid := sha256hex(content)
-	require.NoError(t, e.RepoFake.LFS.Store.Put(ctx, model.LFSObjectKey(oid), strings.NewReader(content), int64(len(content))))
+	require.NoError(t, e.RepoFake.LFS.Stage(ctx, oid, []byte(content), e.Users["bob"].Principal.UserID))
 	body := ndjson(t, header("Upload", string(base)), lfsLine("m.bin", oid, len(content)))
 
 	// The wait runs out: no pull request, and the client is told to retry.

@@ -69,7 +69,7 @@ func TestPresignedStoreAndQuota(t *testing.T) {
 		u, err := e.lfs.PresignGet(e.ctx, oid, time.Hour, "w.bin")
 		require.NoError(t, err)
 		require.Contains(t, u, "https://s3.example")
-		req, err := e.lfs.PresignPut(e.ctx, sha256Hex([]byte("new")), 3, time.Hour)
+		req, err := e.lfs.PresignPut(e.ctx, sha256Hex([]byte("new")), 3, time.Hour, uuid.Nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, req.URL)
 		up, err := e.lfs.CreateUpload(e.ctx, repo.UploadParams{OID: oid, Size: 20, Multipart: true, PartSize: 10})

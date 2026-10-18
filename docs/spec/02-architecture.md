@@ -154,6 +154,7 @@ All tables have `created_at` and `updated_at` (UTC). IDs are UUIDv7 unless state
 | `commits` | Commit metadata cache for fast listing | `repo_id`, `sha`, `parents`, `author`, `committer`, `title`, `message`, `authored_at` |
 | `tree_entries` | Flattened file list per indexed Commit, for fast Hub API listing | `repo_id`, `commit`, `path`, `type`, `size`, `git_oid`, `lfs_oid`, `lfs_size`, `last_commit` |
 | `lfs_objects` | One row per stored LFS object | `oid` (SHA-256, primary key), `size`, `storage_key`, `verified_at`, `last_referenced_at` |
+| `lfs_uploaders` | Users who uploaded an LFS object's bytes, so their Commits may reference it ([04](04-git.md) "Who may reference an LFS object") | `oid`, `user_id` |
 | `repo_lfs` | Which Repos reference an LFS object (access control and GC) | `repo_id`, `oid`, `present` (bool, false for not-yet-pulled files in a Partial mirror) |
 | `uploads` | In-progress multipart uploads | `oid`, `size`, `upload_id`, `storage_key`, `user_id`, `repo_id`, `parts` (json), `expires_at` |
 | `upstreams` | Configured Upstreams | `name`, `base_url`, `kind` (`hf`), `enabled`, `instance_token_ciphertext` |

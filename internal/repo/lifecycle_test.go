@@ -164,7 +164,7 @@ func TestDeleteRestoreAndPurge(t *testing.T) {
 		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "doomed"}
 		r := e.create(repo.CreateParams{ID: id, Actor: alice})
 		weights := []byte("weights")
-		oid := e.putLFS(weights)
+		oid := e.putLFS(weights, alice)
 		e.commit(id, alice, repo.Operation{Kind: repo.OpAddLFS, Path: "w.bin", OID: oid, Size: int64(len(weights))})
 
 		require.NoError(t, e.svc.Delete(e.ctx, id, alice))

@@ -121,7 +121,7 @@ Two checks apply to every boundary that accepts requests:
 | T | A path escapes the Repo (`../`, absolute, backslash, NUL) or names `.git` in a spelling a client checks out as `.git` (CVE-2014-9390). | `model.CleanRepoPath` and `model.ValidPathComponent` port git's NTFS and HFS+ checks and limit paths to 4,096 bytes (`internal/model/entry.go`). | `TestCleanRepoPath`, `TestValidPathComponent` (`internal/model/model_test.go`). **Residual risk:** paths that differ only in case or Unicode normalisation can coexist, as on the Hub. |
 | T | A zip export entry lands outside the export folder. | Every entry must pass `CleanRepoPath` unchanged, or the Job fails (`internal/repo/jobs.go`). | `TestZipExportRefusesUnsafePaths` (`internal/repo/treecheck_test.go`). |
 | T | A folder uploaded with `hangar push` or `hangar import` holds a symbolic link out of it, such as to `~/.ssh`. | Links are followed only into the folder or the Hugging Face cache (`internal/cli/symlinks.go`). | `TestPushSkipsSymlinksOutOfTheFolder`, `TestWithin`, `TestSymlinksToCacheBlobsAreFollowed` (`internal/cli/symlinks_test.go`). |
-| I | A user learns that an LFS or Xet object exists, or downloads it, by committing a pointer to its hash. | None: LFS objects are deduplicated across the Instance, as the spec requires. | **Residual risk, open decision.** Needs the exact SHA-256 and size. See [Open decisions](#open-decisions). |
+| I | A user learns that an LFS or Xet object exists, or downloads it, by committing a pointer to its hash. | Objects stay stored once per Instance, but a Commit, push or pull request may reference one only when its author uploaded the bytes (`lfs_uploaders`) or can read a Repo that holds it (`repo.Store.Referable`, `internal/repo/references.go`). Anything else is refused as an object that was never uploaded. The batch API, the native upload plan and verify ask for the bytes of such an object as if it did not exist, never giving its size; an upload of bytes already stored is checked and discarded, with no second copy (decided by James on 2026-10-18). | `TestLFSObjectsOfPrivateReposCannotBeReferenced` (`cmd/hangar/lfs_references_test.go`: batch, Hub API commit and `create_pr`, git push and Xet, a reader who may reference it, and uploads through git-lfs and Xet that succeed); `TestCommitsReferenceOnlyObjectsTheActorUploadedOrCanRead`, `TestUploadsOfStoredObjectsProveTheBytes` (`internal/repo/references_test.go`); `TestLFSBatchAsksForObjectsTheCallerCannotUse` (`internal/gitserver`); `TestCommitsCannotReferenceObjectsOfPrivateRepos` (`internal/hfapi`); `TestXetUploadsRecordUploadersAndRevealNothing` (`internal/xet`); compat `TestLFSObjectsOfOtherReposNeedTheirBytes` (`compat/git`), `test_upload_of_an_object_stored_in_another_users_private_repo` (`compat/hf`, with and without Xet), `test_file_stored_in_another_users_private_repo` (`compat/xet`). **Residual risk:** see [LFS object references](#lfs-object-references). |
 | I | Usernames and Roles on a closed Instance are listed through Namespace profiles, Organisation member lists, a user's likes, Namespace search results or public Collections. | While `anonymous_read` is off, reading a Namespace needs a signed-in caller (`Authorizer.canSeeNamespace` in `internal/auth/authz.go`), checked before any lookup, so anonymous callers get 401 whether or not the Namespace exists; search and Collection lists leave the closed items out (`internal/api/namespaces.go`, `orgs.go`, `search.go`, `internal/hfapi/likes.go`, `internal/collections/service.go`). Decided by James on 2026-10-18. | `TestNamespacesNeedSignInWhileAnonymousReadIsOff` (`cmd/hangar/namespace_access_test.go`), `TestNamespaceReadFollowsAnonymousRead` (`internal/auth/authz_test.go`), and the `profile` rule of `TestRouteAuthorisationMatrix` (`cmd/hangar/routes_authz_test.go`), which probes each profile route with the setting off and on. **Residual risk:** every signed-in user, whatever their Roles, can still list every username and Organisation through search and profiles; with `anonymous_read` on, they are public, as on the Hub. |
 | D | Large or many requests exhaust a replica. | Request bodies and batches are bounded per protocol (below). | **Residual risk:** no per-user or per-IP request rate limit; use the proxy. |
 | R | A user denies a change. | Security-relevant actions are audited: sign-ins, Tokens, Members, Repo visibility, rename, transfer and delete, settings (`internal/audit`). | `TestEveryW5ActionIsAudited` (`internal/api/identity_test.go`) for sign-ins, Tokens, users, invites and Members; `TestCreateAndSettings` and `TestRenameAndTransferRedirect` (`internal/repo/lifecycle_test.go`) for visibility, renames and transfers. |
@@ -136,6 +136,7 @@ Two checks apply to every boundary that accepts requests:
 | D | Oversized LFS batch requests. | 1,000 objects and a 4 MiB body per batch (`internal/gitserver/lfs.go`). | `TestLFSRequestErrors` (`internal/gitserver/lfs_errors_test.go`), `FuzzParseBatch` (`internal/gitserver/fuzz_test.go`). |
 | D | Xet shards that make the server reload indexes without end (CPU amplification). | Index reloads are paid for by what a shard names (`internal/xet/indexcache.go`). | `TestShardIndexMemoryIsBounded` (`internal/xet/index_limits_test.go`), `TestIndexReloadAllowance`; `FuzzParseXorb`, `FuzzParseShard` (`internal/xet/fuzz_test.go`). |
 | S | A signed LFS or Xet URL is forged, reused for another object or extended. | HMAC-SHA256 over the path, scope, expiry and every query parameter, with a key derived from the Instance key by HKDF, compared in constant time; keys and values are escaped before signing (`internal/httpx/signer.go`). Xet CAS tokens carry a scope and an expiry. | `TestSigner` (`internal/httpx/httpx_test.go`), `TestCASScopesExpiryAndReject` (`internal/xet/cas_test.go`). |
+| I | The git-lfs batch, verify or a Xet shard answer says whether an object exists, or its size. | Objects the caller may not reference get upload actions like missing ones; verify answers 404 until the caller's own upload is checked; Xet errors give no stored size, and a xorb Hangar has is verified before `was_inserted: false` is answered. | `TestLFSBatchAsksForObjectsTheCallerCannotUse` (`internal/gitserver/references_test.go`), `TestXetUploadsRecordUploadersAndRevealNothing` and `TestAcceptShardRejects` (`internal/xet/service_test.go`). |
 | T | An upload replaces a verified object, or stores bytes that do not match their SHA-256. | Uploads go to a staging key and are verified before they move into place (`internal/repo/`). | `TestPresignedPutVerifyRejectsWrongContent`, `TestPresignedPutCannotReplaceAVerifiedObject` (`internal/repo/presign_test.go`). |
 | E | A write Token force-pushes the default branch. | Allowed only for a Namespace admin, as spec 04 says (`gitserver.canForcePush`). | **Residual risk:** for that one check the Role decides, not the Token scope, so a Namespace admin's write Token can force-push. |
 | I | A pickle stored in git rather than LFS leaves through `git clone`. | `scan.Gate.CheckGit` runs before every fetch (`internal/gitserver/smart.go`). | `TestGateChecksGitFetches` (`internal/scan/bypass_test.go`); see [The download gate](#the-download-gate). |
@@ -223,13 +224,14 @@ Hangar-signed links for LFS, Pull-through and zip exports run the download gate 
 
 ## The download gate
 
-Pickle-based files (PyTorch, joblib, NumPy object arrays and raw pickles) can run code when a client loads them. Hangar scans them and, with `scan.block_unsafe_downloads` on, refuses to serve risky ones. The setting is off by default. The rules for users are in [Blocking unsafe downloads](../operate/security.md#blocking-unsafe-downloads).
+Pickle-based files (PyTorch, joblib, NumPy object arrays and raw pickles) can run code when a client loads them. Hangar scans them and, with `scan.block_unsafe_downloads` on, refuses to serve risky ones. The setting is off by default. `scan.block_level` sets how strict it is: `unsafe` (the default) or `suspicious`. The rules for users are in [Blocking unsafe downloads](../operate/security.md#blocking-unsafe-downloads).
 
 ### One gate for every route
 
 Every route that serves a Repo's file bytes calls `scan.Gate` (`internal/scan/gate.go`): `CheckFile` for paths, `CheckTree` for zip exports, `CheckObjects` for objects requested by OID (git-lfs, Pull-through, Ollama) and `CheckGit` for git fetches. The gate refuses a file that can run code when:
 
 - The scan marked it unsafe (`BlockUnsafe`).
+- The scan marked it suspicious and `scan.block_level` is `suspicious` (`BlockSuspicious`).
 - It has no scan result yet, because the scan is running or its Job failed (`BlockNotScanned`).
 - The scan could not follow it to where every loader stops (`BlockPartial`).
 - The history is too long to check (`BlockHistory`).
@@ -241,7 +243,8 @@ The Hub API and web UI accept `accept_risk=1`; git-lfs and Ollama answer 403 wit
 | `TestServingSurfaceIsClassified` (`cmd/hangar/unsafe_surface_test.go`) | Enumerates the router's protocols, its signed-link routes and every function that reads a Repo file's bytes, and fails on any that is not classified. |
 | `TestUnsafeDownloadGateCoversEveryRoute` (`cmd/hangar/unsafe_test.go`) | Every download route refuses an unsafe file. |
 | `TestUnsafeDownloadGateCatchesScannerBypasses` (`cmd/hangar/unsafe_bypass_test.go`) | Each known bypass is refused through the full server. |
-| `TestGateRefusesUnsafeAndUnscannedFilesThatRunCode`, `TestGateRefusesPartialScans`, `TestGateChecksEveryCommitThatHoldsAnObject`, `TestGateChecksObjectsOfTags`, `TestGateChecksGitFetches` (`internal/scan/`) | The gate's rules, including objects held only by older Commits or tags. |
+| `TestSuspiciousDownloadsFollowTheBlockLevel` (`cmd/hangar/unsafe_level_test.go`) | Every download route serves a suspicious pickle at level `unsafe` and refuses it at level `suspicious`, where `accept_risk=1` still works on the Hub API. |
+| `TestGateRefusesUnsafeAndUnscannedFilesThatRunCode`, `TestGateBlockLevel`, `TestGateRefusesPartialScans`, `TestGateChecksEveryCommitThatHoldsAnObject`, `TestGateChecksObjectsOfTags`, `TestGateChecksGitFetches` (`internal/scan/`) | The gate's rules, including objects held only by older Commits or tags. |
 
 ### How the scanner reads files
 
@@ -261,12 +264,22 @@ Bypasses fixed in phase 3, each with a regression test in `internal/scan/bypass_
 
 These are accepted, documented, or waiting for a decision:
 
-- **Suspicious imports download.** Only imports on the deny list block. A function that runs code and is on neither list is suspicious and downloads, because model classes from `transformers` and `sklearn` are on neither list. This is an [open decision](#open-decisions).
+- **Suspicious imports download at the default level.** At `scan.block_level: unsafe`, only imports on the deny list block, so a function that runs code and is on neither list is suspicious and downloads; the level is the default because model classes from `transformers` and `sklearn` are on neither list. Operators who want what `torch.load(weights_only=True)` refuses set the level to `suspicious` (decided by James on 2026-10-18; `TestSuspiciousDownloadsFollowTheBlockLevel`).
 - **Files are chosen by name.** A pickle under a name no standard loader uses is neither scanned nor gated. Code loaded with `trust_remote_code` can load anything, but it already runs the Repo's Python.
 - **Some formats give partial results** and are refused when blocking is on: xz and lzma compression (Go's standard library has no decoder), old PyTorch tar archives, unusual joblib arrays, and zip archives Go cannot open.
 - **joblib wrapper aliases.** The scanner recognises `NumpyArrayWrapper` by name; a module that imports it under another name is not recognised, although its import still shows.
 - **Long histories.** Objects of Repos with more than 20,000 Commits or 50,000 LFS file changes are decided from the history the gate can walk, and git fetches of such Repos are refused.
 - **`redirect` mode** presigned URLs are checked when issued, not when used.
+
+## LFS object references
+
+Decided by James on 2026-10-18 ("check at Commit"); the rules are in [04](../spec/04-git.md) "Who may reference an LFS object". What remains:
+
+- **Pulls into a Mirror are not checked.** A Pull marks an object present when the Upstream's Repo names it and the Instance already stores it, without downloading it again, and Pull-through serves such an object from the store. A user who can start a Pull from an Upstream on which they can commit a pointer without its bytes could reach an object they cannot read. Instance admins choose every Upstream; huggingface.co, and Hangar from this version, refuse such commits.
+- **Xet proof rests on chunk structure.** A shard proves the upload when its file rebuilds, from xorbs Hangar holds, into the claimed SHA-256. A client that knows the xorb hashes and chunk ranges of someone else's file could name them without sending the bytes. Hangar never serves Xet reconstruction data, file hashes or xorb hashes (it offers no Xet downloads), so they are known only to whoever had the file.
+- **Uploaders are recorded for good.** A User who once uploaded an object may reference it for as long as it is stored, also after losing access to the Repo it came from; they held the bytes. Garbage collection removes the record with the object.
+- **Objects stored before the change** have no uploaders, so only readers of the Repos holding them may reference them without an upload.
+- **Readable means `read_files` now.** A User who can read a Repo that holds an object may reference it in their own Repos, including a public one, which makes it readable to everyone. That is the same as downloading and uploading it again.
 
 ## Token scopes
 
@@ -345,10 +358,7 @@ How to verify signatures is in [Verify the image](../operate/security.md#verify-
 
 ## Open decisions
 
-These are not decided yet, so the current behaviour stands and is listed as a residual risk above. Each is recorded with its options in `docs/build/decisions.md`:
-
-- **Should the download gate also refuse suspicious pickles?** Keep the deny list only; block suspicious pickles too, as `torch.load(weights_only=True)` would, which refuses most `sklearn` and full-model pickles; or make the level a setting.
-- **Who may reference an LFS or Xet object by its hash?** Accept and document the global deduplication; deduplicate only objects the caller can read or uploaded; or keep global storage and check at Commit time that each new pointer was uploaded by the caller or is readable by them, and stop the batch API from revealing an object's stored size.
+None. James decided the three Phase 3 security questions on 2026-10-18; each decision and its tests are recorded in `docs/build/decisions.md` and in the rows above.
 
 ## Report a vulnerability
 

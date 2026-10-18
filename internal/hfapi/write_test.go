@@ -212,6 +212,7 @@ func TestCommit(t *testing.T) {
 	weights := "new weights"
 	_, err := e.LFS.Ingest(context.Background(), sha256hex(weights), int64(len(weights)), strings.NewReader(weights))
 	require.NoError(t, err)
+	require.NoError(t, e.LFS.RecordUploader(context.Background(), sha256hex(weights), e.Users["alice"].Principal.UserID))
 
 	body := ndjson(t,
 		header("Upload model", string(base)),

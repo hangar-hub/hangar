@@ -20,14 +20,26 @@ import (
 
 // FakeLFS is an in-memory repo.LFSStore over a blob.Store (usually a
 // blobtest.Fake). It verifies SHA-256 and size exactly as the real store
-// must, so tests of upload handlers catch corrupt uploads.
+// must, so tests of upload handlers catch corrupt uploads, and records
+// uploaders as the real store does.
 type FakeLFS struct {
 	Store blob.Store
 
-	mu      sync.Mutex
-	objects map[string]repo.LFSObject
-	uploads map[uuid.UUID]*fakeUpload
-	now     func() time.Time
+	mu        sync.Mutex
+	objects   map[string]repo.LFSObject
+	uploads   map[uuid.UUID]*fakeUpload
+	uploaders map[string]map[uuid.UUID]bool
+	// staged are presigned PUTs, newest last.
+	staged []stagedPut
+	now    func() time.Time
+}
+
+// stagedPut is where a presigned PUT writes until Verify checks it.
+type stagedPut struct {
+	oid    string
+	size   int64
+	key    string
+	userID uuid.UUID
 }
 
 type fakeUpload struct {
@@ -42,7 +54,8 @@ var _ repo.LFSStore = (*FakeLFS)(nil)
 
 // NewFakeLFS returns an empty FakeLFS writing to store.
 func NewFakeLFS(store blob.Store) *FakeLFS {
-	return &FakeLFS{Store: store, objects: map[string]repo.LFSObject{}, uploads: map[uuid.UUID]*fakeUpload{}, now: time.Now}
+	return &FakeLFS{Store: store, objects: map[string]repo.LFSObject{}, uploads: map[uuid.UUID]*fakeUpload{},
+		uploaders: map[string]map[uuid.UUID]bool{}, now: time.Now}
 }
 
 // Put stores content as a verified object and returns its OID, for test setup.
@@ -76,12 +89,23 @@ func (f *FakeLFS) StatMany(_ context.Context, oids []string) (map[string]repo.LF
 }
 
 // Ingest implements repo.LFSStore. It hashes while it writes to a temporary
-// key and moves the object into place only if it matches.
+// key and moves the object into place only if it matches. An object that
+// is already stored is hashed and checked but not written again.
 func (f *FakeLFS) Ingest(ctx context.Context, oid string, size int64, r io.Reader) (repo.LFSObject, error) {
 	if !model.IsSHA256(oid) {
 		return repo.LFSObject{}, fmt.Errorf("%w: invalid oid %q", repo.ErrInvalid, oid)
 	}
 	h := sha256.New()
+	if o, err := f.Stat(ctx, oid); err == nil {
+		n, err := io.Copy(h, io.LimitReader(r, size+1))
+		if err != nil {
+			return repo.LFSObject{}, err
+		}
+		if n != size || hex.EncodeToString(h.Sum(nil)) != oid {
+			return repo.LFSObject{}, fmt.Errorf("%w: the content does not match SHA-256 %s and %d bytes", repo.ErrChecksumMismatch, oid, size)
+		}
+		return o, nil
+	}
 	tmp := blob.PrefixTmp + uuid.NewString()
 	if err := f.Store.Put(ctx, tmp, io.TeeReader(r, h), size); err != nil {
 		_ = f.Store.Delete(ctx, tmp)
@@ -99,6 +123,36 @@ func (f *FakeLFS) Ingest(ctx context.Context, oid string, size int64, r io.Reade
 		return repo.LFSObject{}, err
 	}
 	return f.record(oid, size, key), nil
+}
+
+// RecordUploader implements repo.LFSStore.
+func (f *FakeLFS) RecordUploader(_ context.Context, oid string, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.objects[oid]; !ok {
+		return fmt.Errorf("%w: lfs object %s", repo.ErrNotFound, oid)
+	}
+	if f.uploaders[oid] == nil {
+		f.uploaders[oid] = map[uuid.UUID]bool{}
+	}
+	f.uploaders[oid][userID] = true
+	return nil
+}
+
+// Uploaded implements repo.LFSStore.
+func (f *FakeLFS) Uploaded(_ context.Context, userID uuid.UUID, oids []string) (map[string]bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]bool{}
+	for _, o := range oids {
+		if userID != uuid.Nil && f.uploaders[o][userID] {
+			out[o] = true
+		}
+	}
+	return out, nil
 }
 
 func (f *FakeLFS) record(oid string, size int64, key string) repo.LFSObject {
@@ -243,6 +297,9 @@ func (f *FakeLFS) CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob
 	f.mu.Lock()
 	delete(f.uploads, id)
 	f.mu.Unlock()
+	if err == nil {
+		err = f.RecordUploader(ctx, u.OID, u.userID)
+	}
 	return obj, err
 }
 
@@ -263,36 +320,107 @@ func (f *FakeLFS) AbortUpload(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// PresignPut implements repo.LFSStore.
-func (f *FakeLFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration) (blob.PresignedRequest, error) {
+// PresignPut implements repo.LFSStore. Like repo.LFS, the URL writes to a
+// staging key of its own that Verify checks.
+func (f *FakeLFS) PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration, userID uuid.UUID) (blob.PresignedRequest, error) {
 	if !model.IsSHA256(oid) {
 		return blob.PresignedRequest{}, fmt.Errorf("%w: invalid oid", repo.ErrInvalid)
 	}
+	key := blob.PrefixTmp + "uploads/" + uuid.NewString()
 	// Like repo.LFS, sign no headers: huggingface_hub sends none on a
 	// basic upload. Verify checks the content.
-	return f.Store.PresignPut(ctx, model.LFSObjectKey(oid), size, nil, ttl)
+	req, err := f.Store.PresignPut(ctx, key, size, nil, ttl)
+	if err != nil {
+		return blob.PresignedRequest{}, err
+	}
+	f.mu.Lock()
+	f.staged = append(f.staged, stagedPut{oid: oid, size: size, key: key, userID: userID})
+	f.mu.Unlock()
+	return req, nil
 }
 
-// Verify implements repo.LFSStore: it re-hashes the stored object.
-func (f *FakeLFS) Verify(ctx context.Context, oid string, size int64) (repo.LFSObject, error) {
-	key := model.LFSObjectKey(oid)
-	rc, info, err := f.Store.Get(ctx, key, nil)
-	if err != nil {
-		if errors.Is(err, blob.ErrNotFound) {
-			return repo.LFSObject{}, fmt.Errorf("%w: lfs object %s", repo.ErrNotFound, oid)
+// Stage writes content where a presigned PUT by userID for oid writes,
+// as a client would, for tests whose Blob store cannot presign. Verify
+// then checks it.
+func (f *FakeLFS) Stage(ctx context.Context, oid string, content []byte, userID uuid.UUID) error {
+	key := blob.PrefixTmp + "uploads/" + uuid.NewString()
+	if err := f.Store.Put(ctx, key, bytes.NewReader(content), int64(len(content))); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.staged = append(f.staged, stagedPut{oid: oid, size: int64(len(content)), key: key, userID: userID})
+	f.mu.Unlock()
+	return nil
+}
+
+// Verify implements repo.LFSStore: it checks what userID staged for the
+// object (anyone, for uuid.Nil), newest first, moves the first match into
+// place, or only proves it when the object is stored, and records the
+// uploader. With nothing staged it gives repo.ErrNotFound.
+func (f *FakeLFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UUID) (repo.LFSObject, error) {
+	f.mu.Lock()
+	var tries []stagedPut
+	for i := len(f.staged) - 1; i >= 0; i-- {
+		sp := f.staged[i]
+		if sp.oid == oid && sp.size == size && (userID == uuid.Nil || sp.userID == userID) {
+			tries = append(tries, sp)
 		}
+	}
+	f.mu.Unlock()
+	mismatch := false
+	for _, sp := range tries {
+		obj, err := f.proveStaged(ctx, sp)
+		switch {
+		case err == nil:
+			return obj, f.RecordUploader(ctx, oid, sp.userID)
+		case errors.Is(err, blob.ErrNotFound):
+		case errors.Is(err, repo.ErrChecksumMismatch):
+			mismatch = true
+		default:
+			return repo.LFSObject{}, err
+		}
+	}
+	if mismatch {
+		return repo.LFSObject{}, fmt.Errorf("%w: %s", repo.ErrChecksumMismatch, oid)
+	}
+	return repo.LFSObject{}, fmt.Errorf("%w: no upload of lfs object %s to verify", repo.ErrNotFound, oid)
+}
+
+// proveStaged hashes a staged PUT, then stores it when the object is not
+// stored yet, and removes it.
+func (f *FakeLFS) proveStaged(ctx context.Context, sp stagedPut) (repo.LFSObject, error) {
+	rc, info, err := f.Store.Get(ctx, sp.key, nil)
+	if err != nil {
 		return repo.LFSObject{}, err
 	}
-	defer rc.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, rc); err != nil {
+	_, err = io.Copy(h, rc)
+	_ = rc.Close()
+	if err != nil {
 		return repo.LFSObject{}, err
 	}
-	if info.Size != size || hex.EncodeToString(h.Sum(nil)) != oid {
-		_ = f.Store.Delete(ctx, key)
+	defer func() {
+		_ = f.Store.Delete(context.WithoutCancel(ctx), sp.key)
+		f.mu.Lock()
+		for i := range f.staged {
+			if f.staged[i].key == sp.key {
+				f.staged = append(f.staged[:i], f.staged[i+1:]...)
+				break
+			}
+		}
+		f.mu.Unlock()
+	}()
+	if info.Size != sp.size || hex.EncodeToString(h.Sum(nil)) != sp.oid {
 		return repo.LFSObject{}, repo.ErrChecksumMismatch
 	}
-	return f.record(oid, size, key), nil
+	if o, err := f.Stat(ctx, sp.oid); err == nil {
+		return o, nil
+	}
+	key := model.LFSObjectKey(sp.oid)
+	if err := f.Store.Copy(ctx, sp.key, key); err != nil {
+		return repo.LFSObject{}, err
+	}
+	return f.record(sp.oid, sp.size, key), nil
 }
 
 // Open implements repo.LFSStore.

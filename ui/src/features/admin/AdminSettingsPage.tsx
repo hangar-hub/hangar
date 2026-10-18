@@ -69,6 +69,29 @@ export function AdminSettingsPage() {
           checked={Boolean(s.scan_block_unsafe_downloads)}
           onCheckedChange={(v) => set({ scan_block_unsafe_downloads: v })}
         />
+        <div className="py-3">
+          <Field
+            label="What to block"
+            hint="Suspicious files import code the scan does not know to be safe, such as model classes from sklearn or transformers. Blocking them refuses what torch.load(weights_only=True) refuses."
+          >
+            {(p) => (
+              <Select
+                {...p}
+                className="max-w-xs"
+                value={s.scan_block_level ?? "unsafe"}
+                disabled={!s.scan_block_unsafe_downloads}
+                onChange={(e) =>
+                  set({
+                    scan_block_level: e.target.value as InstanceSettings["scan_block_level"],
+                  })
+                }
+              >
+                <option value="unsafe">Unsafe files</option>
+                <option value="suspicious">Unsafe and suspicious files</option>
+              </Select>
+            )}
+          </Field>
+        </div>
         <Switch
           label="Allow webhooks to private addresses"
           hint="Turn off on multi-tenant Instances so webhooks cannot reach internal services."

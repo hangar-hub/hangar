@@ -296,3 +296,82 @@ func TestScannedTakesTheNewestScannerVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []scan.ScannedFile{{Commit: a, Status: scan.StatusSafe}, {Commit: b, Status: scan.StatusSuspicious}}, got)
 }
+
+// TestGateBlockLevel checks scan.block_level, decided by James on
+// 2026-10-18: unsafe (the default) refuses only files with imports on the
+// deny list; suspicious also refuses files with imports on neither list,
+// by path, in a tree and by OID, including an object only an older Commit
+// holds as a suspicious pickle.
+func TestGateBlockLevel(t *testing.T) {
+	d := dbtest.SQLite(t)
+	ctx := t.Context()
+	fake := repotest.NewFake(t)
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "levels"}
+	r := indextest.CreateRepo(t, fake, id, model.VisibilityPublic)
+	indextest.InsertRepoRow(t, d, r)
+	sha := indextest.Commit(t, fake, id, map[string][]byte{
+		"model.joblib": scantest.SklearnSuspicious(),
+		"model.ckpt":   scantest.TorchStateDict(),
+		"README.md":    []byte("# hi"),
+	})
+	s := scan.New(scan.Options{DB: d, Repos: fake, LFS: fake.LFS})
+	res, err := s.ScanCommit(ctx, r.UUID, id, sha)
+	require.NoError(t, err)
+	require.Equal(t, scan.StatusSuspicious, res.Status)
+	suspicious, err := fake.Entry(ctx, id, sha, "model.joblib")
+	require.NoError(t, err)
+	ckpt, err := fake.Entry(ctx, id, sha, "model.ckpt")
+	require.NoError(t, err)
+	// A later Commit renames the suspicious file to a name no loader
+	// reads, so only the older Commit says what the object is.
+	renamed, err := fake.Commit(ctx, repo.CommitParams{Repo: id, Revision: model.DefaultBranch, Summary: "rename", Actor: indextest.Owner("alice"),
+		Operations: []repo.Operation{{Kind: repo.OpAddLFS, Path: "weights.data", OID: suspicious.LFS.OID, Size: suspicious.LFS.Size}, {Kind: repo.OpDelete, Path: "model.joblib"}}})
+	require.NoError(t, err)
+	_, err = s.ScanCommit(ctx, r.UUID, id, renamed.SHA)
+	require.NoError(t, err)
+
+	level := scan.Level("")
+	g := s.NewGate(func(context.Context) (bool, error) { return true, nil })
+	g.Level = func(context.Context) (scan.Level, error) { return level, nil }
+
+	for _, l := range []scan.Level{"", scan.LevelUnsafe} {
+		level = l
+		require.NoError(t, g.CheckFile(ctx, r.UUID, id, sha, "model.joblib"), "level %q", l)
+		require.NoError(t, g.CheckTree(ctx, r.UUID, id, sha, ""), "level %q", l)
+		blocked, err := g.CheckObjects(ctx, r.UUID, id, []string{suspicious.LFS.OID, ckpt.LFS.OID})
+		require.NoError(t, err)
+		require.Empty(t, blocked, "level %q", l)
+	}
+
+	level = scan.LevelSuspicious
+	err = g.CheckFile(ctx, r.UUID, id, sha, "model.joblib")
+	require.Equal(t, scan.BlockSuspicious, blockedReason(t, err))
+	require.Contains(t, err.Error(), "model.joblib imports code that Hangar's security scan does not know to be safe")
+	require.Equal(t, scan.BlockSuspicious, blockedReason(t, g.CheckTree(ctx, r.UUID, id, sha, "")))
+	require.NoError(t, g.CheckFile(ctx, r.UUID, id, sha, "model.ckpt"), "a safe pickle still downloads")
+	require.NoError(t, g.CheckFile(ctx, r.UUID, id, sha, "README.md"))
+	blocked, err := g.CheckObjects(ctx, r.UUID, id, []string{suspicious.LFS.OID, ckpt.LFS.OID})
+	require.NoError(t, err)
+	require.Len(t, blocked, 1)
+	require.Equal(t, scan.BlockSuspicious, blockedReason(t, blocked[suspicious.LFS.OID]),
+		"the object is suspicious although the branch tip holds it as weights.data")
+	require.NoError(t, g.CheckFile(ctx, r.UUID, id, renamed.SHA, "weights.data"), "by path, a name no loader reads downloads")
+
+	flagged, err := s.Flagged(ctx, r.UUID, scan.StatusUnsafe, scan.StatusSuspicious)
+	require.NoError(t, err)
+	require.Equal(t, []model.CommitSHA{sha}, flagged)
+	flagged, err = s.Flagged(ctx, r.UUID)
+	require.NoError(t, err)
+	require.Empty(t, flagged, "without statuses Flagged lists Commits with unsafe files only")
+
+	// A failing level read fails the check rather than allowing it.
+	g.Level = func(context.Context) (scan.Level, error) { return "", errors.New("settings unavailable") }
+	require.Error(t, g.CheckFile(ctx, r.UUID, id, sha, "README.md"))
+
+	got, ok := scan.ParseLevel("suspicious")
+	require.True(t, ok)
+	require.Equal(t, scan.LevelSuspicious, got)
+	_, ok = scan.ParseLevel("everything")
+	require.False(t, ok)
+	require.Contains(t, (&scan.BlockedError{Reason: scan.BlockSuspicious}).Error(), "An admin blocks suspicious downloads")
+}

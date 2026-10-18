@@ -40,7 +40,7 @@ func TestCommitsAreByteIdenticalToGit(t *testing.T) {
 		require.NoError(t, err)
 
 		weights := []byte("not really weights")
-		oid := e.putLFS(weights)
+		oid := e.putLFS(weights, alice)
 		_, err = fake.LFS.Put(e.ctx, weights)
 		require.NoError(t, err)
 

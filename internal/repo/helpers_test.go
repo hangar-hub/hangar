@@ -182,12 +182,17 @@ func add(path, content string) repo.Operation {
 	return repo.Operation{Kind: repo.OpAdd, Path: path, Content: strings.NewReader(content)}
 }
 
-func (e *env) putLFS(content []byte) string {
+// putLFS stores content as an LFS object uploaded by uploaders, whose
+// Commits may then add pointers to it.
+func (e *env) putLFS(content []byte, uploaders ...model.Principal) string {
 	e.t.Helper()
 	sum := sha256.Sum256(content)
 	oid := hex.EncodeToString(sum[:])
 	_, err := e.lfs.Ingest(e.ctx, oid, int64(len(content)), bytes.NewReader(content))
 	require.NoError(e.t, err)
+	for _, u := range uploaders {
+		require.NoError(e.t, e.lfs.RecordUploader(e.ctx, oid, u.UserID))
+	}
 	return oid
 }
 

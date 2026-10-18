@@ -4,6 +4,7 @@ branches, tags and history. upload_large_folder is in
 test_upload_large_folder.py."""
 
 import hashlib
+import json
 import math
 import os
 from pathlib import Path
@@ -286,3 +287,64 @@ def test_failed_create_pr_commit_opens_no_pull_request(api, hub, repo_name):
     pr = bob.create_commit(repo, [CommitOperationDelete("f.txt")], commit_message="Good PR", create_pr=True)
     assert pr.pr_url.endswith("/discussions/1")
     assert [d.num for d in api.get_repo_discussions(repo)] == [1]
+
+
+@pytest.mark.endpoint(
+    "POST /api/{type}s/{repo}/commit/{rev}",
+    "POST /{repo}.git/info/lfs/objects/batch",
+)
+def test_upload_of_an_object_stored_in_another_users_private_repo(api, hub, repo_name, tmp_path):
+    """LFS objects are stored once per Instance, but a Commit may reference
+    one only when its author uploaded the bytes or can read a Repo that
+    holds it (decided by James on 2026-10-18, "check at Commit").
+
+    bob knows the SHA-256 and size of a file in alice's private Repo: a
+    commit that only names it is refused as an object nobody uploaded, and
+    the batch API asks him to upload it. huggingface_hub uploading the real
+    bytes, through git-lfs or (in the Xet cell) hf_xet, still succeeds.
+    """
+    import requests
+
+    weights = os.urandom(300_000)
+    oid = hashlib.sha256(weights).hexdigest()
+    private = api.create_repo(repo_name + "-private", private=True).repo_id
+    api.upload_file(path_or_fileobj=weights, path_in_repo="model.safetensors", repo_id=private)
+
+    bob = HfApi(endpoint=hub.endpoint, token=hub.token("bob"))
+    target = bob.create_repo(repo_name + "-bob").repo_id
+    headers = {"Authorization": f"Bearer {hub.token('bob')}"}
+
+    def commit_pointer(sha: str) -> requests.Response:
+        lines = [
+            {"key": "header", "value": {"summary": "Reference", "description": ""}},
+            {"key": "lfsFile", "value": {"path": "w.safetensors", "algo": "sha256", "oid": sha, "size": len(weights)}},
+        ]
+        body = "\n".join(json.dumps(line) for line in lines) + "\n"
+        return requests.post(
+            f"{hub.endpoint}/api/models/{target}/commit/main",
+            data=body,
+            headers={**headers, "Content-Type": "application/x-ndjson"},
+            timeout=60,
+        )
+
+    refused = commit_pointer(oid)
+    unknown = hashlib.sha256(b"nobody uploaded this").hexdigest()
+    missing = commit_pointer(unknown)
+    assert refused.status_code == missing.status_code
+    assert 400 <= refused.status_code < 500
+    assert refused.text.replace(oid, "<oid>") == missing.text.replace(unknown, "<oid>")
+
+    batch = requests.post(
+        f"{hub.endpoint}/{target}.git/info/lfs/objects/batch",
+        json={"operation": "upload", "transfers": ["basic"], "objects": [{"oid": oid, "size": len(weights)}]},
+        headers={**headers, "Accept": "application/vnd.git-lfs+json", "Content-Type": "application/vnd.git-lfs+json"},
+        timeout=60,
+    )
+    assert batch.status_code == 200, batch.text
+    assert "upload" in batch.json()["objects"][0].get("actions", {}), "bob is asked for the bytes"
+
+    folder = _write(tmp_path / "bob", {"model.safetensors": weights})
+    bob.upload_folder(folder_path=folder, repo_id=target, commit_message="The same weights")
+    assert Path(bob.hf_hub_download(target, "model.safetensors")).read_bytes() == weights
+    meta = {s.rfilename: s for s in bob.model_info(target, files_metadata=True).siblings}
+    assert meta["model.safetensors"].lfs.sha256 == oid

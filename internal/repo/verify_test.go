@@ -3,10 +3,12 @@ package repo_test
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/model"
@@ -21,14 +23,14 @@ type gatedLFS struct {
 	calls atomic.Int32
 }
 
-func (g *gatedLFS) Verify(ctx context.Context, oid string, size int64) (repo.LFSObject, error) {
+func (g *gatedLFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UUID) (repo.LFSObject, error) {
 	g.calls.Add(1)
 	select {
 	case <-g.gate:
 	case <-ctx.Done():
 		return repo.LFSObject{}, ctx.Err()
 	}
-	return g.LFS.Verify(ctx, oid, size)
+	return g.LFS.Verify(ctx, oid, size, userID)
 }
 
 func TestWritesWaitForLFSVerification(t *testing.T) {
@@ -45,13 +47,20 @@ func TestWritesWaitForLFSVerification(t *testing.T) {
 		base, err := e.svc.Resolve(e.ctx, id, "main")
 		require.NoError(t, err)
 
-		// Two objects written through presigned PUTs and never verified.
+		// Two objects alice wrote through presigned PUTs and never verified.
+		servePresigned(t, e)
+		stage := func(content []byte) string {
+			t.Helper()
+			oid := sha256Hex(content)
+			req, err := e.lfs.PresignPut(e.ctx, oid, int64(len(content)), time.Hour, alice.UserID)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, putURL(t, req, content, false))
+			return oid
+		}
 		viaCommit := []byte("weights for a commit")
-		commitOID := sha256Hex(viaCommit)
-		require.NoError(t, e.blobs.Put(e.ctx, model.LFSObjectKey(commitOID), bytes.NewReader(viaCommit), int64(len(viaCommit))))
+		commitOID := stage(viaCommit)
 		viaPush := []byte("weights for a push")
-		ptr := model.LFSPointer{OID: sha256Hex(viaPush), Size: int64(len(viaPush))}
-		require.NoError(t, e.blobs.Put(e.ctx, model.LFSObjectKey(ptr.OID), bytes.NewReader(viaPush), ptr.Size))
+		ptr := model.LFSPointer{OID: stage(viaPush), Size: int64(len(viaPush))}
 
 		commit := func() error {
 			_, err := svc.Commit(e.ctx, repo.CommitParams{Repo: id, Summary: "weights", Actor: alice,
@@ -69,7 +78,7 @@ func TestWritesWaitForLFSVerification(t *testing.T) {
 		require.ErrorIs(t, err, repo.ErrLFSObjectMissing)
 		require.Contains(t, err.Error(), "was not verified within 50ms")
 		var pe *repo.PolicyError
-		err = svc.ApplyPack(e.ctx, repo.ApplyPackParams{Repo: id, Source: repo.SourcePush, Pack: bytes.NewReader(pack),
+		err = svc.ApplyPack(e.ctx, repo.ApplyPackParams{Repo: id, Source: repo.SourcePush, Actor: alice, Pack: bytes.NewReader(pack),
 			Updates: []repo.RefUpdate{{Name: "refs/heads/main", Old: base, New: pushed}}})
 		require.ErrorAs(t, err, &pe)
 		require.Contains(t, pe.Message, ptr.OID+" (18 bytes) was not verified within 50ms")
@@ -77,8 +86,9 @@ func TestWritesWaitForLFSVerification(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, base, tip)
 
-		// The verifications carry on after the wait, so retries find the
-		// objects verified without hashing them again.
+		// The verifications carry on after the wait and record alice as the
+		// uploader, so retries find the objects verified without hashing
+		// them again.
 		close(g.gate)
 		require.Eventually(t, func() bool {
 			got, err := e.lfs.StatMany(e.ctx, []string{commitOID, ptr.OID})
@@ -91,7 +101,7 @@ func TestWritesWaitForLFSVerification(t *testing.T) {
 		w2 := e.clone(id)
 		w2.write("pushed.bin", string(ptr.Bytes()))
 		pushed = w2.commit("pointer")
-		require.NoError(t, svc.ApplyPack(e.ctx, repo.ApplyPackParams{Repo: id, Source: repo.SourcePush, Pack: bytes.NewReader(w2.pack(pushed, tip)),
+		require.NoError(t, svc.ApplyPack(e.ctx, repo.ApplyPackParams{Repo: id, Source: repo.SourcePush, Actor: alice, Pack: bytes.NewReader(w2.pack(pushed, tip)),
 			Updates: []repo.RefUpdate{{Name: "refs/heads/main", Old: tip, New: pushed}}}))
 		require.Equal(t, string(viaPush), e.read(id, "main", "pushed.bin"))
 		require.Equal(t, int32(2), g.calls.Load())

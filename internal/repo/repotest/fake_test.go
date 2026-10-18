@@ -596,17 +596,36 @@ func TestFakeLFSUploads(t *testing.T) {
 	_, err = f.LFS.CreateUpload(ctx, repo.UploadParams{OID: oid, Size: 24, Multipart: true})
 	require.ErrorIs(t, err, repo.ErrInvalid)
 
-	_, err = f.LFS.PresignPut(ctx, oid, 24, time.Hour)
+	_, err = f.LFS.PresignPut(ctx, oid, 24, time.Hour, uuid.Nil)
 	require.ErrorIs(t, err, blob.ErrNotSupported)
 	_, err = f.LFS.PresignGet(ctx, oid, time.Hour, "x")
 	require.ErrorIs(t, err, blob.ErrNotSupported)
-	obj, err = f.LFS.Verify(ctx, oid, 24)
-	require.NoError(t, err)
-	require.True(t, obj.Verified)
-	_, err = f.LFS.Verify(ctx, oid, 25)
-	require.ErrorIs(t, err, repo.ErrChecksumMismatch)
-	_, err = f.LFS.Verify(ctx, strings.Repeat("f", 64), 1)
+	_, err = f.LFS.Verify(ctx, oid, 24, uuid.Nil)
+	require.ErrorIs(t, err, repo.ErrNotFound, "a stored object with no upload to check is not found, as repo.LFS answers")
+	_, err = f.LFS.Verify(ctx, oid, 25, uuid.Nil)
+	require.ErrorIs(t, err, repo.ErrNotFound, "whatever the size")
+	_, err = f.LFS.Verify(ctx, strings.Repeat("f", 64), 1, uuid.Nil)
 	require.ErrorIs(t, err, repo.ErrNotFound)
+
+	// An upload of a stored object records its User once the bytes match,
+	// and a wrong one does not.
+	user, other := uuid.New(), uuid.New()
+	upload := func(by uuid.UUID, body []byte) error {
+		u, err := f.LFS.CreateUpload(ctx, repo.UploadParams{OID: oid, Size: 24, Multipart: true, PartSize: 24, UserID: by})
+		require.NoError(t, err)
+		etag, err := f.LFS.PutPart(ctx, u.ID, 1, bytes.NewReader(body), int64(len(body)))
+		require.NoError(t, err)
+		_, err = f.LFS.CompleteUpload(ctx, u.ID, []blob.Part{{Number: 1, ETag: etag}})
+		return err
+	}
+	require.ErrorIs(t, upload(other, bytes.Repeat([]byte("y"), 24)), repo.ErrChecksumMismatch)
+	require.NoError(t, upload(user, content))
+	got2, err := f.LFS.Uploaded(ctx, user, []string{oid})
+	require.NoError(t, err)
+	require.True(t, got2[oid])
+	got2, err = f.LFS.Uploaded(ctx, other, []string{oid})
+	require.NoError(t, err)
+	require.False(t, got2[oid])
 }
 
 func TestAddsFollowGitAttributes(t *testing.T) {

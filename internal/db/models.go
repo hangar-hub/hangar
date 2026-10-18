@@ -349,6 +349,15 @@ type RepoLFS struct {
 	Timestamps
 }
 
+// LFSUploader is a row of lfs_uploaders: a User who uploaded the bytes of
+// an LFS object, so their Commits may add pointers to it.
+type LFSUploader struct {
+	bun.BaseModel `bun:"table:lfs_uploaders"`
+	OID           string    `bun:"oid,pk"`
+	UserID        uuid.UUID `bun:"user_id,pk,type:uuid"`
+	Timestamps
+}
+
 // UploadPart is one uploaded part in uploads.parts.
 type UploadPart struct {
 	Number int    `json:"number"`
@@ -712,7 +721,7 @@ func AllModels() []any {
 		(*Invite)(nil), (*PasswordReset)(nil), (*LoginAttempt)(nil), (*OIDCState)(nil),
 		(*OAuthDeviceCode)(nil), (*Repo)(nil), (*RepoRedirect)(nil), (*Collaborator)(nil),
 		(*Ref)(nil), (*Pack)(nil), (*Commit)(nil), (*TreeEntry)(nil), (*LFSObject)(nil),
-		(*RepoLFS)(nil), (*Upload)(nil), (*Upstream)(nil), (*UpstreamToken)(nil),
+		(*LFSUploader)(nil), (*RepoLFS)(nil), (*Upload)(nil), (*Upstream)(nil), (*UpstreamToken)(nil),
 		(*Mirror)(nil), (*Dependency)(nil), (*Metadata)(nil), (*ScanResult)(nil),
 		(*Job)(nil), (*Schedule)(nil), (*RateLimitLease)(nil), (*Collection)(nil),
 		(*CollectionItem)(nil), (*Discussion)(nil), (*DiscussionEvent)(nil), (*Like)(nil),

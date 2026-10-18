@@ -5,6 +5,7 @@ package gitcompat
 import (
 	"testing"
 
+	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
 	"github.com/jamesagarside/hangar/internal/db"
 	"github.com/jamesagarside/hangar/internal/db/dbtest"
@@ -18,16 +19,16 @@ import (
 // pack cache, sharing the database and the Blob store, as web replicas do.
 func init() {
 	real := func(open func(testing.TB) *db.DB) BackendFactory {
-		return func(t *testing.T, blobs *blobtest.Fake, usernames []string) Backend {
+		return func(t *testing.T, blobs *blobtest.Fake, usernames []string, authz auth.Authz) Backend {
 			d := open(t)
-			first := repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs})
+			first := repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs, Tweak: readFiles(authz)})
 			users := map[string]model.Principal{}
 			for _, name := range usernames {
 				users[name] = first.AddUser(t, name)
 			}
 			lfs := first.LFS
 			replica := func(t *testing.T) repo.Service {
-				return repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs}).Store
+				return repotest.NewReal(t, d, repotest.RealOptions{Blobs: blobs, Tweak: readFiles(authz)}).Store
 			}
 			return Backend{Replica: func(t *testing.T) repo.Service {
 				if first != nil {
@@ -44,4 +45,9 @@ func init() {
 	if dbtest.PostgresEnabled() {
 		register("real-postgres", real(func(t testing.TB) *db.DB { return dbtest.Postgres(t) }))
 	}
+}
+
+// readFiles wires authz into repo.Options.CanReadFiles, as the server does.
+func readFiles(authz auth.Authz) func(*repo.Options) {
+	return func(o *repo.Options) { o.CanReadFiles = repotest.CanReadFilesWith(authz) }
 }

@@ -411,7 +411,10 @@ export function BlobPage({
           <Button asChild size="sm" variant="ghost">
             <a href={raw}>Raw</a>
           </Button>
-          {isPickle && (e.scan_status === "unsafe" || e.scan_status === "pending") ? (
+          {isPickle &&
+          (e.scan_status === "unsafe" ||
+            e.scan_status === "suspicious" ||
+            e.scan_status === "pending") ? (
             <RiskyDownload
               href={resolveUrl(kind, ns, name, rev, path, true)}
               path={path}

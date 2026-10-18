@@ -780,7 +780,7 @@ export interface paths {
         put?: never;
         /**
          * Plan uploads for a set of files
-         * @description For each file, says whether to send it inline in the Commit, skip it because the object exists, or upload it, with part URLs.
+         * @description For each file, says whether to send it inline in the Commit, skip it because the caller can already use the object, or upload it, with part URLs. An object that is stored but that the caller did not upload and cannot read in another Repo is planned as an upload, which stores no second copy.
          */
         post: operations["planUploads"];
         delete?: never;
@@ -2326,7 +2326,7 @@ export interface components {
         UploadPlanItem: {
             path: string;
             /**
-             * @description inline: send the content in the Commit. exists: the object is stored already. upload: upload it.
+             * @description inline: send the content in the Commit. exists: the object is stored and the caller uploaded it or can read it in a Repo. upload: upload it.
              * @enum {string}
              */
             action: "inline" | "exists" | "upload";
@@ -2845,6 +2845,11 @@ export interface components {
             local_login?: boolean;
             ui_external_images?: boolean;
             scan_block_unsafe_downloads?: boolean;
+            /**
+             * @description How strict scan_block_unsafe_downloads is: unsafe refuses files with imports on the deny list; suspicious also refuses files with imports on neither list.
+             * @enum {string}
+             */
+            scan_block_level?: "unsafe" | "suspicious";
             webhooks_allow_private_targets?: boolean;
             /** Format: int64 */
             pull_bandwidth_limit?: number;

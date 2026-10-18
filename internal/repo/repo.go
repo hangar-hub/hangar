@@ -482,6 +482,13 @@ type Service interface {
 	// present. The git-lfs download batch uses it so a Repo can only fetch
 	// objects it references, and to answer "not in arsenal" for Partial mirrors.
 	LFSRefs(ctx context.Context, id model.RepoID, oids []string) (map[string]LFSRef, error)
+	// Referable returns which of oids p may add pointers to in a Commit to
+	// r without uploading them: objects r already holds, objects p uploaded
+	// and objects in another Repo whose files p can read. Commits and
+	// pushes refuse a pointer to any other object as not uploaded, and the
+	// git-lfs batch and upload plans ask for its bytes even when they are
+	// stored, so neither says whether an object p cannot read exists.
+	Referable(ctx context.Context, p model.Principal, r *Repo, oids []string) (map[string]bool, error)
 }
 
 // LFSObject describes a stored LFS object.
@@ -541,8 +548,16 @@ type LFSStore interface {
 	// StatMany returns the stored objects among oids, keyed by OID.
 	StatMany(ctx context.Context, oids []string) (map[string]LFSObject, error)
 	// Ingest streams r into the store, hashing as it goes, and records the
-	// object as verified only if the SHA-256 and size match.
+	// object as verified only if the SHA-256 and size match. When the
+	// object is already stored, r is still read and checked but not stored
+	// again, so a successful Ingest always means r held the object's bytes.
 	Ingest(ctx context.Context, oid string, size int64, r io.Reader) (LFSObject, error)
+	// RecordUploader records that a User sent the bytes of a stored object,
+	// so their Commits may add pointers to it (Service.Referable).
+	// uuid.Nil, for uploads Hangar makes itself, is ignored.
+	RecordUploader(ctx context.Context, oid string, userID uuid.UUID) error
+	// Uploaded returns which of oids the User sent the bytes of.
+	Uploaded(ctx context.Context, userID uuid.UUID, oids []string) (map[string]bool, error)
 	// CreateUpload starts an upload.
 	CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 	// GetUpload returns an upload and the parts done so far.
@@ -554,16 +569,22 @@ type LFSStore interface {
 	PresignPart(ctx context.Context, id uuid.UUID, part int, ttl time.Duration) (string, error)
 	// PutPart uploads a part through Hangar and returns its ETag.
 	PutPart(ctx context.Context, id uuid.UUID, part int, r io.Reader, size int64) (string, error)
-	// CompleteUpload assembles the parts, verifies the object and records it.
+	// CompleteUpload assembles the parts, verifies the object and records it,
+	// with the upload's User as an uploader. When the object is already
+	// stored, the parts are verified the same way and then discarded.
 	// A failure wrapped in ErrRetryable keeps the upload and its assembled
 	// parts, so the same completion can be sent again.
 	CompleteUpload(ctx context.Context, id uuid.UUID, parts []blob.Part) (LFSObject, error)
 	// AbortUpload discards an upload.
 	AbortUpload(ctx context.Context, id uuid.UUID) error
-	// PresignPut returns a direct single-PUT upload, or blob.ErrNotSupported.
-	PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration) (blob.PresignedRequest, error)
-	// Verify checks an object written through a presigned PUT and marks it verified.
-	Verify(ctx context.Context, oid string, size int64) (LFSObject, error)
+	// PresignPut returns a direct single-PUT upload by userID, or
+	// blob.ErrNotSupported.
+	PresignPut(ctx context.Context, oid string, size int64, ttl time.Duration, userID uuid.UUID) (blob.PresignedRequest, error)
+	// Verify checks an object userID wrote through a presigned PUT (anyone,
+	// for uuid.Nil), marks it verified and records the uploader. An object
+	// that is already stored needs such an upload too: with none, Verify
+	// gives ErrNotFound, as for an object that does not exist.
+	Verify(ctx context.Context, oid string, size int64, userID uuid.UUID) (LFSObject, error)
 	// Open reads an object, or a range of it.
 	Open(ctx context.Context, oid string, rng *blob.Range) (io.ReadCloser, LFSObject, error)
 	// PresignGet returns a direct download URL, or blob.ErrNotSupported.

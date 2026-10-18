@@ -12,13 +12,14 @@ This page lists what to do to run Hangar securely. For what Hangar protects, its
 - On Instances shared with people you do not fully trust, turn off `webhooks.allow_private_targets` so webhooks cannot reach your internal network. Webhooks and Upstreams never reach link-local or cloud metadata addresses, and a public Upstream cannot redirect Hangar to a private address; see [Mirrors and Upstreams](../concepts/mirrors.md#upstreams).
 - Watch the audit log (**Admin**, **Audit log**) and export it with your logs.
 - Run the image as it ships: non-root (UID 65532), read-only root filesystem, no shell. The Helm chart also drops every capability and uses the `RuntimeDefault` seccomp profile; turn on its NetworkPolicy.
-- Pickle-based weights can run code when loaded. Hangar scans them and shows a warning on suspicious and unsafe files; prefer safetensors. To refuse downloads of risky files, turn on **Block downloads of unsafe files** under **Admin**, **Settings**. See [Blocking unsafe downloads](#blocking-unsafe-downloads).
+- Pickle-based weights can run code when loaded. Hangar scans them and shows a warning on suspicious and unsafe files; prefer safetensors. To refuse downloads of risky files, turn on **Block downloads of unsafe files** under **Admin**, **Settings**, and choose whether to block suspicious files too. See [Blocking unsafe downloads](#blocking-unsafe-downloads).
 
 ## Blocking unsafe downloads
 
 With **Block downloads of unsafe files** on (`scan_block_unsafe_downloads` in the native API), Hangar refuses to serve:
 
 - Files the security scan marked unsafe.
+- Files the security scan marked suspicious, when **What to block** is **Unsafe and suspicious files** (`scan_block_level: suspicious` in the native API). The default, **Unsafe files** (`unsafe`), lets them download. See [Choose what to block](#choose-what-to-block).
 - Files that can run code when loaded and that the scan could not read in full, such as a pickle compressed with xz, an old PyTorch tar archive or a joblib file whose array data the scan cannot measure. The scan result shows why.
 - Files that can run code when loaded and have no scan result yet, because the scan is still running or its Job failed. They download once the scan finds them safe. While the scan of a new Commit runs, a file whose content is unchanged since an earlier scanned Commit keeps that Commit's result, in the web UI and for downloads by path.
 
@@ -30,9 +31,20 @@ The setting applies to every way a file leaves Hangar: `huggingface_hub` and oth
 
 Links that Hangar signs, for git-lfs, Pull-through and zip export downloads, are checked again when they are used, so a link issued before you turned the setting on, or before the scan finished, stops working. In `redirect` storage mode, presigned links go straight to the Blob store, so Hangar checks them only when it issues them, and they work until they expire.
 
+### Choose what to block
+
+The scan classifies each import a pickle makes against lists of known safe and known dangerous functions. Imports on the deny list make a file **Unsafe imports**; imports on neither list make it **Suspicious imports**. The deny list cannot be complete, so a function that runs code and is on neither list is reported as suspicious, not unsafe.
+
+| What to block | `scan_block_level` | Refuses | Use it when |
+|---|---|---|---|
+| **Unsafe files** (default) | `unsafe` | Files with imports on the deny list | Users download scikit-learn, joblib or full-model pickles, whose model classes from `sklearn` or `transformers` are on neither list. |
+| **Unsafe and suspicious files** | `suspicious` | Also files with imports on neither list, as `torch.load(weights_only=True)` does | Users should load only weights. Most scikit-learn models and pickles of whole models are refused. |
+
+Either way, a user who has reviewed a file can download it through the Hub API or the web UI with `accept_risk=1`.
+
 ### What the scan cannot catch
 
-- The scan classifies each import a pickle makes against lists of known safe and known dangerous functions. Imports on neither list are **Suspicious imports**, which the setting does not block, because model classes from `transformers` or `sklearn` are on neither list. A function that runs code and is on neither list is reported as suspicious, not unsafe. Review files with suspicious imports before you load them, or load them with `torch.load(weights_only=True)`.
+- With **What to block** set to **Unsafe files**, a function that runs code and is on neither list downloads, reported as suspicious. Review files with suspicious imports before you load them, or load them with `torch.load(weights_only=True)`.
 - Files are checked by name. A pickle with another name, such as one a Repo's `trust_remote_code` Python loads, is not scanned; `trust_remote_code` already runs the Repo's Python code, so trust the Repo before you use it.
 - Repos with more than 20,000 Commits, or more than 50,000 LFS files in their history, are checked for objects only in the history Hangar can walk.
 

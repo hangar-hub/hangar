@@ -1208,6 +1208,7 @@ export function createState(): MockState {
       local_login: true,
       ui_external_images: true,
       scan_block_unsafe_downloads: false,
+      scan_block_level: "unsafe",
       webhooks_allow_private_targets: true,
       pull_bandwidth_limit: 0,
       pull_concurrency: 4,

@@ -272,7 +272,23 @@ func (s *Store) prepare(ctx context.Context, row *repoRow, st *gitstore.Staging,
 		files   []string
 		sizes   []int64
 		hashFor []int
+		// referable is nil for a Pull into a Mirror, which may reference
+		// any object; otherwise the actor's referable objects.
+		referable map[string]bool
 	)
+	if !toRepo(row).Mirror || !p.AllowMirror {
+		var oids []string
+		for _, op := range p.Operations {
+			if op.Kind == OpAddLFS {
+				oids = append(oids, op.OID)
+			}
+		}
+		if len(oids) > 0 {
+			if referable, err = s.Referable(ctx, p.Actor, toRepo(row), oids); err != nil {
+				return nil, nil, 0, err
+			}
+		}
+	}
 	spoolBlob := func(r io.Reader) (int64, error) {
 		name := filepath.Join(spool, strconv.Itoa(len(files)))
 		n, err := writeSpool(name, r)
@@ -296,6 +312,10 @@ func (s *Store) prepare(ctx context.Context, row *repoRow, st *gitstore.Staging,
 				if err != nil {
 					return nil, nil, 0, err
 				}
+				// The author sent the bytes, so later Commits may reference them.
+				if err := s.lfs.RecordUploader(ctx, ptr.OID, p.Actor.UserID); err != nil {
+					return nil, nil, 0, err
+				}
 				refs = append(refs, LFSRef{OID: ptr.OID, Size: ptr.Size, Present: true})
 				added += ptr.Size
 				content = bytes.NewReader(ptr.Bytes())
@@ -311,7 +331,7 @@ func (s *Store) prepare(ctx context.Context, row *repoRow, st *gitstore.Staging,
 				added += n
 			}
 		case OpAddLFS:
-			ref, err := s.lfsOp(ctx, row, op, p.AllowMirror)
+			ref, err := s.lfsOp(ctx, row, op, p.AllowMirror, p.Actor, referable)
 			if err != nil {
 				return nil, nil, 0, fmt.Errorf("%w (%s)", err, clean)
 			}
@@ -377,13 +397,32 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// lfsOp checks the object of an OpAddLFS. An object written through a
-// presigned PUT and not yet verified is verified now. Mirrors written by
-// Pulls may reference objects that are not present yet.
-func (s *Store) lfsOp(ctx context.Context, row *repoRow, op Operation, allowMirror bool) (LFSRef, error) {
+// lfsOp checks the object of an OpAddLFS. An object the actor may not
+// reference (referable, nil for Pulls into a Mirror) must have been
+// uploaded by them: a presigned PUT of theirs is verified now, and without
+// one the object is missing, whether or not it is stored, so the answer
+// says nothing about objects the actor cannot read. An object written
+// through a presigned PUT and not yet verified is verified now. Mirrors
+// written by Pulls may reference objects that are not present yet.
+func (s *Store) lfsOp(ctx context.Context, row *repoRow, op Operation, allowMirror bool, actor model.Principal, referable map[string]bool) (LFSRef, error) {
+	if referable != nil && !referable[op.OID] {
+		if op.Size <= 0 {
+			return LFSRef{}, fmt.Errorf("%w: %s", ErrLFSObjectMissing, op.OID)
+		}
+		_, err := s.verifyLFS(ctx, op.OID, op.Size, actor.UserID)
+		switch {
+		case err == nil:
+		case errors.Is(err, errVerifyWait):
+			return LFSRef{}, fmt.Errorf("%w: %w", ErrLFSObjectMissing, err)
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrChecksumMismatch), errors.Is(err, ErrInvalid):
+			return LFSRef{}, fmt.Errorf("%w: %s", ErrLFSObjectMissing, op.OID)
+		default:
+			return LFSRef{}, err
+		}
+	}
 	obj, err := s.lfs.Stat(ctx, op.OID)
 	if errors.Is(err, ErrNotFound) && op.Size > 0 {
-		obj, err = s.verifyLFS(ctx, op.OID, op.Size)
+		obj, err = s.verifyLFS(ctx, op.OID, op.Size, actor.UserID)
 	}
 	switch {
 	case errors.Is(err, errVerifyWait):
@@ -410,14 +449,14 @@ func (s *Store) lfsOp(ctx context.Context, row *repoRow, op Operation, allowMirr
 // lfs.verify_wait ran out.
 var errVerifyWait = errors.New("lfs object is still being verified")
 
-// verifyLFS verifies an LFS object that was written through a presigned URL
-// and is not recorded yet, waiting at most VerifyWait (lfs.verify_wait).
-// The verification itself carries on when the wait runs out, and concurrent
-// writers on this process share it, so a retried Commit finds the object
-// verified instead of hashing it again.
-func (s *Store) verifyLFS(ctx context.Context, oid string, size int64) (LFSObject, error) {
-	ch := s.verifies.DoChan(oid+":"+strconv.FormatInt(size, 10), func() (any, error) {
-		return s.lfs.Verify(context.WithoutCancel(ctx), oid, size)
+// verifyLFS verifies an LFS object that userID wrote through a presigned
+// URL and that is not verified yet, waiting at most VerifyWait
+// (lfs.verify_wait). The verification itself carries on when the wait runs
+// out, and concurrent writers on this process share it, so a retried
+// Commit finds the object verified instead of hashing it again.
+func (s *Store) verifyLFS(ctx context.Context, oid string, size int64, userID uuid.UUID) (LFSObject, error) {
+	ch := s.verifies.DoChan(oid+":"+strconv.FormatInt(size, 10)+":"+userID.String(), func() (any, error) {
+		return s.lfs.Verify(context.WithoutCancel(ctx), oid, size, userID)
 	})
 	timer := time.NewTimer(s.opts.VerifyWait)
 	defer timer.Stop()
