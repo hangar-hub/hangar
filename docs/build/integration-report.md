@@ -2,16 +2,121 @@
 
 Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the test that proves it, the Hub API contract MUSTs, the suite results, the request resolutions and the open issues.
 
-It describes branch `integration/v1` at `195e3a2` (`merge: fix/r7-w9`). Every suite in [Suite results](#suite-results) ran in round 8 on detached worktrees at that commit. Phase 2 is **not finished**: the suites are green, but a user's 20 GB import failed on the preview Instance, which runs an older build (see [Open issues](#open-issues)). `main` was fast-forwarded to `integration/v1` after the final check at `cd42d2b`. [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) describes the fixes for the preview findings and the verification round at `9f08db7`; the sections after it still describe round 8.
+It describes branch `integration/v1` at `6610f45` (`Merge branch 'fix/p3-4-docs'`), after the Phase 3 hardening. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and the round 4 suite results at that commit. Phase 3 is **not finished**: the unit suite did not run to completion at `6610f45` and the audit found one coverage gap, so `main` stays at `382cc88`, where it was fast-forwarded after the final check of the preview feedback round. [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) describes that round, at `9f08db7` and `cd42d2b`. The sections from [Suite results](#suite-results) on describe round 8 at `195e3a2`, except where they name a later result.
 
 ## Summary
 
-- Every feature ID has at least one named test, and every test named here exists in the tree (checked in the round 8 audit).
-- Every MUST in section 13 of the Hub API contract has a handler and a test. None is unimplemented.
-- Round 8 results: unit, lint, coverage and fuzz green; Hub client suites green on SQLite and Postgres, with and without Xet uploads, on the latest and the floor clients; tool suites (Ollama, LM Studio, Viewer, Upstreams) green; real-Instance Playwright 195 of 195, three times; Compose and Helm smoke green.
-- 108 request items have a resolution; 3 are deferred, 2 of them to James.
+- Phase 3 reviewed security (authorisation, untrusted input, the scanner and download gate), performance, the docs and the open gaps, and fixed 61 findings, 3 of them critical and 17 high. The [threat model](../security/threat-model.md), [benchmarks](../benchmarks.md) and [docs walk-through](docs-walkthrough.md) are written.
+- Round 4 at `6610f45`: lint, `actionlint` and `govulncheck` green; client compatibility green (Hub clients 42 passed, 2 skipped in all four cells; Xet 16 of 16 in six runs); deploy green (image, chart, four Compose examples, kind); UI green (mock 356 passed, real Instance 210 passed). Not green: `make test` did not finish, so `make cover` and `make check-generate` did not run, and the audit found that no full-server test covers the tag case of security input 6c.
+- Every feature ID has at least one named test, and every test named here exists in the tree (checked in the round 8 audit). Every MUST in section 13 of the Hub API contract has a handler and a test; the round 4 Hub matrix check lists 85 endpoint and test pairs.
+- 108 request items have a resolution; 3 are deferred. W11 8 (who may reference an LFS or Xet object by its hash) is now an open decision for James from the Phase 3 review.
+- Six questions wait for James: the five open questions in [decisions](decisions.md) (suspicious pickles, object references by hash, public Namespace profiles, concurrent Commits to one branch, Ollama and quants that are not pulled) and self-service password changes (W8 8). The release is on hold until he says go.
 - AWS S3 passed in full on 2026-10-15 after the fixes for the 2026-10-14 failures.
-- Red: the preview Instance's import failure (high), which needs a redeploy and a rerun by James. This report was stale before this update; it now covers every merge.
+- Red: the preview Instance's 20 GB import (high) has not been rerun on a build with the fixes.
+
+## Phase 3 hardening (2026-10-17)
+
+Phase 3 of [`15-build-plan.md`](../spec/15-build-plan.md) ran from `382cc88` on 2026-10-17 in six areas, each on its own branch with a handoff in `handoffs/`: authorisation and browser security, untrusted input, the scanner and download gate (together the security review), performance, the docs walk-through and the open gaps from this report. All six merged into `integration/v1` (`c136924`, `15da985`, `80b59c0`, `6287fc4`, `40ad448`, `19d259e`). The lead then aligned the UI's Token scope help with the "Hub actions only" decision (`c4fc196`), filed the Phase 3 decisions and open questions in [decisions](decisions.md) (`d9c0eab`), fixed how the bypass test sends its Token (`f06d896`) and added the [threat model](../security/threat-model.md) (`132da07`). Three audit rounds followed, each merged as a fix branch:
+
+| Round | Merge | What it fixed |
+|---|---|---|
+| 2 | `4c3d8f2` (`fix/p3-2-input`) | Tests for the `gitstoretest` pack builders, so the helper package meets its 75% coverage floor (`6686e9e`) |
+| 2 | `d1cfd3d` (`fix/p3-2-docs`) | A broken spec link in [decisions](decisions.md); `scripts/check-doc-links.py` now checks every relative Markdown link and runs in `make lint-style` (`8dbcf62`) |
+| 3 | `2ed8ed7` (`fix/p3-3-authz`) | `TestRouteAuthorisationMatrix` failed about once in 41 runs on a loaded host: its probe read the route before the access log recorded it. The probe now waits for its request's log line (`b9cb5d5`); the server code was correct |
+| 3 | `f16466b` (`fix/p3-3-docs`) | Every subcommand's help headings in sentence case (`87cbc4d`) |
+| 4 | `6610f45` (`fix/p3-4-docs`) | Two threat model test citations named the wrong file; `scripts/check-test-citations.py` now checks every cited test against the file cited for it. Spaces before percent signs are flagged (`8257431`) |
+
+`6610f45` is the branch head and the commit every suite in [Suite results at `6610f45`](#suite-results-at-6610f45) ran on. `main` stays at `382cc88`: the unit suite did not finish and the audit found one coverage gap, so nothing was fast-forwarded, pushed or published.
+
+### What each area found and fixed
+
+Each handoff lists every finding with its commit and regression tests. 61 findings in total, 3 of them critical and 17 high.
+
+**Authorisation and browser security** ([`p3-authz.md`](handoffs/p3-authz.md), 7 findings: 2 high, 1 medium, 3 low, 1 process).
+
+- A write Token could do every Repo admin action through every API since `54e5307`. James decided on 2026-10-17 on "Hub actions only": a new `hub_admin` action lets a write Token delete a Repo, change its visibility and gating, and rename it within its Namespace through the Hub API only (`425a744`). Transfers, webhooks, collaborators, access requests and native admin actions need the admin scope again. Tests: `TestWriteTokenAdministersReposThroughHubAPIOnly`, the `hub_admin` column of `TestPermissionMatrix`.
+- Cross-origin requests with ambient credentials (Basic or the session cookie) are refused with 403 through Go's `CrossOriginProtection`, sign-in included, and a Token as a Basic password works only on git and git-lfs routes (`5ad144f`). Tests: `TestCrossOriginBrowserCredentials`, `TestBasicCredentialsOnlyForGit`.
+- An expiring Token can no longer create a Token that outlives it (`5199150`); signed URL fields are escaped before signing (`c1d1038`); raw paths no longer reach route templates (`4b8215c`); UI pages send `Cross-Origin-Opener-Policy` and `Permissions-Policy` (`4b609f3`).
+- `TestRouteAuthorisationMatrix` finds every route of every router, fails on a route without an authorisation rule, and probes all 222 routes as six callers. `TestSecretsStayOutOfLogsAndTelemetry` checks 16 secrets against debug logs and OTLP output. No secret was found in logs or telemetry.
+
+**Untrusted input** ([`p3-input.md`](handoffs/p3-input.md), 10 findings: 2 high, 6 medium, 2 low).
+
+- Delta bombs and tree fan-out bombs in pushes and Pulls could exhaust a replica's memory from a pack of a few kilobytes. Packs are checked as they stream, before go-git or `git index-pack` rebuilds them, and Commits are limited to 1,000,000 paths of at most 4,096 bytes (`dc3918b`, `aa8a2ce`, `2188682`, `bdd53d3`). Tests: `TestPushRefusesDeltaBomb`, `TestApplyPackRefusesTreeBombs`.
+- Path components that git clients check out as `.git` (NTFS and HFS+ spellings), zip export entries outside the Repo's folder, and unbounded ref updates, objects and push options are refused (`dc3918b`).
+- Upstream redirects and webhooks can no longer reach reserved addresses, such as the cloud metadata service; the check runs on the dialled address, so DNS rebinding cannot pass it (`65f13b7`). Tests: `TestUpstreamRedirectsCannotReachTheLocalNetwork`, `TestReservedTargetsAreAlwaysRefused`.
+- `hangar push` and `hangar import` no longer follow symbolic links out of the uploaded folder (`9cf64d1`, `f7c80a7`); Upstream ref advertisements are bounded (`8bf25b8`); kin-openapi moved past two CVEs (`97a9692`).
+- The Phase 2 residuals W6 (cross-Namespace Pull starvation) and W11 (Xet index CPU amplification) were confirmed fixed by reverting each fix and watching its test fail.
+
+**Scanner and download gate** ([`p3-scan.md`](handoffs/p3-scan.md), 15 findings: 3 critical, 8 high, 4 medium).
+
+- Critical: joblib array bytes hid calls from the scanner; a `.bin` beside an `.xml` of the same name was never read (security input 6a); and scan errors never blocked a download (6b). Every file a loader may unpickle is now read by content, joblib files are read as joblib reads them, and the gate refuses partial results of files that can run code (`bdcd21b`, `4e62696`).
+- High: compressed and archived pickle names that standard loaders open were never scanned; objects were judged by ref tips only, so an older Commit could hold an unsafe file under the same OID (6c); `git clone` was not gated; and the opcode walker differed from CPython on `.npy` files, protocol 0 strings, Python 2 names, dotted names and deny list entries. `Gate.CheckGit` now gates every fetch (`f65ba44`).
+- `scan.Version` is 2, and workers rescan older results at start. `TestUnsafeDownloadGateCatchesScannerBypasses` drives each bypass through the Hub API, LFS batch and Ollama.
+
+**Performance** ([`p3-perf.md`](handoffs/p3-perf.md), 7 findings: 1 high, 2 medium, 4 low).
+
+- Unbounded argon2id checks on unauthenticated sign-in let 40 parallel failed sign-ins OOM-kill a web replica. At most two hashes run at once per process (`89631fa`; `TestPasswordHashingIsBounded`).
+- `loadtest/upload.js` had never passed because of a header bug, and repeated runs uploaded nothing (`1044d4c`, `2581fd6`; `loadtest/lib/payload.test.js`).
+- A Token-authenticated `HEAD /resolve` went from 14 queries to 8 (`7857795`, `8ae082e`, `39d739b`, `ed2ef92`; `TestHubDownloadQueries`).
+
+**Docs walk-through** ([`p3-docs.md`](handoffs/p3-docs.md), 16 findings: 4 high, 8 medium, 4 low). See [Docs walk-through](#docs-walk-through).
+
+**Open gaps** ([`p3-gaps.md`](handoffs/p3-gaps.md), 6 items: 2 medium, 3 low, 1 with no change needed).
+
+- A server now listens and answers `/healthz` while it waits up to `storage.s3.startup_wait` (default `5m`) for an S3 Blob store that does not answer yet, instead of exiting (`22eded4`; `TestServeAnswersHealthWhileWaitingForTheBlobStore`). Decision recorded in [decisions](decisions.md) and spec 02.
+- 23 tests returned early and reported PASS when Postgres or S3 was not configured. They now skip visibly through `dbtest.RequirePostgres` and `blobtest.RequireS3`, and `scripts/check-silent-skips.sh` in `make lint` stops the pattern returning (`81978ac`).
+- `/admin/system` reports `upload_mode` (`a23e48e`); `scripts/kind-chart-test.sh` fails at once without the Hangar image (`cebfa8f`); datasets with no Viewer files log at `DEBUG` (`f210b05`).
+- `make release-rehearsal` ran for the first time and passed with no changes, with a throwaway signing key.
+
+### Residual risks
+
+The [threat model](../security/threat-model.md) lists each residual risk under its trust boundary, with the code and tests behind each mitigation, and its "Open decisions" section lists the three security questions for James. In short:
+
+- **Open decisions for James.** Whether the download gate also refuses suspicious pickles; who may reference an LFS or Xet object by its hash (global deduplication lets anyone who knows an object's SHA-256 and size commit a pointer to it, and the batch API reveals whether an object exists); and whether Namespace profiles and member lists are public when `anonymous_read` is off. [decisions](decisions.md) also asks about concurrent server-side Commits to one branch (409 after three retries, from the performance review) and Ollama's handling of a quant that is not pulled (from the docs walk-through).
+- **Accepted and documented.** Presigned URLs are scoped to the object and cannot be revoked before they expire; no HSTS header or per-IP rate limit (the proxy's job); a sign-in flood still delays sign-ins on a replica; Ollama blob responses send no `nosniff` header; `webhooks.allow_private_targets` is on by default; a Namespace admin's write Token can force-push the default branch; paths that differ only in case or Unicode normalisation can coexist; pickles under names no standard loader uses are not scanned; xz and lzma pickles give partial results and are refused; histories past the gate's walk limits are refused for git fetches.
+- **From the gaps and performance reviews.** Every S3 error is retried at start, so a wrong bucket fails after `startup_wait` instead of at once; clone memory is git's (a replica peaked at 496 MiB); and every benchmark comes from one shared laptop.
+
+### Load test results
+
+[Benchmarks](../benchmarks.md) has the results, setup, commands and deviations. Every scale target that a scenario measures passed on the reference Compose setup (two web replicas at 2 CPUs and 1 GiB, Postgres, MinIO): `HEAD /resolve` p99 7 to 28 ms with the host lightly loaded (target 50 ms; 87 to 206 ms when other workloads saturated the host), model info p99 12.5 to 62.7 ms, a 100,000-file listing p95 6.15 to 6.79 s, a 10,000-Commit clone p95 0.60 to 1.13 s, replica memory peaks of 81 MiB in uploads and 115 MiB in downloads, 1.2 GB/s downloads in `proxy` mode, start to ready in 0.85 to 1.61 s, and Dataset Viewer `/rows` p99 16.1 and 27.8 ms on 10 million rows. 100,000 Repos per Instance and a 50 GiB upload were not measured. The sign-in burst that OOM-killed a replica before `89631fa` now peaks at 209 MiB per replica with no restarts.
+
+### Docs walk-through
+
+[Docs walk-through](docs-walkthrough.md) logs every step of every Get started and Guides page, followed as written on 2026-10-17 against local stand-ins for the unpublished image, archives and chart, with real clients. Of its 16 findings, four blocked a documented path: `hangar push --branch` to a new branch never worked (`320939d`, `TestPushToANewBranch`), the first-pull guide's Repo could not be found in Discover (`4f57f3f`, `5554cb5`), the Helm guide read the wrong Secret (`1a0622e`, `TestChartGuideReadsTheGeneratedSecret`), and first sign-in pointed at a password change that does not exist (`5554cb5`). The medium findings fixed an anonymous 401 from huggingface.co read as bad credentials (`33e5dc7`), two dataset Mirror conversion bugs (`bb95881`, `a690d1d`), gating settings cleared by the UI (`8715a05`), and wrong Ollama, diffusers, Polars and landing page examples. vLLM, Homebrew, the Windows and macOS archives, Argo CD itself and guides at 2 GiB and above were not covered.
+
+### Suite results at `6610f45`
+
+Round 4 ran on 2026-10-18 on detached worktrees at `6610f45` (`Merge branch 'fix/p3-4-docs'`), Go 1.27.2, Node 24.19.0, Python 3.11.7, `huggingface_hub` 2.2.0 and `hf_xet` 1.7.0, on a shared machine with other projects' workloads.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `make lint` | Exit 0: golangci-lint 0 issues, `go vet` for the compat tag sets, Biome 219 files, `tsc -b`, `lint-style` (test timeouts, test targets, silent skips, 85 Hub endpoint and test pairs) |
+| Workflows | `actionlint .github/workflows/*` | Exit 0, no findings |
+| Vulnerabilities | `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` | 0 vulnerabilities reached; 1 in a required module, not called |
+| Unit and integration | `make test` (`-race -count=1 -timeout 30m -tags integration`, SQLite, Postgres 18 and MinIO) | **Not finished.** The runner stopped it about 2 minutes in, before any package reported, because the workflow asked for its result early. `make cover` and `make check-generate` did not start. Not a test failure, but the suite is not green |
+| Audit, tests | `go test -race -count=1 -tags integration -run <every test the threat model cites> ./...` on Postgres and MinIO | All 102 cited Test and Fuzz names exist at the files cited; 27 of 27 packages ok. `TestOIDCKeycloak` ran against a real Keycloak |
+| Audit, flakiness | `TestRouteAuthorisationMatrix`, `TestSecretsStayOutOfLogsAndTelemetry`, `TestUnsafeDownloadGateCoversEveryRoute`, `TestUnsafeDownloadGateCatchesScannerBypasses` and `TestWriteTokenAdministersReposThroughHubAPIOnly` with `-race -count=3` | 3 of 3 each. The route matrix took 40 to 52 s |
+| Audit, other | `make test-compat`, `make lint-style`, Vitest, a check of the generated CLI and configuration references | All passed: Vitest 113 of 113; the generated references match the binary. No test was skipped, weakened or deleted since `382cc88`; every changed threshold tightens. **One gap:** see [Still open after Phase 3](#still-open-after-phase-3) |
+| Client compatibility | `HANGAR_TEST_POSTGRES=1 HANGAR_TEST_MINIO=1 make test-compat` | Exit 0. Go: `git` 46, `harness` 7, `hf` 2, `lmstudio` 1, `ollama` 29, `upstream` 26 and `viewer` 100 tests and subtests, 0 skipped, 0 failed (run twice). pytest: 69 passed, 2 skipped |
+| Hub clients against the binary | `HANGAR_HF_INSTANCE=binary uv run --frozen --project compat pytest compat/hf` | 42 passed, 2 skipped in each of four cells: SQLite and Postgres, each with Xet uploads off and on. The skips are the `diffusers` and `upload_large_folder` tests, which run in other matrix cells |
+| Xet | `uv run ... pytest compat/xet` (README command) | 16 passed in each of six runs: the fake backend, `xetreal` on SQLite and `xetreal` on Postgres, each with `hf_xet` 1.7.0 and 1.6.0 |
+| Image | `make image IMAGE=hangar-p3:test` | Built |
+| Chart and scripts, static | `make lint-deploy` | Exit 0: `helm lint` for 3 values files, kubeconform valid for every render, shellcheck, 26 action refs, 8 jobs with uv |
+| Compose | `HANGAR_IMAGE=hangar-p3:test scripts/compose-smoke.sh <example> --skip pull` | 6 of 6 checks on each of `quickstart`, `postgres-minio`, `oidc-keycloak` and `scale`, including upload, download and `git clone` |
+| Helm on kind | `make test-kind IMAGE=hangar-p3:test` | 8 PASS, 0 FAIL: the three kind script tests, `TestKindGeneratedSecretsSurviveRenders`, `TestKindNotesReadOnlyRenderedSecretKeys` (2 subtests) and `TestKindGitOpsInstall`; package ok in 36 s |
+| UI against the mock | `pnpm exec playwright test` (no retries) at 390, 1024 and 1440 px | 356 passed, 43 skipped by design (30 screenshot tests that need `SCREENSHOTS=1`, desktop-only budget and lint tests, the phone card-height test). Axe in light on every page and in dark on 10 pages at each width |
+| UI against a real Instance | `pnpm exec playwright test -c playwright.real.config.ts` against two `make build` binaries (no retries) | 210 passed, 0 skipped. No `WARN` or `ERROR` line in either server's log |
+
+No test failed and none was flaky. Earlier in Phase 3, before the audit rounds, each area ran its own suites: `ws/p3-gaps` ran `make test` with 2,195 Go tests and subtests passed and 0 skipped, and the others are in their handoffs. None of those replaces a full `make test` at `6610f45`.
+
+### Still open after Phase 3
+
+- **Rerun the unit suite at `6610f45` (must).** `make test` (7 to 30 minutes on this machine), then `make cover` and `make check-generate`. Until then Phase 3 is not finished and `main` stays at `382cc88`.
+- **Tag case of security input 6c through the full server (normal, scan).** `TestGateChecksObjectsOfTags` covers an object held only by a tag at gate level, but `TestUnsafeDownloadGateCatchesScannerBypasses` creates no tag, so no full-server test checks that LFS batch and Ollama refuse such an object. Fix: in that test, tag a Commit holding a pickle, delete the pickle from `main`, and assert 403 from the LFS batch and from `/v2/.../blobs/sha256:<oid>`.
+- **Dark-theme axe coverage.** The real-Instance suite runs axe in the light theme only, and the mock suite checks 10 pages in dark. Spec 09 asks for axe in both themes and on every page; whether every page needs a dark check is for James.
+- **Viewer scan timing flake (low).** `TestScanLimitsMakeResultsPartial` failed once at a load average near 50 because `internal/datasets/viewer/scan.go` checks `MaxScanTime` when the row count is a multiple of 4,096, which is already true before the first row ([`p3-authz.md`](handoffs/p3-authz.md), "Not done"). Not fixed.
+- **No kind run starts the Blob store late.** `TestKindGitOpsInstall` passed with `storage.s3.startup_wait` in the build, but no test starts MinIO after Hangar on kind.
+- **Load-sensitive compat tests.** `TestOllamaClient/in-process` and `TestPullThroughFromHuggingFace` failed once at a load average of 30 to 40 during the gaps review; both passed in round 4.
 
 ## Preview feedback round (2026-10-17)
 
@@ -100,12 +205,14 @@ The first attempt at the unit run failed in `ui-deps` because the shell had Node
 
 ### Still open
 
-- **Hangar exits when the Blob store does not answer at start.** In one round 9 kind run, MinIO took about 5 minutes to pull; with migrations no longer holding the Pods back, the `hangar` containers started first, exited with `reach bucket "hangar": ... connection refused`, and went into the kubelet's restart back-off past the 6-minute rollout wait. `0f6e751` removed the delay from the test, but a GitOps install whose object store starts late still waits on that back-off. Waiting for the Blob store at start, as `--wait-for-database` does for migrations, is not done.
-- **`scripts/kind-chart-test.sh` skips a Hangar image that is not local.** It loads only images it finds, so a missing `HANGAR_KIND_IMAGE` makes each `TestKind` test wait 5 to 6 minutes and fail with `ErrImageNeverPull` instead of failing at once. The audit hit this when another runner deleted the image it was using.
-- **Datasets without data files log a `WARN`.** `internal/datasets/pipeline/convert.go:211` logs "the dataset has no Configs" for every dataset with no Viewer files (29 lines in one `e2e-real` run). Since datasets may hold any file types (decision 11a), this is a normal state; the Viewer already logs it at `DEBUG`. Low priority, in the spirit of finding 6.
+As of `cd42d2b`. Phase 3 closed the first three items and the release rehearsal; [Still open after Phase 3](#still-open-after-phase-3) has what remains.
+
+- **Hangar exits when the Blob store does not answer at start.** Closed in Phase 3 by `storage.s3.startup_wait` (`22eded4`). In one round 9 kind run, MinIO took about 5 minutes to pull; with migrations no longer holding the Pods back, the `hangar` containers started first, exited with `reach bucket "hangar": ... connection refused`, and went into the kubelet's restart back-off past the 6-minute rollout wait. `0f6e751` removed the delay from the test, but a GitOps install whose object store starts late still waits on that back-off. Waiting for the Blob store at start, as `--wait-for-database` does for migrations, is not done.
+- **`scripts/kind-chart-test.sh` skips a Hangar image that is not local.** It loads only images it finds, so a missing `HANGAR_KIND_IMAGE` makes each `TestKind` test wait 5 to 6 minutes and fail with `ErrImageNeverPull` instead of failing at once. The audit hit this when another runner deleted the image it was using. Closed in Phase 3 (`cebfa8f`).
+- **Datasets without data files log a `WARN`.** `internal/datasets/pipeline/convert.go:211` logs "the dataset has no Configs" for every dataset with no Viewer files (29 lines in one `e2e-real` run). Since datasets may hold any file types (decision 11a), this is a normal state; the Viewer already logs it at `DEBUG`. Low priority, in the spirit of finding 6. Closed in Phase 3: it logs at `DEBUG` (`f210b05`).
 - **Rerun the import on the preview.** James approved the lead running it on 2026-10-17. Nothing here has moved a multi-GB file through Nginx Proxy Manager, and no Compose or kind setup exercises presigned single-PUT uploads (only `compat/hf` against MinIO does). The lead rebuilds the preview and the CLI from `integration/v1`, runs `hangar admin doctor --large-read` against Aquila's MinIO, and reruns the `Qwen2.5-Coder-32B-Instruct-GGUF` import. This closes the red item in [Open issues](#open-issues).
 - **Local `govulncheck`.** `~/go/bin/govulncheck` was built with Go 1.26 and cannot load this module; rebuild it with Go 1.27. `go run ...@v1.9.0` works.
-- **Not run this round.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, fuzz, LM Studio against a real server, and `make release-rehearsal`.
+- **Not run this round.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, fuzz, LM Studio against a real server, and `make release-rehearsal` (which the Phase 3 gaps review ran and passed).
 - **Release on hold.** Nothing is published until James says go.
 
 ## Suite results
@@ -137,7 +244,7 @@ Not run in round 8: the `diffusers` Hub cell and the 6 GiB sparse file (both nig
 
 ## Feature checklist
 
-Every row passed in round 8 unless its result says otherwise. "unit" is `make test`; the other names are the suites above. "Mock" rows rest on the `ui/e2e` mock suite, which last ran during the `5975bec` checks.
+Every row passed in round 8 unless its result says otherwise. "unit" is `make test`; the other names are the suites above. "Mock" rows rest on the `ui/e2e` mock suite, which last passed at `6610f45` (356 passed). Phase 3 added tests for several rows, listed in its handoffs; META-2 names the Phase 3 gate tests.
 
 | ID | Test that proves it | Latest result |
 |---|---|---|
@@ -152,7 +259,7 @@ Every row passed in round 8 unless its result says otherwise. "unit" is `make te
 | REPO-9 | `internal/repo` settings tests; `compat/hf` `update_repo_settings` | Passed: unit, Hub clients |
 | UP-1 | `internal/hfapi` write tests; `compat/hf` `test_upload.py` against the binary, including the 200 MB multipart file | Passed: unit, Hub clients |
 | UP-2 | `compat/git` `TestCloneFetchPull`, `TestLFSPushCloneAndPull`, `TestLFSMultipartTransfer`; `internal/gitserver` | Passed: git clients, unit |
-| UP-3 | Real-Instance browser upload flow; mock flows for parts and resume after reload | Passed: real Instance. Mock: passed at `5975bec` |
+| UP-3 | Real-Instance browser upload flow; mock flows for parts and resume after reload | Passed: real Instance. Mock: passed at `6610f45` |
 | UP-4 | `internal/cli` push tests, including `TestPushResendsCompletionAfter503WithRetryAfter` | Passed: unit |
 | UP-5 | `internal/blob` `TestStreamsLargeObjects` on both backends and on AWS S3 (2026-10-15); `internal/hfapi` `TestResolveRedirectOver50GB`; nightly 6 GiB Hub cell | Passed: unit. Nightly cell not run in round 8 |
 | UP-6 | `internal/repo/lfs_test.go`; `compat/hf` `test_upload_over_multipart_threshold` (the second upload sends nothing) | Passed: unit, Hub clients |
@@ -174,12 +281,12 @@ Every row passed in round 8 unless its result says otherwise. "unit" is `make te
 | PULL-10 | `internal/upstream` Pull-through tests; `cmd/hangar` `TestHubPullThroughAdapter`; `compat/upstream` `TestPullThroughFromHuggingFace`, `TestRealPullThroughWithHFHubDownloadAndGitLFS` | Passed: unit, Upstreams |
 | PULL-11 | `internal/upstream` dependency tests; `cmd/hangar` `TestDatasetWiring` | Passed: unit |
 | PULL-12 | `internal/cli` import tests, including `TestImportResendsCompletionAfter503WithRetryAfter`; `compat/upstream` `TestRealImportThroughTheNativeAPI` | Passed: unit, Upstreams. A 20 GB import against the preview failed; see [Open issues](#open-issues) |
-| BROWSE-1 | `internal/repo` list and facet tests; mock Arsenal flows | Passed: unit. Mock: passed at `5975bec` |
+| BROWSE-1 | `internal/repo` list and facet tests; mock Arsenal flows | Passed: unit. Mock: passed at `6610f45` |
 | BROWSE-2 | `internal/upstream` discover tests; real-Instance Discover flow | Passed: unit, real Instance |
 | BROWSE-3 | Real-Instance browsing flow and 51 page checks at three widths | Passed: real Instance |
 | BROWSE-4 | Real-Instance safetensors header and GGUF viewer flows; `internal/api` `TestFileScan` | Passed: real Instance, unit |
 | BROWSE-5 | `internal/collections`; `compat/hf` `test_collections`; real-Instance Collection keyboard reorder flow | Passed: unit, Hub clients, real Instance |
-| BROWSE-6 | Mock keyboard search flow | Mock: passed at `5975bec`. Not covered by a round 8 suite |
+| BROWSE-6 | Mock keyboard search flow | Mock: passed at `6610f45` |
 | AUTH-1 | `internal/auth`; `internal/api` `TestLoginThrottleMessage`; real-Instance sign-in flow | Passed: unit, real Instance |
 | AUTH-2 | `internal/auth` OIDC tests; Compose `oidc-keycloak` smoke | Passed: unit, Compose |
 | AUTH-3 | `internal/auth/login` tests | Passed: unit |
@@ -188,7 +295,7 @@ Every row passed in round 8 unless its result says otherwise. "unit" is `make te
 | AUTH-6 | `internal/auth/bootstrap`; `cmd/hangar` admin command tests; Compose `quickstart` with a generated admin password | Passed: unit, Compose |
 | AUTH-7 | `internal/auth` Ollama key tests; `compat/ollama` `private_Repo_with_a_registered_key` | Passed: unit, Ollama |
 | META-1 | `internal/index` extract and fuzz tests | Passed: unit, fuzz |
-| META-2 | `internal/scan`; `cmd/hangar` `TestUnsafeDownloadGateCoversEveryRoute`, `TestServingSurfaceIsClassified`, `TestFileByteReadersAreClassified`; real-Instance unsafe pickle flow | Passed: unit, fuzz, real Instance |
+| META-2 | `internal/scan`; `cmd/hangar` `TestUnsafeDownloadGateCoversEveryRoute`, `TestServingSurfaceIsClassified`, `TestFileByteReadersAreClassified`, `TestUnsafeDownloadGateCatchesScannerBypasses`; real-Instance unsafe pickle flow | Passed: unit, fuzz, real Instance. Phase 3 gate tests passed 3 of 3 in the round 4 audit |
 | META-3 | `internal/scan` integrity tests | Passed: unit |
 | DATA-1 | As REPO-1 to REPO-9 for dataset Repos | Passed: unit, Hub clients |
 | DATA-2 | `compat/viewer` `TestLayoutMatchesDatasetsLibrary` (70 layouts against `datasets` 5.1.0) | Passed: Dataset Viewer |
@@ -305,17 +412,25 @@ Fixes in earlier rounds are described in the owners' handoffs, in `RESOLUTIONS.m
 
 ### Red
 
-- **A 20 GB import fails on the preview Instance (high, needs James).** Update 2026-10-17: finding 13 is now fixed further (server-side copy, completions that outlive their caller, CLI part retries); see [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17). The rerun is still needed. `hangar import` of `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` failed with HTTP 500 on `qwen2.5-coder-32b-instruct-q4_k_m.gguf`. The preview's log shows upload completion failing while reading the assembled object back from Aquila's MinIO: `repo: upload lfs part: upload part 65: unexpected EOF` at 14:55:49Z on 2026-10-16, then part 66 at 15:23:27Z, and part 66 once for `lmstudio-community/Qwen3.8-27B-MLX-4bit` (a later attempt succeeded). The CLI's message names no request ID, so it was built before `1c40413`, and the preview runs image `preview-5975bec`. Both sides are fixed on this branch: the server resumes a broken read with ranged reads, keeps the upload and its parts and answers 503 (`fix/r4-w2`), and the CLI sends the completion again after that 503 (`071ee7d`). `TestCompleteUploadResumesABrokenRead`, `TestCompleteUploadKeepsPartsWhenTheReadFails`, `TestResumingReader` and `TestImportResendsCompletionAfter503WithRetryAfter` pass with `-race -count=3`. No round 8 suite moves a multi-GB file, so the fix is not proven end to end. To close it, James rebuilds the preview from `integration/v1`, installs the CLI from the same commit and reruns the import. Why the MinIO read drops at about the same offset each time is not known; the proxy in front of Aquila's MinIO is worth checking if the rerun still logs retries.
+- **A 20 GB import fails on the preview Instance (high, needs James).** The preview's `hangar import` of `Qwen/Qwen2.5-Coder-32B-Instruct-GGUF` failed with HTTP 500 on `qwen2.5-coder-32b-instruct-q4_k_m.gguf` on 2026-10-16, while upload completion read the assembled object back from Aquila's MinIO (`repo: upload lfs part: upload part 65: unexpected EOF`, then part 66). The preview then ran image `preview-5975bec`. The server side is fixed further on this branch: completion resumes a broken read with ranged reads and keeps the upload and its parts (`fix/r4-w2`), hashes the assembled object and copies it into place server-side, and outlives its caller; the CLI resends a completion after 503 (`071ee7d`) and retries failed parts (finding 8 of [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17)). `TestCompleteUploadResumesABrokenRead`, `TestCompleteUploadKeepsPartsWhenTheReadFails`, `TestCompleteUploadCopiesServerSide` and `TestImportResendsCompletionAfter503WithRetryAfter` pass. No suite here moves a multi-GB file through Nginx Proxy Manager, so the fix is not proven end to end. To close it, rebuild the preview and the CLI from `integration/v1`, run `hangar admin doctor --large-read` against Aquila's MinIO, and rerun the import. Why the MinIO read drops at about the same offset each time is not known; the proxy in front of Aquila's MinIO is worth checking if the rerun still logs retries.
 
 ### Gaps and decisions
 
-- **W8 8, self-service profile and password changes.** A product decision for James: there is no `PATCH /me` or `POST /me/password`; admins send reset links.
-- **W11 8 and W3, ownership of LFS and Xet objects at Commit time.** Deferred to the phase 3 security review: a user who knows an object's SHA-256 can reference it from their own Repo.
-- **git-upload-pack and unsafe files.** `scan.Gate` does not gate `git clone` without LFS, because git sends whole Commits. The Hub's default `.gitattributes` keeps every pickle format in LFS, and [Security](../operate/security.md) says so.
-- **Scan errors are not blocked.** A file the scanner read but could not parse (status `error`) downloads with blocking on, because many `.bin` files are not pickles. The phase 3 review should confirm the trade-off.
-- **`/admin/system` does not report `upload_mode`.** It reports `download_mode`; adding `upload_mode` changes the OpenAPI file and is left to the owners.
+Open:
+
+- **Unit suite at `6610f45`, and the 6c tag test.** See [Still open after Phase 3](#still-open-after-phase-3). Both must be closed before `main` moves.
+- **Questions for James.** The open questions in [decisions](decisions.md): whether `scan.block_unsafe_downloads` also refuses suspicious pickles; who may reference an LFS or Xet object by its hash (W11 8, deferred from Phase 2; global deduplication stays and is documented in the [threat model](../security/threat-model.md)); whether Namespace profiles and member lists are public when `anonymous_read` is off; how concurrent server-side Commits to one branch should behave; and how Ollama should learn that a quant is not pulled. The current behaviour stands until he decides.
+- **W8 8, self-service profile and password changes.** A product decision for James: there is no `PATCH /me` or `POST /me/password`; admins send reset links, and the first sign-in page now says so.
+- **Dark-theme axe coverage.** Whether every page needs a dark-theme axe check; see [Still open after Phase 3](#still-open-after-phase-3).
 - **Release on hold.** James decided on 2026-10-16 that nothing is published until he says go ([decisions](decisions.md), "Release on hold"). Work stops after the release dry run.
-- **Release not exercised.** Multi-arch image publishing, cosign signing and the SBOM run only in `release.yml`; `make release-rehearsal` was not part of round 8, and the first real run is James's release (W9 11).
-- **Local-only checks.** There is no remote, so every result here comes from the development machine, not CI.
-- **Not covered in round 8.** BROWSE-6 and the mock flows for UP-3 and BROWSE-1 last ran in the `ui/e2e` mock suite during the `5975bec` checks. The `diffusers` cell and the 6 GiB file are nightly.
-- **`govulncheck` binary.** The installed `govulncheck` is built with an older Go and cannot load this module; CI's `go run ...@v1.9.0` form works. This is a local tool problem.
+- **Release partly exercised.** `make release-rehearsal` passed in the Phase 3 gaps review with a throwaway key, but keyless signing through GitHub OIDC and the multi-arch push run only in `release.yml`, for the first time in James's release (W9 11).
+- **Local-only checks.** There is no remote, so every result here comes from the development machine, not CI, and every benchmark from one shared laptop.
+- **Not covered in Phase 3.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, a timed fuzz run (round 4 ran the fuzz seeds only), LM Studio against a real server, and a kind install that starts the Blob store late.
+- **`govulncheck` binary.** The installed `govulncheck` is built with an older Go and cannot load this module; the `go run ...@v1.9.0` form works. This is a local tool problem.
+
+Closed in Phase 3:
+
+- **git-upload-pack and unsafe files.** `Gate.CheckGit` gates every git fetch (`f65ba44`).
+- **Scan errors are not blocked.** Data that is not a pickle is now safe, and a partial scan of a file that can run code is refused (`4e62696`).
+- **`/admin/system` does not report `upload_mode`.** It does (`a23e48e`).
+- **Tests that passed without their backend.** They skip visibly, and `make lint` stops the pattern (`81978ac`).
