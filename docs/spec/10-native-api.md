@@ -31,7 +31,7 @@ The native API serves the web UI, the CLI and automation. It lives under `/api/h
 | Collections | `GET/POST /collections`, `GET/PATCH/DELETE /collections/{ns}/{slug}`, `POST/PATCH/DELETE /collections/{ns}/{slug}/items[/{id}]` |
 | Community | `GET/POST .../discussions`, `GET/PATCH .../discussions/{num}`, `POST .../discussions/{num}/comments`, `POST .../discussions/{num}/merge` |
 | Webhooks | `GET/POST /webhooks`, `GET/PATCH/DELETE /webhooks/{id}`, `GET /webhooks/{id}/deliveries`, `POST /webhooks/{id}/deliveries/{id}/redeliver`, `POST /webhooks/{id}/test` |
-| Admin | `GET/POST /admin/users`, `PATCH /admin/users/{id}`, `POST /admin/users/{id}/reset-link`, `POST /admin/invites`, `GET/POST/PATCH/DELETE /admin/upstreams[/{id}]`, `POST /admin/upstreams/{id}/test`, `GET/PATCH /admin/settings`, `GET /admin/storage` (usage by Namespace), `PUT /admin/quotas/{ns}`, `POST /admin/gc`, `GET /admin/audit?actor=&action=&since=&until=&format=csv`, `GET /admin/system` (version, backends with the S3 download and upload modes, telemetry, doctor checks), `GET /admin/tokens`, `DELETE /admin/tokens/{id}` |
+| Admin | `GET/POST /admin/users`, `PATCH /admin/users/{id}`, `POST /admin/users/{id}/reset-link`, `POST /admin/users/{id}/email-link`, `POST /admin/invites`, `GET/POST/PATCH/DELETE /admin/upstreams[/{id}]`, `POST /admin/upstreams/{id}/test`, `GET/PATCH /admin/settings`, `GET /admin/storage` (usage by Namespace), `PUT /admin/quotas/{ns}`, `POST /admin/gc`, `GET /admin/audit?actor=&action=&since=&until=&format=csv`, `GET /admin/system` (version, backends with the S3 download and upload modes, telemetry, doctor checks), `GET /admin/tokens`, `DELETE /admin/tokens/{id}` |
 
 ## Webhook events
 

@@ -47,7 +47,9 @@ People who already have a local account can link a provider under **Settings**, 
 
 ## Names, emails and passwords
 
-Hangar copies the display name and email from the provider's claims only when it creates a User, on the first sign-in. After that they belong to the User, who can change them under **Settings**, **Profile**; later sign-ins do not overwrite them. Admin groups and Organisation mappings are the only things Hangar takes from the provider at every sign-in.
+Hangar copies the display name and email from the provider's claims only when it creates a User, on the first sign-in, and treats the email as confirmed only when the claims mark it verified (`email_verified`). After that they belong to the User, who can change them under **Settings**, **Profile**; later sign-ins do not overwrite them. A new email a user types waits for the confirmation link an admin sends to it, like anyone's.
+
+A first sign-in whose verified email belongs to an existing User is refused until that User signs in and links the provider. Only a verified email counts: one a user typed and never confirmed blocks nobody. Admin groups and Organisation mappings are the only things Hangar takes from the provider at every sign-in.
 
 A User that OIDC created has no Hangar password, so **Settings**, **Profile** tells them to change their password with the provider, and `POST /api/hangar/v1/me/password` answers 403. A local User who links a provider keeps their Hangar password and can still change it.
 

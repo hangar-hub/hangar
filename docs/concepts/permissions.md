@@ -34,7 +34,7 @@ Ollama signs its registry requests with its own key pair. Register `~/.ollama/id
 
 ## Your account
 
-Under **Settings**, **Profile** you can change your display name and email, and your password. To change the password you enter the current one; the new one needs at least 10 characters and cannot be a common password. Changing it signs out your other sessions, keeps this one, and leaves your Tokens working. A Token cannot change a password, but a `write` Token can change your display name and email (`PATCH /api/hangar/v1/me`). If you sign in with an OIDC provider and have no Hangar password, change your password with the provider. If you forget your password, ask an admin for a reset link.
+Under **Settings**, **Profile** you can change your display name and email, and your password. A new email takes effect when you open its confirmation link: Hangar sends no mail, so ask an admin to create the link (**Admin**, **Users**, **Email link**) and send it to the new address. Until then your old email stays. To change the password you enter the current one; the new one needs at least 10 characters and cannot be a common password. Changing it signs out your other sessions, keeps this one, and leaves your Tokens working. A Token cannot change a password, but a `write` Token can change your display name and email (`PATCH /api/hangar/v1/me`). If you sign in with an OIDC provider and have no Hangar password, change your password with the provider. If you forget your password, ask an admin for a reset link.
 
 ## Audit log
 
