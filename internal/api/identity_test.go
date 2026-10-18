@@ -339,14 +339,34 @@ func TestOrganisationEndpoints(t *testing.T) {
 		require.Equal(t, gen.Role("write"), m.Role)
 		require.Equal(t, gen.MemberSourceManual, m.Source)
 		bob.do(http.MethodPut, "/api/hangar/v1/orgs/acme/members/carol", map[string]any{"role": "read"}, http.StatusForbidden, nil)
+		// Members are for signed-in callers while anonymous reads are off
+		// (the default); carol is in no Organisation.
+		carol := e.login("carol")
+		carol.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members/bob", nil, http.StatusOK, &m)
+		require.Equal(t, "bob", m.Username)
+		carol.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members/carol", nil, http.StatusNotFound, nil)
+		carol.do(http.MethodGet, "/api/hangar/v1/orgs/nope/members", nil, http.StatusNotFound, nil)
+		carol.do(http.MethodGet, "/api/hangar/v1/orgs/alice/members", nil, http.StatusNotFound, nil)
+		var list gen.MemberList
+		carol.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members", nil, http.StatusOK, &list)
+		require.Len(t, list.Items, 2)
+		// Anonymous callers get 401 whether or not the Organisation or the
+		// Member exists.
+		for _, path := range []string{"/orgs/acme/members", "/orgs/acme/members/bob", "/orgs/acme/members/carol", "/orgs/nope/members", "/orgs/nope/members/bob"} {
+			var p httpx.Problem
+			anon.do(http.MethodGet, "/api/hangar/v1"+path, nil, http.StatusUnauthorized, &p)
+			require.Equal(t, "Sign in to see users and Organisations on this Instance.", p.Detail, path)
+		}
+		// With anonymous reads on, membership is public, as on the Hub.
+		e.user("root", true)
+		e.login("root").do(http.MethodPatch, "/api/hangar/v1/admin/settings", map[string]any{"anonymous_read": true}, http.StatusOK, nil)
 		anon.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members/bob", nil, http.StatusOK, &m)
 		require.Equal(t, "bob", m.Username)
-		anon.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members/carol", nil, http.StatusNotFound, nil)
-		anon.do(http.MethodGet, "/api/hangar/v1/orgs/nope/members", nil, http.StatusNotFound, nil)
-		anon.do(http.MethodGet, "/api/hangar/v1/orgs/alice/members", nil, http.StatusNotFound, nil)
-		var list gen.MemberList
 		anon.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members", nil, http.StatusOK, &list)
 		require.Len(t, list.Items, 2)
+		anon.do(http.MethodGet, "/api/hangar/v1/orgs/nope/members", nil, http.StatusNotFound, nil)
+		e.login("root").do(http.MethodPatch, "/api/hangar/v1/admin/settings", map[string]any{"anonymous_read": false}, http.StatusOK, nil)
+		anon.do(http.MethodGet, "/api/hangar/v1/orgs/acme/members", nil, http.StatusUnauthorized, nil)
 		alice.do(http.MethodPut, "/api/hangar/v1/orgs/acme/members/nobody", map[string]any{"role": "read"}, http.StatusNotFound, nil)
 		alice.do(http.MethodPut, "/api/hangar/v1/orgs/acme/members/bob", map[string]any{"role": "owner"}, http.StatusUnprocessableEntity, nil)
 		alice.do(http.MethodPut, "/api/hangar/v1/orgs/acme/members/alice", map[string]any{"role": "read"}, http.StatusConflict, nil)

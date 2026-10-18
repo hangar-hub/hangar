@@ -113,9 +113,15 @@ func TestCollectionsLifecycle(t *testing.T) {
 		seen, err := e.svc.Get(ctx, e.bob, "alice", c.Slug)
 		require.NoError(t, err)
 		require.Len(t, seen.Items, 2)
+		// While anonymous reads are off (the fake Authz's default), a public
+		// Collection is closed to anonymous callers, like its Namespace.
+		_, err = e.svc.Get(ctx, model.Anonymous(), "alice", c.Slug)
+		require.ErrorIs(t, err, collections.ErrNotFound)
+		e.authz.AnonymousRead = true
 		anon, err := e.svc.Get(ctx, model.Anonymous(), "alice", c.Slug)
 		require.NoError(t, err)
-		require.Empty(t, anon.Items, "anonymous reads are off in the fake Authz")
+		require.Len(t, anon.Items, 2, "anonymous callers see the public Repos once anonymous reads are on")
+		e.authz.AnonymousRead = false
 
 		// Reorder and change notes.
 		third := c.Items[2].ID
@@ -184,7 +190,10 @@ func TestListFiltersAndVisibility(t *testing.T) {
 		}
 		require.Equal(t, []string{"team/team-only", "alice/internal-50-off", "alice/public-picks"}, titles(e.bob, collections.ListOptions{}))
 		require.Equal(t, []string{"alice/internal-50-off", "alice/public-picks"}, titles(e.carol, collections.ListOptions{}))
+		require.Empty(t, titles(model.Anonymous(), collections.ListOptions{}), "public Collections are closed to anonymous callers while anonymous reads are off")
+		e.authz.AnonymousRead = true
 		require.Equal(t, []string{"alice/public-picks"}, titles(model.Anonymous(), collections.ListOptions{}))
+		e.authz.AnonymousRead = false
 		require.Equal(t, []string{"team/team-only"}, titles(e.bob, collections.ListOptions{Owner: "team"}))
 		require.Empty(t, titles(e.bob, collections.ListOptions{Owner: "nobody"}))
 		require.Equal(t, []string{"alice/internal-50-off"}, titles(e.bob, collections.ListOptions{Query: "50%_"}))

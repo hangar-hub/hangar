@@ -256,6 +256,40 @@ func TestPermissionsPullMirror(t *testing.T) {
 	})
 }
 
+// TestNamespaceReadFollowsAnonymousRead checks James's decision of
+// 2026-10-18: reading a Namespace (its profile, members and Collections)
+// needs a signed-in caller while security.anonymous_read is off, and is
+// open to anyone while it is on. The refusal is the same whether or not
+// the Namespace exists.
+func TestNamespaceReadFollowsAnonymousRead(t *testing.T) {
+	for _, anonymousRead := range []bool{false, true} {
+		t.Run(fmt.Sprintf("anonymous_read=%t", anonymousRead), func(t *testing.T) {
+			dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+				ctx := context.Background()
+				w := buildWorld(t, d, anonymousRead)
+				targets := map[string]*auth.NamespaceTarget{
+					"acme":    {ID: w.acme.ID, Name: "acme", Kind: org.KindOrg},
+					"by name": {Name: "acme"},
+					"missing": {Name: "nope"},
+					"empty":   {},
+				}
+				for name, ns := range targets {
+					err := w.s.Authorizer.Can(ctx, model.Anonymous(), auth.ActionRead, auth.Target{Namespace: ns})
+					if anonymousRead {
+						require.NoError(t, err, "anonymous caller on %s", name)
+					} else {
+						require.ErrorIs(t, err, auth.ErrForbidden, "anonymous caller on %s", name)
+						require.Contains(t, err.Error(), "sign in")
+					}
+					for _, persona := range []string{"outsider", "member-write+read-token", "member-write+token-other-ns", "ollama-registry-token", "instance-admin"} {
+						require.NoError(t, w.s.Authorizer.Can(ctx, w.persons[persona], auth.ActionRead, auth.Target{Namespace: ns}), "%s on %s", persona, name)
+					}
+				}
+			})
+		})
+	}
+}
+
 func TestPermissionsNamespacesAndInstance(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()

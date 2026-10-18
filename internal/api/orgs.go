@@ -32,9 +32,22 @@ func idMemberOut(m org.Member) gen.Member {
 	return gen.Member{Username: m.Username, DisplayName: idStrPtr(m.DisplayName), Role: gen.Role(m.Role), Source: gen.MemberSource(m.Source)}
 }
 
-// orgTarget loads an Organisation and checks the caller may manage it.
+// orgTarget loads an Organisation and checks the caller may act on it.
+// For read, the check comes first, so an anonymous caller refused while
+// security.anonymous_read is off cannot tell whether it exists.
 func (h *Identity) orgTarget(w http.ResponseWriter, r *http.Request, name string, action auth.Action) (*org.Namespace, model.Principal, bool) {
 	p := httpx.Principal(r.Context())
+	if action == auth.ActionRead {
+		ok, err := canSeeNamespaces(r.Context(), h.auth.Authorizer, p)
+		if err != nil {
+			h.fail(w, r, err)
+			return nil, p, false
+		}
+		if !ok {
+			refuseNamespaces(w, r)
+			return nil, p, false
+		}
+	}
 	ns, err := h.orgs.Get(r.Context(), name)
 	if err == nil && ns.Kind != org.KindOrg {
 		err = org.ErrNotFound
@@ -116,7 +129,8 @@ func (h *Identity) DeleteOrg(w http.ResponseWriter, r *http.Request, name gen.Ns
 }
 
 // ListMembers implements GET /orgs/{ns}/members. Membership is public, as
-// on the Hub.
+// on the Hub, while security.anonymous_read is on; otherwise only
+// signed-in callers see it.
 func (h *Identity) ListMembers(w http.ResponseWriter, r *http.Request, name gen.Ns) {
 	ns, _, ok := h.orgTarget(w, r, name, auth.ActionRead)
 	if !ok {

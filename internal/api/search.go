@@ -62,6 +62,16 @@ func (a *SearchAPI) Search(w http.ResponseWriter, r *http.Request, params gen.Se
 		}
 	}
 	if want["namespaces"] {
+		// Anonymous callers find no users or Organisations while
+		// security.anonymous_read is off, as they find no Repos.
+		ok, err := canSeeNamespaces(r.Context(), a.d.Authz, p)
+		if err != nil {
+			a.d.problem(w, r, err)
+			return
+		}
+		want["namespaces"] = ok
+	}
+	if want["namespaces"] {
 		nss, err := a.d.NamespaceSearch.SearchNamespaces(r.Context(), q, limit)
 		if err != nil {
 			a.d.problem(w, r, err)

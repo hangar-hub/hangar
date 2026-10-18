@@ -395,8 +395,18 @@ func TestCollectionEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, status)
 
 	var list gen.CollectionList
+	e.json("GET", "/collections?owner=alice&q=tiny&item=models/alice/tiny&limit=10", "bob-token", nil, http.StatusOK, &list)
+	require.Len(t, list.Items, 1)
+	// Public Collections are closed to anonymous callers while anonymous
+	// reads are off (the fake Authz's default), and open once they are on.
+	e.json("GET", "/collections?owner=alice", "", nil, http.StatusOK, &list)
+	require.Empty(t, list.Items)
+	status, _ = e.do("GET", "/collections/alice/tiny-models", "", nil)
+	require.Equal(t, http.StatusNotFound, status, "the answer a private Collection gives")
+	e.authz.AnonymousRead = true
 	e.json("GET", "/collections?owner=alice&q=tiny&item=models/alice/tiny&limit=10", "", nil, http.StatusOK, &list)
 	require.Len(t, list.Items, 1)
+	e.authz.AnonymousRead = false
 	status, _ = e.do("GET", "/collections?limit=0", "", nil)
 	require.Equal(t, http.StatusBadRequest, status)
 	e.json("GET", "/collections/alice/tiny-models", "bob-token", nil, http.StatusOK, &c)

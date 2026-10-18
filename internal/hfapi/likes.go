@@ -39,9 +39,22 @@ func (h *Handler) likers(w http.ResponseWriter, r *http.Request, ref repoRef) {
 
 // userLikes answers GET /api/users/{user}/likes (list_liked_repos): the
 // Repos a user likes, newest like first, leaving out those the caller
-// cannot read.
+// cannot read. Anonymous callers get 401 while security.anonymous_read is
+// off.
 func (h *Handler) userLikes(w http.ResponseWriter, r *http.Request, user string) {
 	ctx := r.Context()
+	p := httpx.Principal(ctx)
+	// A user's page is closed to anonymous callers while
+	// security.anonymous_read is off, before the user is looked up, so the
+	// answer does not say whether they exist.
+	if err := h.d.Authz.Can(ctx, p, auth.ActionRead, auth.Target{Namespace: &auth.NamespaceTarget{Name: user}}); err != nil {
+		if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrNotFound) {
+			h.writeForbidden(w, r, "Sign in to see users on this Instance.")
+			return
+		}
+		h.internalError(w, r, err)
+		return
+	}
 	ns, err := h.d.Orgs.Get(ctx, user)
 	if err == nil && ns.UserID == uuid.Nil {
 		err = org.ErrNotFound
@@ -59,7 +72,6 @@ func (h *Handler) userLikes(w http.ResponseWriter, r *http.Request, user string)
 		h.internalError(w, r, err)
 		return
 	}
-	p := httpx.Principal(ctx)
 	out := make([]map[string]any, 0, len(liked))
 	for _, id := range liked {
 		rp, err := h.d.Repos.GetByUUID(ctx, id)

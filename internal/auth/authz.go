@@ -24,6 +24,9 @@ import (
 //	admin                   Namespace admin      same            same
 //	hub_admin               Namespace admin      same            same
 //
+// read on a Namespace (its profile, members and Collections) is open to
+// anyone while anonymous read is on, and to signed-in callers otherwise.
+//
 // admin needs the admin Token scope; hub_admin, which only the Hub API's
 // delete, settings and same-Namespace move endpoints use, needs write.
 //
@@ -224,8 +227,7 @@ func (a *Authorizer) canNamespace(ctx context.Context, p model.Principal, action
 		return fmt.Errorf("%w: %s does not apply to a Namespace", ErrForbidden, action)
 	}
 	if action == ActionRead {
-		// Namespace profiles are public; the Repos in them are checked one by one.
-		return nil
+		return a.canSeeNamespace(ctx, p)
 	}
 	if p.IsAnonymous() {
 		return fmt.Errorf("%w: sign in first", ErrForbidden)
@@ -254,6 +256,28 @@ func (a *Authorizer) canNamespace(ctx context.Context, p model.Principal, action
 		return fmt.Errorf("%w: this needs the %s role in %s", ErrForbidden, need, ns.Name)
 	}
 	return nil
+}
+
+// canSeeNamespace decides who may see a Namespace's profile, its
+// Organisation members and its Collections: anyone while
+// security.anonymous_read is on, as on the Hub, and only signed-in callers
+// while it is off, so a closed Instance does not list its usernames and
+// Roles. Decided by James on 2026-10-18 (05-auth.md "Permission rules").
+// It looks nothing up, so the answer is the same whether the Namespace
+// exists or not, and needs no Namespace in the target. The Repos in a
+// Namespace are checked one by one.
+func (a *Authorizer) canSeeNamespace(ctx context.Context, p model.Principal) error {
+	if !p.IsAnonymous() {
+		return nil
+	}
+	st, err := a.s.Settings.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if st.AnonymousRead {
+		return nil
+	}
+	return fmt.Errorf("%w: sign in to see users and Organisations on this Instance", ErrForbidden)
 }
 
 func containsFold(list []string, s string) bool {

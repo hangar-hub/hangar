@@ -5,7 +5,7 @@ This page lists what to do to run Hangar securely. For what Hangar protects, its
 ## Checklist
 
 - Serve Hangar over HTTPS only, with `server.public_url` set to the `https://` address, and set `server.trusted_proxies` to your proxy's addresses.
-- Keep `security.registration: closed` (the default) or `invite`, and leave `security.anonymous_read` off unless you want a public Instance.
+- Keep `security.registration: closed` (the default) or `invite`, and leave `security.anonymous_read` off unless you want a public Instance. While it is off, signed-out visitors cannot see public Repos, user and Organisation profiles, member lists or public Collections either.
 - Use OIDC with groups for Instance admins (`admin_groups`), and turn off local sign-in (`security.local_login: false`), keeping the bootstrap admin as a break-glass account with a long password stored offline.
 - Give Tokens the smallest scope, limit them to the Namespaces or Repos they need, and set an expiry.
 - Store the Instance key, database DSN and S3 keys in secrets, not configuration files. Rotate the Instance key with `hangar admin rotate-key` if it leaks.
