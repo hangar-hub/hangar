@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -360,6 +361,35 @@ func TestSQLiteRefusesASecondProcess(t *testing.T) {
 func TestOpenRejectsUnknownDriver(t *testing.T) {
 	_, err := db.Open(context.Background(), db.Options{Driver: "mysql"})
 	require.Error(t, err)
+}
+
+// TestSQLiteRefusesURLDSNs: a postgres:// DSN with the default sqlite
+// driver used to become the relative path "postgres:/user:pass@host...",
+// and Open created a database and a lock file under the working directory.
+func TestSQLiteRefusesURLDSNs(t *testing.T) {
+	t.Chdir(t.TempDir())
+	ctx := context.Background()
+	for _, dsn := range []string{
+		"postgres://hangar:s3cret@db.example.com:5432/hangar",
+		"postgresql://hangar:s3cret@db.example.com/hangar?sslmode=disable",
+		"POSTGRES://hangar:s3cret@db.example.com/hangar",
+		"mysql://hangar:s3cret@db.example.com/hangar",
+	} {
+		_, err := db.Open(ctx, db.Options{Driver: db.SQLite, DSN: dsn})
+		require.ErrorContains(t, err, "database.driver", dsn)
+		require.ErrorContains(t, err, "postgres", dsn)
+		require.NotContains(t, err.Error(), "s3cret", "the error must not echo the password")
+	}
+	entries, err := os.ReadDir(".")
+	require.NoError(t, err)
+	require.Empty(t, entries, "Open must create nothing for a refused DSN")
+
+	// File paths, file: URLs and Windows-style drive paths still open.
+	for _, dsn := range []string{"hangar.db", "file:other.db?cache=shared", "file:" + filepath.Join(t.TempDir(), "x.db"), ":memory:"} {
+		d, err := db.Open(ctx, db.Options{Driver: db.SQLite, DSN: dsn})
+		require.NoError(t, err, dsn)
+		require.NoError(t, d.Close())
+	}
 }
 
 func TestNewIDIsVersion7(t *testing.T) {

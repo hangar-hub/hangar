@@ -23,6 +23,8 @@ database:
 
 Postgres supports any number of `web` and `worker` processes. Hangar is tested with Postgres 18. Put the DSN in a secret (`HANGAR_DATABASE_DSN`), not in a configuration file.
 
+`database.driver` defaults to `sqlite`, so set it to `postgres` (`HANGAR_DATABASE_DRIVER=postgres`) as well as the DSN. With the `sqlite` driver, Hangar refuses a DSN that is a URL other than `file:` and names the setting to change.
+
 ## Migrations
 
 Processes in role `all` apply migrations when they start. With separate `web` and `worker` processes, run migrations once before starting them:

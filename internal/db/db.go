@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -81,6 +82,12 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 	var d *DB
 	switch opts.Driver {
 	case SQLite:
+		if scheme := urlScheme(opts.DSN); scheme != "" && !strings.EqualFold(scheme, "file") {
+			// Without this a postgres:// DSN became a relative file path,
+			// and Open created a database and a lock file under it.
+			return nil, fmt.Errorf("database.dsn is a %s: URL, but database.driver is sqlite, which takes a file path; "+
+				"for a Postgres database, set database.driver to postgres", scheme)
+		}
 		path := sqlitePath(opts.DSN)
 		var lock *fileLock
 		if path != "" {
@@ -119,6 +126,18 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 		return nil, fmt.Errorf("connect to %s: %w", opts.Driver, err)
 	}
 	return d, nil
+}
+
+// urlSchemeRe matches a URL scheme at the start of a DSN. A scheme of one
+// letter is a Windows drive, such as C:\hangar.db, so it needs two.
+var urlSchemeRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]+):`)
+
+// urlScheme returns the URL scheme a DSN starts with, or "".
+func urlScheme(dsn string) string {
+	if m := urlSchemeRe.FindStringSubmatch(dsn); m != nil {
+		return m[1]
+	}
+	return ""
 }
 
 // sqlitePath returns the file path of a SQLite DSN, or "" for in-memory databases.

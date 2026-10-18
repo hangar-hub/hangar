@@ -19,6 +19,18 @@ import (
 // InstanceKeyBytes is the decoded length of security.instance_key.
 const InstanceKeyBytes = 32
 
+// dsnSchemeRe matches a URL scheme at the start of a DSN. A scheme of one
+// letter is a Windows drive, such as C:\hangar.db, so it needs two.
+var dsnSchemeRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]+):`)
+
+// dsnScheme returns the URL scheme a DSN starts with, or "".
+func dsnScheme(dsn string) string {
+	if m := dsnSchemeRe.FindStringSubmatch(dsn); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 var windowRe = regexp.MustCompile(`^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$`)
 
 // CronParser parses the 5-field cron schedules used in configuration and
@@ -73,6 +85,10 @@ func (c *Config) validate(requireInstanceKey bool) error {
 		}
 		if c.Database.DSN == "" {
 			e.addf("database.dsn is required: the SQLite database file path")
+		} else if scheme := dsnScheme(c.Database.DSN); scheme != "" && !strings.EqualFold(scheme, "file") {
+			// Name only the scheme: the DSN may hold a password.
+			e.addf("database.dsn is a %s: URL, but database.driver is sqlite, which takes a file path. "+
+				"For a Postgres database, set database.driver to postgres (HANGAR_DATABASE_DRIVER=postgres)", scheme)
 		}
 	case DriverPostgres:
 		if !strings.HasPrefix(c.Database.DSN, "postgres://") && !strings.HasPrefix(c.Database.DSN, "postgresql://") {

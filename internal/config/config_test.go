@@ -175,6 +175,38 @@ func TestValidateBeforeSecretsAllowsAnEmptyInstanceKey(t *testing.T) {
 	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "storage.backend")
 }
 
+// TestValidateRefusesURLDSNsForSQLite: database.driver defaults to sqlite,
+// so a Postgres DSN without HANGAR_DATABASE_DRIVER=postgres used to pass
+// validation and become a relative SQLite file path.
+func TestValidateRefusesURLDSNsForSQLite(t *testing.T) {
+	for _, dsn := range []string{
+		"postgres://hangar:s3cret@db.example.com:5432/hangar",
+		"postgresql://hangar:s3cret@db.example.com/hangar",
+		"Postgres://hangar:s3cret@db.example.com/hangar",
+		"mysql://hangar:s3cret@db.example.com/hangar",
+		"http://hangar:s3cret@db.example.com/",
+	} {
+		cfg, err := config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_DATABASE_DSN="+dsn)})
+		require.NoError(t, err)
+		require.Equal(t, config.DriverSQLite, cfg.Database.Driver)
+		for _, err := range []error{cfg.Validate(), cfg.ValidateBeforeSecrets()} {
+			require.ErrorContains(t, err, "database.driver is sqlite", dsn)
+			require.ErrorContains(t, err, "set database.driver to postgres", dsn)
+			require.NotContains(t, err.Error(), "s3cret", "the error must not echo the password")
+			require.NotContains(t, err.Error(), "db.example.com", "the error names the scheme only")
+		}
+	}
+	for _, dsn := range []string{"/var/lib/hangar/hangar.db", "hangar.db", "file:hangar.db?cache=shared", "FILE:hangar.db", `C:\hangar\hangar.db`, "c:/hangar/hangar.db", ":memory:"} {
+		cfg, err := config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_DATABASE_DSN="+dsn)})
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate(), dsn)
+	}
+	cfg, err := config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_DATABASE_DRIVER=postgres",
+		"HANGAR_DATABASE_DSN=postgres://hangar:s3cret@db.example.com/hangar")})
+	require.NoError(t, err)
+	require.NoError(t, cfg.Validate())
+}
+
 func TestValidateRefusesAReservedBootstrapUsername(t *testing.T) {
 	cfg, err := config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_SECURITY_BOOTSTRAP_ADMIN_USERNAME=admin")})
 	require.NoError(t, err)
