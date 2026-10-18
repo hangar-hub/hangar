@@ -104,8 +104,9 @@ lint-ui: ui-deps
 	cd ui && $(PNPM) run lint && $(PNPM) run typecheck
 
 # House style: no em dashes in code, UI copy or docs we write, British
-# spellings in the docs (scripts/check-spelling.sh), and relative links in
-# Markdown that name real files (scripts/check-doc-links.py). It also runs the checks
+# spellings in the docs (scripts/check-spelling.sh), relative links in
+# Markdown that name real files (scripts/check-doc-links.py), and tests the docs
+# cite at the files that define them (scripts/check-test-citations.py). It also runs the checks
 # on how tests run, such as no test passing by returning early
 # (scripts/check-silent-skips.sh).
 .PHONY: lint-style
@@ -119,6 +120,7 @@ lint-style:
 	  echo "House style: replace the em dashes above."; exit 1; fi
 	@./scripts/check-spelling.sh
 	@python3 scripts/check-doc-links.py
+	@python3 scripts/check-test-citations.py
 	@./scripts/check-test-timeouts.sh
 	@./scripts/check-test-targets.sh
 	@./scripts/check-silent-skips.sh

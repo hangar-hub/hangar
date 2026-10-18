@@ -125,7 +125,7 @@ Four clients cloning `many-commits` (4.4 MB pack) for 3 minutes, in five runs: p
 
 #### Clone errors
 
-One busy run had 2 of 904 pack responses end early: k6 reported `unexpected EOF`, and the replica logged `git upload-pack ended early` with `context canceled`, which means the connection from Traefik closed first. That run failed its `http_req_failed` threshold (0.11 % against 0.1 %). The other four clone runs, the ones listed in [Clone](#clone), had none in about 3,900 clones, and nothing in Hangar's logs explains the closed connections. Treat it as unexplained until it happens on a quiet host.
+One busy run had 2 of 904 pack responses end early: k6 reported `unexpected EOF`, and the replica logged `git upload-pack ended early` with `context canceled`, which means the connection from Traefik closed first. That run failed its `http_req_failed` threshold (0.11% against 0.1%). The other four clone runs, the ones listed in [Clone](#clone), had none in about 3,900 clones, and nothing in Hangar's logs explains the closed connections. Treat it as unexplained until it happens on a quiet host.
 
 During clones, a replica's memory peaked at 285 and 496 MiB, mostly the `git upload-pack` and `pack-objects` processes in its cgroup, under the 1 GiB limit. The 256 MiB target covers uploads and downloads of files, not git clones.
 
