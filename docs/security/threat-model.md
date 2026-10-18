@@ -355,7 +355,7 @@ How to verify signatures is in [Verify the image](../operate/security.md#verify-
 
 **Residual risks:**
 
-- Workflows name GitHub Actions by tag, not by commit SHA, so a moved tag in an action's repository changes what runs. `scripts/check-action-refs.sh` checks only that each ref exists.
+- Workflows pin every GitHub Action to a commit SHA, and `scripts/check-action-refs.sh` (run by `make lint-deploy`) checks that each SHA is the commit of the release named in its comment, so a moved tag changes nothing. What remains is trust in each pinned release and in the Dependabot pull requests that move the pins, which a maintainer reviews.
 - Base images are named by tag (`golang:<version>-alpine`, `node:<version>-alpine`, `cgr.dev/chainguard/wolfi-base:latest`), not by digest.
 - Keyless signing, the transparency log and the multi-arch push have only been rehearsed offline with a throwaway key (`make release-rehearsal`); they run for real at the first release.
 

@@ -145,7 +145,7 @@ Before the release:
 2. Enable GitHub Pages from the `gh-pages` branch (the first `docs.yml` or release run creates it), private vulnerability reporting and the CLA Assistant app.
 3. Give the release GitHub App access to the repository. Updated 2026-10-18: the workflows use the organisation's app `hangar-hub-release` instead of tokens, and James has already set it up, with the organisation Actions variable `RELEASE_APP_ID`, the secret `RELEASE_APP_PRIVATE_KEY` and the tap `hangar-hub/homebrew-tap`. At release, add the `hangar` repository to the app's installation and to the selected repositories of the variable and the secret. Without them release-please cannot open its pull request and GoReleaser cannot publish the cask.
 4. Decide whether item 4 stands as it is, or whether 100,000 Repos per Instance must be measured first.
-5. Decide whether to pin the actions in `release.yml` to commit SHAs.
+5. ~~Decide whether to pin the actions in `release.yml` to commit SHAs.~~ Decided 2026-10-18: every workflow pins every action to a commit SHA ([decisions](decisions.md), "GitHub organisation `hangar-hub`").
 6. Rerun the AWS S3 suite from a faster connection, or approve an agent doing so (see [AWS S3](#aws-s3)).
 7. Check LM Studio by hand against a real server; no suite covers it ([integration report](integration-report.md#gaps-and-decisions), "Not covered in Phase 3").
 8. Give the go-ahead, then merge the release-please pull request for `v1.0.0`.
