@@ -427,6 +427,7 @@ func TestClassify(t *testing.T) {
 		"/auth/oidc/unifi/callback":                         httpx.TargetAuth,
 		"/auth/login":                                       httpx.TargetUI,
 		"/auth/invite/abc":                                  httpx.TargetUI,
+		"/auth/email/abc":                                   httpx.TargetUI,
 		"/assets/index.js":                                  httpx.TargetUI,
 		"/":                                                 httpx.TargetUI,
 		"/arsenal":                                          httpx.TargetUI,

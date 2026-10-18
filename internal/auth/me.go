@@ -19,15 +19,16 @@ type OrgMembershipView struct {
 // MeView is the signed-in user, in the shape of the native API's Me
 // schema. The /auth handlers and GET /me both return it.
 type MeView struct {
-	ID          uuid.UUID           `json:"id"`
-	Username    string              `json:"username"`
-	DisplayName string              `json:"display_name"`
-	Email       string              `json:"email,omitempty"`
-	AvatarURL   string              `json:"avatar_url,omitempty"`
-	IsAdmin     bool                `json:"is_admin"`
-	HasPassword bool                `json:"has_password"`
-	Orgs        []OrgMembershipView `json:"orgs"`
-	CSRFToken   string              `json:"csrf_token,omitempty"`
+	ID           uuid.UUID           `json:"id"`
+	Username     string              `json:"username"`
+	DisplayName  string              `json:"display_name"`
+	Email        string              `json:"email,omitempty"`
+	AvatarURL    string              `json:"avatar_url,omitempty"`
+	IsAdmin      bool                `json:"is_admin"`
+	PendingEmail string              `json:"pending_email,omitempty"`
+	HasPassword  bool                `json:"has_password"`
+	Orgs         []OrgMembershipView `json:"orgs"`
+	CSRFToken    string              `json:"csrf_token,omitempty"`
 }
 
 // Me builds the MeView for a signed-in Principal. csrf is the session's
@@ -44,7 +45,7 @@ func (s *Service) Me(ctx context.Context, p model.Principal, csrf string) (*MeVi
 	if err != nil {
 		return nil, err
 	}
-	out := &MeView{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Email: u.Email, IsAdmin: u.IsAdmin, HasPassword: u.HasPassword,
+	out := &MeView{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Email: u.Email, IsAdmin: u.IsAdmin, HasPassword: u.HasPassword, PendingEmail: u.PendingEmail,
 		Orgs: make([]OrgMembershipView, 0, len(ms)), CSRFToken: csrf}
 	if out.DisplayName == "" {
 		out.DisplayName = u.Username

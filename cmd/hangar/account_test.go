@@ -37,6 +37,7 @@ func TestSelfServiceAccountOnTheFullServer(t *testing.T) {
 	const oldPassword, newPassword = "a long enough password 1", "an even longer password 2"
 	alice := testUser(t, in, "alice")
 	testUser(t, in, "bob")
+	// Set as the admin editor sets it: verified at once.
 	_, err = in.auth.Users.Update(ctx, alice.UserID, auth.UserUpdate{Email: ptr("alice@example.com")}, model.System())
 	require.NoError(t, err)
 	_, aliceToken, err := in.auth.TokenStore.Create(ctx, auth.NewToken{UserID: alice.UserID, Name: "ci", Scope: model.ScopeAdmin})
@@ -104,6 +105,24 @@ func TestSelfServiceAccountOnTheFullServer(t *testing.T) {
 	require.Contains(t, r.body, "the email address is already used")
 	r = withToken(http.MethodPatch, "/api/hangar/v1/me", `{"display_name":"From CI"}`)
 	require.Equal(t, http.StatusOK, r.status, r.body)
+
+	// A new email waits for the confirmation link; the link takes the
+	// cross-origin check and works once.
+	r = do(browserA, http.MethodPatch, "/api/hangar/v1/me", `{"email":"alice@home.example"}`)
+	require.Equal(t, http.StatusOK, r.status, r.body)
+	require.Contains(t, r.body, `"email":"alice@example.com"`)
+	require.Contains(t, r.body, `"pending_email":"alice@home.example"`)
+	link, err := in.auth.CreateEmailLink(ctx, alice.UserID, model.System())
+	require.NoError(t, err)
+	confirm := link.URL[strings.Index(link.URL, "/auth/email/"):]
+	r = send(http.DefaultClient, http.MethodPost, confirm, "", map[string]string{"Sec-Fetch-Site": "cross-site"})
+	require.Equal(t, http.StatusForbidden, r.status, r.body)
+	r = send(browserA.http, http.MethodPost, confirm, "", nil)
+	require.Equal(t, http.StatusNoContent, r.status, r.body)
+	r = send(http.DefaultClient, http.MethodPost, confirm, "", nil)
+	require.Equal(t, http.StatusNotFound, r.status, r.body)
+	r = do(browserA, http.MethodGet, "/api/hangar/v1/me", "")
+	require.Contains(t, r.body, `"email":"alice@home.example"`)
 
 	// Unsafe calls from a session need the CSRF header and a same-origin
 	// request.

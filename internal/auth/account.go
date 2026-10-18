@@ -37,11 +37,28 @@ type ProfileUpdate struct {
 	Email       *string
 }
 
-// UpdateProfile changes the signed-in User's display name and email with
-// the same checks as the admin user editor (UserStore.Update), and records
-// user.profile_changed naming the fields that changed. Users who sign in
-// with OIDC may change both: Hangar copies them from the provider's claims
-// only when it creates the account.
+// ErrNoEmailChange means an admin asked for a confirmation link for a User
+// who has no email change waiting.
+var ErrNoEmailChange = fmt.Errorf("%w: this user has no email change waiting for confirmation", ErrInvalid)
+
+// UpdateProfile changes the signed-in User's display name with the admin
+// user editor's checks (UserStore.Update), and handles their email:
+//
+//   - The same address as now (in any case) cancels a pending change.
+//   - An empty string removes the email at once, and any pending change.
+//   - Another address must be valid and not another User's email (the
+//     admin editor's ErrConflict). It does not take effect: it is stored as
+//     the User's pending email, outside users.email and its uniqueness,
+//     replacing any earlier one, until the confirmation link that an admin
+//     creates (CreateEmailLink) and sends to that address is used
+//     (ConfirmEmail). Hangar sends no mail, so the admin delivers the link,
+//     as for reset links. A pending email matches no OIDC sign-in, invite
+//     or clash check.
+//
+// It records user.profile_changed naming the fields that changed, with
+// email_pending when the email waits for confirmation. Users who sign in
+// with OIDC may do all of this: Hangar copies the claims only when it
+// creates the account.
 func (s *Service) UpdateProfile(ctx context.Context, p model.Principal, up ProfileUpdate, ip, userAgent string) (*User, error) {
 	if !p.IsUser() {
 		return nil, fmt.Errorf("%w: not signed in", ErrInvalidCredentials)
@@ -50,7 +67,51 @@ func (s *Service) UpdateProfile(ctx context.Context, p model.Principal, up Profi
 	if err != nil {
 		return nil, err
 	}
-	u, err := s.Users.Update(ctx, p.UserID, UserUpdate{DisplayName: up.DisplayName, Email: up.Email}, p)
+	if before.IsSystem {
+		return nil, fmt.Errorf("%w: the system user cannot be changed", ErrInvalid)
+	}
+	var email string
+	if up.Email != nil {
+		if email, err = normaliseEmail(*up.Email); err != nil {
+			return nil, err
+		}
+		if email != "" && !strings.EqualFold(email, before.Email) {
+			other, err := s.Users.GetByEmail(ctx, email)
+			switch {
+			case err == nil && other.ID != before.ID:
+				return nil, fmt.Errorf("%w: the email address is already used", ErrConflict)
+			case err != nil && !errors.Is(err, ErrNotFound):
+				return nil, err
+			}
+		}
+	}
+	if up.DisplayName != nil {
+		if _, err := s.Users.Update(ctx, p.UserID, UserUpdate{DisplayName: up.DisplayName}, p); err != nil {
+			return nil, err
+		}
+	}
+	pending := false
+	if up.Email != nil {
+		err := s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+			if _, err := tx.NewDelete().Model((*db.EmailChange)(nil)).Where("user_id = ?", before.ID).Exec(ctx); err != nil {
+				return err
+			}
+			switch {
+			case email == "":
+				_, err := tx.NewUpdate().Model((*db.User)(nil)).Where("id = ?", before.ID).Set("email = NULL").
+					Set("email_verified = ?", false).Set("updated_at = ?", s.nowUTC()).Exec(ctx)
+				return err
+			case strings.EqualFold(email, before.Email):
+				return nil
+			}
+			pending = true
+			return setPendingEmail(ctx, tx, before.ID, email)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	u, err := s.Users.Get(ctx, p.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -58,14 +119,109 @@ func (s *Service) UpdateProfile(ctx context.Context, p model.Principal, up Profi
 	if u.DisplayName != before.DisplayName {
 		fields = append(fields, "display_name")
 	}
-	if !strings.EqualFold(u.Email, before.Email) {
+	if !strings.EqualFold(u.Email, before.Email) || !strings.EqualFold(u.PendingEmail, before.PendingEmail) {
 		fields = append(fields, "email")
 	}
 	if len(fields) > 0 {
+		data := map[string]any{"fields": fields}
+		if pending {
+			data["email_pending"] = true
+		}
 		s.record(ctx, audit.Event{Action: audit.UserProfileChanged, Actor: p, TargetType: "user", TargetID: u.Username,
-			IP: ip, UserAgent: userAgent, Data: map[string]any{"fields": fields}})
+			IP: ip, UserAgent: userAgent, Data: data})
 	}
 	return u, nil
+}
+
+// CreateEmailLink makes the single-use link that confirms a User's pending
+// email, for an admin to send to that address. It expires in 72 hours, like
+// reset links, and replaces any earlier link for the User. It records
+// user.email_confirmation with step link_created.
+func (s *Service) CreateEmailLink(ctx context.Context, userID uuid.UUID, actor model.Principal) (*Link, error) {
+	u, err := s.Users.Get(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if u.PendingEmail == "" {
+		return nil, ErrNoEmailChange
+	}
+	code, err := randomString(32)
+	if err != nil {
+		return nil, err
+	}
+	hash, expires := hashSecret(code), s.nowUTC().Add(LinkTTL)
+	q := s.db.NewUpdate().Model((*db.EmailChange)(nil)).Where("user_id = ?", userID).
+		Set("code_hash = ?", hash).Set("expires_at = ?", expires).Set("updated_at = ?", s.nowUTC())
+	if actor.UserID != uuid.Nil {
+		q = q.Set("created_by = ?", actor.UserID)
+	}
+	res, err := q.Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNoEmailChange
+	}
+	s.record(ctx, audit.Event{Action: audit.UserEmailConfirmation, Actor: actor, TargetType: "user", TargetID: u.Username,
+		Data: map[string]any{"step": "link_created"}})
+	return &Link{URL: s.publicURL() + EmailPath + code, ExpiresAt: expires}, nil
+}
+
+// ConfirmEmail applies the pending email that a confirmation link's code
+// names: it becomes the User's verified email and the pending change ends,
+// so the link works once. An unknown, used or expired code gives
+// ErrLinkInvalid; an address another User took meanwhile gives the admin
+// editor's ErrConflict and keeps the link. It records user.email_confirmation
+// with step confirmed.
+func (s *Service) ConfirmEmail(ctx context.Context, code, ip, userAgent string) (*User, error) {
+	var row db.EmailChange
+	err := s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().Model(&row).Where("code_hash = ?", hashSecret(code)).Scan(ctx)
+		if db.IsNotFound(err) {
+			return ErrLinkInvalid
+		}
+		if err != nil {
+			return err
+		}
+		if row.ExpiresAt == nil || !s.nowUTC().Before(*row.ExpiresAt) {
+			return ErrLinkInvalid
+		}
+		if _, err := tx.NewUpdate().Model((*db.User)(nil)).Where("id = ?", row.UserID).Set("email = ?", row.Email).
+			Set("email_verified = ?", true).Set("updated_at = ?", s.nowUTC()).Exec(ctx); err != nil {
+			if db.IsUniqueViolation(err) {
+				return fmt.Errorf("%w: the email address is already used", ErrConflict)
+			}
+			return err
+		}
+		res, err := tx.NewDelete().Model((*db.EmailChange)(nil)).Where("id = ? AND code_hash = ?", row.ID, hashSecret(code)).Exec(ctx)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrLinkInvalid
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	u, err := s.Users.Get(ctx, row.UserID)
+	if err != nil {
+		return nil, err
+	}
+	s.record(ctx, audit.Event{Action: audit.UserEmailConfirmation, Actor: u.Principal(model.AuthPassword), TargetType: "user",
+		TargetID: u.Username, IP: ip, UserAgent: userAgent, Data: map[string]any{"step": "confirmed"}})
+	return u, nil
+}
+
+// setPendingEmail stores email as the User's pending email in idb,
+// replacing any earlier one.
+func setPendingEmail(ctx context.Context, idb bun.IDB, userID uuid.UUID, email string) error {
+	if _, err := idb.NewDelete().Model((*db.EmailChange)(nil)).Where("user_id = ?", userID).Exec(ctx); err != nil {
+		return err
+	}
+	_, err := idb.NewInsert().Model(&db.EmailChange{ID: db.NewID(), UserID: userID, Email: email}).Exec(ctx)
+	return err
 }
 
 // PasswordChange is a signed-in User's request to change their password.

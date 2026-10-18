@@ -64,15 +64,19 @@ paths:
       operationId: updateMe
       summary: Change my display name or email
       description: >-
-        Changes the signed-in user's display name and email address, with the
-        same checks as the admin user editor: a display name of at most 100
-        characters, and an email address that is valid and not used by
-        another user (409). An empty string clears the field; a field left
-        out is unchanged. Changing the email address marks it unverified.
-        Session callers need the `X-CSRF-Token` header, and Token callers
-        need the `write` scope. Users who sign in with OIDC can change both
-        fields too: Hangar copies them from the provider only when it
-        creates the account.
+        Changes the signed-in user's display name, with the same checks as
+        the admin user editor (at most 100 bytes), and asks for a new email
+        address. A new address must be valid and not another user's email
+        (409, the admin editor's error), and does not take effect at once:
+        it becomes `pending_email` until the single-use confirmation link
+        that an admin creates (`POST /admin/users/{id}/email-link`) and sends
+        to that address is used. A pending email matches no sign-in, invite
+        or other user's change. The current address cancels a pending
+        change, and an empty string removes the email at once. A field left
+        out is unchanged. Session callers need the `X-CSRF-Token` header,
+        and Token callers need the `write` scope. Users who sign in with
+        OIDC can change both fields too: Hangar copies them from the
+        provider only when it creates the account.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/MeUpdate"}}}
@@ -1148,6 +1152,21 @@ paths:
       responses:
         "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/AdminUser"}}}}
         default: {$ref: "#/components/responses/Problem"}
+  /admin/users/{id}/email-link:
+    post:
+      tags: [admin]
+      operationId: adminCreateEmailLink
+      summary: Create a link that confirms a user's pending email
+      description: >-
+        Hangar sends no mail, so an admin sends this link to the user's
+        `pending_email`. Opening it and confirming makes that address the
+        user's verified email. It is single use, expires in 72 hours and
+        replaces any earlier link for the user. A user with no pending email
+        gets 422.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "201": {description: A single-use link that expires in 72 hours., content: {application/json: {schema: {$ref: "#/components/schemas/Link"}}}}
+        default: {$ref: "#/components/responses/Problem"}
   /admin/users/{id}/reset-link:
     post:
       tags: [admin]
@@ -1386,6 +1405,11 @@ components:
         avatar_url: {type: string}
         is_admin: {type: boolean}
         orgs: {type: array, items: {$ref: "#/components/schemas/OrgMembership"}}
+        pending_email:
+          type: string
+          description: >-
+            An email address the user asked for that waits for its
+            confirmation link. It is not the user's email until then.
         has_password:
           type: boolean
           description: >-
@@ -1396,7 +1420,7 @@ components:
       type: object
       properties:
         display_name: {type: string, description: "The name shown instead of the username, at most 100 bytes. An empty string clears it."}
-        email: {type: string, description: The email address. An empty string clears it.}
+        email: {type: string, description: "The new email address, which waits for confirmation. The current address cancels a pending change; an empty string removes the email."}
     PasswordChange:
       type: object
       required: [current_password, new_password]
@@ -2361,6 +2385,7 @@ components:
         username: {type: string}
         display_name: {type: string}
         email: {type: string}
+        pending_email: {type: string, description: An email address the user asked for that waits for its confirmation link.}
         is_admin: {type: boolean}
         disabled: {type: boolean}
         oidc_providers: {type: array, items: {type: string}}

@@ -27,6 +27,7 @@ import (
 //	POST /auth/register                        {"username","password","email","display_name"}
 //	POST /auth/invite/{code}                   the same body; accepts an invite
 //	POST /auth/reset/{code}                    {"password"}; sets a new password
+//	POST /auth/email/{code}                    confirms a pending email; 204
 //
 // The register, invite and reset calls sign the user in and answer with
 // the Me schema. GET /auth/login, /auth/invite/{code} and /auth/reset/{code}
@@ -41,6 +42,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("POST /auth/register", s.route("/auth/register", s.register))
 	mux.HandleFunc("POST /auth/invite/{code}", s.route("/auth/invite/{code}", s.acceptInvite))
 	mux.HandleFunc("POST /auth/reset/{code}", s.route("/auth/reset/{code}", s.resetPassword))
+	mux.HandleFunc("POST /auth/email/{code}", s.route("/auth/email/{code}", s.confirmEmail))
 	return mux
 }
 
@@ -188,6 +190,14 @@ func (s *Service) resetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.signInAndRespond(w, r, u, http.StatusOK)
+}
+
+func (s *Service) confirmEmail(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.ConfirmEmail(r.Context(), r.PathValue("code"), httpx.ClientIP(r), r.UserAgent()); err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Service) signInAndRespond(w http.ResponseWriter, r *http.Request, u *User, status int) {

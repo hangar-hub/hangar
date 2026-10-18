@@ -16,7 +16,8 @@ type Action string
 
 // Audited actions. UserPasswordChanged, UserPasswordChangeFailed and
 // UserProfileChanged are a User changing their own password or profile
-// (POST /me/password and PATCH /me).
+// (POST /me/password and PATCH /me); UserEmailConfirmation is the link
+// that confirms a pending email, created and then used.
 const (
 	LoginSucceeded           Action = "login.succeeded"
 	LoginFailed              Action = "login.failed"
@@ -31,6 +32,7 @@ const (
 	UserPasswordChanged      Action = "user.password_changed"
 	UserPasswordChangeFailed Action = "user.password_change_failed"
 	UserProfileChanged       Action = "user.profile_changed"
+	UserEmailConfirmation    Action = "user.email_confirmation"
 	IdentityLinked           Action = "user.identity_linked"
 	InviteCreated            Action = "invite.created"
 	MembershipChanged        Action = "membership.changed"

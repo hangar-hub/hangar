@@ -176,6 +176,10 @@ func isSignInCall(r *http.Request) bool {
 		return !strings.Contains(strings.TrimPrefix(p, "/auth/invite/"), "/")
 	case strings.HasPrefix(p, "/auth/reset/"):
 		return !strings.Contains(strings.TrimPrefix(p, "/auth/reset/"), "/")
+	case strings.HasPrefix(p, EmailPath):
+		// Confirming an email needs only the link's code, so it gets the
+		// same cross-origin check and ignores the session, like a reset.
+		return !strings.Contains(strings.TrimPrefix(p, EmailPath), "/")
 	}
 	return false
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,62 +45,103 @@ func (e *env) auditActions() map[audit.Action][]audit.Entry {
 }
 
 // TestUpdateMe covers PATCH /me (W8 8, decided by James on 2026-10-18):
-// the user's own display name and email, with the admin editor's checks
-// and its error for an email another user has, CSRF for sessions and the
+// the user's own display name with the admin editor's checks, a new email
+// that waits for the confirmation link an admin creates, the admin
+// editor's error for an email another user has, CSRF for sessions and the
 // write scope for Tokens.
 func TestUpdateMe(t *testing.T) {
 	t.Parallel()
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
 		e := newEnv(t, d)
-		e.user("alice", false)
+		alice := e.user("alice", false)
 		e.user("bob", false)
 		e.user("root", true)
-		alice, anon := e.login("alice"), e.anon()
+		aliceClient, anon, rootClient := e.login("alice"), e.anon(), e.login("root")
 
 		anon.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Nobody"}, http.StatusUnauthorized, nil)
 
 		var me gen.Me
-		alice.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Alice Liddell", "email": "alice@example.com"}, http.StatusOK, &me)
+		aliceClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Alice Liddell", "email": "alice@example.com"}, http.StatusOK, &me)
 		require.Equal(t, "Alice Liddell", me.DisplayName)
-		require.Equal(t, "alice@example.com", *me.Email)
+		require.Nil(t, me.Email, "a new email waits for confirmation")
+		require.Equal(t, "alice@example.com", *me.PendingEmail)
 		require.True(t, me.HasPassword)
 		require.NotNil(t, me.CsrfToken, "a session caller keeps its CSRF token")
-		alice.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusOK, &me)
-		require.Equal(t, "Alice Liddell", me.DisplayName)
 
-		// A field left out is unchanged; an empty string clears it.
-		alice.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": ""}, http.StatusOK, &me)
+		// The admin sees the pending email and creates the link; the
+		// person who opens it confirms it, once.
+		var au gen.AdminUserList
+		rootClient.do(http.MethodGet, "/api/hangar/v1/admin/users?q=alice", nil, http.StatusOK, &au)
+		require.Equal(t, "alice@example.com", *au.Items[0].PendingEmail)
+		var link gen.Link
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+alice.ID.String()+"/email-link", nil, http.StatusCreated, &link)
+		require.Contains(t, link.Url, "http://hangar.test/auth/email/")
+		path := strings.TrimPrefix(link.Url, "http://hangar.test")
+		anon.do(http.MethodPost, path, nil, http.StatusNoContent, nil)
+		anon.do(http.MethodPost, path, nil, http.StatusNotFound, nil)
+		var confirmed gen.Me
+		aliceClient.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusOK, &confirmed)
+		require.Equal(t, "alice@example.com", *confirmed.Email)
+		require.Nil(t, confirmed.PendingEmail)
+		bob, err := e.svc.Users.GetByUsername(ctx, "bob")
+		require.NoError(t, err)
+		var none gen.Problem
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", nil, http.StatusUnprocessableEntity, &none)
+		require.Contains(t, *none.Detail, "no email change waiting")
+		// The link is the credential, so it ignores a session cookie sent
+		// without the CSRF header.
+		e.user("lena", false)
+		lena := e.login("lena")
+		lena.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "lena@example.com"}, http.StatusOK, nil)
+		lenaUser, err := e.svc.Users.GetByUsername(ctx, "lena")
+		require.NoError(t, err)
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+lenaUser.ID.String()+"/email-link", nil, http.StatusCreated, &link)
+		lenaCSRF := lena.csrf
+		lena.csrf = ""
+		lena.do(http.MethodPost, strings.TrimPrefix(link.Url, "http://hangar.test"), nil, http.StatusNoContent, nil)
+		lena.csrf = lenaCSRF
+
+		// A field left out is unchanged; an empty display name shows the
+		// username.
+		me = gen.Me{}
+		aliceClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": ""}, http.StatusOK, &me)
 		require.Equal(t, "alice", me.DisplayName, "the username stands in for a cleared display name")
 		require.Equal(t, "alice@example.com", *me.Email)
 
 		// The admin editor's validation.
-		alice.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "not an email"}, http.StatusUnprocessableEntity, nil)
-		long := make([]byte, 101)
-		for i := range long {
-			long[i] = 'a'
-		}
-		alice.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": string(long)}, http.StatusUnprocessableEntity, nil)
+		aliceClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "not an email"}, http.StatusUnprocessableEntity, nil)
+		aliceClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": strings.Repeat("a", 101)}, http.StatusUnprocessableEntity, nil)
 
 		// An email another user has fails with the admin path's error.
 		bobClient := e.login("bob")
 		var clash, adminClash gen.Problem
 		bobClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "ALICE@example.com"}, http.StatusConflict, &clash)
-		rootClient := e.login("root")
-		bob, err := e.svc.Users.GetByUsername(context.Background(), "bob")
-		require.NoError(t, err)
 		rootClient.do(http.MethodPatch, "/api/hangar/v1/admin/users/"+bob.ID.String(), map[string]any{"email": "alice@example.com"}, http.StatusConflict, &adminClash)
 		require.Equal(t, *adminClash.Detail, *clash.Detail)
 
+		// Squatting: a pending address blocks nobody. Bob asks for an
+		// address, and the admin can still give it to someone else, who
+		// then has it; Bob's link fails.
+		var bm gen.Me
+		bobClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "boss@example.com"}, http.StatusOK, &bm)
+		require.Equal(t, "boss@example.com", *bm.PendingEmail)
+		_, err = e.svc.Users.GetByEmail(ctx, "boss@example.com")
+		require.ErrorIs(t, err, auth.ErrNotFound)
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", nil, http.StatusCreated, &link)
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users", map[string]any{"username": "boss", "email": "boss@example.com"}, http.StatusCreated, nil)
+		anon.do(http.MethodPost, strings.TrimPrefix(link.Url, "http://hangar.test"), nil, http.StatusConflict, nil)
+
 		// CSRF is needed with a session.
-		csrf := alice.csrf
-		alice.csrf = ""
-		alice.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "No CSRF"}, http.StatusForbidden, nil)
-		alice.csrf = csrf
+		csrf := aliceClient.csrf
+		aliceClient.csrf = ""
+		aliceClient.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "No CSRF"}, http.StatusForbidden, nil)
+		aliceClient.csrf = csrf
 
 		// Tokens: write may change the profile, read may not.
 		var wt, rt gen.TokenCreated
-		alice.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "w", "scope": "write"}, http.StatusCreated, &wt)
-		alice.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "r", "scope": "read"}, http.StatusCreated, &rt)
+		aliceClient.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "w", "scope": "write"}, http.StatusCreated, &wt)
+		aliceClient.do(http.MethodPost, "/api/hangar/v1/me/tokens", map[string]any{"name": "r", "scope": "read"}, http.StatusCreated, &rt)
 		(&client{e: e, http: http.DefaultClient, bearer: rt.Secret}).do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Read"}, http.StatusForbidden, nil)
 		var tokMe gen.Me
 		(&client{e: e, http: http.DefaultClient, bearer: wt.Secret}).do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Written"}, http.StatusOK, &tokMe)
@@ -107,21 +149,19 @@ func TestUpdateMe(t *testing.T) {
 		require.Nil(t, tokMe.CsrfToken, "token callers get no CSRF token")
 
 		// Users who sign in with OIDC change both fields too.
-		oidcUser, err := e.svc.Users.Create(context.Background(), auth.NewUser{Username: "olivia", Email: "olivia@corp.example", EmailVerified: true}, model.System())
+		oidcUser, err := e.svc.Users.Create(ctx, auth.NewUser{Username: "olivia", Email: "olivia@corp.example", EmailVerified: true}, model.System())
 		require.NoError(t, err)
-		_, err = d.NewInsert().Model(&db.Identity{ID: db.NewID(), UserID: oidcUser.ID, Provider: "sso", Subject: "o", Claims: map[string]any{}}).Exec(context.Background())
+		_, err = d.NewInsert().Model(&db.Identity{ID: db.NewID(), UserID: oidcUser.ID, Provider: "sso", Subject: "o", Claims: map[string]any{}}).Exec(ctx)
 		require.NoError(t, err)
-		olivia := e.sessionFor(oidcUser)
-		olivia.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Olivia", "email": "olivia@home.example"}, http.StatusOK, &me)
-		require.Equal(t, "olivia@home.example", *me.Email)
-		require.False(t, me.HasPassword)
-		u, err := e.svc.Users.Get(context.Background(), oidcUser.ID)
-		require.NoError(t, err)
-		require.False(t, u.EmailVerified, "a changed email is not verified")
+		var om gen.Me
+		e.sessionFor(oidcUser).do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Olivia", "email": "olivia@home.example"}, http.StatusOK, &om)
+		require.Equal(t, "olivia@corp.example", *om.Email)
+		require.Equal(t, "olivia@home.example", *om.PendingEmail)
+		require.False(t, om.HasPassword)
 
-		events := e.auditActions()[audit.UserProfileChanged]
-		require.Len(t, events, 4, "every change is audited, and failed ones are not")
-		require.Equal(t, []any{"display_name", "email"}, events[len(events)-1].Data["fields"])
+		got := e.auditActions()
+		require.Len(t, got[audit.UserProfileChanged], 6, "every change is audited, and failed ones are not")
+		require.NotEmpty(t, got[audit.UserEmailConfirmation])
 	})
 }
 

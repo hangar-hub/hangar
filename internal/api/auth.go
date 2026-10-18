@@ -95,6 +95,7 @@ type IdentityAPI interface {
 	AdminCreateUser(w http.ResponseWriter, r *http.Request)
 	AdminUpdateUser(w http.ResponseWriter, r *http.Request, id gen.ID)
 	AdminCreateResetLink(w http.ResponseWriter, r *http.Request, id gen.ID)
+	AdminCreateEmailLink(w http.ResponseWriter, r *http.Request, id gen.ID)
 	AdminCreateInvite(w http.ResponseWriter, r *http.Request)
 	AdminGetSettings(w http.ResponseWriter, r *http.Request)
 	AdminUpdateSettings(w http.ResponseWriter, r *http.Request)

@@ -588,7 +588,7 @@ func TestCommandsJSON(t *testing.T) {
 	var sv schemaVersion
 	require.NoError(t, json.Unmarshal([]byte(out), &sv))
 	require.Equal(t, sv.Expected, sv.Current)
-	require.Contains(t, sv.Current, "0002")
+	require.Contains(t, sv.Current, "0003")
 	require.NotNil(t, sv.Pending)
 	require.Empty(t, sv.Pending)
 
