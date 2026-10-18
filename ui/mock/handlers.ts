@@ -51,6 +51,7 @@ export function problem(status: number, detail: string, errors?: S["Problem"]["e
     404: "Not Found",
     409: "Conflict",
     412: "Precondition Failed",
+    413: "Content Too Large",
     501: "Not Implemented",
   };
   return {
