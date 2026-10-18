@@ -780,7 +780,7 @@ export interface paths {
         put?: never;
         /**
          * Plan uploads for a set of files
-         * @description For each file, says whether to send it inline in the Commit, skip it because the object exists, or upload it, with part URLs.
+         * @description For each file, says whether to send it inline in the Commit, skip it because the caller can already use the object, or upload it, with part URLs. An object that is stored but that the caller did not upload and cannot read in another Repo is planned as an upload, which stores no second copy.
          */
         post: operations["planUploads"];
         delete?: never;
@@ -2326,7 +2326,7 @@ export interface components {
         UploadPlanItem: {
             path: string;
             /**
-             * @description inline: send the content in the Commit. exists: the object is stored already. upload: upload it.
+             * @description inline: send the content in the Commit. exists: the object is stored and the caller uploaded it or can read it in a Repo. upload: upload it.
              * @enum {string}
              */
             action: "inline" | "exists" | "upload";

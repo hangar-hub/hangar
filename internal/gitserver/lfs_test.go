@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamesagarside/hangar/internal/blob"
 	"github.com/jamesagarside/hangar/internal/config"
 	"github.com/jamesagarside/hangar/internal/gitserver"
 	"github.com/jamesagarside/hangar/internal/gitserver/gitservertest"
@@ -369,7 +370,8 @@ func TestLFSPresignedStore(t *testing.T) {
 	content, oid := randomContent(t, 1000)
 	_, b := f.batch(t, publicID, tokAlice, batchReq("upload", nil, obj(oid, len(content))))
 	up := b.Objects[0].Actions["upload"]
-	require.True(t, strings.HasPrefix(up.Href, "https://s3.example.com/bucket/lfs/sha256/"))
+	require.True(t, strings.HasPrefix(up.Href, "https://s3.example.com/bucket/"+blob.PrefixTmp+"uploads/"),
+		"a presigned PUT writes to a staging key, as repo.LFS's does: %s", up.Href)
 	require.True(t, b.Objects[0].Authenticated)
 	require.True(t, strings.HasPrefix(b.Objects[0].Actions["verify"].Href, f.inst.URL+"/alice/tiny.git/info/lfs/verify?"))
 
@@ -381,8 +383,11 @@ func TestLFSPresignedStore(t *testing.T) {
 	_, b = f.batch(t, publicID, tokAlice, batchReq("upload", []string{"multipart"}, obj(strings.Repeat("c", 64), 2<<20)))
 	require.True(t, strings.HasPrefix(b.Objects[0].Actions["upload"].Header["00001"], "https://s3.example.com/bucket/"))
 
-	// Simulate the presigned PUT, then verify re-hashes the object.
-	require.NoError(t, f.blobs.Put(context.Background(), model.LFSObjectKey(oid), bytes.NewReader(content), int64(len(content))))
+	// Simulate the presigned PUT to its staging key, then verify re-hashes
+	// the object.
+	staged, err := url.Parse(up.Href)
+	require.NoError(t, err)
+	require.NoError(t, f.blobs.Put(context.Background(), strings.TrimPrefix(staged.Path, "/bucket/"), bytes.NewReader(content), int64(len(content))))
 	require.Equal(t, http.StatusOK, call(t, http.MethodPost, b2verify(t, f, oid, len(content)), verifyBody(oid, len(content))).StatusCode)
 
 	// Downloads redirect to the store in redirect mode.

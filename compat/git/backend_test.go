@@ -6,6 +6,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/jamesagarside/hangar/internal/auth"
 	"github.com/jamesagarside/hangar/internal/blob/blobtest"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
@@ -24,8 +25,9 @@ type Backend struct {
 }
 
 // BackendFactory builds a backend over blobs, with a User and personal
-// Namespace for each of usernames.
-type BackendFactory func(t *testing.T, blobs *blobtest.Fake, usernames []string) Backend
+// Namespace for each of usernames. Commits may reference LFS objects in
+// Repos whose files authz lets the author read (repo.Service.Referable).
+type BackendFactory func(t *testing.T, blobs *blobtest.Fake, usernames []string, authz auth.Authz) Backend
 
 var backends = map[string]BackendFactory{}
 

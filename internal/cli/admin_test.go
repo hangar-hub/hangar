@@ -30,9 +30,10 @@ var (
 	fixtureDay = time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC)
 )
 
-// checkValues satisfies the CHECK constraints in the schema (the same
-// values as internal/db's round-trip test).
+// checkValues satisfies the CHECK constraints in the schema and foreign
+// keys to text columns (the same values as internal/db's round-trip test).
 var checkValues = map[string]map[string]string{
+	"lfs_uploaders":      {"oid": "lfs_objects.oid"},
 	"namespaces":         {"kind": "org"},
 	"tokens":             {"scope": "write"},
 	"memberships":        {"role": "admin", "source": "oidc"},

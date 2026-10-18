@@ -39,7 +39,9 @@ const maxParts = 10000
 // transfer, get Hugging Face's multipart action: `chunk_size` and numbered
 // part URLs in the header, and the completion URL as the href. The parts go
 // through repo.LFSStore's multipart upload. Other objects get a single PUT
-// URL. Downloads go through resolve.
+// URL. Downloads go through resolve. Like internal/gitserver, it asks for
+// the bytes of a stored object the caller may not reference
+// (repo.Service.Referable), and records the uploader once they match.
 type lfsStandIn struct {
 	lfs   repo.LFSStore
 	repos repo.Service
@@ -56,6 +58,8 @@ type lfsStandIn struct {
 type pendingUpload struct {
 	oid  string
 	size int64
+	// userID is the uploader the batch answered.
+	userID uuid.UUID
 	// multipart is set for a multipart upload.
 	multipart *multipartUpload
 }
@@ -106,6 +110,22 @@ func (l *lfsStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		lfsJSON(w, http.StatusBadRequest, map[string]string{"message": "Invalid batch request."})
 		return
 	}
+	p := httpx.Principal(r.Context())
+	oids := make([]string, 0, len(req.Objects))
+	for _, o := range req.Objects {
+		oids = append(oids, o.OID)
+	}
+	var target *repo.Repo
+	if id, ok := batchRepo(r.URL.Path); ok {
+		if rp, err := l.repos.Get(r.Context(), id); err == nil {
+			target = rp
+		}
+	}
+	referable, err := l.repos.Referable(r.Context(), p, target, oids)
+	if err != nil {
+		lfsJSON(w, http.StatusInternalServerError, map[string]string{"message": "Could not check the objects."})
+		return
+	}
 	objects := make([]map[string]any, 0, len(req.Objects))
 	for _, o := range req.Objects {
 		obj := map[string]any{"oid": o.OID, "size": o.Size}
@@ -114,7 +134,7 @@ func (l *lfsStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			objects = append(objects, obj)
 			continue
 		}
-		if _, err := l.lfs.Stat(r.Context(), o.OID); err == nil {
+		if _, err := l.lfs.Stat(r.Context(), o.OID); err == nil && (req.Operation != "upload" || referable[o.OID]) {
 			objects = append(objects, obj)
 			continue
 		}
@@ -123,10 +143,11 @@ func (l *lfsStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			objects = append(objects, obj)
 			continue
 		}
-		up := pendingUpload{oid: o.OID, size: o.Size}
+		up := pendingUpload{oid: o.OID, size: o.Size, userID: p.UserID}
 		if l.multipartThreshold > 0 && o.Size > l.multipartThreshold && slices.Contains(req.Transfers, "multipart") {
 			partSize := max(l.partSize, (o.Size+maxParts-1)/maxParts)
-			u, err := l.lfs.CreateUpload(r.Context(), repo.UploadParams{OID: o.OID, Size: o.Size, Multipart: true, PartSize: partSize})
+			u, err := l.lfs.CreateUpload(r.Context(), repo.UploadParams{OID: o.OID, Size: o.Size, Multipart: true, PartSize: partSize,
+				UserID: p.UserID})
 			if err != nil {
 				obj["error"] = map[string]any{"code": 500, "message": "Could not start the upload."}
 				objects = append(objects, obj)
@@ -150,6 +171,24 @@ func (l *lfsStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		objects = append(objects, obj)
 	}
 	lfsJSON(w, http.StatusOK, map[string]any{"transfer": "basic", "objects": objects})
+}
+
+// batchRepo returns the Repo a batch URL names: /{ns}/{name}.git/... or
+// /datasets/{ns}/{name}.git/....
+func batchRepo(path string) (model.RepoID, bool) {
+	name, ok := strings.CutSuffix(strings.TrimPrefix(path, "/"), ".git/info/lfs/objects/batch")
+	if !ok {
+		return model.RepoID{}, false
+	}
+	typ := model.RepoTypeModel
+	if rest, ok := strings.CutPrefix(name, "datasets/"); ok {
+		typ, name = model.RepoTypeDataset, rest
+	}
+	ns, n, ok := strings.Cut(name, "/")
+	if !ok {
+		return model.RepoID{}, false
+	}
+	return model.RepoID{Type: typ, Namespace: ns, Name: n}, true
 }
 
 // register records an upload under a new one-time secret.
@@ -209,6 +248,10 @@ func (l *lfsStandIn) putSingle(w http.ResponseWriter, r *http.Request, secret st
 		return
 	}
 	if _, err := l.lfs.Ingest(r.Context(), up.oid, up.size, r.Body); err != nil {
+		writeIngestError(w, err)
+		return
+	}
+	if err := l.lfs.RecordUploader(r.Context(), up.oid, up.userID); err != nil {
 		writeIngestError(w, err)
 		return
 	}

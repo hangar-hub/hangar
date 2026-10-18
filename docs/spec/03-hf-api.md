@@ -76,7 +76,7 @@ The contract, with sources (hub-docs and xet-core at `e922f742`, covering hf_xet
 | `GET /api/{type}s/{ns}/{name}/xet-write-token/{rev}[?create_pr=1]` | Needs `write` on the Repo (or the right to open a pull request with `create_pr=1`). `rev` arrives percent-encoded; the literal `None` means the default branch. Returns JSON `{accessToken, exp, casUrl}` and the matching `X-Xet-Cas-Url`, `X-Xet-Access-Token` and `X-Xet-Token-Expiration` headers. The token is an HMAC-signed, short-lived (`xet.token_ttl`, default 1 hour) credential scoped to the user and Repo. `exp` must be accurate, because hf_xet refreshes 30 seconds before it and never on a 401. |
 | `GET /api/{type}s/{ns}/{name}/xet-read-token/{rev}` | 404. Never called while Hangar emits no Xet download data. |
 | `GET {casUrl}/v1/chunks/default/{hash}` | Always 404 (no global chunk deduplication in v1.0). The client then uploads the chunk. |
-| `POST {casUrl}/v1/xorbs/default/{hash}` | Verify the xorb fully (layout, decompression, chunk hashes, xorb hash) before storing; reject a mismatch with 400. Store under `xet/xorbs/<hash>` in the Blob store. Respond `{"was_inserted": bool}`. Idempotent. |
+| `POST {casUrl}/v1/xorbs/default/{hash}` | Verify the xorb fully (layout, decompression, chunk hashes, xorb hash) before storing; reject a mismatch with 400. Store under `xet/xorbs/<hash>` in the Blob store. Respond `{"was_inserted": bool}`. Idempotent. A xorb Hangar already has is verified the same way and not stored again, so `was_inserted: false` reaches only a client that sent the xorb's bytes. |
 | `POST {casUrl}/v2/shards` | Streamed response with heartbeats (the research doc, section 2.3), so reassembly survives proxies with idle timeouts such as Cloudflare's 100 seconds. |
 | `POST {casUrl}/v1/shards` | Fallback; responds `{"result": 1}`. |
 | `POST /v1/telemetry` at the root of the host | 200, body discarded. hf_xet drops any path prefix of `casUrl` for this one call. |
@@ -90,7 +90,7 @@ On a shard POST, Hangar validates the shard (research section 4.5). Then, for ea
 1. checks every referenced xorb exists (looked up globally, not per Repo)
 2. reassembles the file's bytes from the xorb chunk ranges, streaming
 3. recomputes the SHA-256 and the Xet file hash while it streams, and checks both against the shard (the SHA-256 in `FileMetadataExt` comes from the client, so it is never trusted without recomputing)
-4. stores the result as a normal LFS object (`lfs/sha256/...`), verified, and records the mapping in `xet_files`
+4. stores the result as a normal LFS object (`lfs/sha256/...`), verified, and records the mapping in `xet_files` and the token's User as an uploader of the object ([04](04-git.md) "Who may reference an LFS object"). When the object is already stored, the rebuilt bytes are compared with it and not stored again. An error about a file never gives the size of a stored object.
 
 Only then does the shard POST succeed. The commit that follows names files by SHA-256 in `lfsFile` lines, so it uses the normal commit path with no Xet awareness.
 

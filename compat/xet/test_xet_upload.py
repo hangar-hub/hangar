@@ -158,6 +158,43 @@ def test_same_file_to_a_second_repo_is_deduplicated(server, tmp_path):
     assert_stored(server, third, "tuned.bin", sha256_file(modified), tmp_path)
 
 
+def test_file_stored_in_another_users_private_repo(server, tmp_path):
+    """LFS objects are stored once per Instance, but a Commit may reference
+    one only when its author uploaded the bytes or can read a Repo that
+    holds it (decided by James on 2026-10-18, "check at Commit").
+
+    bob, who cannot read alice's private Repo, uploads the same file with
+    his own client: hf_xet sends every xorb again, Hangar checks and keeps
+    the copy it has, and the commit succeeds. A commit that only names the
+    file's SHA-256 is refused as an object nobody uploaded."""
+    src = tmp_path / "src" / "private.bin"
+    sha = write_random(src, 2 * MiB, 41)
+    private = f"alice/xet-private-{uuid.uuid4().hex[:10]}"
+    HfApi(endpoint=server.endpoint, token=server.tokens["alice"]).create_repo(private, private=True)
+    Client(server, tmp_path / "alice-home").run(upload_file_code(private, src, "private.bin"))
+
+    target = new_repo(server, "bob")
+    lines = [
+        {"key": "header", "value": {"summary": "Reference", "description": ""}},
+        {"key": "lfsFile", "value": {"path": "private.bin", "algo": "sha256", "oid": sha, "size": 2 * MiB}},
+    ]
+    refused = requests.post(
+        f"{server.endpoint}/api/models/{target}/commit/main",
+        data="\n".join(json.dumps(line) for line in lines) + "\n",
+        headers={"Authorization": f"Bearer {server.tokens['bob']}", "Content-Type": "application/x-ndjson"},
+        timeout=60,
+    )
+    assert 400 <= refused.status_code < 500, refused.text
+    assert "missing" in refused.text.lower()
+
+    before = server.stats()
+    Client(server, tmp_path / "bob-home", user="bob").run(upload_file_code(target, src, "private.bin"))
+    after = server.stats()
+    assert delta(before, after, "xorb_posts") >= 1, "bob's client sends the xorbs"
+    assert delta(before, after, "xorbs_inserted") == 0, "and Hangar stores none of them again"
+    assert_stored(server, target, "private.bin", sha, tmp_path)
+
+
 def test_resume_after_killing_the_client(server, tmp_path):
     """Kill the client while its shard upload is held, then upload again
     with the same cache: hf_xet resumes from its staged xorbs."""

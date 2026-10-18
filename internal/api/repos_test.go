@@ -390,20 +390,26 @@ func sum256(b []byte) string {
 func TestUploadCommitAndBrowseEndpoints(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	f.user("alice")
+	alice := f.user("alice")
 	f.user("bob")
 	f.createRepo("alice", gen.RepoCreate{Type: "model", Namespace: "alice", Name: "up"})
 	f.createRepo("alice", gen.RepoCreate{Type: "model", Namespace: "alice", Name: "other"})
 	base := "/repos/models/alice/up"
 
 	weights := bytes.Repeat([]byte("w"), 100)
-	stored := []byte("already stored")
-	_, err := f.real.LFS.Ingest(f.ctx, sum256(stored), int64(len(stored)), bytes.NewReader(stored))
-	require.NoError(t, err)
+	// alice uploaded stored before; someone else uploaded theirs, which
+	// alice cannot read anywhere, so she must upload it like a new object.
+	stored, theirs := []byte("already stored"), []byte("stored by someone else")
+	for _, b := range [][]byte{stored, theirs} {
+		_, err := f.real.LFS.Ingest(f.ctx, sum256(b), int64(len(b)), bytes.NewReader(b))
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.real.LFS.RecordUploader(f.ctx, sum256(stored), alice.UserID))
 	plan := gen.UploadPlanRequest{Files: []gen.UploadFile{
 		{Path: "config.json", Size: 2, Sha256: sum256([]byte("{}"))},
 		{Path: "model.safetensors", Size: int64(len(weights)), Sha256: sum256(weights)},
 		{Path: "old.bin", Size: int64(len(stored)), Sha256: sum256(stored)},
+		{Path: "theirs.bin", Size: int64(len(theirs)), Sha256: sum256(theirs)},
 	}}
 	f.expect(http.StatusForbidden, http.MethodPost, "bob", base+"/uploads", plan)
 	var p gen.UploadPlan
@@ -411,6 +417,7 @@ func TestUploadCommitAndBrowseEndpoints(t *testing.T) {
 	require.Equal(t, gen.UploadPlanItemAction("inline"), p.Files[0].Action)
 	require.Equal(t, gen.UploadPlanItemAction("upload"), p.Files[1].Action)
 	require.Equal(t, gen.UploadPlanItemAction("exists"), p.Files[2].Action)
+	require.Equal(t, gen.UploadPlanItemAction("upload"), p.Files[3].Action, "a stored object alice cannot use is planned as an upload")
 	up := p.Files[1]
 	require.False(t, *up.Presigned)
 	require.Len(t, *up.PartUrls, 1)
@@ -465,6 +472,11 @@ func TestUploadCommitAndBrowseEndpoints(t *testing.T) {
 	f.expect(http.StatusBadRequest, http.MethodPost, "alice", base+"/commits", gen.CommitRequest{Summary: "s", Operations: []gen.CommitOperation{{Op: "rename", Path: "x"}}})
 	f.expect(http.StatusUnprocessableEntity, http.MethodPost, "alice", base+"/commits", gen.CommitRequest{Summary: "s",
 		Operations: []gen.CommitOperation{{Op: "add_lfs", Path: "x.bin", Sha256: ptr(sum256([]byte("missing"))), Size: i64(7)}}})
+	// A stored object alice did not upload and cannot read is refused the
+	// same way, without its size.
+	r = f.expect(http.StatusUnprocessableEntity, http.MethodPost, "alice", base+"/commits", gen.CommitRequest{Summary: "s",
+		Operations: []gen.CommitOperation{{Op: "add_lfs", Path: "x.bin", Sha256: ptr(sum256(theirs)), Size: i64(int64(len(theirs)))}}})
+	require.Contains(t, string(r.body), "missing or not verified")
 
 	// A pull request from a reader.
 	f.authz.AnonymousRead = true

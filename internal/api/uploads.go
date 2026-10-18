@@ -76,13 +76,21 @@ func (a *UploadsAPI) PlanUploads(w http.ResponseWriter, r *http.Request, pType g
 		return
 	}
 	p := httpx.Principal(r.Context())
+	// A stored object the caller did not upload and cannot read must be
+	// uploaded like a new one, so the plan says nothing about it; the
+	// upload stores no second copy (04-git.md "LFS objects").
+	referable, err := a.d.Repos.Referable(r.Context(), p, rp, oids)
+	if err != nil {
+		a.d.problem(w, r, err)
+		return
+	}
 	out := gen.UploadPlan{Files: make([]gen.UploadPlanItem, 0, len(body.Files))}
 	for _, f := range body.Files {
 		item := gen.UploadPlanItem{Path: f.Path}
 		switch {
 		case !rules.IsLFS(f.Path) && f.Size <= a.d.InlineMax:
 			item.Action = "inline"
-		case stored[f.Sha256].Verified && stored[f.Sha256].Size == f.Size:
+		case referable[f.Sha256] && stored[f.Sha256].Verified && stored[f.Sha256].Size == f.Size:
 			item.Action = "exists"
 		default:
 			ps := repo.PartSize(f.Size)

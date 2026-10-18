@@ -28,8 +28,10 @@ var (
 	fixtureDay = time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC)
 )
 
-// checkValues satisfies the CHECK constraints in the schema.
+// checkValues satisfies the CHECK constraints in the schema, and foreign
+// keys to text columns.
 var checkValues = map[string]map[string]string{
+	"lfs_uploaders":      {"oid": "lfs_objects.oid"},
 	"namespaces":         {"kind": "org"},
 	"tokens":             {"scope": "write"},
 	"memberships":        {"role": "admin", "source": "oidc"},
@@ -256,7 +258,7 @@ func TestMigrateIsIdempotentAndSchemaStatus(t *testing.T) {
 		st, err := d.Schema(ctx)
 		require.NoError(t, err)
 		require.True(t, st.UpToDate())
-		require.Equal(t, "0001", st.Expected)
+		require.Equal(t, "0002", st.Expected)
 		require.Equal(t, st.Expected, st.Current)
 	})
 }
@@ -269,7 +271,7 @@ func TestSchemaStatusBeforeMigrate(t *testing.T) {
 	st, err := d.Schema(ctx)
 	require.NoError(t, err)
 	require.False(t, st.UpToDate())
-	require.Equal(t, []string{"0001"}, st.Pending)
+	require.Equal(t, []string{"0001", "0002"}, st.Pending)
 }
 
 func TestInTxRollsBackAndClassifiesErrors(t *testing.T) {

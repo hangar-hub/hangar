@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"io"
 	"math/rand/v2"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -445,6 +446,7 @@ func TestAcceptShardRejects(t *testing.T) {
 		u.Shard.Files[0].SHA256 = &claim
 		_, _, err = e.accept(t, u)
 		require.ErrorIs(t, err, xet.ErrBadShard)
+		require.NotContains(t, err.Error(), strconv.Itoa(len(otherData)), "the answer does not give the stored object's size")
 		// With the right size too.
 		short := data[:len(otherData)]
 		su := xettest.BuildUpload([][]byte{short}, xettest.UploadOptions{ChunkSize: 4096})
@@ -516,4 +518,62 @@ func TestAcceptShardDetectsCorruptStorage(t *testing.T) {
 	require.NoError(t, e.blobs.Put(ctx, key, bytes.NewReader(stored[:10]), 10))
 	_, _, err = e.accept(t, u)
 	require.Error(t, err)
+}
+
+// TestXetUploadsRecordUploadersAndRevealNothing covers the Xet side of the
+// decision James made on 2026-10-18 ("check at Commit"): a shard whose
+// file rebuilds into an LFS object records the token's User as an
+// uploader of it, also when the object was stored by someone else, which
+// stores no second copy; and a xorb that is already stored is accepted
+// only with its own bytes, so a xorb upload says whether Hangar has a xorb
+// only to a client that holds it.
+func TestXetUploadsRecordUploadersAndRevealNothing(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d)
+		ctx := context.Background()
+		r := rand.New(rand.NewPCG(11, 12))
+		data := randomBytes(r, 60_000)
+		first := xettest.BuildUpload([][]byte{data}, xettest.UploadOptions{ChunkSize: 4096, ChunksPerXorb: 5})
+		e.putAll(t, first)
+		_, _, err := e.accept(t, first)
+		require.NoError(t, err)
+		oid := sha(data)
+		uploaded := func(user uuid.UUID) bool {
+			t.Helper()
+			got, err := e.lfs.Uploaded(ctx, user, []string{oid})
+			require.NoError(t, err)
+			return got[oid]
+		}
+		require.True(t, uploaded(alice().UserID))
+
+		// bob uploads the same file to his own Repo: every xorb is sent
+		// again and checked, nothing is stored twice, and bob becomes an
+		// uploader.
+		bob := model.Principal{Kind: model.PrincipalUser, UserID: uuid.New(), Username: "bob"}
+		require.False(t, uploaded(bob.UserID))
+		tok, err := e.svc.IssueWriteToken(ctx, xet.TokenRequest{Principal: bob, Repo: model.RepoID{Type: model.RepoTypeModel, Namespace: "bob", Name: "copy"}, Revision: "main"})
+		require.NoError(t, err)
+		e.claims, err = e.svc.VerifyToken(ctx, tok.AccessToken)
+		require.NoError(t, err)
+		puts := e.blobs.Calls("Put")
+		for _, x := range first.Xorbs {
+			inserted, err := e.svc.PutXorb(ctx, e.claims, x.Hash.String(), bytes.NewReader(x.Body), int64(len(x.Body)))
+			require.NoError(t, err)
+			require.False(t, inserted)
+		}
+		_, _, err = e.accept(t, xettest.BuildUpload([][]byte{data}, xettest.UploadOptions{ChunkSize: 4096, ChunksPerXorb: 5}))
+		require.NoError(t, err)
+		require.Equal(t, puts, e.blobs.Calls("Put"), "no xorb or object is stored again")
+		require.True(t, uploaded(bob.UserID))
+
+		// A stored xorb's hash with other bytes is refused, as an unknown
+		// one would be.
+		x := first.Xorbs[0]
+		other := xettest.BuildXorb([][]byte{[]byte("not the stored xorb")}, false)
+		_, err = e.svc.PutXorb(ctx, e.claims, x.Hash.String(), bytes.NewReader(other.Body), int64(len(other.Body)))
+		require.ErrorIs(t, err, xet.ErrBadXorb)
+		unknown := xettest.BuildXorb([][]byte{[]byte("a xorb nobody stored")}, false)
+		_, err = e.svc.PutXorb(ctx, e.claims, unknown.Hash.String(), bytes.NewReader(other.Body), int64(len(other.Body)))
+		require.ErrorIs(t, err, xet.ErrBadXorb)
+	})
 }

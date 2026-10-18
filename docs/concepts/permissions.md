@@ -20,6 +20,10 @@ A Token has one scope, `read`, `write` or `admin`, which caps what it can do on 
 
 Requests for a private Repo you cannot read get the same answer as a Repo that does not exist (404), as on huggingface.co, so Repo names do not leak.
 
+## Large files you add by their hash
+
+Hangar stores each LFS object once, however many Repos hold it. A Commit can still add a large file by its SHA-256 alone only if you uploaded that file before or can read a Repo that holds it. Otherwise Hangar asks for the bytes, as if it had never seen the file: `huggingface_hub`, `hf` and git-lfs send them without you doing anything, and Hangar checks them without storing a second copy. So knowing a file's hash is not enough to get a copy of a file in a private Repo.
+
 ## Gated Repos
 
 The owner of a Repo can require people to ask for access, with a form. Admins of the Repo accept or reject requests, automatically or by hand. See [Gated models](../guides/gated.md).

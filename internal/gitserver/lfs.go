@@ -299,12 +299,24 @@ func scopeDownload(rec *repo.Repo, oid string) string {
 	return "lfs-download:" + rec.UUID.String() + ":" + oid
 }
 
-func scopeUpload(rec *repo.Repo, oid string, size int64) string {
-	return "lfs-upload:" + rec.UUID.String() + ":" + oid + ":" + strconv.FormatInt(size, 10)
+// Upload and verify scopes also name the User the batch answered, who is
+// recorded as the object's uploader once its bytes are checked.
+func scopeUpload(rec *repo.Repo, oid string, size int64, uploader uuid.UUID) string {
+	return "lfs-upload:" + rec.UUID.String() + ":" + oid + ":" + strconv.FormatInt(size, 10) + ":" + uploader.String()
 }
 
-func scopeVerify(rec *repo.Repo, oid string, size int64) string {
-	return "lfs-verify:" + rec.UUID.String() + ":" + oid + ":" + strconv.FormatInt(size, 10)
+func scopeVerify(rec *repo.Repo, oid string, size int64, uploader uuid.UUID) string {
+	return "lfs-verify:" + rec.UUID.String() + ":" + oid + ":" + strconv.FormatInt(size, 10) + ":" + uploader.String()
+}
+
+// uploaderParam is the query parameter of signed upload and verify URLs
+// that names the uploader. The signature covers it.
+const uploaderParam = "uploader"
+
+// uploaderOf returns the uploader a signed URL names, or false.
+func uploaderOf(r *http.Request) (uuid.UUID, bool) {
+	id, err := uuid.Parse(r.URL.Query().Get(uploaderParam))
+	return id, err == nil
 }
 
 func scopePart(rec *repo.Repo, id uuid.UUID) string {
@@ -427,6 +439,19 @@ func (s *Server) batchUpload(ctx context.Context, rec *repo.Repo, req *batchRequ
 	if err != nil {
 		return nil, fmt.Errorf("stat lfs objects: %w", err)
 	}
+	// A stored object the caller did not upload and cannot read is answered
+	// as if it were missing: the client uploads it, which proves it holds
+	// the bytes and stores no second copy. So the batch never says whether
+	// such an object exists, or its size (04-git.md "LFS objects").
+	referable, err := s.deps.Repos.Referable(ctx, httpx.Principal(ctx), rec, oids)
+	if err != nil {
+		return nil, fmt.Errorf("referable lfs objects: %w", err)
+	}
+	for oid := range stored {
+		if !referable[oid] {
+			delete(stored, oid)
+		}
+	}
 	var newBytes int64
 	multipart := false
 	for _, o := range req.Objects {
@@ -469,7 +494,8 @@ func (s *Server) batchUpload(ctx context.Context, rec *repo.Repo, req *batchRequ
 		if err != nil {
 			return nil, err
 		}
-		verify, err := s.signed(s.lfsBase(rec)+"/verify", scopeVerify(rec, o.OID, o.Size), s.cfg.UploadURLTTL)
+		user := httpx.Principal(ctx).UserID
+		verify, err := s.signed(s.lfsBase(rec)+"/verify?"+uploaderParam+"="+user.String(), scopeVerify(rec, o.OID, o.Size, user), s.cfg.UploadURLTTL)
 		if err != nil {
 			return nil, err
 		}
@@ -484,14 +510,16 @@ func (s *Server) batchUpload(ctx context.Context, rec *repo.Repo, req *batchRequ
 // otherwise.
 func (s *Server) basicUploadAction(ctx context.Context, rec *repo.Repo, o batchObject) (*action, error) {
 	ttl := s.cfg.UploadURLTTL
-	pr, err := s.deps.LFS.PresignPut(ctx, o.OID, o.Size, ttl)
+	user := httpx.Principal(ctx).UserID
+	pr, err := s.deps.LFS.PresignPut(ctx, o.OID, o.Size, ttl, user)
 	if err == nil {
 		return &action{Href: pr.URL, Header: pr.Headers, ExpiresIn: int64(ttl.Seconds())}, nil
 	}
 	if !errors.Is(err, blob.ErrNotSupported) {
 		return nil, fmt.Errorf("presign upload: %w", err)
 	}
-	return s.signed(s.lfsBase(rec)+"/objects/"+o.OID+"?size="+strconv.FormatInt(o.Size, 10), scopeUpload(rec, o.OID, o.Size), ttl)
+	return s.signed(s.lfsBase(rec)+"/objects/"+o.OID+"?size="+strconv.FormatInt(o.Size, 10)+"&"+uploaderParam+"="+user.String(),
+		scopeUpload(rec, o.OID, o.Size, user), ttl)
 }
 
 // multipartAction starts a multipart upload for Hugging Face's multipart
@@ -642,11 +670,12 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, rp repoPath, oid
 		return
 	}
 	size, err := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
-	if err != nil || size < 0 {
+	uploader, named := uploaderOf(r)
+	if err != nil || size < 0 || !named {
 		lfsError(w, r, http.StatusForbidden, "The link is invalid or has expired. Start the transfer again.")
 		return
 	}
-	if _, ok := s.signedRepo(w, r, rp, func(rec *repo.Repo) string { return scopeUpload(rec, oid, size) }); !ok {
+	if _, ok := s.signedRepo(w, r, rp, func(rec *repo.Repo) string { return scopeUpload(rec, oid, size, uploader) }); !ok {
 		return
 	}
 	if r.ContentLength >= 0 && r.ContentLength != size {
@@ -662,6 +691,10 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, rp repoPath, oid
 		s.lfsFailure(w, r, err)
 		return
 	}
+	if err := s.deps.LFS.RecordUploader(r.Context(), oid, uploader); err != nil {
+		s.lfsFailure(w, r, err)
+		return
+	}
 	s.countUpload(r.Context(), obj.Size)
 	writeLFS(w, r, http.StatusOK, map[string]any{"oid": obj.OID, "size": obj.Size})
 }
@@ -672,27 +705,42 @@ func (s *Server) countUpload(ctx context.Context, n int64) {
 	}
 }
 
-// verify answers the verify action: it checks that the object is stored
-// with the declared size, re-hashing it if nothing has verified it yet.
+// verify answers the verify action: it checks that the User the batch
+// answered uploaded the object with the declared size, through Hangar or
+// a presigned PUT it re-hashes now. An object that is stored but that this
+// User did not upload is answered as missing, so verify says nothing about
+// objects the User cannot read.
 func (s *Server) verify(w http.ResponseWriter, r *http.Request, rp repoPath) {
 	var body batchObject
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxSmallBody)).Decode(&body); err != nil || !validObject(body) {
 		lfsError(w, r, http.StatusUnprocessableEntity, "The verify request must have an oid and a size.")
 		return
 	}
-	if _, ok := s.signedRepo(w, r, rp, func(rec *repo.Repo) string { return scopeVerify(rec, body.OID, body.Size) }); !ok {
+	uploader, named := uploaderOf(r)
+	if !named {
+		lfsError(w, r, http.StatusForbidden, "The link is invalid or has expired. Start the transfer again.")
+		return
+	}
+	if _, ok := s.signedRepo(w, r, rp, func(rec *repo.Repo) string { return scopeVerify(rec, body.OID, body.Size, uploader) }); !ok {
 		return
 	}
 	obj, err := s.deps.LFS.Stat(r.Context(), body.OID)
-	if err == nil && obj.Verified && obj.Size == body.Size {
-		writeLFS(w, r, http.StatusOK, map[string]any{"oid": obj.OID, "size": obj.Size})
-		return
-	}
 	if err != nil && !errors.Is(err, repo.ErrNotFound) {
 		s.lfsFailure(w, r, err)
 		return
 	}
-	obj, err = s.deps.LFS.Verify(r.Context(), body.OID, body.Size)
+	if err == nil && obj.Verified && obj.Size == body.Size {
+		up, err := s.deps.LFS.Uploaded(r.Context(), uploader, []string{body.OID})
+		if err != nil {
+			s.lfsFailure(w, r, err)
+			return
+		}
+		if up[body.OID] {
+			writeLFS(w, r, http.StatusOK, map[string]any{"oid": obj.OID, "size": obj.Size})
+			return
+		}
+	}
+	obj, err = s.deps.LFS.Verify(r.Context(), body.OID, body.Size, uploader)
 	switch {
 	case err == nil:
 		s.countUpload(r.Context(), obj.Size)

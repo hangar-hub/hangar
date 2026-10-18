@@ -237,17 +237,27 @@ func (s *Service) PutXorb(ctx context.Context, c *Claims, hash string, r io.Read
 	}
 
 	// A xorb Hangar already has is not stored again, but its retention
-	// clock restarts (§2.2).
+	// clock restarts (§2.2). Its body is still checked against the hash,
+	// so only a client that holds the xorb's bytes learns that Hangar has
+	// it (04-git.md "LFS objects").
 	found, err := s.touchXorbs(ctx, []Hash{h})
 	if err != nil {
 		return false, err
 	}
 	if found[h] {
-		if _, err := io.Copy(io.Discard, body); err != nil {
-			return false, err
-		}
+		idx, err := ParseXorb(body, io.Discard)
 		if body.N <= 0 {
 			return false, tooLarge()
+		}
+		if err != nil {
+			if errors.Is(err, ErrBadXorb) {
+				s.xorbCounter(ctx, "rejected")
+			}
+			return false, err
+		}
+		if got := idx.Hash(); got != h {
+			s.xorbCounter(ctx, "rejected")
+			return false, fmt.Errorf("%w: the xorb hash does not match the body (the body hashes to %s)", ErrBadXorb, got)
 		}
 		s.xorbCounter(ctx, "existing")
 		span.SetAttributes(attribute.Bool("xet.xorb.inserted", false))
@@ -478,7 +488,7 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 	res = &ShardResult{Result: 1}
 	budget := s.limits.MaxShardBytes
 	for i := range sh.Files {
-		f, err := s.reassemble(ctx, &sh.Files[i], index, &budget)
+		f, err := s.reassemble(ctx, c, &sh.Files[i], index, &budget)
 		if err != nil {
 			return nil, err
 		}
@@ -490,10 +500,11 @@ func (s *Service) AcceptShard(ctx context.Context, c *Claims, r io.Reader, size 
 	return res, nil
 }
 
-// reassemble rebuilds one file as an LFS object and records its Xet hash.
-// Every rebuild is paid for from budget, the bytes the shard may still
-// rebuild, before it starts.
-func (s *Service) reassemble(ctx context.Context, f *ShardFile, index IndexFunc, budget *int64) (out ReassembledFile, err error) {
+// reassemble rebuilds one file as an LFS object and records its Xet hash,
+// and the token's User as an uploader of the object, so their Commits may
+// reference it (04-git.md "LFS objects"). Every rebuild is paid for from
+// budget, the bytes the shard may still rebuild, before it starts.
+func (s *Service) reassemble(ctx context.Context, c *Claims, f *ShardFile, index IndexFunc, budget *int64) (out ReassembledFile, err error) {
 	start := time.Now()
 	oid := f.SHA256.String()
 	size := f.Size()
@@ -516,14 +527,15 @@ func (s *Service) reassemble(ctx context.Context, f *ShardFile, index IndexFunc,
 	switch {
 	case statErr == nil && obj.Verified:
 		if obj.Size != size {
-			return out, fmt.Errorf("%w: file %s claims SHA-256 %s with %d bytes, but that object has %d bytes",
-				ErrBadShard, f.Hash, oid, size, obj.Size)
+			// The answer does not give the stored size: the caller may not
+			// be able to read the object.
+			return out, fmt.Errorf("%w: file %s does not have SHA-256 %s", ErrBadShard, f.Hash, oid)
 		}
 		// A file reassembled and checked before needs no second pass.
 		var row db.XetFile
 		err := s.db.NewSelect().Model(&row).Where("xet_hash = ?", out.XetHash).Scan(ctx)
 		if err == nil && row.OID == oid {
-			return out, s.recordFile(ctx, out)
+			return out, s.recordFile(ctx, c, out)
 		}
 		if err != nil && !db.IsNotFound(err) {
 			return out, fmt.Errorf("xet: look up file: %w", err)
@@ -565,10 +577,15 @@ func (s *Service) reassemble(ctx context.Context, f *ShardFile, index IndexFunc,
 			s.inst.XetReassemblyBytes.Add(ctx, size)
 		}
 	}
-	return out, s.recordFile(ctx, out)
+	return out, s.recordFile(ctx, c, out)
 }
 
-func (s *Service) recordFile(ctx context.Context, f ReassembledFile) error {
+// recordFile records a file's Xet hash and the token's User as an uploader
+// of its LFS object.
+func (s *Service) recordFile(ctx context.Context, c *Claims, f ReassembledFile) error {
+	if err := s.lfs.RecordUploader(ctx, f.OID, c.UserID); err != nil {
+		return fmt.Errorf("xet: record uploader: %w", err)
+	}
 	row := &db.XetFile{XetHash: f.XetHash, OID: f.OID, Size: f.Size}
 	if _, err := s.db.NewInsert().Model(row).
 		On("CONFLICT (xet_hash) DO UPDATE").

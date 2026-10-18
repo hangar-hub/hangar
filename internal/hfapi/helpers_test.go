@@ -59,6 +59,8 @@ func commitFiles(t *testing.T, e *hfapitest.Env, user string, id model.RepoID, b
 			oid := hex.EncodeToString(sum[:])
 			_, err := e.LFS.Ingest(context.Background(), oid, int64(len(c)), strings.NewReader(c))
 			require.NoError(t, err)
+			// The user uploaded it, so their Commit may reference it.
+			require.NoError(t, e.LFS.RecordUploader(context.Background(), oid, e.Users[user].Principal.UserID))
 			ops = append(ops, repo.Operation{Kind: repo.OpAddLFS, Path: p, OID: oid, Size: int64(len(c))})
 			continue
 		}

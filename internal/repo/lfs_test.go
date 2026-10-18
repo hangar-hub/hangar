@@ -24,13 +24,21 @@ func TestLFSIngestDeduplicatesAndVerifies(t *testing.T) {
 		require.Equal(t, repo.LFSObject{OID: oid, Size: int64(len(content)), StorageKey: model.LFSObjectKey(oid), Verified: true}, obj)
 		puts := e.blobs.Calls("Put")
 
-		// UP-6: the same object is never stored twice.
-		again, err := e.lfs.Ingest(e.ctx, oid, int64(len(content)), strings.NewReader("never read"))
+		// UP-6: the same object is never stored twice. The bytes are still
+		// read and checked, so a successful Ingest proves the caller sent
+		// them (decided by James on 2026-10-18, "check at Commit").
+		again, err := e.lfs.Ingest(e.ctx, oid, int64(len(content)), bytes.NewReader(content))
 		require.NoError(t, err)
 		require.Equal(t, obj, again)
 		require.Equal(t, puts, e.blobs.Calls("Put"))
+		_, err = e.lfs.Ingest(e.ctx, oid, int64(len(content)), strings.NewReader("never read"))
+		require.ErrorIs(t, err, repo.ErrChecksumMismatch, "other bytes under a stored object's SHA-256 prove nothing")
+		require.NotContains(t, err.Error(), "stored", "the answer does not describe the stored object")
+		_, err = e.lfs.Ingest(e.ctx, oid, int64(len(content)), strings.NewReader("some weights and more"))
+		require.ErrorIs(t, err, repo.ErrChecksumMismatch, "longer content is not the object")
 		_, err = e.lfs.Ingest(e.ctx, oid, 3, strings.NewReader("abc"))
 		require.ErrorIs(t, err, repo.ErrChecksumMismatch)
+		require.Equal(t, puts, e.blobs.Calls("Put"))
 
 		// Corrupt or short content is never stored.
 		other := sha256Hex([]byte("other"))
@@ -66,23 +74,27 @@ func TestLFSIngestDeduplicatesAndVerifies(t *testing.T) {
 		// Verify re-hashes objects written by presigned PUTs.
 		pv := []byte("presigned")
 		pvOID := sha256Hex(pv)
-		_, err = e.lfs.Verify(e.ctx, pvOID, int64(len(pv)))
+		_, err = e.lfs.Verify(e.ctx, pvOID, int64(len(pv)), uuid.Nil)
 		require.ErrorIs(t, err, repo.ErrNotFound)
 		require.NoError(t, e.blobs.Put(e.ctx, model.LFSObjectKey(pvOID), bytes.NewReader(pv), int64(len(pv))))
-		v, err := e.lfs.Verify(e.ctx, pvOID, int64(len(pv)))
+		v, err := e.lfs.Verify(e.ctx, pvOID, int64(len(pv)), uuid.Nil)
 		require.NoError(t, err)
 		require.True(t, v.Verified)
-		_, err = e.lfs.Verify(e.ctx, pvOID, 1)
-		require.ErrorIs(t, err, repo.ErrChecksumMismatch)
+		// Stored, with no upload of it to check: not found, whatever the
+		// size, so Verify never gives away an object's size.
+		_, err = e.lfs.Verify(e.ctx, pvOID, 1, uuid.Nil)
+		require.ErrorIs(t, err, repo.ErrNotFound)
+		_, err = e.lfs.Verify(e.ctx, pvOID, int64(len(pv)), uuid.Nil)
+		require.ErrorIs(t, err, repo.ErrNotFound)
 		bad := sha256Hex([]byte("claimed"))
 		require.NoError(t, e.blobs.Put(e.ctx, model.LFSObjectKey(bad), strings.NewReader("actual!"), 7))
-		_, err = e.lfs.Verify(e.ctx, bad, 7)
+		_, err = e.lfs.Verify(e.ctx, bad, 7, uuid.Nil)
 		require.ErrorIs(t, err, repo.ErrChecksumMismatch)
 		_, ok = e.blobs.Bytes(model.LFSObjectKey(bad))
 		require.False(t, ok, "a corrupt presigned upload is deleted")
-		_, err = e.lfs.PresignPut(e.ctx, "zz", 1, time.Hour)
+		_, err = e.lfs.PresignPut(e.ctx, "zz", 1, time.Hour, uuid.Nil)
 		require.ErrorIs(t, err, repo.ErrInvalid)
-		_, err = e.lfs.PresignPut(e.ctx, oid, 1, time.Hour)
+		_, err = e.lfs.PresignPut(e.ctx, oid, 1, time.Hour, uuid.Nil)
 		require.ErrorIs(t, err, blob.ErrNotSupported)
 	})
 }

@@ -122,12 +122,23 @@ Endpoints under `/{repo}.git/info/lfs/` (and `/datasets/...`). The server tells 
 - **Download:**
   - Present objects: a presigned S3 `GET` (in `redirect` mode) or a Hangar URL with a signed token, `authenticated: true`, and `expires_in` set.
   - Objects not present in a Mirror: if Pull-through is enabled and the caller may use it, return a Hangar URL that starts the transfer and streams bytes as they arrive (the same mechanism as `resolve`). Otherwise return a per-object `error: {code: 404, message: "Not in arsenal. Pull this file with: hangar pull <repo> --include <path>, or clone with GIT_LFS_SKIP_SMUDGE=1"}`.
-- **Upload:** objects that already exist and are verified get no `actions` (deduplication). Otherwise:
+- **Upload:** objects that already exist and are verified, and that the caller may reference (see [Who may reference an LFS object](#who-may-reference-an-lfs-object)), get no `actions` (deduplication). Every other object gets upload actions, including one that is stored but that the caller did not upload and cannot read, so the answer never says whether such an object exists or how large it is; a size mismatch is reported with the stored size only for objects the caller may reference. Otherwise:
   - The client offered `multipart` (Hugging Face's custom transfer, used by `hf lfs-enable-largefiles`) and the object is over the multipart threshold (default 64 MiB): Hangar creates a multipart upload, `actions.upload.href` is the completion URL, and `actions.upload.header` has `chunk_size` and zero-padded part numbers mapping to presigned part URLs (or Hangar part URLs with a signed token on the filesystem backend).
   - `basic` and at most 5 GiB on S3: a presigned `PUT`. Sign `x-amz-checksum-sha256` into it when the store supports it (W1 tests this against AWS and MinIO, and records the result in `docs/research/`).
   - `basic` and over 5 GiB, or the filesystem backend: a Hangar upload URL with a signed token. Hangar streams the body into an S3 multipart upload (part size `max(16 MiB, ceil(size/10000))`), or a temp file and rename, hashing as it goes. It completes only if SHA-256 and size match, so a corrupt object is never visible.
   - Every upload response includes a `verify` action.
-- **Verify:** `POST` with `{oid, size}`. Checks size, and makes sure the SHA-256 has been verified, either by the signed checksum or by Hangar re-hashing the stored object (streaming). Marks the object verified. A Commit or push that references an object still being verified waits up to `lfs.verify_wait` (default 10 minutes) and then fails with a clear error.
+- **Verify:** `POST` with `{oid, size}`. Checks size, and makes sure the SHA-256 has been verified, either by the signed checksum or by Hangar re-hashing the stored object (streaming). Marks the object verified. A Commit or push that references an object still being verified waits up to `lfs.verify_wait` (default 10 minutes) and then fails with a clear error. Verify succeeds only for an upload by the User the batch answered (the signed URL names them): for an object that is stored but that this User did not upload, it answers 404 as for a missing object.
+
+### Who may reference an LFS object
+
+Decided by James on 2026-10-18 ("check at Commit"). LFS objects are stored once per Instance (UP-6), but a Commit may add a pointer to an object only when its author:
+
+- uploaded its bytes, through any path: the git-lfs basic or multipart transfer, a presigned `PUT` and its verify, the native API's upload plan, a Hub API `file` line that `.gitattributes` stores in LFS, or a Xet shard that rebuilds into it; or
+- can read the files of a Repo that holds it (the `read_files` permission, which includes Token restrictions and gating), including the Repo the Commit goes to.
+
+Hangar records each uploader in `lfs_uploaders(oid, user_id)`. An upload of bytes that are already stored is read and checked against the SHA-256 and size like a new one, records the uploader, and is then discarded, so no second copy is kept. Objects stored before the table existed have no uploaders and stay usable through the Repos that already hold them.
+
+The rule applies to git pushes, Hub API commits (including `create_pr=1`, checked before the pull request opens), native API commits and Xet uploads, which commit through the Hub API. A pointer to any other object is refused with the same error as for an object that was never uploaded (`the push refers to LFS object <oid> (<size> bytes), which has not been uploaded` for pushes, `lfs object is missing or not verified` for commits), with the size the client sent, never the stored one. huggingface_hub and git-lfs ask the batch API first, get upload actions and send the bytes, so they succeed without any change. Hangar itself (Parquet export, pull request merges within a Repo, Pulls into a Mirror) is not checked.
 
 Single-part `PUT`s, part `PUT`s and the multipart completion `POST` carry no `Authorization` from Hugging Face clients, so every one of these URLs must authorise itself (presigned or signed token, scoped to one object and one upload, expiring in `lfs.upload_url_ttl`, default 24 hours).
 

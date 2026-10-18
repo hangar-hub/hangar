@@ -332,3 +332,76 @@ func TestLFSPushWithoutObjectsRefused(t *testing.T) {
 		require.Contains(t, strings.ToLower(out), "lfs")
 	})
 }
+
+// TestLFSObjectsOfOtherReposNeedTheirBytes covers the decision James made
+// on 2026-10-18 ("check at Commit") with git and git-lfs: other knows the
+// SHA-256 and size of an object in owner's private Repo. A push of a
+// pointer to it is refused, and the batch API asks other to upload it as
+// if it did not exist. git-lfs then uploads the real bytes and the push
+// succeeds, with no second copy stored. writer, who can read the private
+// Repo, pushes a pointer to it without uploading anything.
+func TestLFSObjectsOfOtherReposNeedTheirBytes(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, _ string, f BackendFactory) {
+		s := newSuite(t, f, suiteOptions{})
+		ctx := context.Background()
+		secret, oid := randomFile(t, 50_000)
+		dir := s.lfsRepo(privateID)
+		s.write(dir, "secret.bin", secret)
+		s.must(dir, "add", "-A")
+		s.must(dir, "commit", "-q", "-m", "secret")
+		s.must(dir, "push", "-q", "origin", "main")
+		otherID := model.RepoID{Type: model.RepoTypeModel, Namespace: "other", Name: "own"}
+		_, err := s.repos.Create(ctx, repo.CreateParams{ID: otherID, Visibility: model.VisibilityPublic, Actor: s.other, InitialReadme: true})
+		require.NoError(t, err)
+		pointer := model.LFSPointer{OID: oid, Size: int64(len(secret))}.Bytes()
+
+		// A pointer alone, past git-lfs's own pre-push check.
+		d := s.clone(otherID, tokOther)
+		s.write(d, "w.bin", pointer)
+		s.must(d, "add", "-A")
+		s.must(d, "commit", "-q", "-m", "pointer only")
+		out, err := s.run(d, "push", "--no-verify", "origin", "main")
+		require.Error(t, err, out)
+		require.Contains(t, out, "which has not been uploaded")
+
+		// The batch asks for the bytes, without the stored size.
+		body := `{"operation":"upload","transfers":["basic"],"objects":[{"oid":"` + oid + `","size":1}]}`
+		req, err := http.NewRequest(http.MethodPost, s.replicas[0].URL+"/other/own.git/info/lfs/objects/batch", strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/vnd.git-lfs+json")
+		req.SetBasicAuth("other", tokOther)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		raw, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(raw))
+		require.Contains(t, string(raw), `"upload"`)
+		require.NotContains(t, string(raw), "50000")
+
+		// git-lfs uploads the real bytes, which are checked, not stored again.
+		s.must(d, "reset", "-q", "--hard", "HEAD~1")
+		s.must(d, "lfs", "track", "*.bin")
+		s.write(d, "w.bin", secret)
+		s.must(d, "add", "-A")
+		s.must(d, "commit", "-q", "-m", "the real bytes")
+		s.must(d, "push", "-q", "origin", "main")
+		stored, ok := s.blobs.Bytes(model.LFSObjectKey(oid))
+		require.True(t, ok)
+		require.True(t, bytes.Equal(secret, stored))
+		for _, k := range s.blobs.Keys() {
+			require.False(t, strings.HasPrefix(k, "tmp/"), "no staged copy is left: %s", k)
+		}
+		c := s.clone(otherID, "")
+		got, err := os.ReadFile(filepath.Join(c, "w.bin"))
+		require.NoError(t, err)
+		require.True(t, bytes.Equal(secret, got))
+
+		// writer can read the private Repo, so a pointer needs no upload.
+		w := s.clone(datasetID, tokWriter)
+		s.write(w, "copy.bin", pointer)
+		s.must(w, "add", "-A")
+		s.must(w, "commit", "-q", "-m", "pointer to a readable object")
+		out, err = s.run(w, "push", "--no-verify", "origin", "main")
+		require.NoError(t, err, out)
+	})
+}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamesagarside/hangar/internal/blob"
@@ -62,7 +63,7 @@ func TestPresignedPutWorksWithoutHeaders(t *testing.T) {
 		for _, withHeaders := range []bool{false, true} {
 			content := []byte("basic upload, headers sent: " + map[bool]string{false: "none", true: "the listed ones"}[withHeaders])
 			oid := sha256Hex(content)
-			req, err := e.lfs.PresignPut(e.ctx, oid, int64(len(content)), time.Hour)
+			req, err := e.lfs.PresignPut(e.ctx, oid, int64(len(content)), time.Hour, uuid.Nil)
 			require.NoError(t, err)
 			require.NotContains(t, req.Headers, "x-amz-checksum-sha256", "no checksum header to leave out")
 			require.Equal(t, http.StatusOK, putURL(t, req, content, withHeaders))
@@ -73,7 +74,7 @@ func TestPresignedPutWorksWithoutHeaders(t *testing.T) {
 			_, err = e.lfs.Stat(e.ctx, oid)
 			require.ErrorIs(t, err, repo.ErrNotFound)
 
-			obj, err := e.lfs.Verify(e.ctx, oid, int64(len(content)))
+			obj, err := e.lfs.Verify(e.ctx, oid, int64(len(content)), uuid.Nil)
 			require.NoError(t, err)
 			require.Equal(t, repo.LFSObject{OID: oid, Size: int64(len(content)), StorageKey: model.LFSObjectKey(oid), Verified: true}, obj)
 			stored, ok := e.blobs.Bytes(model.LFSObjectKey(oid))
@@ -96,23 +97,29 @@ func TestPresignedPutCannotReplaceAVerifiedObject(t *testing.T) {
 		content := []byte("the real weights")
 		oid := sha256Hex(content)
 		size := int64(len(content))
-		honest, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour)
+		honest, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour, uuid.Nil)
 		require.NoError(t, err)
-		late, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour)
+		late, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour, uuid.Nil)
 		require.NoError(t, err)
 		require.NotEqual(t, honest.URL, late.URL, "every URL has its own staging key")
 
 		require.Equal(t, http.StatusOK, putURL(t, honest, content, false))
-		_, err = e.lfs.Verify(e.ctx, oid, size)
+		_, err = e.lfs.Verify(e.ctx, oid, size, uuid.Nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, putURL(t, late, []byte("not the weights!"), false))
-		obj, err := e.lfs.Verify(e.ctx, oid, size)
+		_, err = e.lfs.Verify(e.ctx, oid, size, uuid.Nil)
+		require.ErrorIs(t, err, repo.ErrChecksumMismatch, "the late PUT proves nothing")
+		require.Empty(t, stagedUploads(t, e, oid), "and is discarded")
+		obj, err := e.lfs.Stat(e.ctx, oid)
 		require.NoError(t, err)
 		require.True(t, obj.Verified)
 		stored, _ := e.blobs.Bytes(model.LFSObjectKey(oid))
 		require.Equal(t, content, stored, "the verified object is untouched")
 
-		// The late PUT's staged bytes go when its upload expires.
+		// A staged PUT nobody verifies goes when its upload expires.
+		never, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour, uuid.Nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, putURL(t, never, []byte("not the weights!"), false))
 		rows := stagedUploads(t, e, oid)
 		require.Len(t, rows, 1)
 		_, err = e.d.NewUpdate().Model((*db.Upload)(nil)).Set("expires_at = ?", time.Now().Add(-time.Minute)).Where("id = ?", rows[0].ID).Exec(e.ctx)
@@ -136,13 +143,13 @@ func TestPresignedPutVerifyRejectsWrongContent(t *testing.T) {
 		oid := sha256Hex(content)
 		size := int64(len(content))
 
-		_, err := e.lfs.Verify(e.ctx, oid, size)
+		_, err := e.lfs.Verify(e.ctx, oid, size, uuid.Nil)
 		require.ErrorIs(t, err, repo.ErrNotFound, "nothing was uploaded")
 
-		req, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour)
+		req, err := e.lfs.PresignPut(e.ctx, oid, size, time.Hour, uuid.Nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, putURL(t, req, []byte("other  bytes!!"), false))
-		_, err = e.lfs.Verify(e.ctx, oid, size)
+		_, err = e.lfs.Verify(e.ctx, oid, size, uuid.Nil)
 		require.ErrorIs(t, err, repo.ErrChecksumMismatch)
 		require.Empty(t, stagedUploads(t, e, oid))
 		_, ok := e.blobs.Bytes(model.LFSObjectKey(oid))
@@ -151,13 +158,13 @@ func TestPresignedPutVerifyRejectsWrongContent(t *testing.T) {
 		require.ErrorIs(t, err, repo.ErrNotFound)
 
 		// A good upload after a bad one is verified.
-		req, err = e.lfs.PresignPut(e.ctx, oid, size, time.Hour)
+		req, err = e.lfs.PresignPut(e.ctx, oid, size, time.Hour, uuid.Nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, putURL(t, req, content, false))
-		_, err = e.lfs.Verify(e.ctx, oid, size)
+		_, err = e.lfs.Verify(e.ctx, oid, size, uuid.Nil)
 		require.NoError(t, err)
 
-		_, err = e.lfs.PresignPut(e.ctx, strings.ToUpper(oid), size, time.Hour)
+		_, err = e.lfs.PresignPut(e.ctx, strings.ToUpper(oid), size, time.Hour, uuid.Nil)
 		require.ErrorIs(t, err, repo.ErrInvalid)
 	})
 }

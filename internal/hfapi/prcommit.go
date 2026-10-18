@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/jamesagarside/hangar/internal/community"
+	"github.com/jamesagarside/hangar/internal/httpx"
 	"github.com/jamesagarside/hangar/internal/model"
 	"github.com/jamesagarside/hangar/internal/repo"
 )
@@ -39,7 +42,7 @@ func (h *Handler) checkPRCommit(ctx context.Context, rp *repo.Repo, base model.C
 		case repo.OpAdd, repo.OpCopy:
 			written[clean], removed[clean] = true, false
 		case repo.OpAddLFS:
-			if err := h.checkLFSObject(ctx, op); err != nil {
+			if err := h.checkLFSObject(ctx, rp, op); err != nil {
 				return err
 			}
 			written[clean], removed[clean] = true, false
@@ -103,13 +106,30 @@ func (h *Handler) checkDeleteFolder(ctx context.Context, rp *repo.Repo, base mod
 }
 
 // checkLFSObject fails when an lfsFile names an object that is not stored,
-// or whose size differs. An object written through a presigned PUT and not
-// recorded yet is verified now, as the Commit would, waiting at most
-// lfs.verify_wait.
-func (h *Handler) checkLFSObject(ctx context.Context, op repo.Operation) error {
+// that the caller may not reference without uploading it (Referable), or
+// whose size differs. The caller's own upload through a presigned PUT that
+// is not recorded yet is verified now, as the Commit would, waiting at
+// most lfs.verify_wait.
+func (h *Handler) checkLFSObject(ctx context.Context, rp *repo.Repo, op repo.Operation) error {
+	p := httpx.Principal(ctx)
+	referable, err := h.d.Repos.Referable(ctx, p, rp, []string{op.OID})
+	if err != nil {
+		return err
+	}
+	if !referable[op.OID] {
+		if op.Size <= 0 {
+			return fmt.Errorf("%w: %s (%s)", repo.ErrLFSObjectMissing, op.OID, op.Path)
+		}
+		if _, err := h.verifyLFS(ctx, op.OID, op.Size, p.UserID); err != nil {
+			if errors.Is(err, repo.ErrNotFound) || errors.Is(err, repo.ErrChecksumMismatch) || errors.Is(err, repo.ErrInvalid) {
+				return fmt.Errorf("%w: %s (%s)", repo.ErrLFSObjectMissing, op.OID, op.Path)
+			}
+			return err
+		}
+	}
 	obj, err := h.d.LFS.Stat(ctx, op.OID)
 	if errors.Is(err, repo.ErrNotFound) && op.Size > 0 {
-		obj, err = h.verifyLFS(ctx, op.OID, op.Size)
+		obj, err = h.verifyLFS(ctx, op.OID, op.Size, p.UserID)
 	}
 	switch {
 	case err == nil:
@@ -124,13 +144,13 @@ func (h *Handler) checkLFSObject(ctx context.Context, op repo.Operation) error {
 	}
 }
 
-// verifyLFS verifies an LFS object written through a presigned PUT. The
-// verification carries on when the wait runs out, and concurrent requests
-// share it, so a retry finds the object recorded instead of hashing it
-// again.
-func (h *Handler) verifyLFS(ctx context.Context, oid string, size int64) (repo.LFSObject, error) {
-	ch := h.verifies.DoChan(oid+":"+strconv.FormatInt(size, 10), func() (any, error) {
-		return h.d.LFS.Verify(context.WithoutCancel(ctx), oid, size)
+// verifyLFS verifies an LFS object userID wrote through a presigned PUT.
+// The verification carries on when the wait runs out, and concurrent
+// requests share it, so a retry finds the object recorded instead of
+// hashing it again.
+func (h *Handler) verifyLFS(ctx context.Context, oid string, size int64, userID uuid.UUID) (repo.LFSObject, error) {
+	ch := h.verifies.DoChan(oid+":"+strconv.FormatInt(size, 10)+":"+userID.String(), func() (any, error) {
+		return h.d.LFS.Verify(context.WithoutCancel(ctx), oid, size, userID)
 	})
 	timer := time.NewTimer(h.d.Settings.VerifyWait)
 	defer timer.Stop()

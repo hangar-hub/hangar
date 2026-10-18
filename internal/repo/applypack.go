@@ -131,7 +131,7 @@ func (s *Store) ApplyPack(ctx context.Context, p ApplyPackParams) error {
 			}
 		}
 	}
-	lfsRefs, added, commits, err := s.checkPackObjects(ctx, st, row, p.Source, objects)
+	lfsRefs, added, commits, err := s.checkPackObjects(ctx, st, row, p.Source, p.Actor, objects)
 	if err != nil {
 		return err
 	}
@@ -152,10 +152,12 @@ func (s *Store) ApplyPack(ctx context.Context, p ApplyPackParams) error {
 
 // checkPackObjects applies the blob policy to the objects of a new pack:
 // pushes may not add non-LFS files over git.max_blob_size, and every LFS
-// pointer they add must name a stored, verified object. Mirrors record the
-// pointers they bring as present or not. It also returns the Commits in
-// the pack.
-func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row *repoRow, source PackSource, objects []string) ([]LFSRef, int64, []string, error) {
+// pointer they add must name a stored, verified object that the pusher
+// uploaded or can already read (Referable); the refusal is the same for an
+// object that is stored but not referable as for one that does not exist.
+// Mirrors record the pointers they bring as present or not. It also
+// returns the Commits in the pack.
+func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row *repoRow, source PackSource, actor model.Principal, objects []string) ([]LFSRef, int64, []string, error) {
 	if len(objects) == 0 {
 		return nil, 0, nil, nil
 	}
@@ -208,18 +210,24 @@ func (s *Store) checkPackObjects(ctx context.Context, st *gitstore.Staging, row 
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	var referable map[string]bool
+	if source == SourcePush {
+		if referable, err = s.Referable(ctx, actor, toRepo(row), oids); err != nil {
+			return nil, 0, nil, err
+		}
+	}
 	refs := make([]LFSRef, 0, len(ptrs))
 	for _, p := range ptrs {
 		obj, ok := stored[p.OID]
-		if !ok && source == SourcePush {
-			// An object written by a presigned PUT may not be verified yet.
-			v, err := s.verifyLFS(ctx, p.OID, p.Size)
+		if source == SourcePush && (!ok || !referable[p.OID]) {
+			// The pusher's own upload: one written by a presigned PUT may
+			// not be verified yet. A stored object the pusher may not
+			// reference counts as not uploaded.
+			v, err := s.verifyLFS(ctx, p.OID, p.Size, actor.UserID)
 			if errors.Is(err, errVerifyWait) {
 				return nil, 0, nil, &PolicyError{Message: err.Error()}
 			}
-			if err == nil {
-				obj, ok = v, true
-			}
+			obj, ok = v, err == nil
 		}
 		present := ok && obj.Size == p.Size
 		if source == SourcePush && !present {

@@ -155,6 +155,8 @@ func (s *secondInstance) seed(t *testing.T, id model.RepoID, files map[string][]
 			sum := sha256.Sum256(c)
 			obj, err := s.Real.LFS.Ingest(ctx, hex.EncodeToString(sum[:]), int64(len(c)), bytes.NewReader(c))
 			require.NoError(t, err)
+			// The owner uploaded it, so their Commit may reference it.
+			require.NoError(t, s.Real.LFS.RecordUploader(ctx, obj.OID, s.Owner.UserID))
 			ops = append(ops, repo.Operation{Kind: repo.OpAddLFS, Path: p, OID: obj.OID, Size: obj.Size})
 			continue
 		}

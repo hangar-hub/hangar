@@ -32,7 +32,7 @@ func TestZipExportJob(t *testing.T) {
 		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "zipme"}
 		e.create(repo.CreateParams{ID: id, Actor: alice})
 		weights := []byte("lfs weights")
-		oid := e.putLFS(weights)
+		oid := e.putLFS(weights, alice)
 		res := e.commit(id, alice, add("config.json", "{}"), add("sub/dir/a.txt", "a"),
 			repo.Operation{Kind: repo.OpAddLFS, Path: "sub/w.safetensors", OID: oid, Size: int64(len(weights))})
 
