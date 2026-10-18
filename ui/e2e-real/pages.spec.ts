@@ -3,6 +3,7 @@ import {
   expectAccessible,
   expectGlossaryTerms,
   expectNoHorizontalOverflow,
+  expectTheme,
   settled,
   watchConsole,
   watchFailedLoads,
@@ -111,49 +112,67 @@ const signedIn: Route[] = [
 
 const signedOut = ["/", "/auth/login", "/auth/login?error=oidc_denied"];
 
+// Spec 09 asks for axe in both themes on every page: the light theme runs
+// every check, and the dark theme runs axe on the same pages.
+const schemes = ["light", "dark"] as const;
+
 for (const route of signedIn) {
   const title = route.title ?? (route.path as string);
-  test(`${title} renders, fits the width and is accessible${route.as ? " for admins" : ""}`, async ({
-    page,
-  }) => {
-    const problems = watchConsole(page);
-    const [username, password] =
-      route.as === "admin" ? ["hangar-admin", adminPassword()] : [user.username, user.password];
-    let path = route.path;
-    if (typeof path !== "string") {
-      const s = await session(env("HANGAR_URL"), username, password);
-      try {
-        path = await path(s);
-      } finally {
-        await s.dispose();
+  for (const scheme of schemes) {
+    const name =
+      scheme === "light"
+        ? `${title} renders, fits the width and is accessible${route.as ? " for admins" : ""}`
+        : `${title} passes axe in the dark theme${route.as ? " for admins" : ""}`;
+    test(name, async ({ page }) => {
+      const problems = watchConsole(page);
+      await page.emulateMedia({ colorScheme: scheme });
+      const [username, password] =
+        route.as === "admin" ? ["hangar-admin", adminPassword()] : [user.username, user.password];
+      let path = route.path;
+      if (typeof path !== "string") {
+        const s = await session(env("HANGAR_URL"), username, password);
+        try {
+          path = await path(s);
+        } finally {
+          await s.dispose();
+        }
       }
-    }
-    await signIn(page, username, password);
-    await page.goto(path);
-    await expect(page.locator("h1")).toHaveCount(1);
-    await settled(page);
-    // Again once lazy content such as a Markdown card has loaded.
-    await expect(page.locator("h1")).toHaveCount(1);
-    await expectNoHorizontalOverflow(page);
-    await expectAccessible(page);
-    await expectGlossaryTerms(page);
-    expect(problems).toEqual([]);
-  });
+      await signIn(page, username, password);
+      await page.goto(path);
+      await expect(page.locator("h1")).toHaveCount(1);
+      await settled(page);
+      // Again once lazy content such as a Markdown card has loaded.
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expectTheme(page, scheme);
+      await expectNoHorizontalOverflow(page);
+      await expectAccessible(page);
+      await expectGlossaryTerms(page);
+      expect(problems).toEqual([]);
+    });
+  }
 }
 
 for (const path of signedOut) {
-  test(`${path} renders, fits the width and is accessible when signed out`, async ({ page }) => {
-    const problems = watchConsole(page);
-    const failedLoads = watchFailedLoads(page);
-    await page.goto(path);
-    await expect(page.locator("h1")).toHaveCount(1);
-    await settled(page);
-    await expect(page.locator("h1")).toHaveCount(1);
-    await expectNoHorizontalOverflow(page);
-    await expectAccessible(page);
-    await expectGlossaryTerms(page);
-    expect(problems).toEqual([]);
-    // No request fails before sign-in, so the console stays clean.
-    expect(failedLoads).toEqual([]);
-  });
+  for (const scheme of schemes) {
+    const name =
+      scheme === "light"
+        ? `${path} renders, fits the width and is accessible when signed out`
+        : `${path} passes axe in the dark theme when signed out`;
+    test(name, async ({ page }) => {
+      const problems = watchConsole(page);
+      const failedLoads = watchFailedLoads(page);
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(path);
+      await expect(page.locator("h1")).toHaveCount(1);
+      await settled(page);
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expectTheme(page, scheme);
+      await expectNoHorizontalOverflow(page);
+      await expectAccessible(page);
+      await expectGlossaryTerms(page);
+      expect(problems).toEqual([]);
+      // No request fails before sign-in, so the console stays clean.
+      expect(failedLoads).toEqual([]);
+    });
+  }
 }

@@ -6,6 +6,7 @@ import {
   expectAccessible,
   expectGlossaryTerms,
   expectNoHorizontalOverflow,
+  expectTheme,
   searchWithKeyboard,
   settled,
   signIn,
@@ -98,9 +99,15 @@ const signedOut = [
   "/auth/login?error=oidc_denied",
 ];
 
+// Spec 09 asks for axe in both themes on every page. The light theme runs
+// every check; the dark theme runs axe, which is what changes with the
+// palette, on the same pages.
+const schemes = ["light", "dark"] as const;
+
 for (const path of signedIn) {
   test(`${path} renders, fits the width and is accessible`, async ({ page }) => {
     const problems = watchConsole(page);
+    await page.emulateMedia({ colorScheme: "light" });
     await signIn(page);
     await page.goto(path);
     await expect(page.locator("h1")).toHaveCount(1);
@@ -108,30 +115,55 @@ for (const path of signedIn) {
     // Again once lazy content such as a Markdown card has loaded: its
     // headings must not add a second h1.
     await expect(page.locator("h1")).toHaveCount(1);
+    await expectTheme(page, "light");
     await expectNoHorizontalOverflow(page);
     await expectAccessible(page);
     await expectGlossaryTerms(page);
+    expect(problems).toEqual([]);
+  });
+
+  test(`${path} passes axe in the dark theme`, async ({ page }) => {
+    const problems = watchConsole(page);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await signIn(page);
+    await page.goto(path);
+    // Wait for the page to render before settled(): with no loading
+    // placeholder on the page yet, settled() passes at once and axe would
+    // check an empty document.
+    await expect(page.locator("h1")).toHaveCount(1);
+    await settled(page);
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expectTheme(page, "dark");
+    await expectAccessible(page);
     expect(problems).toEqual([]);
   });
 }
 
 for (const path of signedOut) {
-  test(`${path} renders, fits the width and is accessible when signed out`, async ({ page }) => {
-    const problems = watchConsole(page);
-    const failedLoads = watchFailedLoads(page);
-    await page.goto(path);
-    await expect(page.locator("h1")).toHaveCount(1);
-    await settled(page);
-    // Again once lazy content such as a Markdown card has loaded: its
-    // headings must not add a second h1.
-    await expect(page.locator("h1")).toHaveCount(1);
-    await expectNoHorizontalOverflow(page);
-    await expectAccessible(page);
-    await expectGlossaryTerms(page);
-    expect(problems).toEqual([]);
-    // No request fails before sign-in, so the console stays clean.
-    expect(failedLoads).toEqual([]);
-  });
+  for (const scheme of schemes) {
+    const name =
+      scheme === "light"
+        ? `${path} renders, fits the width and is accessible when signed out`
+        : `${path} passes axe in the dark theme when signed out`;
+    test(name, async ({ page }) => {
+      const problems = watchConsole(page);
+      const failedLoads = watchFailedLoads(page);
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(path);
+      await expect(page.locator("h1")).toHaveCount(1);
+      await settled(page);
+      // Again once lazy content such as a Markdown card has loaded: its
+      // headings must not add a second h1.
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expectTheme(page, scheme);
+      await expectNoHorizontalOverflow(page);
+      await expectAccessible(page);
+      await expectGlossaryTerms(page);
+      expect(problems).toEqual([]);
+      // No request fails before sign-in, so the console stays clean.
+      expect(failedLoads).toEqual([]);
+    });
+  }
 }
 
 test("a wide Markdown table scrolls in a region keyboard users can focus", async ({ page }) => {
@@ -260,35 +292,6 @@ test("cards in a grid row are the same height, with the stats at the bottom", as
     cards.getByRole("img", { name: /^\d+ more quants?: Q\w+(, Q\w+)*$/ }).first(),
   ).toBeVisible();
 });
-
-// The dark theme on a page of each kind.
-const darkPages = [
-  "/models",
-  "/datasets",
-  "/datasets/ada/ingest-samples/viewer",
-  "/ada/bert-tiny-finetune",
-  "/ada/bert-tiny-finetune/blob/main/config.json",
-  "/datasets/ada/imdb-mini/viewer/default/train",
-  "/discover?repo=TinyLlama/TinyLlama-1.1B-Chat-GGUF",
-  "/settings/tokens",
-  "/admin/jobs",
-];
-
-for (const path of darkPages) {
-  test(`${path} passes axe in the dark theme`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "dark" });
-    await signIn(page);
-    await page.goto(path);
-    // Wait for the page to render before settled(): with no loading
-    // placeholder on the page yet, settled() passes at once and axe would
-    // check an empty document.
-    await expect(page.locator("h1")).toHaveCount(1);
-    await settled(page);
-    await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page.locator("html")).toHaveClass(/dark/);
-    await expectAccessible(page);
-  });
-}
 
 // Dialogs and panels that open over a page, which must fit the width too.
 test("the upload panel with staged files passes axe", async ({ page }) => {

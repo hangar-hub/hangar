@@ -234,6 +234,13 @@ export async function expectAccessible(page: Page): Promise<void> {
   expect(summary).toEqual([]);
 }
 
+/** Checks the page follows the emulated colour scheme. */
+export async function expectTheme(page: Page, scheme: "light" | "dark"): Promise<void> {
+  const dark = /(^|\s)dark(\s|$)/;
+  if (scheme === "dark") await expect(page.locator("html")).toHaveClass(dark);
+  else await expect(page.locator("html")).not.toHaveClass(dark);
+}
+
 /**
  * Fails when the page's text says "Owner", which CONTEXT.md says to avoid:
  * the UI calls the owner part of a Repo ID a Namespace.
