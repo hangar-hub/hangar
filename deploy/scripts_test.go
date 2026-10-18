@@ -209,12 +209,15 @@ func TestPercentSpacingCheck(t *testing.T) {
 // or the working tree, and commits nothing when they are already there.
 func TestDocsRootFiles(t *testing.T) {
 	repo := t.TempDir()
+	// The script commits too, so it runs with the same identity: CI runners
+	// have none of their own.
+	gitEnv := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com", "GIT_CONFIG_GLOBAL=/dev/null")
 	git := func(args ...string) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com", "GIT_CONFIG_GLOBAL=/dev/null")
+		cmd.Env = gitEnv
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
@@ -264,7 +267,9 @@ func TestDocsRootFiles(t *testing.T) {
 
 	run := func() string {
 		t.Helper()
-		out, err := exec.Command(filepath.Join(repo, "scripts/docs-root-files.sh")).CombinedOutput()
+		cmd := exec.Command(filepath.Join(repo, "scripts/docs-root-files.sh"))
+		cmd.Env = gitEnv
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("the script failed: %v\n%s", err, out)
 		}
