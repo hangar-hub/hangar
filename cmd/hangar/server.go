@@ -124,8 +124,14 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return nil
 	}
 
-	waitingForBlobs := "waiting for the Blob store to answer"
-	waiting.Store(&waitingForBlobs)
+	// Name the Blob store as the reason only when start-up may wait for
+	// it. The filesystem backend opens at once or fails, and a /readyz
+	// answered while it opens would otherwise report a wait that never
+	// happens.
+	if blobStoreWaits(cfg) {
+		waitingForBlobs := "waiting for the Blob store to answer"
+		waiting.Store(&waitingForBlobs)
+	}
 	blobs, err := openBlobStoreWaiting(ctx, cfg, func(ctx context.Context) (blob.Store, error) {
 		return openBlobStore(ctx, cfg, tel)
 	}, log)
@@ -248,10 +254,10 @@ const (
 // of exiting into the kubelet's growing restart back-off. The filesystem
 // backend is never retried: its errors do not go away.
 func openBlobStoreWaiting(ctx context.Context, cfg *config.Config, open func(context.Context) (blob.Store, error), log *slog.Logger) (blob.Store, error) {
-	wait := cfg.Storage.S3.StartupWait
-	if cfg.Storage.Backend != config.BackendS3 || wait <= 0 {
+	if !blobStoreWaits(cfg) {
 		return open(ctx)
 	}
+	wait := cfg.Storage.S3.StartupWait
 	deadline := time.Now().Add(wait)
 	retry := blobRetryFirst
 	for attempt := 1; ; attempt++ {
@@ -283,6 +289,12 @@ func openBlobStoreWaiting(ctx context.Context, cfg *config.Config, open func(con
 		}
 		retry = min(retry*2, blobRetryMax)
 	}
+}
+
+// blobStoreWaits reports whether openBlobStoreWaiting retries a Blob store
+// that does not answer: only an S3 store with a storage.s3.startup_wait.
+func blobStoreWaits(cfg *config.Config) bool {
+	return cfg.Storage.Backend == config.BackendS3 && cfg.Storage.S3.StartupWait > 0
 }
 
 // openBlobStore opens the configured Blob store with telemetry and writes
