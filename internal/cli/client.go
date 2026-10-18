@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -27,13 +28,83 @@ type client struct {
 }
 
 // newHTTPClient returns the HTTP client the CLI uses: no overall timeout,
-// because downloads and uploads can take hours, but bounded connection set-up.
+// because downloads and uploads can take hours, but bounded connection
+// set-up and a bounded wait for each answer (responseTimeout).
 func newHTTPClient() *http.Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DialContext = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	tr.TLSHandshakeTimeout = 30 * time.Second
-	tr.ResponseHeaderTimeout = 5 * time.Minute
-	return &http.Client{Transport: tr, CheckRedirect: checkRedirect}
+	return &http.Client{Transport: responseTimeout{next: tr, wait: defaultResponseTimeout}, CheckRedirect: checkRedirect}
+}
+
+// defaultResponseTimeout is how long a request waits for the answer's
+// headers, unless its context sets another wait (withResponseTimeout).
+const defaultResponseTimeout = 5 * time.Minute
+
+type responseTimeoutKey struct{}
+
+// withResponseTimeout returns ctx with the wait for an answer's headers
+// set to d, for a request the Instance takes longer to answer, such as the
+// completion of a large upload.
+func withResponseTimeout(ctx context.Context, d time.Duration) context.Context {
+	return context.WithValue(ctx, responseTimeoutKey{}, d)
+}
+
+// responseTimeout is http.Transport's ResponseHeaderTimeout, with a wait
+// that each request's context can set. Once the headers arrive, reading
+// the body has no time limit.
+type responseTimeout struct {
+	next http.RoundTripper
+	wait time.Duration
+}
+
+// errNoAnswer is the cause of a request cancelled by responseTimeout.
+var errNoAnswer = errors.New("no answer")
+
+// ResponseTimeoutError is a request that got no answer within its wait.
+// The Instance may still be working on it.
+type ResponseTimeoutError struct{ Wait time.Duration }
+
+func (e *ResponseTimeoutError) Error() string {
+	return fmt.Sprintf("no answer from the Instance within %s", formatDuration(e.Wait))
+}
+
+// Timeout reports true, as net.Error does for a timeout.
+func (e *ResponseTimeoutError) Timeout() bool { return true }
+
+// Temporary reports true: the request may succeed if it is sent again.
+func (e *ResponseTimeoutError) Temporary() bool { return true }
+
+func (rt responseTimeout) RoundTrip(req *http.Request) (*http.Response, error) {
+	wait := rt.wait
+	if d, ok := req.Context().Value(responseTimeoutKey{}).(time.Duration); ok && d > 0 {
+		wait = d
+	}
+	ctx, cancel := context.WithCancelCause(req.Context())
+	timer := time.AfterFunc(wait, func() { cancel(errNoAnswer) })
+	resp, err := rt.next.RoundTrip(req.WithContext(ctx)) // #nosec G704 -- the request the caller built.
+	timer.Stop()
+	if err != nil {
+		cancel(nil)
+		if errors.Is(context.Cause(ctx), errNoAnswer) && req.Context().Err() == nil {
+			return nil, &ResponseTimeoutError{Wait: wait}
+		}
+		return nil, err
+	}
+	resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: func() { cancel(nil) }}
+	return resp, nil
+}
+
+// cancelOnClose ends a request's context when its body is closed.
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel func()
+}
+
+func (c *cancelOnClose) Close() error {
+	err := c.ReadCloser.Close()
+	c.cancel()
+	return err
 }
 
 // maxRedirects is how many redirects one request may follow, as in

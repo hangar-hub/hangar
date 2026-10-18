@@ -167,6 +167,8 @@ type uploader struct {
 	// waiting shows a status line while the Instance checks an upload;
 	// nil shows none.
 	waiting func(msg string) func()
+	// note prints a line about a retry; nil prints none.
+	note func(format string, args ...any)
 }
 
 // upload sends every file that the Instance does not already have and
@@ -330,9 +332,7 @@ func (u *uploader) uploadFile(ctx context.Context, f localFile, item gen.UploadP
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("%w; run the command again to resume the upload", err)
 	}
-	stop := u.status(fmt.Sprintf("Checking %s (%s) on the Instance", f.Path, formatBytes(f.Size)))
 	fin, err := u.complete(ctx, f, *item.UploadId, results)
-	stop()
 	if err != nil {
 		return err
 	}
@@ -422,22 +422,46 @@ func (u *uploader) sendPart(ctx context.Context, f localFile, n int, off, size i
 	}
 }
 
+// completionWaitPerGiB is how long a completion may take per GiB before
+// the CLI stops waiting for its answer. The Instance verifies the SHA-256
+// and copies the object at about 20 seconds per GiB on a small host
+// (19.85 GB took about 6 minutes on the bellatrix preview), so this allows
+// twice that.
+const completionWaitPerGiB = 40 * time.Second
+
+// completionTimeout is how long the CLI waits for the answer to an upload
+// completion: defaultResponseTimeout, or completionWaitPerGiB for each GiB
+// of the file if that is longer. Tests replace it.
+var completionTimeout = func(size int64) time.Duration {
+	return max(defaultResponseTimeout, time.Duration(float64(size)/float64(1<<30)*float64(completionWaitPerGiB)))
+}
+
 // complete finishes an upload. A 503 with Retry-After means the Instance
 // kept the upload and its parts (api/openapi.yaml), so the same request is
 // sent again after the wait it asks for. A connection that fails or times
 // out, or a proxy that answers 502, 504, 408 or 429, may cut off a
 // completion the Instance carries on with, so it is sent again too, after
-// a growing wait. If a completion sent again finds the upload gone, an
-// earlier one finished it: planning the file again then says the object
-// is stored. It sends the completion at most completeAttempts times.
+// a growing wait, and a line says so. If a completion sent again finds the
+// upload gone, an earlier one finished it: planning the file again then
+// says the object is stored. It sends the completion at most
+// completeAttempts times, and shows a status line while it waits.
 func (u *uploader) complete(ctx context.Context, f localFile, upload gen.ID, parts []gen.UploadedPart) (*gen.UploadStatus, error) {
+	timeout := completionTimeout(f.Size)
+	msg := fmt.Sprintf("Verifying %s (%s) on the Instance", f.Path, formatBytes(f.Size))
 	for attempt := 1; ; attempt++ {
-		fin, err := u.c.completeUpload(ctx, u.id, upload, parts)
+		line := msg
+		if attempt > 1 {
+			line = fmt.Sprintf("%s, attempt %d of %d", msg, attempt, completeAttempts)
+		}
+		stop := u.status(line)
+		fin, err := u.c.completeUpload(withResponseTimeout(ctx, timeout), u.id, upload, parts)
+		stop()
 		if err == nil {
 			return fin, nil
 		}
 		var ae *APIError
 		var wait time.Duration
+		cutOff := false
 		switch {
 		case errors.As(err, &ae) && ae.Retryable:
 			wait = ae.RetryAfter
@@ -448,15 +472,36 @@ func (u *uploader) complete(ctx context.Context, f localFile, upload gen.ID, par
 			return nil, err
 		case completionCutOff(ctx, err):
 			wait = retryWait(err, attempt)
+			cutOff = true
 		default:
 			return nil, err
 		}
 		if attempt == completeAttempts {
 			return nil, fmt.Errorf("%w; the Instance kept the upload, so run the command again to finish it", err)
 		}
+		if cutOff {
+			u.notef("%s\n", retryNote(f.Path, err))
+		}
 		if err := waitRetry(ctx, wait); err != nil {
 			return nil, err
 		}
+	}
+}
+
+// retryNote says why a completion is sent again after it was cut off.
+func retryNote(path string, err error) string {
+	var te *ResponseTimeoutError
+	if errors.As(err, &te) {
+		return fmt.Sprintf("No answer from the Instance within %s while it verified %s. It carries on verifying, so the CLI asks again.",
+			formatDuration(te.Wait), path)
+	}
+	return fmt.Sprintf("The connection broke off while the Instance verified %s (%s). The CLI asks again.", path, redactURLError(err))
+}
+
+// notef prints a line about a retry, if the uploader has a way to print one.
+func (u *uploader) notef(format string, args ...any) {
+	if u.note != nil {
+		u.note(format, args...)
 	}
 }
 

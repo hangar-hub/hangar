@@ -197,9 +197,12 @@ func (c *countingProgress) undo() {
 }
 
 // statusTick is how often a status line on a terminal redraws its timer,
-// and statusTerminal tells whether stderr is one. Tests replace them.
+// statusRepeat how often it is printed again when stderr is not a
+// terminal, and statusTerminal tells whether stderr is one. Tests replace
+// them.
 var (
 	statusTick     = time.Second
+	statusRepeat   = time.Minute
 	statusTerminal = isTerminal
 )
 
@@ -207,22 +210,27 @@ var (
 // progress of its own, such as an Upstream lookup or a check of a large
 // upload, and returns a function that ends it. On a terminal the line
 // counts the seconds and is cleared at the end; otherwise msg is printed
-// once. With --json nothing is shown.
+// at once and again with the time taken every statusRepeat, so a log shows
+// that a long wait is still going. With --json nothing is shown.
 func (a *app) waitStatus(msg string) func() {
 	if a.json {
 		return func() {}
 	}
-	if !statusTerminal(a.stderr) {
-		a.logf("%s\n", msg)
-		return func() {}
-	}
 	start := time.Now()
+	tty := statusTerminal(a.stderr)
+	every := statusTick
 	draw := func() { a.logf("\r\033[K%s (%s)", msg, formatDuration(time.Since(start))) }
-	draw()
+	if !tty {
+		every = statusRepeat
+		a.logf("%s\n", msg)
+		draw = func() { a.logf("%s (%s)\n", msg, formatDuration(time.Since(start))) }
+	} else {
+		draw()
+	}
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		t := time.NewTicker(statusTick)
+		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
 			select {
@@ -236,6 +244,8 @@ func (a *app) waitStatus(msg string) func() {
 	return func() {
 		close(done)
 		wg.Wait()
-		a.logf("\r\033[K")
+		if tty {
+			a.logf("\r\033[K")
+		}
 	}
 }

@@ -120,7 +120,9 @@ func TestPushFinishesACompletionAProxyCutOff(t *testing.T) {
 	e.inst.DropCompletion(sha(weights), 1)
 
 	r := e.ok("push", dir, "acme/cutoff")
-	require.Contains(t, r.stderr, "Checking model.safetensors (256.0 KiB) on the Instance\n", "the long wait is named")
+	require.Contains(t, r.stderr, "Verifying model.safetensors (256.0 KiB) on the Instance\n", "the long wait is named")
+	require.Contains(t, r.stderr, "The connection broke off while the Instance verified model.safetensors", "the retry is named")
+	require.Contains(t, r.stderr, "Verifying model.safetensors (256.0 KiB) on the Instance, attempt 2 of 10\n")
 	require.Equal(t, 2, e.inst.RequestCount(completeRoute))
 	require.Len(t, *waits, 1)
 	require.Equal(t, 4, e.inst.PartPuts(), "no part is sent again")

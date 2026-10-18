@@ -426,7 +426,7 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	if len(upload) > 0 && !a.json {
 		a.logf("Uploading %s to %s.\n", countFiles(len(upload), total), display(id))
 	}
-	up := &uploader{c: c, id: id, prog: newProgress(a.stderr, "Uploading "+display(id), total, a.json), waiting: a.waitStatus}
+	up := &uploader{c: c, id: id, prog: newProgress(a.stderr, "Uploading "+display(id), total, a.json), waiting: a.waitStatus, note: a.logf}
 	_, err = up.upload(ctx, upload)
 	up.prog.finish()
 	var failed *uploadFailures

@@ -703,6 +703,14 @@ func (s *server) CompleteUpload(w http.ResponseWriter, r *http.Request, _ gen.Re
 		problem(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if d := s.i.takeSlowCompletion(id); d > 0 {
+		t := time.NewTimer(d)
+		select {
+		case <-t.C:
+		case <-r.Context().Done():
+		}
+		t.Stop()
+	}
 	s.i.mu.Lock()
 	defer s.i.mu.Unlock()
 	up := s.i.uploads[id]

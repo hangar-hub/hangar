@@ -38,6 +38,8 @@ hangar push ./data datasets/acme/reviews --branch march
 
 `hangar push` hashes every file, asks the Instance which ones it needs, uploads only those, in parts, then makes one Commit. If an upload stops part-way, run the same command again: parts already stored are not sent again. A file that still fails after its retries does not stop the others: the command uploads the rest, names the files that failed and makes no Commit, so the next run sends only those files and then commits. `.git` and `huggingface_hub`'s `.cache/huggingface` folder are skipped; add `--include` and `--exclude` patterns for more control, or `--create-pr` to open a pull request instead.
 
+After the last part of a large file, the Instance checks its SHA-256 and size and stores it, which takes about 20 seconds per GiB on a small host. While it does, the CLI shows `Verifying <file> (<size>) on the Instance` with the time taken. It waits up to 5 minutes for the answer, or 40 seconds per GiB for a file larger than 7.5 GiB. If no answer comes in that time, it prints one line to say so and asks again: the Instance carries on checking in the meantime, so nothing is uploaded twice.
+
 Symbolic links are followed only to files inside the folder, or to files in a Hugging Face cache, such as the files of a cache snapshot or the files `hangar lmstudio` links into LM Studio's folder. `hangar push` skips any other link and names it, so a folder you did not make yourself cannot send a file from elsewhere on your machine. Copy such a file into the folder to upload it.
 
 ## Your own models, not on any Upstream

@@ -153,8 +153,10 @@ type Instance struct {
 	failedCompletes map[string]completeFailure
 	// droppedCompletes counts completions to cut off, by SHA-256.
 	droppedCompletes map[string]int
-	failedDownloads  map[string]downloadFailure
-	downloads        map[string]int
+	// slowCompletes holds completions to answer late, by SHA-256.
+	slowCompletes   map[string]slowCompletion
+	failedDownloads map[string]downloadFailure
+	downloads       map[string]int
 	// stalePlans counts upload plans to hand expired part URLs.
 	stalePlans int
 	// partStored is closed, and replaced, each time a part is stored.
@@ -189,6 +191,7 @@ func New(t testing.TB) *Instance {
 		failedParts:      map[string]partFailure{},
 		failedCompletes:  map[string]completeFailure{},
 		droppedCompletes: map[string]int{},
+		slowCompletes:    map[string]slowCompletion{},
 		failedDownloads:  map[string]downloadFailure{},
 		downloads:        map[string]int{},
 		partStored:       make(chan struct{}),
@@ -469,6 +472,41 @@ func (i *Instance) DropCompletion(sha string, times int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.droppedCompletes[sha] = times
+}
+
+// slowCompletion is an injected delay before a completion's answer.
+type slowCompletion struct {
+	times int
+	delay time.Duration
+}
+
+// SlowCompletion makes the next times completions of the upload of the
+// file with this SHA-256 wait delay before they verify the upload and
+// answer, as a real Instance does for a large file. A client that stops
+// waiting ends the delay early; like Hangar, the Instance then carries on
+// and completes the upload.
+func (i *Instance) SlowCompletion(sha string, times int, delay time.Duration) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.slowCompletes[sha] = slowCompletion{times: times, delay: delay}
+}
+
+// takeSlowCompletion returns the delay for a completion of upload id, and
+// counts it.
+func (i *Instance) takeSlowCompletion(id uuid.UUID) time.Duration {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	up := i.uploads[id]
+	if up == nil {
+		return 0
+	}
+	sc := i.slowCompletes[up.sha]
+	if sc.times == 0 {
+		return 0
+	}
+	sc.times--
+	i.slowCompletes[up.sha] = sc
+	return sc.delay
 }
 
 // downloadFailure is an injected failure of a file download.
