@@ -134,7 +134,7 @@ export function LoginPage() {
               <>
                 <Field
                   label="Email"
-                  hint="Optional. Admins use it to recognise you."
+                  hint="Optional. It takes effect when you open the confirmation link an admin sends to it."
                   error={errs.email}
                 >
                   {(fp) => (

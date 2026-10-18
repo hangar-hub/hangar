@@ -132,6 +132,8 @@ var routeMatrix = []routeCase{
 	{method: "POST", route: "/auth/register", rule: ruleOpen, path: "/auth/register", body: `{}`},
 	{method: "POST", route: "/auth/invite/{code}", rule: ruleOpen, path: "/auth/invite/nope", body: `{}`},
 	{method: "POST", route: "/auth/reset/{code}", rule: ruleOpen, path: "/auth/reset/nope", body: `{}`},
+	// The code in a confirmation link is the credential, as for a reset.
+	{method: "POST", route: "/auth/email/{code}", rule: ruleOpen, path: "/auth/email/nope"},
 
 	// Signed links.
 	{method: "GET", route: "/api/hangar/v1/exports/{file}", rule: ruleOwnCredential, path: "/api/hangar/v1/exports/x.zip"},
@@ -251,6 +253,11 @@ var routeMatrix = []routeCase{
 
 	// Native API.
 	{method: "GET", route: "/api/hangar/v1/me", rule: ruleOpen, path: "/api/hangar/v1/me"},
+	// Self-service profile and password (W8 8, decided by James on
+	// 2026-10-18): a write Token may change the profile, as for the other
+	// /me changes, but only a UI session may change a password.
+	{method: "PATCH", route: "/api/hangar/v1/me", rule: ruleSignedInWrite, path: "/api/hangar/v1/me", body: `{"display_name":"Probe {n}"}`},
+	{method: "POST", route: "/api/hangar/v1/me/password", rule: ruleSessionOnly, path: "/api/hangar/v1/me/password", body: `{"current_password":"wrong password 1","new_password":"a new password 2"}`},
 	{method: "POST", route: "/api/hangar/v1/auth/login", rule: ruleCredentialExchange, path: "/api/hangar/v1/auth/login", body: `{"username":"nobody","password":"wrong password 1"}`},
 	{method: "POST", route: "/api/hangar/v1/auth/logout", rule: ruleOpen, path: "/api/hangar/v1/auth/logout"},
 	{method: "GET", route: "/api/hangar/v1/auth/providers", rule: ruleOpen, path: "/api/hangar/v1/auth/providers"},
@@ -355,6 +362,7 @@ var routeMatrix = []routeCase{
 	{method: "POST", route: "/api/hangar/v1/admin/users", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users", body: `{"username":"made-{n}","email":"made{n}@example.com"}`},
 	{method: "PATCH", route: "/api/hangar/v1/admin/users/{id}", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}", body: `{"disabled":false}`},
 	{method: "POST", route: "/api/hangar/v1/admin/users/{id}/reset-link", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}/reset-link"},
+	{method: "POST", route: "/api/hangar/v1/admin/users/{id}/email-link", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}/email-link", body: `{"email":"probe@example.com"}`},
 	{method: "POST", route: "/api/hangar/v1/admin/invites", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/invites", body: `{}`},
 	{method: "GET", route: "/api/hangar/v1/admin/upstreams", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/upstreams"},
 	{method: "POST", route: "/api/hangar/v1/admin/upstreams", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/upstreams", body: `{"name":"u{n}","url":"https://upstream{n}.example.com"}`},
@@ -390,6 +398,7 @@ var routeSiteRoutes = map[string][]string{
 	`internal/auth/handler.go: s.route("/auth/oidc/{provider}/callback", s.oidcCallback)`: {"GET /auth/oidc/{provider}/callback"},
 	`internal/auth/handler.go: s.route("/auth/register", s.register)`:                     {"POST /auth/register"},
 	`internal/auth/handler.go: s.route("/auth/reset/{code}", s.resetPassword)`:            {"POST /auth/reset/{code}"},
+	`internal/auth/handler.go: s.route("/auth/email/{code}", s.confirmEmail)`:             {"POST /auth/email/{code}"},
 	`internal/auth/handler.go: mux.HandleFunc("DELETE /auth/oidc/{provider}/link", s.route("/auth/oidc/{provider}/link", s.oidcUnlink))`: {
 		"DELETE /auth/oidc/{provider}/link"},
 	`internal/auth/handler.go: mux.HandleFunc("GET /auth/oidc/{provider}", s.route("/auth/oidc/{provider}", s.oidcStart))`: {"GET /auth/oidc/{provider}"},
@@ -400,6 +409,7 @@ var routeSiteRoutes = map[string][]string{
 		"POST /auth/oidc/{provider}/link"},
 	`internal/auth/handler.go: mux.HandleFunc("POST /auth/register", s.route("/auth/register", s.register))`:              {"POST /auth/register"},
 	`internal/auth/handler.go: mux.HandleFunc("POST /auth/reset/{code}", s.route("/auth/reset/{code}", s.resetPassword))`: {"POST /auth/reset/{code}"},
+	`internal/auth/handler.go: mux.HandleFunc("POST /auth/email/{code}", s.route("/auth/email/{code}", s.confirmEmail))`:  {"POST /auth/email/{code}"},
 	`internal/datasets/viewer/http.go: httpx.SetRoute(r.Context(), "/datasets-server"+endpoint)`:                          {"viewer"},
 	`internal/datasets/viewer/http.go: httpx.SetRoute(r.Context(), "/datasets-server/{endpoint}")`:                        {"GET /datasets-server/{endpoint}"},
 	`internal/datasets/viewer/http.go: httpx.SetRoute(r.Context(), "/datasets-server/assets/...")`:                        {"GET /datasets-server/assets/..."},

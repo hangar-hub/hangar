@@ -4,6 +4,7 @@ import {
   chooseFiles,
   commitResponse,
   expectAccessible,
+  expectTheme,
   parseBytes,
   searchWithKeyboard,
   seedBulkRepos,
@@ -372,6 +373,136 @@ test("creates a Token that is shown once, then revokes it", async ({ page }) => 
   await page.getByRole("dialog").getByRole("button", { name: "Revoke Token" }).click();
   await expect(page.getByRole("row").filter({ hasText: name })).toHaveCount(0);
   expect(problems).toEqual([]);
+});
+
+/**
+ * Runs axe on the page as it is, in the light theme and then the dark one,
+ * once the colour transitions the switch starts have finished and nothing
+ * is hovered.
+ */
+async function expectAccessibleInBothThemes(page: Page): Promise<void> {
+  await page.mouse.move(0, 0);
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await expectTheme(page, scheme);
+    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+    await expectAccessible(page);
+  }
+}
+
+test.describe("account", () => {
+  test("edits the display name, and a new email waits for its confirmation link", async ({
+    page,
+  }) => {
+    const problems = watchConsole(page);
+    await signIn(page);
+    await page.goto("/settings/profile");
+    await expect(page.getByText(/ask an admin for a reset link/i)).toHaveCount(0);
+    const save = page.getByRole("button", { name: "Save profile" });
+    const email = page.getByRole("textbox", { name: "Email" });
+    await expect(save).toBeDisabled();
+    await page.getByLabel("Display name").fill("Ada King");
+    await email.fill("ada.king@example.com");
+    await save.click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Your new email waits for confirmation." }),
+    ).toBeVisible();
+    // The address in use stays until the link is used.
+    await expect(email).toHaveValue("ada@example.com");
+    const pending = page
+      .getByRole("status")
+      .filter({ hasText: "waits for confirmation. Ask an admin" });
+    await expect(pending).toContainText("ada.king@example.com");
+    await page.reload();
+    await expect(page.getByLabel("Display name")).toHaveValue("Ada King");
+    await expect(pending).toContainText("ada.king@example.com");
+    // Another user's email: the admin editor's error.
+    await email.fill("grace@example.com");
+    await save.click();
+    await expect(page.getByRole("alert")).toHaveText(
+      "Already exists: the email address is already used.",
+    );
+    await expectAccessibleInBothThemes(page);
+
+    // An admin creates the confirmation link and sends it to the address.
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/admin/users");
+    const row = page.getByRole("row").filter({ hasText: "ada.king@example.com" });
+    await expect(row).toContainText("Waiting for confirmation");
+    await row.getByRole("button", { name: "Email link" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Email confirmation link for ada, to send to ada.king@example.com",
+    });
+    const url = (await dialog.locator("code").textContent()) ?? "";
+    expect(url).toContain("/auth/email/");
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    // Opening the link asks before it confirms; it works once.
+    await page.goto(new URL(url).pathname);
+    await expect(page.getByRole("heading", { level: 1, name: "Confirm your email" })).toBeVisible();
+    await expectAccessibleInBothThemes(page);
+    await page.getByRole("button", { name: "Confirm email" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Email confirmed." })).toBeVisible();
+    await page.goto("/settings/profile");
+    await expect(email).toHaveValue("ada.king@example.com");
+    await expect(pending).toHaveCount(0);
+    await page.goto(new URL(url).pathname);
+    await page.getByRole("button", { name: "Confirm email" }).click();
+    await expect(page.getByRole("alert")).toContainText("invalid, used or expired");
+    expect(problems).toEqual([]);
+  });
+
+  test("changes the password, with errors, and ends other sessions", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/settings/sessions");
+    const signOut = page.getByRole("button", { name: "Sign out", exact: true });
+    await expect(signOut).not.toHaveCount(0);
+    await page.goto("/settings/profile");
+    const current = page.getByLabel("Current password");
+    const next = page.getByLabel("New password", { exact: true });
+    const confirm = page.getByLabel("Confirm new password");
+    const submit = page.getByRole("button", { name: "Change password" });
+
+    await current.fill("wrong-password");
+    await next.fill("a fresh passphrase 1");
+    await confirm.fill("a fresh passphrase 1");
+    await submit.click();
+    await expect(current).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("The current password is wrong.")).toBeVisible();
+
+    await current.fill("correct-horse-battery");
+    await next.fill("short");
+    await confirm.fill("short");
+    await submit.click();
+    await expect(next).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("Use at least 10 characters.")).toBeVisible();
+
+    await next.fill("a fresh passphrase 1");
+    await confirm.fill("a different passphrase 2");
+    await submit.click();
+    await expect(page.getByText("The new passwords do not match.")).toBeVisible();
+    await expectAccessibleInBothThemes(page);
+
+    await confirm.fill("a fresh passphrase 1");
+    await submit.click();
+    await expect(page.getByRole("status").filter({ hasText: "Password changed." })).toContainText(
+      "Your other sessions are signed out",
+    );
+    await expect(current).toHaveValue("");
+    await expectAccessibleInBothThemes(page);
+    await page.goto("/settings/sessions");
+    await expect(page.getByText("This browser")).toBeVisible();
+    await expect(signOut).toHaveCount(0);
+  });
+
+  test("tells users who sign in with a provider that they have no password", async ({ page }) => {
+    await page.goto("/auth/login?redirect=%2Fsettings%2Fprofile");
+    await page.getByRole("link", { name: "Sign in with UniFi" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Profile" })).toBeVisible();
+    await expect(page.getByText("your account has no Hangar password")).toBeVisible();
+    await expect(page.getByLabel("Current password")).toHaveCount(0);
+    await expect(page.getByLabel("Display name")).toBeEditable();
+  });
 });
 
 test.describe("admin settings", () => {

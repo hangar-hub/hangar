@@ -433,7 +433,9 @@ func (o *OIDCService) signIn(ctx context.Context, cfg config.OIDCProvider, c ide
 		}
 	default:
 		if c.Email != "" && c.EmailVerified {
-			if existing, err := o.s.Users.GetByEmail(ctx, c.Email); err == nil && !existing.IsSystem {
+			// Only a verified email counts: an address a user typed
+			// for themselves cannot block someone else's first sign-in.
+			if existing, err := o.s.Users.GetByEmail(ctx, c.Email); err == nil && !existing.IsSystem && existing.EmailVerified {
 				return nil, ErrOIDCLinkRequired
 			} else if err != nil && !errors.Is(err, ErrNotFound) {
 				return nil, err

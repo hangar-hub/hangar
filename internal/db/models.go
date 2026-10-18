@@ -186,6 +186,20 @@ type PasswordReset struct {
 	Timestamps
 }
 
+// EmailChange is a row of email_changes: an email address a User asked
+// for and has not confirmed. CodeHash and ExpiresAt are set once an admin
+// creates the confirmation link.
+type EmailChange struct {
+	bun.BaseModel `bun:"table:email_changes"`
+	ID            uuid.UUID  `bun:"id,pk,type:uuid"`
+	UserID        uuid.UUID  `bun:"user_id,notnull,type:uuid"`
+	Email         string     `bun:"email,notnull"`
+	CodeHash      *string    `bun:"code_hash"`
+	CreatedBy     *uuid.UUID `bun:"created_by,type:uuid"`
+	ExpiresAt     *time.Time `bun:"expires_at"`
+	Timestamps
+}
+
 // LoginAttempt is a row of login_attempts, keyed by "user:<name>" or "ip:<addr>".
 type LoginAttempt struct {
 	bun.BaseModel `bun:"table:login_attempts"`
@@ -718,7 +732,7 @@ func AllModels() []any {
 	return []any{
 		(*Namespace)(nil), (*User)(nil), (*Identity)(nil), (*Session)(nil), (*Token)(nil),
 		(*OllamaKey)(nil), (*OllamaNonce)(nil), (*OllamaBlob)(nil), (*Membership)(nil),
-		(*Invite)(nil), (*PasswordReset)(nil), (*LoginAttempt)(nil), (*OIDCState)(nil),
+		(*Invite)(nil), (*PasswordReset)(nil), (*EmailChange)(nil), (*LoginAttempt)(nil), (*OIDCState)(nil),
 		(*OAuthDeviceCode)(nil), (*Repo)(nil), (*RepoRedirect)(nil), (*Collaborator)(nil),
 		(*Ref)(nil), (*Pack)(nil), (*Commit)(nil), (*TreeEntry)(nil), (*LFSObject)(nil),
 		(*LFSUploader)(nil), (*RepoLFS)(nil), (*Upload)(nil), (*Upstream)(nil), (*UpstreamToken)(nil),

@@ -23,6 +23,7 @@ const LinkTTL = 72 * time.Hour
 const (
 	InvitePath = "/auth/invite/"
 	ResetPath  = "/auth/reset/"
+	EmailPath  = "/auth/email/"
 )
 
 // ErrRegistrationClosed means self-registration is not allowed.
@@ -36,6 +37,8 @@ var ErrLinkInvalid = fmt.Errorf("%w: the link is invalid, used or expired; ask a
 type Link struct {
 	URL       string
 	ExpiresAt time.Time
+	// Email is the address an email confirmation link is bound to.
+	Email string
 }
 
 // InviteParams describes an invite.
@@ -113,7 +116,15 @@ func (s *Service) Register(ctx context.Context, reg Registration) (*User, error)
 	if reg.Password == "" {
 		return nil, fmt.Errorf("%w: choose a password", ErrInvalid)
 	}
-	nu := NewUser{Username: reg.Username, Password: reg.Password, Email: reg.Email, DisplayName: reg.DisplayName}
+	// An email the person types is theirs to prove: it waits as the
+	// User's pending email until a confirmation link is used, like one
+	// set under Settings (UpdateProfile). Only an invite's email, which
+	// an admin chose, is set and verified at once.
+	selfEmail, err := normaliseEmail(reg.Email)
+	if err != nil {
+		return nil, err
+	}
+	nu := NewUser{Username: reg.Username, Password: reg.Password, DisplayName: reg.DisplayName}
 	actor := model.Anonymous()
 	if reg.InviteCode == "" {
 		st, err := s.Settings.Get(ctx)
@@ -127,13 +138,19 @@ func (s *Service) Register(ctx context.Context, reg Registration) (*User, error)
 		if err != nil {
 			return nil, err
 		}
-		return u, nil
+		if selfEmail == "" {
+			return u, nil
+		}
+		if err := setPendingEmail(ctx, s.db, u.ID, selfEmail); err != nil {
+			return nil, err
+		}
+		return s.Users.Get(ctx, u.ID)
 	}
 	var (
 		id     uuid.UUID
 		invite db.Invite
 	)
-	err := s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+	err = s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
 		err := tx.NewSelect().Model(&invite).Where("code_hash = ?", hashSecret(reg.InviteCode)).Scan(ctx)
 		if db.IsNotFound(err) {
 			return ErrLinkInvalid
@@ -152,6 +169,11 @@ func (s *Service) Register(ctx context.Context, reg Registration) (*User, error)
 		id, err = s.Users.createTx(ctx, tx, nu)
 		if err != nil {
 			return err
+		}
+		if invite.Email == "" && selfEmail != "" {
+			if err := setPendingEmail(ctx, tx, id, selfEmail); err != nil {
+				return err
+			}
 		}
 		res, err := tx.NewUpdate().Model((*db.Invite)(nil)).Where("id = ? AND used_at IS NULL", invite.ID).
 			Set("used_at = ?", s.nowUTC()).Set("used_by = ?", id).Set("updated_at = ?", s.nowUTC()).Exec(ctx)

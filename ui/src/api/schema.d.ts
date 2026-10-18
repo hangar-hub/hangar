@@ -21,6 +21,30 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Change my display name or email
+         * @description Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+         */
+        patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change my password
+         * @description Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+         */
+        post: operations["changeMyPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1627,6 +1651,26 @@ export interface paths {
         patch: operations["adminUpdateUser"];
         trace?: never;
     };
+    "/admin/users/{id}/email-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a link that confirms a user's pending email
+         * @description Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+         */
+        post: operations["adminCreateEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users/{id}/reset-link": {
         parameters: {
             query?: never;
@@ -1890,8 +1934,27 @@ export interface components {
             avatar_url?: string;
             is_admin: boolean;
             orgs: components["schemas"]["OrgMembership"][];
+            /** @description An email address the user asked for that waits for its confirmation link. It is not the user's email until then. */
+            pending_email?: string;
+            /** @description Whether the user has a Hangar password. Users who sign in only with OIDC have none and cannot change it in Hangar. */
+            has_password: boolean;
             /** @description Send as X-CSRF-Token on state-changing calls. */
             csrf_token?: string;
+        };
+        MeUpdate: {
+            /** @description The name shown instead of the username, at most 100 bytes. An empty string clears it. */
+            display_name?: string;
+            /** @description The new email address, which waits for confirmation. The current address cancels a pending change; an empty string removes the email. */
+            email?: string;
+        };
+        PasswordChange: {
+            /** Format: password */
+            current_password: string;
+            /**
+             * Format: password
+             * @description At least 10 characters and not a common password.
+             */
+            new_password: string;
         };
         OrgMembership: {
             name: string;
@@ -2797,6 +2860,8 @@ export interface components {
             username: string;
             display_name?: string;
             email?: string;
+            /** @description An email address the user asked for that waits for its confirmation link. */
+            pending_email?: string;
             is_admin: boolean;
             disabled: boolean;
             oidc_providers?: string[];
@@ -2837,6 +2902,17 @@ export interface components {
             url: string;
             /** Format: date-time */
             expires_at: string;
+        };
+        EmailLinkCreate: {
+            /** @description The pending email the admin saw and approves. */
+            email: string;
+        };
+        EmailLink: {
+            url: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description The address the link confirms. Send the link there. */
+            email: string;
         };
         InstanceSettings: {
             anonymous_read?: boolean;
@@ -2995,6 +3071,54 @@ export interface operations {
                 };
             };
             /** @description Nobody is signed in. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    changeMyPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Changed. The user's other sessions have ended. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5705,6 +5829,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    adminCreateEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description A single-use link that expires in 72 hours. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailLink"];
                 };
             };
             default: components["responses"]["Problem"];

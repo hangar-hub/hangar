@@ -11,7 +11,8 @@ import (
 
 func idAdminUserOut(u *auth.User) gen.AdminUser {
 	out := gen.AdminUser{Id: u.ID, Username: u.Username, DisplayName: idStrPtr(u.DisplayName), Email: idStrPtr(u.Email),
-		IsAdmin: u.IsAdmin, Disabled: u.Disabled(), LastLoginAt: u.LastLoginAt, CreatedAt: u.CreatedAt}
+		IsAdmin: u.IsAdmin, Disabled: u.Disabled(), LastLoginAt: u.LastLoginAt, CreatedAt: u.CreatedAt,
+		PendingEmail: idStrPtr(u.PendingEmail)}
 	if len(u.OIDCProviders) > 0 {
 		ps := append([]string(nil), u.OIDCProviders...)
 		out.OidcProviders = &ps
@@ -78,7 +79,9 @@ func (h *Identity) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	if !h.decode(w, r, &body) {
 		return
 	}
-	nu := auth.NewUser{Username: body.Username, Email: idStr(body.Email), DisplayName: idStr(body.DisplayName), Password: idStr(body.Password)}
+	// An admin vouches for the email they give, so it is verified.
+	nu := auth.NewUser{Username: body.Username, Email: idStr(body.Email), EmailVerified: idStr(body.Email) != "",
+		DisplayName: idStr(body.DisplayName), Password: idStr(body.Password)}
 	if body.IsAdmin != nil {
 		nu.IsAdmin = *body.IsAdmin
 	}
@@ -121,6 +124,25 @@ func (h *Identity) AdminCreateResetLink(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	httpx.WriteJSON(w, r, http.StatusCreated, gen.Link{Url: link.URL, ExpiresAt: link.ExpiresAt})
+}
+
+// AdminCreateEmailLink implements POST /admin/users/{id}/email-link: the
+// link that confirms a user's pending email, for the admin to send to it.
+func (h *Identity) AdminCreateEmailLink(w http.ResponseWriter, r *http.Request, id gen.ID) {
+	p, ok := h.instanceAdmin(w, r)
+	if !ok {
+		return
+	}
+	var body gen.EmailLinkCreate
+	if !h.decode(w, r, &body) {
+		return
+	}
+	link, err := h.auth.CreateEmailLink(r.Context(), id, body.Email, p)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, r, http.StatusCreated, gen.EmailLink{Url: link.URL, ExpiresAt: link.ExpiresAt, Email: link.Email})
 }
 
 // AdminCreateInvite implements POST /admin/invites.

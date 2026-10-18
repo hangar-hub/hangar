@@ -292,7 +292,7 @@ func TestCommands(t *testing.T) {
 	dbPath := filepath.Join(dir, "x.db")
 	out, code = execute(t, "admin", "migrate", "--set", "database.dsn="+dbPath)
 	require.Equal(t, 0, code, out)
-	require.Contains(t, out, "version 0002")
+	require.Contains(t, out, "version 0003")
 
 	out, code = execute(t, "config", "validate", "--set", "storage.backend=tape")
 	require.Equal(t, 1, code)
@@ -588,7 +588,7 @@ func TestCommandsJSON(t *testing.T) {
 	var sv schemaVersion
 	require.NoError(t, json.Unmarshal([]byte(out), &sv))
 	require.Equal(t, sv.Expected, sv.Current)
-	require.Contains(t, sv.Current, "0002")
+	require.Contains(t, sv.Current, "0003")
 	require.NotNil(t, sv.Pending)
 	require.Empty(t, sv.Pending)
 

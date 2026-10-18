@@ -675,6 +675,9 @@ func TestEveryW5ActionIsAudited(t *testing.T) {
 		_, err = d.NewInsert().Model(&db.Identity{ID: db.NewID(), UserID: bob.ID, Provider: "sso", Subject: "b", Claims: map[string]any{}}).Exec(ctx)
 		require.NoError(t, err)
 		b.do(http.MethodDelete, "/auth/oidc/sso/link", nil, http.StatusNoContent, nil)
+		b.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"display_name": "Bob"}, http.StatusOK, nil)
+		b.do(http.MethodPost, "/api/hangar/v1/me/password", map[string]any{"current_password": "wrong password 12", "new_password": "a new password 34"}, http.StatusForbidden, nil)
+		b.do(http.MethodPost, "/api/hangar/v1/me/password", map[string]any{"current_password": password, "new_password": "a new password 34"}, http.StatusNoContent, nil)
 		b.do(http.MethodPost, "/api/hangar/v1/auth/logout", nil, http.StatusNoContent, nil)
 
 		got := map[audit.Action]bool{}
@@ -696,6 +699,7 @@ func TestEveryW5ActionIsAudited(t *testing.T) {
 			audit.UserDisabled, audit.UserEnabled, audit.UserAdminChanged, audit.UserPasswordReset, audit.InviteCreated,
 			audit.OrgCreated, audit.OrgDeleted, audit.MembershipChanged, audit.MembershipRemoved, audit.CollaboratorsChanged,
 			audit.AccessRequestDecided, audit.SettingsChanged, audit.OllamaKeyChanged, audit.UpstreamTokenChanged, audit.IdentityLinked,
+			audit.UserProfileChanged, audit.UserPasswordChanged, audit.UserPasswordChangeFailed,
 		} {
 			require.True(t, got[a], "no %s event", a)
 		}

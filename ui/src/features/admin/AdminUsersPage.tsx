@@ -341,6 +341,26 @@ export function AdminUsersPage() {
     },
     onError: (e) => toast(errorMessage(e), "danger"),
   });
+  const emailLink = useMutation({
+    mutationFn: async (u: AdminUser) =>
+      unwrap(
+        await api.POST("/admin/users/{id}/email-link", {
+          params: { path: { id: u.id } },
+          // The address shown in the row: the link is bound to it, and a
+          // change the user made since gives 409 instead.
+          body: { email: u.pending_email ?? "" },
+        }),
+      ),
+    onSuccess: (l, u) => {
+      // Name the address the server bound the link to, not the row's copy.
+      setLinkTitle(`Email confirmation link for ${u.username}, to send to ${l.email}`);
+      setLink(l);
+    },
+    onError: (e) => {
+      toast(errorMessage(e), "danger");
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
   const items = users.data?.pages.flatMap((p) => p.items) ?? [];
   const columns: Column<AdminUser>[] = [
     {
@@ -364,7 +384,14 @@ export function AdminUsersPage() {
     {
       key: "email",
       header: "Email",
-      cell: (u) => <span className="text-xs">{u.email || "Not set"}</span>,
+      cell: (u) => (
+        <span className="flex flex-col text-xs">
+          <span>{u.email || "Not set"}</span>
+          {u.pending_email ? (
+            <span className="text-muted">Waiting for confirmation: {u.pending_email}</span>
+          ) : null}
+        </span>
+      ),
     },
     {
       key: "login",
@@ -379,6 +406,11 @@ export function AdminUsersPage() {
       className: "text-right",
       cell: (u) => (
         <span className="flex flex-wrap justify-end gap-1">
+          {u.pending_email ? (
+            <Button size="sm" variant="ghost" onClick={() => emailLink.mutate(u)}>
+              Email link
+            </Button>
+          ) : null}
           <Button size="sm" variant="ghost" onClick={() => reset.mutate(u)}>
             Reset link
           </Button>

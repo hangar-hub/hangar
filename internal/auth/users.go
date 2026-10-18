@@ -39,12 +39,15 @@ type User struct {
 	DisplayName   string
 	Email         string
 	EmailVerified bool
-	HasPassword   bool
-	IsAdmin       bool
-	IsSystem      bool
-	DisabledAt    *time.Time
-	LastLoginAt   *time.Time
-	CreatedAt     time.Time
+	// PendingEmail is an email address the User asked for that waits for
+	// its confirmation link (email_changes); it does not match anything.
+	PendingEmail string
+	HasPassword  bool
+	IsAdmin      bool
+	IsSystem     bool
+	DisabledAt   *time.Time
+	LastLoginAt  *time.Time
+	CreatedAt    time.Time
 	// OIDCProviders lists the providers linked to the account.
 	OIDCProviders []string
 
@@ -86,9 +89,10 @@ type UserUpdate struct {
 type UserStore struct{ s *Service }
 
 type userRow struct {
-	db.User     `bun:",extend"`
-	Username    string `bun:"username"`
-	DisplayName string `bun:"display_name"`
+	db.User      `bun:",extend"`
+	Username     string  `bun:"username"`
+	DisplayName  string  `bun:"display_name"`
+	PendingEmail *string `bun:"pending_email"`
 }
 
 func (us *UserStore) query(idb bun.IDB) *bun.SelectQuery {
@@ -97,7 +101,9 @@ func (us *UserStore) query(idb bun.IDB) *bun.SelectQuery {
 		ColumnExpr("u.*").
 		ColumnExpr("n.name AS username").
 		ColumnExpr("n.display_name AS display_name").
-		Join("JOIN namespaces AS n ON n.id = u.namespace_id")
+		ColumnExpr("ec.email AS pending_email").
+		Join("JOIN namespaces AS n ON n.id = u.namespace_id").
+		Join("LEFT JOIN email_changes AS ec ON ec.user_id = u.id")
 }
 
 func (r *userRow) toUser() *User {
@@ -108,6 +114,9 @@ func (r *userRow) toUser() *User {
 	}
 	if r.Email != nil {
 		u.Email = *r.Email
+	}
+	if r.PendingEmail != nil {
+		u.PendingEmail = *r.PendingEmail
 	}
 	if r.PasswordHash != nil {
 		u.passwordHash = *r.PasswordHash
@@ -313,7 +322,8 @@ func countOtherEnabledAdmins(ctx context.Context, idb bun.IDB, userID uuid.UUID)
 }
 
 // Update changes a User and records user.disabled, user.enabled and
-// user.admin_changed audit events. Disabling a User signs them out
+// user.admin_changed audit events. It is the admin user editor: an email it
+// sets is verified, and replaces any email change the User asked for. Disabling a User signs them out
 // everywhere. It refuses to disable or demote the last enabled admin.
 func (us *UserStore) Update(ctx context.Context, id uuid.UUID, up UserUpdate, actor model.Principal) (*User, error) {
 	var events []audit.Event
@@ -374,7 +384,12 @@ func (us *UserStore) Update(ctx context.Context, id uuid.UUID, up UserUpdate, ac
 				} else {
 					q = q.Set("email = ?", email)
 				}
-				q = q.Set("email_verified = ?", false)
+				// An admin vouches for the address, as for one set
+				// when creating a User.
+				q = q.Set("email_verified = ?", email != "")
+			}
+			if _, err := tx.NewDelete().Model((*db.EmailChange)(nil)).Where("user_id = ?", id).Exec(ctx); err != nil {
+				return err
 			}
 		}
 		if dirty {

@@ -2,7 +2,7 @@
 
 1. Open Hangar's public URL, such as <http://localhost:8080>.
 2. Sign in as `hangar-admin` with the password Hangar printed on first start (`docker logs hangar`), or the one you set in `HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD`.
-3. Choose your own password: open **Admin**, **Users**, select **Reset link** next to `hangar-admin`, open the link and save a new password. Hangar has no password change under **Settings**; every local password changes through a reset link that an admin creates.
+3. Choose your own password: open **Settings**, **Profile**, enter the printed password as the current password, then your new password twice, and select **Change password**. The new password needs at least 10 characters and cannot be a common password. Your other sessions are signed out; this one stays signed in. On the same page you can set your display name and email.
 
 ## Create a Token
 

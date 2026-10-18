@@ -10,7 +10,7 @@ It describes branch `integration/v1` at `a998d78`, after the Phase 3 hardening a
 - Final check at `a998d78` (2026-10-18): every suite green, run one after another by the lead: lint, unit on SQLite and Postgres, coverage, generated code, client compatibility (7 Go packages, pytest 71 passed and 2 skipped), UI on the mock server (542 passed) and on two real Instances (369 passed), deploy checks, image, four Compose examples, kind (9 tests) and the docs site. Round 4 of Phase 3 at `6610f45` had left the unit suite unfinished and one coverage gap; both are closed.
 - Every feature ID has at least one named test, and every test named here exists in the tree (checked in the round 8 audit). Every MUST in section 13 of the Hub API contract has a handler and a test; the round 4 Hub matrix check lists 85 endpoint and test pairs.
 - 108 request items have a resolution; 3 are deferred. W11 8 (who may reference an LFS or Xet object by its hash) was decided by James on 2026-10-18: references are checked at Commit.
-- James decided the five Phase 3 questions on 2026-10-18 (see [decisions](decisions.md)). One product question remains: self-service password changes (W8 8). The release is on hold until he says go.
+- James decided the five Phase 3 questions on 2026-10-18 (see [decisions](decisions.md)). He decided the last product question, self-service profile and password changes (W8 8), the same day; it is closed on branch `feat/self-service-account` (see [W8 8 closed](#w8-8-closed-self-service-profile-and-password)). The release is on hold until he says go.
 - AWS S3 passed in full on 2026-10-15 after the fixes for the 2026-10-14 failures.
 - The preview Instance's large import, red in earlier rounds, passed on `382cc88` on 2026-10-17: a 19.85 GB GGUF imported with its SHA-256 matching huggingface.co (bellatrix PRs #121 and #122). The preview has not yet been updated past `382cc88`.
 
@@ -420,12 +420,32 @@ Every item in `requests/w1.md` to `requests/w11.md` has a row in [`RESOLUTIONS.m
 | W5 Identity and access | 10 | 0 |
 | W6 Upstreams and Pulls | 13 | 0 |
 | W7 Metadata, Ollama and community | 12 | 0 |
-| W8 Web UI | 9 | 1: request 8, self-service profile and password (a product decision for James) |
+| W8 Web UI | 9 | 0 (request 8, self-service profile and password, closed on 2026-10-18) |
 | W9 CLI, packaging and docs | 12 | 1: request 11, release tasks (James) |
 | W10 Datasets | 10 | 0 |
 | W11 Xet | 9 | 1: request 8, Commit-time ownership of LFS and Xet objects (phase 3 security review) |
 
 The round 8 audit spot-checked the wiring items in `cmd/hangar` (`GCSchedule`, `ReindexStale`, `RescanStale`, `RecordQueueGauge`, `ConnectSrc`, `CleanupSchedule`, `NewLimiter`, `SyncConfig`, `AfterIndex`, `EnqueueConvert`, `OpenBlobStore`, `PullThroughPath`, `ExportPath`, `ExemptTokenEndpoint`, `gc.Register`, `InstanceLimits`, `ParseWindows`) and found all of them.
+
+## W8 8 closed: self-service profile and password
+
+James decided on 2026-10-18 to let users change their own profile and password before v1.0. Branch `feat/self-service-account` from `main` at `9815b88` adds `PATCH /me`, `POST /me/password`, a **Settings**, **Profile** page that edits both, and, after two security reviews the same day, email confirmation links: an email a user sets for themselves waits as pending until a single-use link that an admin creates, bound to the address the admin saw, is used, and only verified emails match OIDC sign-ins. The rules are in [decisions](decisions.md) under "Phase 3 decisions by James (2026-10-18), self-service accounts".
+
+| Commit | What it does |
+|---|---|
+| `38cb14a` | `PATCH /me` and `POST /me/password`, `has_password` on `Me`, audit events, route matrix entries |
+| `a0706a9` | The Profile page, mock handlers, mock and real Playwright flows |
+| `1cb7d6f` | Spec 05, 09 and 10, threat model, decisions and user and admin docs |
+| `f9f6421` | Self-set emails pending in `email_changes` (migration `0003`) until confirmed; only verified emails match OIDC first sign-in |
+| `30d1998`, `ef94378` | The UI and docs for pending emails and the confirmation page |
+| `b166893` | `TestCommands` expects schema `0003` |
+| `c937c8e` | Confirmation links bound to the address the admin saw (409 otherwise), with the bound address in the response |
+
+Tests: `TestChangePassword`, `TestUpdateProfile`, `TestSelfSetEmailsNeedConfirmation`, `TestRegistrationEmailsNeedConfirmation` (`internal/auth`); `TestUpdateMe`, `TestChangeMyPassword`, `TestChangeMyPasswordIsThrottled`, `TestEveryW5ActionIsAudited` (`internal/api`); `TestSelfServiceAccountOnTheFullServer`, `TestRouteAuthorisationMatrix` (`cmd/hangar`); the "account" flows in `ui/e2e/flows.spec.ts` and "changes the display name, email and password on the Profile page" in `ui/e2e-real/flows.spec.ts`, with axe in both themes.
+
+Results on the branch at `c937c8e`, run one after another on the development machine: `make lint` exit 0; `make check-generate` exit 0; `make test` exit 0 (78 Go packages on SQLite and Postgres, UI 114 passed, load test helpers 3 passed); `make cover` exit 0 (`internal/auth` 86.0%, `internal/api` 83.3%, every package at its floor); `CI=1 make e2e` exit 0 (557 passed, 43 skipped); the real-Instance suite against two Instances started as `compat.yml` starts them exit 0 (378 passed).
+
+The CLI has no account or profile command group and signs in with Tokens, which cannot change passwords, so there is no `hangar account password`.
 
 ## Shipped binary
 
@@ -472,7 +492,6 @@ Open:
 
 - **Unit suite at `6610f45`, and the 6c tag test.** See [Still open after Phase 3](#still-open-after-phase-3). Both must be closed before `main` moves.
 - **Questions for James.** The open questions in [decisions](decisions.md): whether `scan.block_unsafe_downloads` also refuses suspicious pickles; who may reference an LFS or Xet object by its hash (W11 8, deferred from Phase 2; global deduplication stays and is documented in the [threat model](../security/threat-model.md)); whether Namespace profiles and member lists are public when `anonymous_read` is off; how concurrent server-side Commits to one branch should behave; and how Ollama should learn that a quant is not pulled. The current behaviour stands until he decides.
-- **W8 8, self-service profile and password changes.** A product decision for James: there is no `PATCH /me` or `POST /me/password`; admins send reset links, and the first sign-in page now says so.
 - **Dark-theme axe coverage.** Whether every page needs a dark-theme axe check; see [Still open after Phase 3](#still-open-after-phase-3).
 - **Release on hold.** James decided on 2026-10-16 that nothing is published until he says go ([decisions](decisions.md), "Release on hold"). Work stops after the release dry run.
 - **Release partly exercised.** `make release-rehearsal` passed in the Phase 3 gaps review with a throwaway key, but keyless signing through GitHub OIDC and the multi-arch push run only in `release.yml`, for the first time in James's release (W9 11).
@@ -481,6 +500,8 @@ Open:
 - **`govulncheck` binary.** The installed `govulncheck` is built with an older Go and cannot load this module; the `go run ...@v1.9.0` form works. This is a local tool problem.
 
 Closed in Phase 3:
+
+- **W8 8, self-service profile and password changes.** Closed on 2026-10-18; see [W8 8 closed](#w8-8-closed-self-service-profile-and-password).
 
 - **git-upload-pack and unsafe files.** `Gate.CheckGit` gates every git fetch (`f65ba44`).
 - **Scan errors are not blocked.** Data that is not a pickle is now safe, and a partial scan of a file that can run code is refused (`4e62696`).

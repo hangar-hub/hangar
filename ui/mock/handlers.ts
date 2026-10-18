@@ -345,9 +345,10 @@ export function slugify(title: string): string {
 }
 
 /** Stores a single-use invite or reset link code and returns it. */
-function newLink(state: MockState, kind: "invite" | "reset"): string {
+function newLink(state: MockState, kind: "invite" | "reset" | "email", username?: string): string {
   const code = randomBytes(24).toString("base64url");
   state.links[code] = kind;
+  if (username) state.emailLinks[code] = username;
   return code;
 }
 
@@ -360,7 +361,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       return problem(401, "Wrong username or password.");
     }
     state.signedIn = true;
-    state.me = { ...state.me, username: username || state.me.username };
+    state.me = { ...state.me, username: username || state.me.username, has_password: true };
     return {
       status: 200,
       body: state.me,
@@ -378,6 +379,71 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       ui_external_images: state.settings.ui_external_images ?? true,
       providers: [{ id: "unifi", name: "UniFi", login_url: "/auth/oidc/unifi" }],
     }),
+  updateMe: (ctx) => {
+    const { state } = ctx;
+    const p = b(ctx) as S["MeUpdate"];
+    if (p.display_name !== undefined && p.display_name.length > 100) {
+      return problem(422, "Invalid request: the display name can be at most 100 characters.", [
+        { pointer: "/display_name", detail: "Use at most 100 characters." },
+      ]);
+    }
+    if (p.email !== undefined) {
+      const email = p.email.trim();
+      if (email && !/^[^\s@]+@[^\s@]+$/.test(email)) {
+        return problem(422, `Invalid request: "${email}" is not a valid email address.`);
+      }
+      const clash = state.users.find(
+        (u) => u.username !== state.me.username && u.email?.toLowerCase() === email.toLowerCase(),
+      );
+      if (email && clash) {
+        return problem(409, "Already exists: the email address is already used.");
+      }
+      // Like W5's UpdateProfile: a new address waits for its confirmation
+      // link, the current one cancels a pending change, and an empty one
+      // removes the email at once.
+      if (!email) {
+        state.me = { ...state.me, email: undefined, pending_email: undefined };
+      } else if (email.toLowerCase() === state.me.email?.toLowerCase()) {
+        state.me = { ...state.me, pending_email: undefined };
+      } else {
+        state.me = { ...state.me, pending_email: email };
+      }
+    }
+    if (p.display_name !== undefined) {
+      state.me = { ...state.me, display_name: p.display_name || state.me.username };
+    }
+    const self = state.users.find((u) => u.username === state.me.username);
+    if (self) {
+      Object.assign(self, {
+        display_name: state.me.display_name,
+        email: state.me.email,
+        pending_email: state.me.pending_email,
+      });
+    }
+    return ok(state.me);
+  },
+  changeMyPassword: (ctx) => {
+    const { state } = ctx;
+    const p = b(ctx) as S["PasswordChange"];
+    if (!state.me.has_password) {
+      return problem(
+        403,
+        "Forbidden: this account signs in with a sign-in provider and has no Hangar password; change your password with your provider.",
+      );
+    }
+    if (p.current_password === "wrong-password" || !p.current_password) {
+      return problem(403, "The current password is wrong.", [
+        { pointer: "/current_password", detail: "The current password is wrong." },
+      ]);
+    }
+    if ([...p.new_password].length < 10) {
+      return problem(422, "Use at least 10 characters.", [
+        { pointer: "/new_password", detail: "Use at least 10 characters." },
+      ]);
+    }
+    state.sessions = state.sessions.filter((s) => s.current);
+    return noContent;
+  },
   listMySessions: ({ state }) => ok({ items: state.sessions }),
   revokeMySession: ({ state, params }) => {
     state.sessions = state.sessions.filter((s) => s.id !== params.id);
@@ -1540,6 +1606,31 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       {
         url: `${ctx.origin}/auth/reset/${newLink(ctx.state, "reset")}`,
         expires_at: iso(-72 * 3_600_000),
+      },
+      201,
+    );
+  },
+  adminCreateEmailLink: (ctx) => {
+    const u = ctx.state.users.find((x) => x.id === ctx.params.id);
+    if (!u) return problem(404, "User not found.");
+    if (!u.pending_email) {
+      return problem(
+        422,
+        "Invalid request: this user has no email change waiting for confirmation.",
+      );
+    }
+    // Like W5's CreateEmailLink: bound to the address the admin saw.
+    if ((b(ctx) as S["EmailLinkCreate"]).email !== u.pending_email) {
+      return problem(
+        409,
+        "Already exists: the user's pending email has changed since you looked; reload and check the new address.",
+      );
+    }
+    return ok(
+      {
+        url: `${ctx.origin}/auth/email/${newLink(ctx.state, "email", u.username)}`,
+        expires_at: iso(-72 * 3_600_000),
+        email: u.pending_email,
       },
       201,
     );

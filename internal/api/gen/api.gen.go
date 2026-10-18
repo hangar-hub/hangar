@@ -1057,7 +1057,10 @@ type AdminUser struct {
 	IsAdmin       bool               `json:"is_admin"`
 	LastLoginAt   *time.Time         `json:"last_login_at,omitempty"`
 	OidcProviders *[]string          `json:"oidc_providers,omitempty"`
-	Username      string             `json:"username"`
+
+	// PendingEmail An email address the user asked for that waits for its confirmation link.
+	PendingEmail *string `json:"pending_email,omitempty"`
+	Username     string  `json:"username"`
 }
 
 // AdminUserCreate defines model for AdminUserCreate.
@@ -1453,6 +1456,20 @@ type DiscussionUpdate struct {
 // DiscussionUpdateStatus defines model for DiscussionUpdate.Status.
 type DiscussionUpdateStatus string
 
+// EmailLink defines model for EmailLink.
+type EmailLink struct {
+	// Email The address the link confirms. Send the link there.
+	Email     string    `json:"email"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Url       string    `json:"url"`
+}
+
+// EmailLinkCreate defines model for EmailLinkCreate.
+type EmailLinkCreate struct {
+	// Email The pending email the admin saw and approves.
+	Email string `json:"email"`
+}
+
 // FileChange defines model for FileChange.
 type FileChange struct {
 	Binary  bool             `json:"binary"`
@@ -1649,13 +1666,28 @@ type Me struct {
 	AvatarUrl *string `json:"avatar_url,omitempty"`
 
 	// CsrfToken Send as X-CSRF-Token on state-changing calls.
-	CsrfToken   *string            `json:"csrf_token,omitempty"`
-	DisplayName string             `json:"display_name"`
-	Email       *string            `json:"email,omitempty"`
+	CsrfToken   *string `json:"csrf_token,omitempty"`
+	DisplayName string  `json:"display_name"`
+	Email       *string `json:"email,omitempty"`
+
+	// HasPassword Whether the user has a Hangar password. Users who sign in only with OIDC have none and cannot change it in Hangar.
+	HasPassword bool               `json:"has_password"`
 	Id          openapi_types.UUID `json:"id"`
 	IsAdmin     bool               `json:"is_admin"`
 	Orgs        []OrgMembership    `json:"orgs"`
-	Username    string             `json:"username"`
+
+	// PendingEmail An email address the user asked for that waits for its confirmation link. It is not the user's email until then.
+	PendingEmail *string `json:"pending_email,omitempty"`
+	Username     string  `json:"username"`
+}
+
+// MeUpdate defines model for MeUpdate.
+type MeUpdate struct {
+	// DisplayName The name shown instead of the username, at most 100 bytes. An empty string clears it.
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Email The new email address, which waits for confirmation. The current address cancels a pending change; an empty string removes the email.
+	Email *string `json:"email,omitempty"`
 }
 
 // Member defines model for Member.
@@ -1787,6 +1819,14 @@ type OrgMembership struct {
 type OrgUpdate struct {
 	Description *string `json:"description,omitempty"`
 	DisplayName *string `json:"display_name,omitempty"`
+}
+
+// PasswordChange defines model for PasswordChange.
+type PasswordChange struct {
+	CurrentPassword string `json:"current_password"`
+
+	// NewPassword At least 10 characters and not a common password.
+	NewPassword string `json:"new_password"`
 }
 
 // Problem defines model for Problem.
@@ -2655,6 +2695,9 @@ type AdminCreateUserJSONRequestBody = AdminUserCreate
 // AdminUpdateUserJSONRequestBody defines body for AdminUpdateUser for application/json ContentType.
 type AdminUpdateUserJSONRequestBody = AdminUserUpdate
 
+// AdminCreateEmailLinkJSONRequestBody defines body for AdminCreateEmailLink for application/json ContentType.
+type AdminCreateEmailLinkJSONRequestBody = EmailLinkCreate
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -2670,11 +2713,17 @@ type AddCollectionItemJSONRequestBody = CollectionItemCreate
 // UpdateCollectionItemJSONRequestBody defines body for UpdateCollectionItem for application/json ContentType.
 type UpdateCollectionItemJSONRequestBody = CollectionItemUpdate
 
+// UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
+type UpdateMeJSONRequestBody = MeUpdate
+
 // DecideDeviceLoginJSONRequestBody defines body for DecideDeviceLogin for application/json ContentType.
 type DecideDeviceLoginJSONRequestBody = DeviceDecision
 
 // AddMyOllamaKeyJSONRequestBody defines body for AddMyOllamaKey for application/json ContentType.
 type AddMyOllamaKeyJSONRequestBody = OllamaKeyCreate
+
+// ChangeMyPasswordJSONRequestBody defines body for ChangeMyPassword for application/json ContentType.
+type ChangeMyPasswordJSONRequestBody = PasswordChange
 
 // CreateMyTokenJSONRequestBody defines body for CreateMyToken for application/json ContentType.
 type CreateMyTokenJSONRequestBody = TokenCreate
@@ -2987,6 +3036,24 @@ type ClientInterface interface {
 	// Corresponds with PATCH /admin/users/{id} (the `AdminUpdateUser` operationId).
 	AdminUpdateUser(ctx context.Context, id ID, body AdminUpdateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminCreateEmailLinkWithBody Create a link that confirms a user's pending email
+	//
+	// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+	AdminCreateEmailLinkWithBody(ctx context.Context, id ID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCreateEmailLink Create a link that confirms a user's pending email
+	//
+	// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+	AdminCreateEmailLink(ctx context.Context, id ID, body AdminCreateEmailLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminCreateResetLink Create a password reset link
 	//
 	// Corresponds with POST /admin/users/{id}/reset-link (the `AdminCreateResetLink` operationId).
@@ -3133,6 +3200,24 @@ type ClientInterface interface {
 	// Corresponds with GET /me (the `GetMe` operationId).
 	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// UpdateMeWithBody Change my display name or email
+	//
+	// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /me (the `UpdateMe` operationId).
+	UpdateMeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMe Change my display name or email
+	//
+	// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /me (the `UpdateMe` operationId).
+	UpdateMe(ctx context.Context, body UpdateMeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DecideDeviceLoginWithBody Approve or deny a device-code login
 	//
 	// Answers the code that `hf auth login` shows in a browser-based login.
@@ -3174,6 +3259,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /me/ollama-keys/{id} (the `DeleteMyOllamaKey` operationId).
 	DeleteMyOllamaKey(ctx context.Context, id ID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChangeMyPasswordWithBody Change my password
+	//
+	// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+	ChangeMyPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChangeMyPassword Change my password
+	//
+	// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+	ChangeMyPassword(ctx context.Context, body ChangeMyPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListMySessions List my sessions
 	//
@@ -4233,6 +4336,44 @@ func (c *Client) AdminUpdateUser(ctx context.Context, id ID, body AdminUpdateUse
 	return c.Client.Do(req)
 }
 
+// AdminCreateEmailLinkWithBody Create a link that confirms a user's pending email
+//
+// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+func (c *Client) AdminCreateEmailLinkWithBody(ctx context.Context, id ID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCreateEmailLinkRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AdminCreateEmailLink Create a link that confirms a user's pending email
+//
+// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+func (c *Client) AdminCreateEmailLink(ctx context.Context, id ID, body AdminCreateEmailLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCreateEmailLinkRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // AdminCreateResetLink Create a password reset link
 //
 // Corresponds with POST /admin/users/{id}/reset-link (the `AdminCreateResetLink` operationId).
@@ -4619,6 +4760,44 @@ func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*htt
 	return c.Client.Do(req)
 }
 
+// UpdateMeWithBody Change my display name or email
+//
+// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /me (the `UpdateMe` operationId).
+func (c *Client) UpdateMeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMeRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateMe Change my display name or email
+//
+// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /me (the `UpdateMe` operationId).
+func (c *Client) UpdateMe(ctx context.Context, body UpdateMeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // DecideDeviceLoginWithBody Approve or deny a device-code login
 //
 // Answers the code that `hf auth login` shows in a browser-based login.
@@ -4711,6 +4890,44 @@ func (c *Client) AddMyOllamaKey(ctx context.Context, body AddMyOllamaKeyJSONRequ
 // Corresponds with DELETE /me/ollama-keys/{id} (the `DeleteMyOllamaKey` operationId).
 func (c *Client) DeleteMyOllamaKey(ctx context.Context, id ID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteMyOllamaKeyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChangeMyPasswordWithBody Change my password
+//
+// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+func (c *Client) ChangeMyPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChangeMyPasswordRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChangeMyPassword Change my password
+//
+// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+func (c *Client) ChangeMyPassword(ctx context.Context, body ChangeMyPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChangeMyPasswordRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -7243,6 +7460,53 @@ func NewAdminUpdateUserRequestWithBody(server string, id ID, contentType string,
 	return req, nil
 }
 
+// NewAdminCreateEmailLinkRequest calls the generic AdminCreateEmailLink builder with application/json body
+func NewAdminCreateEmailLinkRequest(server string, id ID, body AdminCreateEmailLinkJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCreateEmailLinkRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewAdminCreateEmailLinkRequestWithBody constructs an http.Request for the AdminCreateEmailLink method, with any body, and a specified content type
+func NewAdminCreateEmailLinkRequestWithBody(server string, id ID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/users/%s/email-link", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewAdminCreateResetLinkRequest constructs an http.Request for the AdminCreateResetLink method
 func NewAdminCreateResetLinkRequest(server string, id ID) (*http.Request, error) {
 	var err error
@@ -8251,6 +8515,46 @@ func NewGetMeRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewUpdateMeRequest calls the generic UpdateMe builder with application/json body
+func NewUpdateMeRequest(server string, body UpdateMeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUpdateMeRequestWithBody constructs an http.Request for the UpdateMe method, with any body, and a specified content type
+func NewUpdateMeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/me")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewDecideDeviceLoginRequest calls the generic DecideDeviceLogin builder with application/json body
 func NewDecideDeviceLoginRequest(server string, body DecideDeviceLoginJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -8388,6 +8692,46 @@ func NewDeleteMyOllamaKeyRequest(server string, id ID) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewChangeMyPasswordRequest calls the generic ChangeMyPassword builder with application/json body
+func NewChangeMyPasswordRequest(server string, body ChangeMyPasswordJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewChangeMyPasswordRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewChangeMyPasswordRequestWithBody constructs an http.Request for the ChangeMyPassword method, with any body, and a specified content type
+func NewChangeMyPasswordRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/me/password")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -13026,6 +13370,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /admin/users/{id} (the `AdminUpdateUser` operationId).
 	AdminUpdateUserWithResponse(ctx context.Context, id ID, body AdminUpdateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminUpdateUserResponse, error)
 
+	// AdminCreateEmailLinkWithBodyWithResponse Create a link that confirms a user's pending email
+	//
+	// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+	AdminCreateEmailLinkWithBodyWithResponse(ctx context.Context, id ID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCreateEmailLinkResponse, error)
+
+	// AdminCreateEmailLinkWithResponse Create a link that confirms a user's pending email
+	//
+	// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+	AdminCreateEmailLinkWithResponse(ctx context.Context, id ID, body AdminCreateEmailLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCreateEmailLinkResponse, error)
+
 	// AdminCreateResetLinkWithResponse Create a password reset link
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -13200,6 +13562,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /me (the `GetMe` operationId).
 	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error)
 
+	// UpdateMeWithBodyWithResponse Change my display name or email
+	//
+	// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /me (the `UpdateMe` operationId).
+	UpdateMeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMeResponse, error)
+
+	// UpdateMeWithResponse Change my display name or email
+	//
+	// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /me (the `UpdateMe` operationId).
+	UpdateMeWithResponse(ctx context.Context, body UpdateMeJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMeResponse, error)
+
 	// DecideDeviceLoginWithBodyWithResponse Approve or deny a device-code login
 	//
 	// Answers the code that `hf auth login` shows in a browser-based login.
@@ -13245,6 +13625,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /me/ollama-keys/{id} (the `DeleteMyOllamaKey` operationId).
 	DeleteMyOllamaKeyWithResponse(ctx context.Context, id ID, reqEditors ...RequestEditorFn) (*DeleteMyOllamaKeyResponse, error)
+
+	// ChangeMyPasswordWithBodyWithResponse Change my password
+	//
+	// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+	ChangeMyPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeMyPasswordResponse, error)
+
+	// ChangeMyPasswordWithResponse Change my password
+	//
+	// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+	ChangeMyPasswordWithResponse(ctx context.Context, body ChangeMyPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*ChangeMyPasswordResponse, error)
 
 	// ListMySessionsWithResponse List my sessions
 	//
@@ -14913,6 +15311,54 @@ func (r AdminUpdateUserResponse) ContentType() string {
 	return ""
 }
 
+type AdminCreateEmailLinkResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *EmailLink
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r AdminCreateEmailLinkResponse) GetJSON201() *EmailLink {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AdminCreateEmailLinkResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AdminCreateEmailLinkResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCreateEmailLinkResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCreateEmailLinkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AdminCreateEmailLinkResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type AdminCreateResetLinkResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15811,6 +16257,54 @@ func (r GetMeResponse) ContentType() string {
 	return ""
 }
 
+type UpdateMeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Me
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateMeResponse) GetJSON200() *Me {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateMeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateMeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateMeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type DecideDeviceLoginResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15983,6 +16477,47 @@ func (r DeleteMyOllamaKeyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DeleteMyOllamaKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ChangeMyPasswordResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ChangeMyPasswordResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ChangeMyPasswordResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ChangeMyPasswordResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ChangeMyPasswordResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ChangeMyPasswordResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -19852,6 +20387,36 @@ func (c *ClientWithResponses) AdminUpdateUserWithResponse(ctx context.Context, i
 	return ParseAdminUpdateUserResponse(rsp)
 }
 
+// AdminCreateEmailLinkWithBodyWithResponse Create a link that confirms a user's pending email
+//
+// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+func (c *ClientWithResponses) AdminCreateEmailLinkWithBodyWithResponse(ctx context.Context, id ID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCreateEmailLinkResponse, error) {
+	rsp, err := c.AdminCreateEmailLinkWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCreateEmailLinkResponse(rsp)
+}
+
+// AdminCreateEmailLinkWithResponse Create a link that confirms a user's pending email
+//
+// Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /admin/users/{id}/email-link (the `AdminCreateEmailLink` operationId).
+func (c *ClientWithResponses) AdminCreateEmailLinkWithResponse(ctx context.Context, id ID, body AdminCreateEmailLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCreateEmailLinkResponse, error) {
+	rsp, err := c.AdminCreateEmailLink(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCreateEmailLinkResponse(rsp)
+}
+
 // AdminCreateResetLinkWithResponse Create a password reset link
 //
 // Returns a wrapper object for the known response body format(s).
@@ -20170,6 +20735,36 @@ func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors 
 	return ParseGetMeResponse(rsp)
 }
 
+// UpdateMeWithBodyWithResponse Change my display name or email
+//
+// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /me (the `UpdateMe` operationId).
+func (c *ClientWithResponses) UpdateMeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMeResponse, error) {
+	rsp, err := c.UpdateMeWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMeResponse(rsp)
+}
+
+// UpdateMeWithResponse Change my display name or email
+//
+// Changes the signed-in user's display name, with the same checks as the admin user editor (at most 100 bytes), and asks for a new email address. A new address must be valid and not another user's email (409, the admin editor's error), and does not take effect at once: it becomes `pending_email` until the single-use confirmation link that an admin creates (`POST /admin/users/{id}/email-link`) and sends to that address is used. A pending email matches no sign-in, invite or other user's change. The current address cancels a pending change, and an empty string removes the email at once. A field left out is unchanged. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /me (the `UpdateMe` operationId).
+func (c *ClientWithResponses) UpdateMeWithResponse(ctx context.Context, body UpdateMeJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMeResponse, error) {
+	rsp, err := c.UpdateMe(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMeResponse(rsp)
+}
+
 // DecideDeviceLoginWithBodyWithResponse Approve or deny a device-code login
 //
 // Answers the code that `hf auth login` shows in a browser-based login.
@@ -20250,6 +20845,36 @@ func (c *ClientWithResponses) DeleteMyOllamaKeyWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseDeleteMyOllamaKeyResponse(rsp)
+}
+
+// ChangeMyPasswordWithBodyWithResponse Change my password
+//
+// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+func (c *ClientWithResponses) ChangeMyPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeMyPasswordResponse, error) {
+	rsp, err := c.ChangeMyPasswordWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChangeMyPasswordResponse(rsp)
+}
+
+// ChangeMyPasswordWithResponse Change my password
+//
+// Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /me/password (the `ChangeMyPassword` operationId).
+func (c *ClientWithResponses) ChangeMyPasswordWithResponse(ctx context.Context, body ChangeMyPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*ChangeMyPasswordResponse, error) {
+	rsp, err := c.ChangeMyPassword(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChangeMyPasswordResponse(rsp)
 }
 
 // ListMySessionsWithResponse List my sessions
@@ -22215,6 +22840,39 @@ func ParseAdminUpdateUserResponse(rsp *http.Response) (*AdminUpdateUserResponse,
 	return response, nil
 }
 
+// ParseAdminCreateEmailLinkResponse parses an HTTP response from a AdminCreateEmailLinkWithResponse call
+func ParseAdminCreateEmailLinkResponse(rsp *http.Response) (*AdminCreateEmailLinkResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCreateEmailLinkResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest EmailLink
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAdminCreateResetLinkResponse parses an HTTP response from a AdminCreateResetLinkWithResponse call
 func ParseAdminCreateResetLinkResponse(rsp *http.Response) (*AdminCreateResetLinkResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -22846,6 +23504,39 @@ func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
 	return response, nil
 }
 
+// ParseUpdateMeResponse parses an HTTP response from a UpdateMeWithResponse call
+func ParseUpdateMeResponse(rsp *http.Response) (*UpdateMeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Me
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseDecideDeviceLoginResponse parses an HTTP response from a DecideDeviceLoginWithResponse call
 func ParseDecideDeviceLoginResponse(rsp *http.Response) (*DecideDeviceLoginResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -22950,6 +23641,35 @@ func ParseDeleteMyOllamaKeyResponse(rsp *http.Response) (*DeleteMyOllamaKeyRespo
 	}
 
 	response := &DeleteMyOllamaKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseChangeMyPasswordResponse parses an HTTP response from a ChangeMyPasswordWithResponse call
+func ParseChangeMyPasswordResponse(rsp *http.Response) (*ChangeMyPasswordResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ChangeMyPasswordResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -25459,6 +26179,9 @@ type ServerInterface interface {
 	// AdminUpdateUser Disable, enable or make a user admin
 	// (PATCH /admin/users/{id})
 	AdminUpdateUser(w http.ResponseWriter, r *http.Request, id ID)
+	// AdminCreateEmailLink Create a link that confirms a user's pending email
+	// (POST /admin/users/{id}/email-link)
+	AdminCreateEmailLink(w http.ResponseWriter, r *http.Request, id ID)
 	// AdminCreateResetLink Create a password reset link
 	// (POST /admin/users/{id}/reset-link)
 	AdminCreateResetLink(w http.ResponseWriter, r *http.Request, id ID)
@@ -25516,6 +26239,9 @@ type ServerInterface interface {
 	// GetMe Get the signed-in user
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// UpdateMe Change my display name or email
+	// (PATCH /me)
+	UpdateMe(w http.ResponseWriter, r *http.Request)
 	// DecideDeviceLogin Approve or deny a device-code login
 	// (POST /me/device)
 	DecideDeviceLogin(w http.ResponseWriter, r *http.Request)
@@ -25528,6 +26254,9 @@ type ServerInterface interface {
 	// DeleteMyOllamaKey Remove an Ollama key
 	// (DELETE /me/ollama-keys/{id})
 	DeleteMyOllamaKey(w http.ResponseWriter, r *http.Request, id ID)
+	// ChangeMyPassword Change my password
+	// (POST /me/password)
+	ChangeMyPassword(w http.ResponseWriter, r *http.Request)
 	// ListMySessions List my sessions
 	// (GET /me/sessions)
 	ListMySessions(w http.ResponseWriter, r *http.Request)
@@ -25876,6 +26605,12 @@ func (_ Unimplemented) AdminUpdateUser(w http.ResponseWriter, r *http.Request, i
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// AdminCreateEmailLink Create a link that confirms a user's pending email
+// (POST /admin/users/{id}/email-link)
+func (_ Unimplemented) AdminCreateEmailLink(w http.ResponseWriter, r *http.Request, id ID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // AdminCreateResetLink Create a password reset link
 // (POST /admin/users/{id}/reset-link)
 func (_ Unimplemented) AdminCreateResetLink(w http.ResponseWriter, r *http.Request, id ID) {
@@ -25990,6 +26725,12 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// UpdateMe Change my display name or email
+// (PATCH /me)
+func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // DecideDeviceLogin Approve or deny a device-code login
 // (POST /me/device)
 func (_ Unimplemented) DecideDeviceLogin(w http.ResponseWriter, r *http.Request) {
@@ -26011,6 +26752,12 @@ func (_ Unimplemented) AddMyOllamaKey(w http.ResponseWriter, r *http.Request) {
 // DeleteMyOllamaKey Remove an Ollama key
 // (DELETE /me/ollama-keys/{id})
 func (_ Unimplemented) DeleteMyOllamaKey(w http.ResponseWriter, r *http.Request, id ID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ChangeMyPassword Change my password
+// (POST /me/password)
+func (_ Unimplemented) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -27050,6 +27797,32 @@ func (siw *ServerInterfaceWrapper) AdminUpdateUser(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// AdminCreateEmailLink operation middleware
+func (siw *ServerInterfaceWrapper) AdminCreateEmailLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AdminCreateEmailLink(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // AdminCreateResetLink operation middleware
 func (siw *ServerInterfaceWrapper) AdminCreateResetLink(w http.ResponseWriter, r *http.Request) {
 
@@ -27802,6 +28575,20 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// UpdateMe operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DecideDeviceLogin operation middleware
 func (siw *ServerInterfaceWrapper) DecideDeviceLogin(w http.ResponseWriter, r *http.Request) {
 
@@ -27861,6 +28648,20 @@ func (siw *ServerInterfaceWrapper) DeleteMyOllamaKey(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteMyOllamaKey(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ChangeMyPassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangeMyPassword(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -31528,6 +32329,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/me", wrapper.UpdateMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/password", wrapper.ChangeMyPassword)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.Login)
 	})
 	r.Group(func(r chi.Router) {
@@ -31825,6 +32632,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/admin/users/{id}", wrapper.AdminUpdateUser)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users/{id}/email-link", wrapper.AdminCreateEmailLink)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/admin/users/{id}/reset-link", wrapper.AdminCreateResetLink)
 	})
 	r.Group(func(r chi.Router) {
@@ -31884,232 +32694,252 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"L7jS1JQUTtEaobTltrXO5gOaSf/fAA==",
+	"7L17cxu3kij+VVD87SkntRQlP5JTUWrrV4ofibJ27CPZJ1s38VLgTJNENBxMAIwkHpfvZ7/VeMyDA8wM",
+	"qaFkZfcvWxw8uxuNRj8/jSK+yngKqZKj40+jjAq6AgVC//U8F5IL/F8MMhIsU4yno+PR24z+mQOJ9Gcy",
+	"F3xFKMkEXDGeS5LRBUxG4xHDpn/mINaj8SilKxgdj0yX0XgkoyWsKA6t1hl+kUqwdDH6/Hk8esUSeEfV",
+	"sjkx/kpYStQSyBlk3M2SYetiEvtXBiKCVB1AGvEYYnLN1JJcHF4QKsnF3568upiMjtM8ScYjAX/mTEA8",
+	"OlYih/bFnb7A3z2zsnjUNtKcixVVo+NRnuuWzZFfsxVTxeAbgEv0x+qAMcxpnqjR8TdH49GK3rBVvsI/",
+	"8C+Wmr8eF/OwVMEChJ7oFz3kJmwRngRnm/ihqv/ZDla/yOY0OLnMaAStc8ltZ8pXBeQ2hspXrWN1wOoM",
+	"kGTZFYQQI4oGXuTMaSKhGHnGeQI0tSNn/P06Kweur1v3aFv4vwmYj45H/99heYIPzVd56MZ+l+SCJna6",
+	"Kx/Or5jE/3qxIOCqeYx2OjRncPUPDbbgCr7XZ9qCjcwETaMluV5CSuhMQqpCDMWssW3u859OAiCWS9oK",
+	"4YwqBQL7/fdvRwff0YP5x0/Pjj7/m/f0nif5IjQPftoGYJ+xscx4KkGfoHeCzxLQFB7xVEGq2QTNsoRF",
+	"FAF5mJkW//6HRKh+6kkmblw9Yx0vJyk5e/WcfPfsm78TOziJQVGWTPR27RA4w0kUgZRn8GcOUi8sEzwD",
+	"oZhZfCSAKoinVNXYYEwVHCimecrG/nEtEYt37DNbe0A6Hs0ZJLFeEI1jhrukybvKQg1ObDc++wMihd1Y",
+	"3IN5j0dSUZXLLnjXIHVuunwej3IJIrU8uUlYJdn8Zu6Yonkx7bgK5I+eXdQmfq7bNhG1E4Q+d832AiLD",
+	"YhrzlTADZNLHv41oFEGmwFykOBrEle0EYGKH6dz2a+ajTqZgVf9PbwSOyr1TIega/07hRk2jQmzqwKae",
+	"snPh5w04ZZDGOOC4J8TGo5N4xdK3YjEEEIobfJ8AwPV+kCAG4idM0lkCcWVJxVWsv2YJXU8DZ3A8ghVl",
+	"ifdLT/bA5JTijvzzJ1SqacIXLN1qU5zF0TQT/IrFVl4v0Ndou4kmS0HTYmcN7q+/EBrHAqTUlzPyHULl",
+	"JcRkzgVRS6rINWVK6j/x34inc4ZLZzwlCUsvJ751787uCjBWMNrN+xwphfjebdDfiteMSnnNRZ1Eih9v",
+	"BZmiZeuOB2F5brC7OO0fsjiEoj2d3xYEeq82ISGlCbJkqHLklKcwQowLxWgyGo/meZL4OXEeM/Xyyspw",
+	"9W3SSNmbstGNRsoL4/Fu/JAquqMo1ARh5v1ZUbEANWVx21dl3z/ekzClCwulHlzCgq6bGxTgH+RwlMjc",
+	"4+nI1fJdlc3XV5zwiCbm+giwIe8VsbFtP5rMpZQL/+HZgolbBl6O59voJvwELJhUgrpD4Q4bz8C8WK+Y",
+	"wlGjhMuA3JOzKdwo5JXJlK3oAjwaifdLIKepVDSNgEhQiqULkrPJRscJ+RWfo+ZBry/ED6ck4TSWJOXE",
+	"tDG6MK6WIMiSSyVRWfWGx5CQiIpYVu7DKpupgquKziruNsDh3ZoPqM+XEF2egdTaiAbtUAVptJ7WpIZC",
+	"/TEerUBKuoBtsD8e8csAN61uk1+OyuG96+ZJQmdcUMv36gsXPKnxXwEUyexaMAV+Qtj+ah2bWboWNwQf",
+	"qW22cRJ6cwocBoo7ZOMKrdK8j41vvWAz06mClZf5Fa8E32zSaksaH9QSAmSlmEr8X/Isdiy/9w2IWqcZ",
+	"S5had231n2XLTUyUexw7JY9ZZW18B9vaQtvRFxRVO5DYDvQwBAeHhpmqfZOacgI3UfeLSsEqJFykXPm3",
+	"mXHJNmBXYXYCMt5HsVpSe8l/VsjjR0awkqDwUirPYqcKo9xiubHKarvBGKKXnaA07N42ttW9l9AboBdW",
+	"C23+kVeb3zL1UGzcwmUIJh58DXVwgV146M4cwLP+1QrSoJZxxuO1xdRrSBdqWbW8BGhI9/kYmIupF1ov",
+	"jYPSJHk7Hx3/1oUm7HWazvEoN9RLS5ouoD/O0Vj5XPfpxLkburmTj8Ve9KqaD8NcLbnoWso5W6RU5UKv",
+	"JNLDKdiuV5vAl1HhzMT9FU1oY9mGEjdAZkw0buaxA0R1e+Wd2y5OYvthDnmFevb15jOTvM2gfP1skKmx",
+	"A01nVMK3z5qPmldcoPLOq4DjWU3pHuv3cxxPkzmCOIYEFBT/mc55EoMBebb2ytaZtdU3PsglffLNt8HF",
+	"4YTeBUr2L6hJASxV3z4bjT2XthTRNPP6CuAkuGT/DCKaCmf87MQTz0Z2l2FcBe1fxpbZorqZZiKg1+rg",
+	"89yRx7bEW9LVZ+0scGq6PvboifXJm5rT5sdxvlpRsTVLd91qu2iDrjGH+sSCKc8Cio88SaaixItP5JuH",
+	"CLcvb8IhfOt+YaSl56gSX3jPr/3dY8i0vgO+PcksYao/vu0qzrFX9/1k1lSuoJiuc4PSt8MgzURln212",
+	"YWHp4bqodpmihqWH5sGuq9qpXFHLRg0MG9sEIQKK2T/4bNrzNZPmq+lsrUBOMyr+zEH15H5lP8lzEcEW",
+	"3QS/lj2bS7fzFrN30zQpgMbruk6csqSXRVfPN26z7L4AnAjSyGJhgycAlJ4A/SjMjbf2X+oQy0HG2nwy",
+	"64HHlQW3bnbd3Co1BolORXXVbvF5PLpkaVxFG7r2jMYjlCam7r1HY5opEFrEwCNCRTytNXAPQp9M4B7T",
+	"ng9u+z721nInj0eGxqeXsG77HJRG3Lu2j+PUOUsXeUJFA2PCeB3aV60GY6XBuMCHH49XLIKwQwTNUN0L",
+	"fshoi4hGUy8N5tRi1I3pXQ+TEb8Cse37yfWzqr8G47d8uKllzzOpBNAVOXt58uLNy8nKL59qStvJRDX4",
+	"xRJv8JkBmMmcJduMZWGNz0zfaNrrFq67ILUhGjMhFcEbwBgstDHD4uaRJBYq5J8MrkFMRh5A/5nTdAsx",
+	"5B/Y/EfB88y3B8UVTaa9hf4NajfwrI2ygTf/e7sG2aZlZC5DRv0Ae8kEyLq9stJr181ZR0K7K/NAcxO1",
+	"HWm/bnXHyyLm16k2dPWUFxZUQdziLtP4WTvArHjM5gzi/jr8hM0EFS12/4RdQt9FG7ubFfzrx+UclHFF",
+	"xXNigUOWVBKaEv04Js6L1cvOMpZBwlKYKroIUA67oirA94MKFLrYUhUzyP1XVVW33nWWEIfQuGzcN/vS",
+	"ueA0uQxczYUCrnlbDagw3M2bA65gG2Zc7jPoubApHsZFl9HGs/qj/zXjf25nVpj0H4Jp8DXeeGXEgs6V",
+	"0R2kpQPAeLQCsQh4AvRUOJpwASvXOcVi4WZbqh/bvUxKEAfV4CE4dCl9AkqNCscodrqNPiZssNskl23O",
+	"hlP235/T0pLFMQQcY3o+zjftYZExcBR0cWA4gKOX8k+radjK/Lc9hQ3FYc1o2/NXK3n5TryX9br27bsK",
+	"2b4c8PvxiTp/2JItNFb3Et0IX7P0srmsgB8tPnqqLrToE+u8ZOWEnEMal7+rJQjwShBwkzEBcqvT4nfa",
+	"2nwpimRUG975Sn5s236Ip7UAwaqFrFex0mBZsZRIek1oGhP7TPWZAzaWHF5f5WJtsluWWiW1x/06JOqn",
+	"cD3lIes5XE+3MFPwJA4Ohd+Crwr8uMU8wXGaZ4PGsbkzndztLD74PwEoVPfQ1bkHirshzRPFgjuEpRds",
+	"Pu+vbqgJTJuIzagyxhUzpSamhIoFEP0uLKLV6iT5IdVbJjGbz78nsMrUWjuxv3517iVAz/MRV/UT0NgX",
+	"ouAQVQJb0jkoSCUXCJ7FIp97udGyGHC7EJzae9hMXgwWQsI7wRcCpEd9ajTKMU/7Up3pUFwDPXqEteY9",
+	"KLgXRVY2UV9gq14ZAXMe0bRFz1+npF+Xa83OZERTEvE8iUnKFRFADWdHKhyb16OZljBJ9FheTj9nmk/2",
+	"v7lxsa9MJ696qD8/QBJF4OQyYxHj+jTnqf3V7L6IG9meLxQb80H9R6pwjJaItIDbcvDl365l3pToFNxo",
+	"tyZ0lZ3xG/wvz1OlzZNaDBmPJCS42M59W89R3aiPj/OKx7WlGBGQI1+maU79MQSZ4KtM9ZRanGvzufFs",
+	"9kCRpjxdr3gup0i2gUuyy8u8JRqpl6s5kzIHsaWfeWOzuIG3abLeYJXlecDXE00Sfj1FjYJgMUyvWRpb",
+	"Y1jAhjyjaXzNYrWcJi5Gv89djF0jnka5EM54E2illoLni6VZ2ZaRXNX+kLaEydRarlg63XSiLujARl35",
+	"aQ9HqYCs/0oHcOdHLjudJTy6nCZwBR5h8yd+TbB9pEilseFj00KRSZg8JuZHImCeS5BGXjBJItgq40JJ",
+	"wlMblZ6uScKk+p6U3JHQRPKOzikwHQqAfZHdux0XbLUcrmu7mzsIGIm84Q7NdtcwW3J+Ke1RsArIqYnK",
+	"kX2DoU41xjpfA1tGzXHh15I6am1VX2Ib71p/5jMP41MKZb9A8MMuOgrXJxCEHhZ75ixlcrnlbD0VGE6b",
+	"1/iwojfTdhhY/5+eE2V0jcS5tZImq4iibej9mc8KqVUzFBfVstVsIk+ndG49I/sBWioqtiWFfikBfuYz",
+	"lwjApxWyishSAemwtYG8Cgw7VUc/89kQOiM8UftTxldRfS8PFEWnEiKexoGTsZ0Zt/bgChmFix0FZpsG",
+	"FW3tjrvC8uf6TfkDwoRkIIjZZ+U9kuarmUd/1/Kkqqy/vlg7ewDFbakNRJ6m5n8yjyLtIFP6EI1HEcq0",
+	"SRIQFF5TqZ4XDmgb7vMWHD2P8RAOzM6QEIdg8ZpdQgmMDVM0uwyJdP0NnBvLMmO6Afwr8uo570wT6V0T",
+	"Pj+CjrZ3EW5fCer3LfCNRw6iV1RREQyijaSYTxW/hLR5RLV+mEryXwfPz89eHbzHVihX4nVg7QyoVI1o",
+	"kvgdqW8RGb+kclrs1aP2AC3ZFnkhtDmc/ETTBRXE9ZsQDOqX5HrJiWSLFKNheZqsjaD89vTFc7KkV0BS",
+	"noLW3EU0Re2J3hkQprCDGdMXOTtQ+g0uttC3vBWLN4DcUS5Zdp+ZNcipQlUSgssN8UjasfNUGS17OnAC",
+	"jho91fJx1MjFwtR/QlpyPNRotWlEwC9ELvk1EpJUqGLj82L3+HVMqCIrLhV5fHRE9BU1ISep1fCaTZIo",
+	"ASokYcoLnBYjRgrXdeShYo9FywquqniaEOxkXv+qwLe5t/CwOJuIofbvCd1Yp4AVmkT0BvW0kz666fHI",
+	"0OcOeU76v7Ccs2UtTNDoq4wmaOAY7GK+j8H9DiHSWsjtHrtnBjgHFY5Y7/V8rc4WDEJ/A2IB4bRrQUOp",
+	"l2aYe5n2s8mY9uc2iKNpltEeXeHXrv4s12kEcWtsSbSEOA9ELBqNrNUltarIoRqUKWh0GdAK46eAE8qm",
+	"VFcM6Ub0+xjWwXTshZIFw25Py0As/JReUZagLjCgJ7LOnoEhzMdp0Ie7aNFPtHOTbQ7daokxoAtdFl8U",
+	"ZTTW/ks1DH87aXCnZIntHkOdfH/T20vrfo0izsfGV5rJTbWJxP8YbTHLZLytowAJ4gri6Ypt8I5QNI+9",
+	"JayepLbVj22Y+eBey3X0LJgyATV9vUbncqv27Qka/sy5oluN1w7QlgQN5cLHlU3XBvTB722S0BX9T1gP",
+	"k5dvztIFiEywgEdPT/le89Fcbjn5FiJwdZ2d+rUCRiHNePB4ZPksYZELcGkKoDboV6LY+38PJ1xPdMji",
+	"KcRPvvnm8XeTLJ91e9BUZmld/hASVTHYLYSqt2Kxaz6UTtbXjwaC7KT+Gtxe4h5AFPfzw6DQ+FYsdk0r",
+	"0bEb30X4zr4IQ25Z9nE03Vp1g+5XYe3EiSIJUP0KxNeVoJECIbWGAd/LlKDMydNSTzEa95l2M5B0c/Eb",
+	"y/KBv5LJeRP4KqSJ0WJ0m0W9pW+Rz9//lbPU/21jq3aGPg4NzLobBN0yQAazAjbk2spNF05dEkgi6M9D",
+	"s+HS7cVRniRB1s2vm+R2uki5AIKWceIs4+MRM6qJIrOcNrUatYP1SfOFPwajJtviIgeXd3eKFGl9VoTf",
+	"BNWISh86KrFjHgehTSNMpxdC+PJti9/KBMf18G3z7O4a92XZuItts/FfbZFfGkz+K7vlhb3dbd4WxheK",
+	"sg/f6/9AaTdk3CscbepH7aimFdPyco15O/B25IFqWrXMfL5lnsG8uciWF868LeFpEBWBaxzmo82+gTXK",
+	"UOaRLayUuFVfTBJPr0CoW49TDV259WCN+Letx9ikAwctO3Zl35tL96MAcRZUx91S0DyzF8MQpRV0bo9p",
+	"S1oa6wY+rBKi6rhUazx6UXplGX8rfM6Rp0ckpmvpPd0tIadb+VEyj+xYPJIPq66cQ0SrbqkqSFgEITlq",
+	"EJMwcsmQlsV9m/bzYtlUB49aXzxhBUgGYsV0/I/sI3+8qzQvb/CtoOwN+P2pYlqql6QJpqvabtJSIdy1",
+	"xQpM7yrid7eEqlo300dZM0iu0XLocU2tZc9sZY4GxyvI3nGNmkKntnl3mqrsq4bu6qkOse1ddRdt53/H",
+	"4yWAxj7j6kkcE0qMk5vwJucY4HEwCN5DKA8B3y8Qz2lk3Vz9joPh3z3v0sCDuPxhOxm7nmF2cL86HP4N",
+	"KOqCafu/FNIYbna2U1XzdK9b40hq3LF/ShNUj+olEtudfHX09wP9C0sXBzSND9CbGj3KJqv4a09Sk9AD",
+	"pkVTsHkHNa09Ya8TG1Lf4qrfdjuHAzVMCvRuw0ktY/p4VKmropcV2i46qflUUHTdpqEqLBQ9LseYrhsU",
+	"1qmLw042aqeXlqq/K2hzovYQ5uql3dQUaQpdssUyYYul8xmhIjbKyTlLFAgt827QkYiWTEGkcgGhjHoY",
+	"xDRNbLx/L0ibJlvKFJ1JV+olRHssozM/iifZUOcydejEPoLcvAiv1FrcTJwty0Rp/iCPxl3Zkno71D+s",
+	"0u/x2GsXQxZFbF7brWUj+DrElu0l2OHSUp+1VYxw/M8H32qEZYvqveHmpylcMLV29RPH+rS7QEjj5UcF",
+	"aJOEDRryPi9W3Hk6eK483Q9iYhqNicyjJbqMcv9YYee6YiTjR+fGkWupYBVII+zS0TVHy1h0mQAxTcxW",
+	"iwmYOiY/vn77w8nrMTl/f/L8P6fmL8IFOf3l/P2knyjR4yjfpnbgecSzHQkGkF2bkiveu9Dldx8msXxF",
+	"Gh6ohp+AjN9WYPWkTZSj2lLHNUh4UVC1a2xmsMN4O8UJGmu0i6cpE4s0ZJwozTBkBTSVBK5ArPF6Bd0W",
+	"brByKlPJ2ja+wHBleaED9YxzcsrVUiesSCQQY2CB2I6Wcj2UPNYKAlwBmYNC3aH+Ycmk4mKtPZ2bV7kv",
+	"RWEnG4SbKMlj2K4TS3foZPPPTrkOog0lwNty+Ttd4M1Exx19PntJKJDQa6fgPmPw9YNll8iIvu7rWYsT",
+	"JcB2VSO3rqxWU47UUsU4eHwMA34IHxKHw/09issSCLcMFgqHUwTF5f5O0Va3ZeZoiSU6V1zQRcjDTVPN",
+	"ItraU2rXC8YsI5j1c1uHO9NrW136DZrPaLSsqGmbMst/gSJ5hlo+otv2Mj1s4Ghzec1tNhdTg68XoVoG",
+	"81cGmSV8NsX7xptjLrqE1GPjmEu8J+VTf8yQVXVOV17pThrqmsink1rLYyIgZgLvXC5Q5L1ZT8iJvZTT",
+	"IheKkSeJXZp3AXlWDNo6faXdMRli6k2DoGnoRYlOFbKF/FYpwuc1sAbVbvjyc7kCNziTYFcBvx4z7fQK",
+	"RL/6FnaoRkffzp1nWmNSBQmsQLUp7rqen6OXN/qNIExYKnLlxJt+uPfOXMMijqSA57h6dKqrL5Dr2/17",
+	"F6h3e2lijwLDoP6w2q42ZzfeTwKkTrbRx2KnYXdW7aBJlXebE8xbbPvINReyadbvJut04NULDaa12AFt",
+	"bskrelMk5Dw6Grcn6Lxj4PqFDTNCB5Di/nFDupcnXkhCJMDj73Ouo/14GkE3v7Zj+CNx9MRDSKNuB/uS",
+	"RZuI9PqSeMSxHgl4Nt/1dWBj++Nu/4fuV9d7QVM5B9HqDRMyUwaDFrzQEgAvUxUMripv1jacVrIFlPkg",
+	"66OFkjdaF9oiR6PH2L+jCyDXLMx5/lWn8QEiuL4e6eo3VCsUVR5GVYlKFq2erOU+99uF96Nx36oY2GZe",
+	"tzkzd76WDblY905bZ83MFvgGE23Ol0iGyFy8OuLB3C9LYr8t++nhnflBS9fP+SpLwHcPZnQbj0AzGsTv",
+	"qOiuQ2WGDi/KX7GhRxW6jCoFIh0dj/77t6OD7+jB/OOnb599/rdb1aBrrdhg5w7v5V3iSza5XXKZciR/",
+	"hnxvwYz2JQXqRwS0sSxNWArHRLp8xjZQyfENw1snBG6YVFZtavWzTBItgsfaAKr70iQBYV/i2lxAtJE0",
+	"NUk1TVIISlDtPLGtju2/NqbfHX+zLK21wnlH7mkZKGIo1HaZdoXCME7PPfpOAL5dIMaFFykxhCIfzl7j",
+	"Klhq/uQiBlFEA2yjo23h6XriUNSvfjD3ekT4qZpGwYLEJe2EQ9Lbyx3uQvSuLM6K3rgihkdHRz7Rp2+t",
+	"x67TEcrSs8fnnCa1lqjZXUh3KNZdZa+3ubqlsq+tIghZT8t0AqgrEMbZtl8qfbuiUngq4ec27yYM49lu",
+	"uInnkJeCTZo1qAxoxxybWf2LLUNumhUmgnHm3YmB2jKJYrIXF+dV5i7aOT1PtzfjtEUF0cxEUtSxDNto",
+	"r3Rpq375C6qqhI0EOAWMS4C1IamtGMieUNVEU7/4yluhZBvobkKyDX5DvN/dWLcISHZD6Ke6N9nLNsBu",
+	"WBCwa/e0gWtI0qvw9b+DV/cuEX1mDW1bCPkr3elB8CTmCmRf0l16BgkPdEQaoPtnzROqSJeoY/m1TGnS",
+	"/o7KcmI+vverSfw7kAa7Dd6eolTdHgtbqLdjSNBo0ekXZnf8wjXv4SSf8SZ5YLPDVAaVYv1vEntdXNmK",
+	"9g6InVppu5GgXvq2yGitA94PZI0PpVq3X0LGLTJFOvgFtb7j0SbqQ/mfh0v/bIly2165SYo+XQViDMKJ",
+	"tOAKbpc6RauNLBy2WnQl13PAWW+zWm2wLFTs8FkmOO59HBxyhxANPKxiT0p+O9OAi76FOGNHCN3Jg3P5",
+	"oZhCM35DQpQLptbnCBsrUQAV4KnbcuIUMyap6lcXy4WYTiaTCx0aooGrt2q6F5MtlcrMHgq/sqYjyYdT",
+	"Yr9PyLknVaspHZACGIXXRTW96wUxZXsm+k4fHY8izi9ZEed0PFrqZU/dAkrwZkyn2fmsZZ05D6XQVOwK",
+	"yMk7XKJw8s01zMiH07FZjZnggjx/fWpKc+WKu4SWOufo76mEjAqqoKwe/FO+0Pt7RSP8Y6Zn0G6/Fsx6",
+	"y2bKye/p7+lzjK1OcVR5jH8fkJ/P3/6iVXtpTHiuxuRCpvQSphGVcEF0KRjtmyzH5OzVc/L06dPvyIf3",
+	"zwkyKDkm+MTGCOLfU2ISf6L3smU5OOUBeYlcVGqXaxzgu2ff/N25ZhPjxy3JVxc0Q99Qvd9D+/Xf/5A8",
+	"vfhaD4JHVpJc6sSeEt1N6IKluvkxufj/zY//8Xt+dPTkW51T4D8uyFcuhvSbozFZ0RvMTIDL/Obo6Osx",
+	"oam8BlSAar/Ti0+/m6P0++iY/DaZTD6Oye9VtoO//z6aTCa/jz5f6CWd5GqJoIwQI3qQCh4doVwQQ0gk",
+	"S3LpITtcj6G8UILhMWozzRpPdJFC9i+77R/0ISG46aeRlpX1f8Esz9XGLUJcgGgXUsJS+x/ESAYiglQd",
+	"QIq3Rjy2Mx1eIBov/vbklV7hV2iWghuKRglyIWAu//bkVSb+9uTVY42fkY0/MP4yLEawzBkIdC1BqZFF",
+	"B08mR+Vhsj+S16YTwY/VCDR9ZpCUZ7BkaWyJ+ZEsToznkBRJZo5HlvbLQzequK6MHk+OzHQ8g5RmbHQ8",
+	"ejp5rJdX+NgeahXGIc1jY0FaGMaJ/FnPdhrr8E10JGBSnehm9RCc3z4ZPvJnDmJd7pyiQazw+PEy2GBH",
+	"w3e27ilZGkGtYx9JIzSaznE82Gi2b3U498TCwz8ajyJ55VU/+m/nEgOHz4200KPla6Yt0B/HIwEy46k0",
+	"V9iToyPrOK6ssFflUXp5x58qC28t7Y0Uouu4atlDX6Nwow5xd7VBNvfZdNXCQeQYj6fm3FyQ5+f/nFRS",
+	"TITWUmzu0GXD+lw7c7gyoimeFFK+iRz6zWn0sIM9GosI58m4DB2Mszz98fmoAdMng8FUF8JoAujc1AwZ",
+	"AiJneUoWVMzoAkgZNEEwGVUbaExFJdkBH/OgPHXVl2ySkx9s5d5BIFQrFPS5LpkqkcPnBnYeDza3rmPg",
+	"Qc8JkSxdJHCAd7mtv0oVsWYcvJz+/oQseY7hmLfHoNk7pvg2SNEztiLPZaVf+NyiXup4lrdiQVMmTVJ4",
+	"vpFujKUmX7o2Mo4Jz4w7ZrK2UaYQk9naNSFWt6b/npSD6KXIIpIlcO28FTpdTo9b58+ue+NB8VLc/1ux",
+	"sJy0QWFV9MjBGGNt1FYK0tmx5OGnVH7WLCAPcYBzUCYXVwOHHUD+RVoID88yzIJ68YqjfUzafDrZZGO3",
+	"R+M5YArKIkDikfGAoAs7RStOZaWIY1gW/BFUUe1xj+BqVJb03YL22xCA+xFUyZpkucFNcI3LqsAe4Bg9",
+	"Rw0++7jxfKC5O0q+a9SYBK+9sFMhZkP23bRs2+0RXrWYKQ+s9IehaNgd9xwHxVv4l0o6mxZw6fiVbmiZ",
+	"ZvsEVhmP5CMr/ZWw1Lyp9JN4GLjZp/PYhfDIMSnCNvQrPOb4qiXChl63AVOrKWT3k/q9abftzfhFCSql",
+	"77vvatMbHEw8MZHWetAe8D/8xOLPRrx1Xqa+Fxxc8UtwY26HiNMXPtg+a4rUZpJhnmt6KELTPoBwdvMe",
+	"tPihaLpHYqn5Wvg4oVvEwCTzofQf8NznXc/XSu99XOcbDjx3/IQtNud7xsbxMESrc8ClbWjw0Gy/8/tC",
+	"f6yhqPs0ovfFQKcRh+rY27j9Tg2v/ehOsKytSvb7ULdpF0B24rPdgvcdnVQz2V2L3W04NCuKB5S2dzuu",
+	"h8o5Z4eZ6nuQVZof4sodDsi1YGr/WTES4BCgRki4kIbU6l0V7w96afOgddzsutn/UBUabj4obUgQw0ka",
+	"uQXzLgKGqYm1D5ZVAOF+pItieh/8zZLiIVXgxJYX6zg0hWjR40oxA+7IpfaI0Pu5hFoROuAt9IJJ9Awa",
+	"E+MhhGaEFb10GCYuo2gfPB/qpDYHias5bU/jRlZuY02X+PLHHFzYZUykZsZ6QPtJLZm0Fh1erY17USvN",
+	"ezEhbzNI0b2BKVN82NRuxV9wHy5D30ad3keSuHAUW5VVl3md8dhYT0xLO5VpoX+xK6TX4yLSTa+RSTLj",
+	"Of7CdWY8Nq8XVTbVYXUHJjbG1RZ147ZjvEhwtGdH39lKR8UEKxqDWabDKRGQAVVmsWb+oqat4mUgnwWj",
+	"qzZsTGa4uLHPUqbnFZAlNAKp379ARcJAmHFMbWOzt+8J1fV06xvSXkIaieZRWO0+IScGKjY/20bXBShJ",
+	"nj15ErBTGe7zEpu+Nqa3L4ZdFIu6H/5fwuSLsZJWZrKHUlqu8kjW0d6XvwiQoBr8JUgnZ9j8dnTyP8Kc",
+	"XVRQIxrArVbtXC0PE75gaRgDur7/nqQsPbYLTb3jG/mN16ZwbmKEWbrBmiVYvmxd96znHjI246Gn13cO",
+	"6uC5/uD39Az4/01anw+fdyYN63k7Ov7tY83Waav+a55Nizrt+qKoOv1agrGL3SAZnqtWmsHvfZRKFuA8",
+	"H+RlqLdmpm5Zfib4FYvbHoHGcU8t3xUt9+r/VZ0oQJQHLCUrUEse34ZZBChCP8RkfZYgCDdy5Qbh97zS",
+	"rtcrml+n0On+uPEUKufAW0lRpoVHLW0yY3HzzWQ/BScaj1yqZZMu3AUZ2bwAn8f7UQPcweO+BFjodV+2",
+	"GO6NXycFR1a1VMPB97651soR9nQVlRPcj8RX2eAdPflrIPXjZOO4a7elw08yyRetBgZjW9hAWddFYDoN",
+	"8wjWQ/XbYsDI8COotvUf3RHe3+tELa7FYFaGfoDZ3u+sm8WdJ/mizShhVCF3eNrvRx3UjvU9WCVuedoP",
+	"yxoyeyWKwBswLld/6vxo9kkUOMk218DDZQfWwmwFoh3potPivHkhnHqdoe7K5Ny62X2yvfEtLbabzPHO",
+	"zsKXyCSHPwulBRcp5JHOsqg16BmXrJNzxkxG/ArE4Se1zuBzMEzA1iDBClNibTXIOrRvI6Ej+eqHs7e/",
+	"nr88eDImL07enxz8/eumGvWFnXRrlZgrcDQKhnJVUodsHVSmi63s0pPqIMaunlgqRIexm6JzvoFMPEVt",
+	"oC2CodU6cQFoQQBJLvyxaUrYxJn1CpWuamVCpXrjCtU+/OA1R4Gh56Ql92F89JGsAmZ+d/z8p9HeWYi6",
+	"8MnU9WvGxBRGGZPnpiiMVoud68InxqrzAlDbDWnEQLpI6mueJzHBCoFoqlE00aHPuqs7zvqMN0/wj6Ac",
+	"CF+YulW9dCV9j2cnG7j6hx74TmjEbtBDJeaLHNCNygFI56R8JF0wuZ9ibsU9BxEQ0NvcJMU+/IPP2hVr",
+	"P2ODXlSyMqk2GxRSqT/p73jJ0ngnzm8yYI37R2nanFkPju/9zGchlof4GUx1ZpHtiFYTh2Fx+N9C8g4p",
+	"MTAO9kvzFQvE5qJA9zOfDafkMHtvg9xhRNMIkrAh47n+/oCAaBacDKQ80IP1g6RwVUb8gDzDz8PBce+B",
+	"4rheNtTDU4fCkDllCcRhWK4gKJmcaEcSSZ4cPSs8LbRzy/USMORc/1+7gljrpXbBKbPI6EzNVF6SGcy5",
+	"gMLUg2PxXN+XIAQX7gkyE/xagkCTiuRYn+8HqvMmG8t1TCIBOo0HTSSRiiXa04M8O3rslW/ewOjO7bjv",
+	"l2aXEOM+cwlCo9KrZPilCb/hTWzIklRjUV4jW+X9v3G49QNVesZ5JGvR4uMy5YxEy64pnoP2rNLrCbsR",
+	"iBkGZ31FFVlxqcjjoyOTqOdr4xFF5aWph2wcg6xDkHFKQt8f/NH+SVa5VGQG5IomLLbeTkhaXC1BuFWa",
+	"Eb56dvTduLIWs4xH0lChnTvmttCBQgc2mM8hUoQqXXjkGP3DZhDxFTR8yIjOQmKBVLhfWJ8VE5df+mIU",
+	"bmomsxkmG3r39vw9afOGu/har886tvG6SxrTiYhiBE7dF2pFTTXKlLvjN3Z5B7ggNSAZ9zLjgWDr+RXj",
+	"mxsLXW/c8Ka1xVdLwkyLPANAXJ9J35TAXKHJXK88NYPFE3Lu/Bx05nfZkRnLzK5/8vTQ5VkviK5bMyHa",
+	"fZhcLw0cCkeEt6cvnms+ZZZAZlwtzRIRyPzYPbUinjGzo1WZ6spZ9HVWBMMVmSpwqgkt0smmmwzK6Lbe",
+	"7CvNxhu4H+VZmC3alLMlUxxGbbZa11iQKfpa9war+xGs4DCGKxZBVWrw33vG198VLb5YzjG305Joz6UL",
+	"Ipf8WpoCBPbiOphRCbH57lGaQcRieKHn3qd3k5kBZ5OFDrOLALw68IiLoQLKMjwpGjkxpCiVGBQcaOgm",
+	"FhgOXzYet0AXTxK6ogeXsG5/oL5Zv9Ut/xMb7pHGi1lCLzFcwGAvsdWamAnJpdmXA5P+sy1gIa4AZE+0",
+	"Vox/P94L5fa8svSCSQViKHHajIZ3ncWHSbiMaGlipUm6Pa1VdZztLcB5D/atkkqD4Cjc/IKst1XWdN21",
+	"Czre8yiP2KeGc5CkaYu88H01Jh0lDwFzFJuMKPDs6Gld+HHzFTKmYIulQjHyqRV1ixcMT8mF7TZ13S6+",
+	"LlaDAitPwQy0AiuUF+NnPGHRmnz17MkT38ApXFcGnZBfBUcBbGOV6IqWp4oofk1FLEsxXC0FVyoBFMTt",
+	"a9CKgrLmh194Y+IPUcIgVY8kOX1XCIFfPXvynU3GqF+XBydzBeLi60K4cu+6stKNWdrYL3eN7fvt6YS8",
+	"TYnMowhnMSgykqnDKq9EQqD8+71Zo4XAJu4tuWgs40uRejJWGUJ7s35Xep7ug0G64c10O1/Gz518/L7c",
+	"Xg1CkizpFSBsBnXgWK27XXNXcOgW0XE9n7tm+0xIUik27k10Y5Yw5PUsy211QqjzFjAJIwpYPagkF6SS",
+	"iTgEiI5kK4ZQikwrf4k8KKs1KTbUkHHHgYtQa5IgEqDMPaVyoR3WdSo+VHIgmyR0QX1PDSONWTjuibNV",
+	"K+PesdhXqzcbeG6aKx4hxZS0kBzUj3Uzncvmq6VnVht33h9eSptOCDhb6IEDhfuhlxhcK3FzT15bq7Wp",
+	"92J0kV4HgOIV5tWgv3cVY5AKIZnjWTYn151ov+q6a/fDp6moVhLyZ7BV+TDuFFRryrTwckp0fSBC+4N5",
+	"43z4ExIRW5pF24ptvcKmB0OdYfWKy1ia3PZzGhVBGeg350unee5H4/7SnBQlqO4p0UkXBdGBzuY53epk",
+	"IjMqq2QXKVBDlutq/r0dM6DuCc7lygJXXtFgOFu2fnBxUU8vnAluqyk7UJfwtQB3GYvbYmveisW+tFJi",
+	"cT+CSSuK9hBMk9YQ04WQgvbbr16Hl3uInHFmpD672vF4tvo475Uk78cg00qSe8lDtTVJHq4AS5t2PApt",
+	"m73arnCK0KPQLmCwV2G5oeHI2wvWw0/IxTseISjumhXdV4AEKaYPwCN0Y4eWPTRhhK5d83W4O9eM55SZ",
+	"TJAznsCQZNIIZ/5glb+TgMhc5rvqJS63isQlsvZh9MbB70EEvisC0WFTjkC4cD4L3WSCjAHdxFuEMl2j",
+	"5F2eJPvShOdJso1UtndfO1wQkcNVZtHjUe34retjSb4CNFyg/mlufPxZatNQWe/8cCCBRlanm61F14Px",
+	"s9Ug+pnPjAkoA3FgaoAJvtCuXYPxUAuYAHAFZFy2REpl3Pp+aJci7R0kwXm3mRAfW8GMRqCM2U0WgVOP",
+	"beDU48eeyCm8+vUE/TzpNWft69buwgPeJbmgyejzzvkifJ1S2Ts8ak4TGYqPatbWGjg+SlF5ucv+EjYT",
+	"VKx36aojd3bpqAlATk1uPE/xMpaqb5+VhcsqRVPbx6M3w4yn2cGNGm6BGJ003PJ0eb8IdoH8ignBxU4x",
+	"KiseU116excio+kiN+Urtu6rYRdRBQveTaYbL3WqqM4kZVwLFEmA6lS2Oh9guibovjYhZ/zaFGC8TPl1",
+	"ak1NJDadUXMdYaFOvC7R/fQdFX/moCaBXDc45G6E07H2FfcsvWy15BKIcDtJubK7WYMiMdc/aJfY9nUP",
+	"RaLBaE3rDelajjV663eCL47z4Qdu4iUVemKfYAVVLTNhq+Ge2n6Jy0gBXRmAcCV7kohx6PvRU+pN3VG+",
+	"HwvATagXctihZTCyGix7GJko2FaVkD30NmB2h1j0OwlCrS/SB/RGwO+ACbA2hzZs1DBy7TNVhE4WsrJF",
+	"x96SUlRiTg0B+GOlS13Vhh2JzxUxH40XGBKYltFnOnGi4q6AMkuxLjAyEvvz9JqlMb++8Plm43jFWb+P",
+	"pFGBcxLWe/lXe7R3JvHewny411pw619IeHSH1WDPV8T92A1C2B/eZKDPr6dIXPOmaDKKQ6p9Rg8s7Dsy",
+	"a+q2Z65prwf4lpHltSkeaox5bRPhBBv683B3lcEkcZhEKZCShQ4ZegD8IRB9rPdi4LmvihFVZN1T1Yjq",
+	"ElpoZaBYImmyx1t6UbyLTLbhH5VKE18CZd02c5cJOavj5w7IcLvYs6O7I0QDj2HIMIogU0SXmPxDhwin",
+	"GyxsW1LE3F50xgVVXHSnOC5b7jkVmpuoLXFvsZjBboNoY4tfMu8PmDqbWNpPvrwmgu42V96dE8iZqSrS",
+	"SSMdp221YqrrnJk2u2sWGurMtxgobse1VS2cDZdJgnb3kGLS2uT/MvW+DBDCRONAn8I1SEXmTEhVJEIf",
+	"SDvi5ngAkmWj1KccWy2ItBWLdH4Ca2imcxOquiavX52TPNNaZBMihvNZ7cU4kPMcwbI3hoWDb1V74/Hg",
+	"k5vhw2Q3kKT6xlTAKuDpqMyioyeHOvwkl7TVC6CCsL2e1XAePZMUFdsMmSscxzP6SmSWMZvPiWv05R7Z",
+	"7nbnP510qD/rqD/EnXfjH9NIvsCWvfQa9jbZyqdrb+RVLD1AWgiAoQhL2fFQv8BT0AzTJPFonNO/JGnF",
+	"lTSibURVTTe6T9ZSm8eD/1+X1CBNqwlt0H8ak2v83fw5HNepLsZkArqm6y9aQGjHNZNR3iMy+0WlXS/u",
+	"0cjT6cza5Yw4UJ4kU/cY9luue6pc3fA801FUUcIlxFsM2S+/80PLf5y3RrqXLYZ7lVcISh9CxHChsa2l",
+	"KV+t8pSp9UPQ0hqp90WVcveSlqmY4H60tJUNeqgF658OI/XiSOg2VEynU9lXCCVAJ3052eGnNF+1ysMb",
+	"qNz7CQyLLa7FcFJxBayFZKyWAmj8hR+/Hu3yVbet9Q6P6f3YXe+arIpKPeWwjyRRTJkqzg33kN2PrH7V",
+	"4Joekn2lIEr/1WF29DbdO1name776nh5hYMFCNPidxCqNEMNQ3cb7+fmwvUbsEzqyVmqMEWBAPN35e56",
+	"pFOGmeSlyHpnVGLaYppGS1dhHDONuXxVAuamKnltEMO5JaaBoEmhDDbpJGmSuJgRoxhGZZ6JRsBVYjFz",
+	"qXSuYN/abBdChb/kA4ZFWN3b/6oLbqku6CHSPLS7d8tztQKxgL8OM3+D26mckL0FKYoFVBTg9ydM6JUM",
+	"o+nGkfqdiVYa0yzu8JOAq8+Hn5DnfD40iRtbgrWozd4odIY8gqKwLPPQL3niDq3LvOO86gO5d5C7/GQm",
+	"3TMPs7MEuJjZODL/n8/f/jLcC0LSOShIJRcSBbwff/zwys71oFWfZ3DVpxnC/R1eZh3czkOJMqJpqxjB",
+	"VhkXtl57xqLLBAj2SUGQOc/TuMhPqcNGBFNrkhlEmT7YmOCKdIjNXCf/NMRr0qYnUDYrstTrHPtI3IjX",
+	"okrDnOkk7fL70pCijc3MdDLLinVQDJMupXvwOJzjzvd8GPQcgaNgASPzZED7EsLzkSSucEJ1kv89COVB",
+	"wLijttQRH1JssW9f9NfsEsKppcwahs1Goff9AH1OX987Nl4PhQscqE8AkYdqV6BoTBVtUxPiuG9cuy8z",
+	"eKi2RA+oT9MYbizTkqPxqFDYFFU6rpfmwRLDjebwA/nPuKeRHti4ap/BFdtI/vqwrGU2JriFYt64qOH9",
+	"JRIxM4QSieivQ12BZrQi8sIUl1FUVdmegclDCsap4GgPbzc9+D1VVgmSxvAhORJsleExUYJGl8hJkFSi",
+	"JcR54ieQHmfrMAZFDeq+8Fv0hV7o/s97KMrKzD8MTt/nAvVV9rjrFDQ0JVzELKVivXm9bodQfPA/AHSi",
+	"VucNF3CaKr5XBnEOtdLhf80cRysunDbaUBMpYLobFcl1Gj0AKjpfp1GIJewdkzj5kJjU4xVcIeXX22PP",
+	"VKxu9Sz6h2nyZUrXenEh9xn9kSwEz7Ph/Ge0sk2DzeXSNRM8WJlZwLydAHBZZ9hor5foXPrDDufDoc4Y",
+	"+dAch5ga1w16CAbrha8z5DxkhOK/D4AZn+mF7jX03kywRaTC/uVCs6iBNF2m3tNO+hWbUONB0Ile6X0l",
+	"y7DTD4QxPZaunqgjeHZCnVRUyS692Llu1Ms1IDYe0iWYil0+PRqPVvSGrfLV6Pjpt9+MRyuWmr8ee1Jo",
+	"7VuRZvbke2xRlqwLs+BgWSiLAclsTWK6frB3ghI0lXNjhP3CT/t7u9Q93gvlFF/UzfBmqHzcb4z9A+fR",
+	"yRVsIe1qXYyt+I0SAMaQ2sZ03guAM87VDk+FKBeSXcHoobnw45ZRtDQOUw2EvkyVYDBsEjzBOTrxC4gU",
+	"F2tC1cPQ2/c0en7sSYfWoB+05VvIE5ZGSR4DyQRISCMgX6FN/h0VitGE2Efy12NjObZ2F2fiT2gRYOw1",
+	"qyPy/5fW90XrtCTysSk6jbPNwJr9x381yh/O3O9ik7/Eq75OM6+4IECjpcWopGtZ1BVTnEjQpf8ISxOW",
+	"gvOXNSdyTOQly/DrDCKaS9jM9k0TATReE/eJzzDFiyYlAyCCg5gk5lQo8uHstZyQk9Q2LHxtbDLCWW5/",
+	"qkwTs1i74tjxtPKApvgLTo3rdTevvonRSycxTjsUuYzth4V1WbQ0E0n0/JEQcZMOwFP09l1C0w+ZSym7",
+	"n2JkODrOc0/yUbmAkBUV4TiILjwp0GDqKFMiQaExXOvGtw/4t806s/6bLY72DsQWhxtDtNpaPJhHlgOm",
+	"LvQtFGrauPZtWAEJ5E8YP6w8Xb2xf+iSdDzEVGT+hCVSwmqW2MruGr+a512BYHNmfz7/6eTgyTff6g+Y",
+	"DxvdHi++OXp64Sk6TlZAU9PNAgvV6ba8uTmNAqjkqeG8K2oqWeuxLyEzvLjCfJmyZPe9uTqK6ulOxxsq",
+	"tWsxVTmU++Kqbqr7YalhbvBPg0MDx+HUXa9YyuSy5Au3Y6iHGrmHn9IHl97PxbTXizKlreE4hdrt8dHR",
+	"0VG34s3mMGuUhcI8C2BEpx8SPjPYdYJKJkCX9C9FoKbAkdvbCl9NvQ8HjxSoA1vQ8/iTLxH/TDsvjJoZ",
+	"AO7hZIDZnbdqrjkM45HxsNcLePmeLupTNPZw+8Njb2hqkKOWgueLJfmJpgsqtj9I/2LZA3gR6ApWklBy",
+	"8S+WTeAm40JdYLmh70nGk4Rc/PjyPTn8g88MR7jQ14QO8LKaWiTiJg3rYf8Py17qAQdPBqcTv815EoPY",
+	"OfXbx3vwRxjQFQGHIpT8i2UlKrp8SpFeJVARLYOi8rn53MuK8edW0Y0NTOK7kh5IwJkUxNYll2A/zRX7",
+	"1EbSjf2lkVz+E2ErR1Vqu41HmAbROB356oP0KKN0/+ohg6kz68fsN6Php0GoTc9lKoyMS7W2kQyfV2BZ",
+	"0pylM0N0roB4u9/Dh6LVHVTeDvmwFIsYTLEGKZ2hgF3dXqDI2jXMlpxftoPpV9eo1yHtrkHWrOSmo6fX",
+	"GRym8rBW43JjbGEsRvcT0WzBEMKj/TwcGh1uyKlWd61oaopSOVS6753VcezK9vTssaPfT9IDt7U7KpNz",
+	"XUDSg4TqeSrUQ+1VvKuYuY9yJq37CRc1CS776C4Qi+pBu8zhAg07ILFT8c7WEIg7OZT3EwTRgrs91DLf",
+	"8lAexpAwVGhBr0vvRdl6Fyp4YBbA+qbXwax1BVCGS1pXhfOWeDz8ZP+/nuIHAfbPcBnlM9ekPIU74daj",
+	"8qkspfW1UihJ8ly3vMvX4gaa/Z7VkA/0cERFLXUIXhsVbV8kK5AqjMb3INVtMPhXgzFCi8BVPSdTFb7Y",
+	"yYbSaxhJMHlHjn/7iOQ8Ayrw2Pz2EUEjQVw5YOYiGR2PDmnGDpdaPXV49VjDz87yaeR8KqJcCEgVWmWF",
+	"jWRtaCXYIsVgNW0+jQnPVXl83Iqa74STd6e6+YIp8p5fQionZTelf/Bpb5KErii5hLV5O7o3EVGbQ2AT",
+	"zwA/JnxGE2Jel5PqQvEH3cElh8LxXaBmYOuuqrQxPtomlceNt/C/tV6ap6+ZqsiDNcNSqDqLfEyevz6t",
+	"LNBpDXFAW1YQG9mKsMRo3qxHTGC1tiwiKYs3Fu6k+oNvtd6A1XUaVUHtQleavc27H4mjeLy6kFeB4+ma",
+	"4dWhivdsc6wfaHSJkRtpjOrFaifULuoOb8WCpjbKw0xkyvaHAPJBmpqvdpyKhsenbSq0FJWpq3qgZp8X",
+	"balba6O4XD3NMdw7VA8QV27qonfBEZqdT1OpqC4pHKM1QirDbSud9Qc0k/6/AQA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

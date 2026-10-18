@@ -117,13 +117,14 @@ func Classify(r *http.Request, viewerHost string) Target {
 	return classifyRepoPath(p)
 }
 
-// isAuthPage reports whether the request is for one of the sign-in, invite
-// or password reset pages, which the UI renders.
+// isAuthPage reports whether the request is for one of the sign-in, invite,
+// password reset or email confirmation pages, which the UI renders.
 func isAuthPage(r *http.Request, p string) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	return p == "/auth/login" || strings.HasPrefix(p, "/auth/invite/") || strings.HasPrefix(p, "/auth/reset/")
+	return p == "/auth/login" || strings.HasPrefix(p, "/auth/invite/") || strings.HasPrefix(p, "/auth/reset/") ||
+		strings.HasPrefix(p, "/auth/email/")
 }
 
 // classifyRepoPath handles paths that start with a Repo ID, with or without

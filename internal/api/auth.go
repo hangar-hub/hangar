@@ -62,6 +62,8 @@ func NewIdentity(o IdentityOptions) *Identity {
 // IdentityAPI lists the gen.ServerInterface operations Identity serves.
 type IdentityAPI interface {
 	GetMe(w http.ResponseWriter, r *http.Request)
+	UpdateMe(w http.ResponseWriter, r *http.Request)
+	ChangeMyPassword(w http.ResponseWriter, r *http.Request)
 	Login(w http.ResponseWriter, r *http.Request)
 	Logout(w http.ResponseWriter, r *http.Request)
 	ListAuthProviders(w http.ResponseWriter, r *http.Request)
@@ -93,6 +95,7 @@ type IdentityAPI interface {
 	AdminCreateUser(w http.ResponseWriter, r *http.Request)
 	AdminUpdateUser(w http.ResponseWriter, r *http.Request, id gen.ID)
 	AdminCreateResetLink(w http.ResponseWriter, r *http.Request, id gen.ID)
+	AdminCreateEmailLink(w http.ResponseWriter, r *http.Request, id gen.ID)
 	AdminCreateInvite(w http.ResponseWriter, r *http.Request)
 	AdminGetSettings(w http.ResponseWriter, r *http.Request)
 	AdminUpdateSettings(w http.ResponseWriter, r *http.Request)
