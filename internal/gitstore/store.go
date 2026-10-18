@@ -31,9 +31,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 // Pack states (the packs table).

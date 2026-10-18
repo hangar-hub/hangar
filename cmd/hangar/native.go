@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/jamesagarside/hangar/internal/api"
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/api"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/config"
 )
 
 // nativeServer serves every operation of the native API

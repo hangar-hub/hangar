@@ -16,8 +16,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/card"
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/datasets/card"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
 )
 
 type layoutCase struct {

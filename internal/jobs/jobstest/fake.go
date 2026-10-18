@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/jobs"
 )
 
 // Fake is an in-memory jobs.Queue. It honours deduplication, priorities,

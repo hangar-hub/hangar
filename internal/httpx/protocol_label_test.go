@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 func TestSetProtocolLabelsHTTPMetrics(t *testing.T) {

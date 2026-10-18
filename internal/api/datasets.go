@@ -5,14 +5,14 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/pipeline"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // DatasetsDeps are the services behind the dataset endpoints.

@@ -14,10 +14,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/xet"
-	"github.com/jamesagarside/hangar/internal/xet/xettest"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet/xettest"
 )
 
 // indexReads counts reads of stored xorb indexes (ranged reads from the

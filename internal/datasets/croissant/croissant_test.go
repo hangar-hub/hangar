@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/croissant"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/croissant"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 func parse(t *testing.T, js string) features.Features {

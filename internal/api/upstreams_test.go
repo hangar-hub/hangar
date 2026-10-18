@@ -16,16 +16,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/api"
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/auth/authtest"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/upstream"
-	"github.com/jamesagarside/hangar/internal/upstream/upstreamtest"
+	"github.com/hangar-hub/hangar/internal/api"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/auth/authtest"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/upstream/upstreamtest"
 )
 
 // upstreamsServer is the native API with W6's handlers and 501 for the rest.

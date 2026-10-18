@@ -29,7 +29,7 @@ To try the web UI without installing anything, open the demo at <https://demo.ha
 ```sh
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
-  ghcr.io/jamesagarside/hangar:latest
+  ghcr.io/hangar-hub/hangar:latest
 docker logs hangar   # prints the generated admin password and Instance key once
 ```
 
@@ -44,10 +44,10 @@ python -c "from transformers import AutoModel; AutoModel.from_pretrained('hf-int
 
 | Option | How |
 |---|---|
-| Container image | `ghcr.io/jamesagarside/hangar` for linux/amd64 and linux/arm64, signed with cosign |
+| Container image | `ghcr.io/hangar-hub/hangar` for linux/amd64 and linux/arm64, signed with cosign |
 | Docker Compose | Examples for SQLite, Postgres and MinIO, a scaled-out setup and Keycloak in [`deploy/compose`](deploy/compose) |
-| Kubernetes | `helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --set publicURL=https://hangar.example.com`, with `publicURL` set to the address clients use; see the [Helm guide](https://hangar.page/latest/get-started/helm/) and [`deploy/helm/hangar`](deploy/helm/hangar) |
-| Binary | [Release archives](https://github.com/jamesagarside/hangar/releases) for Linux, macOS and Windows, `brew install --cask jamesagarside/tap/hangar`, or `go install github.com/jamesagarside/hangar/cmd/hangar@latest` |
+| Kubernetes | `helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --set publicURL=https://hangar.example.com`, with `publicURL` set to the address clients use; see the [Helm guide](https://hangar.page/latest/get-started/helm/) and [`deploy/helm/hangar`](deploy/helm/hangar) |
+| Binary | [Release archives](https://github.com/hangar-hub/hangar/releases) for Linux, macOS and Windows, `brew install --cask hangar-hub/tap/hangar`, or `go install github.com/hangar-hub/hangar/cmd/hangar@latest` |
 
 ## Documentation
 

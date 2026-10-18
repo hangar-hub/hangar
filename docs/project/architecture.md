@@ -1,6 +1,6 @@
 # Architecture
 
-Hangar is one Go binary with an embedded React UI. The full design is in the [specification](https://github.com/jamesagarside/hangar/tree/main/docs/spec); this is the short version.
+Hangar is one Go binary with an embedded React UI. The full design is in the [specification](https://github.com/hangar-hub/hangar/tree/main/docs/spec); this is the short version.
 
 ## Processes
 

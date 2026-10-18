@@ -20,7 +20,7 @@ import (
 	"github.com/parquet-go/parquet-go/compress"
 	"github.com/parquet-go/parquet-go/encoding"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // ErrUnsupported means a type cannot be stored in Parquet by Hangar.

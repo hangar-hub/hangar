@@ -6,10 +6,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	blobfs "github.com/jamesagarside/hangar/internal/blob/fs"
-	"github.com/jamesagarside/hangar/internal/blob/s3"
-	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/blob"
+	blobfs "github.com/hangar-hub/hangar/internal/blob/fs"
+	"github.com/hangar-hub/hangar/internal/blob/s3"
+	"github.com/hangar-hub/hangar/internal/config"
 )
 
 // Open returns the configured Blob store. For S3 it checks that the bucket

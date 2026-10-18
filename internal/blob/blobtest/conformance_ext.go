@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // runExtended covers verified writes, key ordering, overwrite and part

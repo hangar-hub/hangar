@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 // Hub API error codes, sent in X-Error-Code (docs/research/hf-hub-api-contract.md §9).

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/api/gen"
 )
 
 // pollInterval is how often the CLI asks for Job progress. Tests shorten it.

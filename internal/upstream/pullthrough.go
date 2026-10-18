@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // ErrPullPending means a Pull-through has not finished planning in time;

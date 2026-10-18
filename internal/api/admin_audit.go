@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/audit"
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/audit"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // idMaxCSVEvents bounds one CSV export; narrow the time range for more.

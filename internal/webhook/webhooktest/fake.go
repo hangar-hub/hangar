@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/jamesagarside/hangar/internal/webhook"
+	"github.com/hangar-hub/hangar/internal/webhook"
 )
 
 // Fake records emitted events. Set Err to make Emit fail.

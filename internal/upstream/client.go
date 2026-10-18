@@ -19,8 +19,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // HTTPOptions configure an HTTPClient.
@@ -93,7 +93,7 @@ func NewHTTPClient(opts HTTPOptions) *HTTPClient {
 		opts.Sleep = sleepCtx
 	}
 	if opts.Tracer == nil {
-		opts.Tracer = otel.Tracer("github.com/jamesagarside/hangar/internal/upstream")
+		opts.Tracer = otel.Tracer("github.com/hangar-hub/hangar/internal/upstream")
 	}
 	hc := &http.Client{Transport: opts.Transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {

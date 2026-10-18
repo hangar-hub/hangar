@@ -10,14 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/audit"
-	"github.com/jamesagarside/hangar/internal/audit/audittest"
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/auth/authtest"
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/audit"
+	"github.com/hangar-hub/hangar/internal/audit/audittest"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/auth/authtest"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // TestChangePassword covers auth.Service.ChangePassword (W8 8): only a

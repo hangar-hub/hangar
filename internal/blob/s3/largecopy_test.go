@@ -16,8 +16,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/s3"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/s3"
 )
 
 // sizedS3 is a minimal S3 server whose objects have a size and an ETag but

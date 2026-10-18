@@ -14,15 +14,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/convert"
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
-	"github.com/jamesagarside/hangar/internal/datasets/pq"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/convert"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/datasets/pq"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // ExportRef is the ref that holds the Parquet export, as on the Hub.

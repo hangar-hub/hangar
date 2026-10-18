@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/api"
-	"github.com/jamesagarside/hangar/internal/org"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/api"
+	"github.com/hangar-hub/hangar/internal/org"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 type failingNamespaceSearch struct{ err error }

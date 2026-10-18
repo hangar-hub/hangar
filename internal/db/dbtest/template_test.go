@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun/driver/pgdriver"
 
-	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db"
 )
 
 func TestTemplateNameFollowsTheMigrations(t *testing.T) {

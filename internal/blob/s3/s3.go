@@ -24,7 +24,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // Options configures the S3 backend. They mirror storage.s3 in the

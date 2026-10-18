@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/gitserver/gitservertest"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/scan"
-	"github.com/jamesagarside/hangar/internal/scan/scantest"
+	"github.com/hangar-hub/hangar/internal/gitserver/gitservertest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/scan/scantest"
 )
 
 // TestLFSBlocksUnsafeDownloads checks that git-lfs follows

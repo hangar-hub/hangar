@@ -21,10 +21,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 func mustGet(t *testing.T, q jobs.Queue, id uuid.UUID) *jobs.Job {

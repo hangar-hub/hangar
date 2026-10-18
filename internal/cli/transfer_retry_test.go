@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // lastProgress returns the last progress line a command printed for label.

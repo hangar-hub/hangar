@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/jobs"
 )
 
 // CleanupResult counts the rows Cleanup removed.

@@ -13,9 +13,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/xet"
-	"github.com/jamesagarside/hangar/internal/xet/xettest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet/xettest"
 )
 
 // countingBody counts the bytes the handler reads from a request body.

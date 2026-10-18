@@ -15,7 +15,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // ErrInvalid means the card metadata is not valid.

@@ -15,12 +15,12 @@ import (
 
 	"github.com/parquet-go/parquet-go"
 
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
-	"github.com/jamesagarside/hangar/internal/datasets/query"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/pipeline"
+	"github.com/hangar-hub/hangar/internal/datasets/query"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // result is a scan's matching rows, in response order.

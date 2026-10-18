@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 
-	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db"
 )
 
 // ErrQuotaExceeded is wrapped by QuotaError.

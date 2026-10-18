@@ -10,14 +10,14 @@ import (
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/audit"
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/org"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/webhook"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/audit"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/org"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/webhook"
 )
 
 // WebhooksAPI serves webhook registration and the delivery log (EVT-1).

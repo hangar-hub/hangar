@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/jobs"
 )
 
 // Schedule keys of the recurring Jobs this package owns.

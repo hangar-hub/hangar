@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // lookupCacheKey is the context key of a *lookupCache.

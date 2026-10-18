@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // AdminListTokens implements GET /admin/tokens: every live Token, newest

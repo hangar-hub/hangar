@@ -17,14 +17,14 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/jamesagarside/hangar/internal/collections"
-	"github.com/jamesagarside/hangar/internal/community"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/scan"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/collections"
+	"github.com/hangar-hub/hangar/internal/community"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 func testHandler() *Handler {

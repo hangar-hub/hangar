@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/upstream"
 )
 
 // QuotaCheck is one CheckQuota call a Quota saw.

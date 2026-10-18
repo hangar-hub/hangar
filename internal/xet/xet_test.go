@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet"
 )
 
 func TestValidHash(t *testing.T) {

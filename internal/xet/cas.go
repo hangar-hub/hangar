@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 // DefaultHeartbeat is how often /v2/shards repeats its last frame while it

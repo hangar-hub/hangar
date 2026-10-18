@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/jamesagarside/hangar/internal/api"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/api"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/upstream"
 )
 
 // byteUse says how a protocol, route or function that reaches a Repo
@@ -149,7 +149,7 @@ func TestServingSurfaceIsClassified(t *testing.T) {
 // cannot skip scan.block_unsafe_downloads unnoticed: it fails until the
 // function is classified in fileByteReaders.
 func TestFileByteReadersAreClassified(t *testing.T) {
-	const module = "github.com/jamesagarside/hangar/"
+	const module = "github.com/hangar-hub/hangar/"
 	pkgs, err := packages.Load(&packages.Config{
 		Mode: packages.NeedName | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
 		Dir:  "../..",

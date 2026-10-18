@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/index"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/index"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // Selection picks the files of a Pull (PULL-2, PULL-4, DATA-8). With no

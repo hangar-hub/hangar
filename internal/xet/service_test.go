@@ -18,16 +18,16 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
-	"github.com/jamesagarside/hangar/internal/telemetry"
-	"github.com/jamesagarside/hangar/internal/xet"
-	"github.com/jamesagarside/hangar/internal/xet/xettest"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet/xettest"
 )
 
 var testKey = bytes.Repeat([]byte{7}, 32)

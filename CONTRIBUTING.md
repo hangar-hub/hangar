@@ -5,15 +5,15 @@ Thanks for helping. This page covers setting up, testing and sending changes.
 ## Before you start
 
 - For anything bigger than a small fix, open an issue first, so we can agree on the approach.
-- Hangar's behaviour is specified in [`docs/spec/`](https://github.com/jamesagarside/hangar/tree/main/docs/spec). Compatibility with the Hugging Face Hub is the product: check behaviour against [`docs/spec/03-hf-api.md`](https://github.com/jamesagarside/hangar/blob/main/docs/spec/03-hf-api.md) and the `huggingface_hub` source, not memory.
-- Use the vocabulary in [`CONTEXT.md`](https://github.com/jamesagarside/hangar/blob/main/CONTEXT.md) in code, docs and UI copy.
+- Hangar's behaviour is specified in [`docs/spec/`](https://github.com/hangar-hub/hangar/tree/main/docs/spec). Compatibility with the Hugging Face Hub is the product: check behaviour against [`docs/spec/03-hf-api.md`](https://github.com/hangar-hub/hangar/blob/main/docs/spec/03-hf-api.md) and the `huggingface_hub` source, not memory.
+- Use the vocabulary in [`CONTEXT.md`](https://github.com/hangar-hub/hangar/blob/main/CONTEXT.md) in code, docs and UI copy.
 
 ## Set up
 
 You need Go (the version in `go.mod`), Node.js 24 with corepack, Docker (for Postgres and MinIO in tests), git 2.39 or later with git-lfs, and [uv](https://docs.astral.sh/uv/) for the Python compatibility suites. The repository has a dev container (`.devcontainer/`) with all of them.
 
 ```sh
-git clone https://github.com/jamesagarside/hangar.git
+git clone https://github.com/hangar-hub/hangar.git
 cd hangar
 make build        # the UI and bin/hangar
 make dev          # the server on :8080 and the UI with live reload on :5173

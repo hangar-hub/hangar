@@ -15,9 +15,9 @@ import (
 	"github.com/uptrace/bun"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // LFS stores LFS objects once per Instance (UP-6), addressed by SHA-256,

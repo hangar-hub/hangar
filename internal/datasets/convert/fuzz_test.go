@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/convert"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/convert"
 )
 
 // fuzzConvert converts one fuzzed file with a builder: it may fail, but

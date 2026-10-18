@@ -37,11 +37,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://<project>.ingest.<region>.elastic.cloud:443
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=ApiKey <key>"
 ```
 
-Traces appear in APM as the `hangar` service. Import the Kibana dashboard: **Stack Management**, **Saved objects**, **Import**, and choose [`deploy/dashboards/kibana/hangar.ndjson`](https://github.com/jamesagarside/hangar/blob/main/deploy/dashboards/kibana/hangar.ndjson). It needs Kibana 9.4 or later and reads the `logs-*.otel-*` and `metrics-*.otel-*` data streams. Keep the default cumulative temporality for metrics; the dashboard computes rates from cumulative counters.
+Traces appear in APM as the `hangar` service. Import the Kibana dashboard: **Stack Management**, **Saved objects**, **Import**, and choose [`deploy/dashboards/kibana/hangar.ndjson`](https://github.com/hangar-hub/hangar/blob/main/deploy/dashboards/kibana/hangar.ndjson). It needs Kibana 9.4 or later and reads the `logs-*.otel-*` and `metrics-*.otel-*` data streams. Keep the default cumulative temporality for metrics; the dashboard computes rates from cumulative counters.
 
 ## Grafana stack
 
-Send OTLP to Grafana Alloy or an OpenTelemetry Collector that writes to Tempo, Prometheus or Mimir, and Loki; or scrape Hangar's Prometheus endpoint directly. Import [`deploy/dashboards/grafana/hangar.json`](https://github.com/jamesagarside/hangar/blob/main/deploy/dashboards/grafana/hangar.json) under **Dashboards**, **New**, **Import**, and choose your Prometheus data source.
+Send OTLP to Grafana Alloy or an OpenTelemetry Collector that writes to Tempo, Prometheus or Mimir, and Loki; or scrape Hangar's Prometheus endpoint directly. Import [`deploy/dashboards/grafana/hangar.json`](https://github.com/hangar-hub/hangar/blob/main/deploy/dashboards/grafana/hangar.json) under **Dashboards**, **New**, **Import**, and choose your Prometheus data source.
 
 The dashboard uses the names the Prometheus exporter gives (`hangar_download_bytes_total`, `http_server_request_duration_seconds` and so on), which are also what Prometheus's own OTLP receiver produces with its default name translation.
 

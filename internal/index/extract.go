@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/index/card"
-	"github.com/jamesagarside/hangar/internal/index/gguf"
-	"github.com/jamesagarside/hangar/internal/index/safetensors"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/index/card"
+	"github.com/hangar-hub/hangar/internal/index/gguf"
+	"github.com/hangar-hub/hangar/internal/index/safetensors"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // Version is the indexer version. Results are keyed by it; bumping it

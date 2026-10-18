@@ -3,7 +3,7 @@ package index
 import (
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // CommitJob is the payload of the index and scan Jobs that run for every

@@ -16,8 +16,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // Errors. The Viewer handlers answer with the Hub's viewer error shape.

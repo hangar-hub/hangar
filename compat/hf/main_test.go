@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jamesagarside/hangar/compat/harness"
+	"github.com/hangar-hub/hangar/compat/harness"
 )
 
 // TestMain removes the hangar binary the harness builds for this package.

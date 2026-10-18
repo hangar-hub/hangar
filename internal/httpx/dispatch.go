@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/telemetry"
 )
 
 // Protocols holds one handler per protocol that Hangar serves on its single

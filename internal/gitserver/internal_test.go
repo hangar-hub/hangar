@@ -13,9 +13,9 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 func TestConfigFrom(t *testing.T) {

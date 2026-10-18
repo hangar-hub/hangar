@@ -276,7 +276,7 @@ These are accepted, documented, or waiting for a decision:
 
 ## LFS object references
 
-Decided by James on 2026-10-18 ("check at Commit"); the rules are in [spec 04, "Who may reference an LFS object"](https://github.com/jamesagarside/hangar/blob/main/docs/spec/04-git.md#who-may-reference-an-lfs-object). What remains:
+Decided by James on 2026-10-18 ("check at Commit"); the rules are in [spec 04, "Who may reference an LFS object"](https://github.com/hangar-hub/hangar/blob/main/docs/spec/04-git.md#who-may-reference-an-lfs-object). What remains:
 
 - **Pulls into a Mirror are not checked.** A Pull marks an object present when the Upstream's Repo names it and the Instance already stores it, without downloading it again, and Pull-through serves such an object from the store. A user who can start a Pull from an Upstream on which they can commit a pointer without its bytes could reach an object they cannot read. Instance admins choose every Upstream; huggingface.co, and Hangar from this version, refuse such commits.
 - **Xet proof rests on chunk structure.** A shard proves the upload when its file rebuilds, from xorbs Hangar holds, into the claimed SHA-256. A client that knows the xorb hashes and chunk ranges of someone else's file could name them without sending the bytes. Hangar never serves Xet reconstruction data, file hashes or xorb hashes (it offers no Xet downloads), so they are known only to whoever had the file.

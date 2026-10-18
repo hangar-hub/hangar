@@ -21,7 +21,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 
-	"github.com/jamesagarside/hangar/internal/scan/pickle"
+	"github.com/hangar-hub/hangar/internal/scan/pickle"
 )
 
 // Kind is how a file is checked.

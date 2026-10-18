@@ -13,8 +13,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/gitstore/gitstoretest"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/gitstore/gitstoretest"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // receivePack posts a raw receive-pack request and returns the response

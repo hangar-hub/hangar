@@ -21,10 +21,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/compat/harness"
-	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/compat/harness"
+	"github.com/hangar-hub/hangar/internal/datasets/viewertest"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // EnvBackends limits the backends the suite runs on to a comma-separated

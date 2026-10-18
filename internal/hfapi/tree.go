@@ -11,11 +11,11 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/scan"
 )
 
 // treePageSize matches the Hub's page size for tree listings.

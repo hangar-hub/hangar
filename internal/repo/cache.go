@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/gitstore"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/gitstore"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // The tree_entries cache holds every path of a Commit, so the Hub API's hot

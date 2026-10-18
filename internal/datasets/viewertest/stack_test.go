@@ -16,11 +16,11 @@ import (
 	"github.com/parquet-go/parquet-go"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/viewer"
-	"github.com/jamesagarside/hangar/internal/datasets/viewertest"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/datasets/viewer"
+	"github.com/hangar-hub/hangar/internal/datasets/viewertest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
 )
 
 func TestStackServesAConvertedDataset(t *testing.T) {

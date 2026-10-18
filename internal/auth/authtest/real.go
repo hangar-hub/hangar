@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/audit"
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/org"
+	"github.com/hangar-hub/hangar/internal/audit"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/org"
 )
 
 // Clock is a settable clock for tests.

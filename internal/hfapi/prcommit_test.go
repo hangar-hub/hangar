@@ -11,11 +11,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/community"
-	"github.com/jamesagarside/hangar/internal/hfapi"
-	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/community"
+	"github.com/hangar-hub/hangar/internal/hfapi"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 func lfsLine(p, oid string, size int) map[string]any {

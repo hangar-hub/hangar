@@ -1,4 +1,4 @@
-module github.com/jamesagarside/hangar
+module github.com/hangar-hub/hangar
 
 go 1.27.0
 

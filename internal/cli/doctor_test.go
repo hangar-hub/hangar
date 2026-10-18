@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
-	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/config"
 )
 
 // cuttingStore cuts every read of the large read check's object after cut

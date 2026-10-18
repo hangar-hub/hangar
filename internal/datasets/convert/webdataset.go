@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // webdatasetBatch is WebDataset.DEFAULT_WRITER_BATCH_SIZE.

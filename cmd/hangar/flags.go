@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/config"
 )
 
 // configFlags are the flags every command that reads the configuration takes.

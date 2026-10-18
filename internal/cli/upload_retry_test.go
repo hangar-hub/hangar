@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 const completeRoute = "POST /api/hangar/v1/repos/{type}/{ns}/{name}/uploads/{id}/complete"

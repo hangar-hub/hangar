@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/gitstore"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/gitstore"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // DefaultMaxTreePaths is the most files and folders one Commit may hold:

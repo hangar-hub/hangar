@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zalando/go-keyring"
 
-	"github.com/jamesagarside/hangar/internal/cli/clitest"
+	"github.com/hangar-hub/hangar/internal/cli/clitest"
 )
 
 func TestLoginWithTokenWhoamiAndLogout(t *testing.T) {

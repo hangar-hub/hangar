@@ -10,11 +10,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
-	"github.com/jamesagarside/hangar/internal/upstream"
-	"github.com/jamesagarside/hangar/internal/upstream/upstreamtest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/upstream/upstreamtest"
 )
 
 var (

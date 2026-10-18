@@ -29,7 +29,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // stagingDir is the directory under the root that holds temporary files.

@@ -31,4 +31,4 @@ On the reference setup (two `web` replicas with 2 vCPU and 1 GiB each, one `work
 | Memory during a 50 GiB upload or download | flat, under 256 MiB per replica |
 | Web replica start to ready | under 5 seconds |
 
-The load tests in [`loadtest/`](https://github.com/jamesagarside/hangar/tree/main/loadtest) measure them.
+The load tests in [`loadtest/`](https://github.com/hangar-hub/hangar/tree/main/loadtest) measure them.

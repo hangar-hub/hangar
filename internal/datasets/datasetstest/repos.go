@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
 )
 
 // lfsExtensions are stored as LFS objects by CommitFiles, as the Hub's

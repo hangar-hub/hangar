@@ -15,11 +15,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/upstream"
-	"github.com/jamesagarside/hangar/internal/upstream/upstreamtest"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/upstream/upstreamtest"
 )
 
 // requireQuotaFailure checks that a pull Job failed because of the

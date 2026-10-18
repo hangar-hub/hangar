@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
 )
 
 // TestWrapperStartsMinIOImage checks that scripts/with-test-minio.sh, which

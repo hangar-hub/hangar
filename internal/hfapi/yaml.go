@@ -6,7 +6,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // cardHelpURL explains card metadata in the warnings validate-yaml returns.

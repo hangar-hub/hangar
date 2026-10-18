@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // FuzzParseBatch checks that no batch body panics the parser and that every

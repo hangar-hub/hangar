@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/index/rangeio"
-	"github.com/jamesagarside/hangar/internal/index/safetensors"
+	"github.com/hangar-hub/hangar/internal/index/rangeio"
+	"github.com/hangar-hub/hangar/internal/index/safetensors"
 )
 
 func tensor(name, dtype string, shape ...int64) safetensors.Tensor {

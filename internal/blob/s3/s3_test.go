@@ -21,9 +21,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
-	"github.com/jamesagarside/hangar/internal/blob/s3"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/blob/s3"
 )
 
 func TestConformanceMinIO(t *testing.T) {

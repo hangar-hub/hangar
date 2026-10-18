@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 func (h *Identity) settingsOut(st auth.InstanceSettings) gen.InstanceSettings {

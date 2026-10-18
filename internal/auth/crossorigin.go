@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // ErrCrossOrigin means a state-changing request came from another site

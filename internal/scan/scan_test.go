@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/scan"
 )
 
 func TestWorst(t *testing.T) {

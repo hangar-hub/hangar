@@ -37,7 +37,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/uptrace/bun/driver/pgdriver"
 
-	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db"
 )
 
 // Environment variables that turn on Postgres tests.

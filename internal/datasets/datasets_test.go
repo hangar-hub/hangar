@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets"
 )
 
 func TestConfigSplitsAndLookup(t *testing.T) {

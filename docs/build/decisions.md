@@ -118,6 +118,25 @@ James decided to host Hangar's websites on Cloudflare instead of GitHub Pages ("
 - **No open redirect and no shared state.** Found in review on 2026-10-18. The mock's OIDC sign-in sent visitors to any `redirect` value, which on a public domain is an open redirect for phishing; it now follows only paths on the demo, with the rules of `internal/auth.SafeRedirect` plus a same-origin check, and the UI's `safeRedirect` also refuses `/\` and control characters as the Go server does. The Go server already had the check (`SafeRedirect` in `internal/auth/oidc.go`, applied when the sign-in starts and at the callback). State was already per visitor, so one visitor cannot sign another out or plant content others see; `ui/mock/fetch.test.ts` and `ui/e2e-demo` now test both, and the export file name is kept free of quotes and line breaks.
 - **The banner is a build flag.** `VITE_HANGAR_DEMO=1` adds "This is a demo with sample data. Nothing you do here is saved." and a link to the docs, and builds into `ui/demo/dist`; the embedded build in `internal/web/dist` has neither. `wrangler` 4.147.0 runs through `pnpm dlx`, pinned in the `Makefile`, so the UI's dependencies do not grow.
 
+## GitHub organisation `hangar-hub`, decided by James (2026-10-18)
+
+- **The project's GitHub home is the organisation `hangar-hub`.** James created the organisation; the repository will be `github.com/hangar-hub/hangar`. Only the owner changes. Every address that names the project's home moved:
+
+  | What | Before | Now |
+  |---|---|---|
+  | Go module path | `github.com/jamesagarside/hangar` | `github.com/hangar-hub/hangar` |
+  | Repository, issues, releases, security advisories | `https://github.com/jamesagarside/hangar/...` | `https://github.com/hangar-hub/hangar/...` |
+  | Container image | `ghcr.io/jamesagarside/hangar` | `ghcr.io/hangar-hub/hangar` |
+  | Helm chart | `oci://ghcr.io/jamesagarside/charts/hangar` | `oci://ghcr.io/hangar-hub/charts/hangar` |
+  | Homebrew tap and cask | `jamesagarside/homebrew-tap`, `brew install --cask jamesagarside/tap/hangar` | `hangar-hub/homebrew-tap`, `brew install --cask hangar-hub/tap/hangar` |
+  | `go install` | `github.com/jamesagarside/hangar/cmd/hangar@latest` | `github.com/hangar-hub/hangar/cmd/hangar@latest` |
+  | cosign keyless identity | `^https://github.com/jamesagarside/hangar/.github/workflows/release.yml@...` | `^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@...` |
+  | GitHub attestations | `gh attestation verify ... --owner jamesagarside` | `gh attestation verify ... --owner hangar-hub` |
+  | SBOM package name | `github.com/jamesagarside/hangar` | `github.com/hangar-hub/hangar` |
+
+  The image's `org.opencontainers.image.source` label, the chart's `sources`, `mkdocs.yml`'s `repo_url` and `repo_name`, the issue template links, the Compose examples' default image, the GoReleaser release and cask owners, and the release rehearsal's SBOM check follow. What still says `jamesagarside` names James the person, not the project: the chart's maintainer link, `CODEOWNERS` (the organisation has no teams yet, and an owner that does not exist makes the file invalid), and the Code of Conduct's contact link. `LICENSE` names no licensor by name; ELv2's licensor is "the entity offering these terms", and `NOTICE` keeps "Copyright 2026 James Garside", so James stays the licensor. Records in `docs/build/` (handoffs, requests, the docs walk-through, the release dry run and the decisions above) describe what happened under the old owner and keep its addresses; the release dry run has a dated note.
+- **The product name stays "Hangar".** The CLI and binary stay `hangar`. Only the GitHub owner changed, and the name decision under "Website and name" above stands.
+
 ## Open questions for James
 
 - **When to release.** The release is on hold (see "Release on hold" above). After the release dry run passes, ask James whether to go ahead with phase 4.

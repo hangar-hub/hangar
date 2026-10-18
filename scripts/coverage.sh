@@ -6,8 +6,8 @@
 # Usage: scripts/coverage.sh [extra go test flags]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-exclude='^github.com/jamesagarside/hangar/(internal/api/gen|compat/|internal/pins)'
-strict='^github.com/jamesagarside/hangar/internal/(auth|repo|gitserver|hfapi)$'
+exclude='^github.com/hangar-hub/hangar/(internal/api/gen|compat/|internal/pins)'
+strict='^github.com/hangar-hub/hangar/internal/(auth|repo|gitserver|hfapi)$'
 out="$(go test -count=1 -cover "$@" ./... 2>&1)" || { echo "$out"; exit 1; }
 fail=0
 while read -r pkg pct; do
@@ -20,6 +20,6 @@ while read -r pkg pct; do
   else
     echo "ok   $pkg ${pct}%"
   fi
-done < <(echo "$out" | grep -oE 'github.com/jamesagarside/hangar/[^[:space:]]+[[:space:]].*coverage: [0-9.]+%' \
+done < <(echo "$out" | grep -oE 'github.com/hangar-hub/hangar/[^[:space:]]+[[:space:]].*coverage: [0-9.]+%' \
   | sed -E 's/^([^[:space:]]+).*coverage: ([0-9.]+)%.*/\1 \2/')
 exit $fail

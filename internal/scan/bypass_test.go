@@ -15,13 +15,13 @@ import (
 	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/index/indextest"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/scan"
-	"github.com/jamesagarside/hangar/internal/scan/scantest"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/index/indextest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/scan/scantest"
 )
 
 // The tests in this file are regressions for files that could run code

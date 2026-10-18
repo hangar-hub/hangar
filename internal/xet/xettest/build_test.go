@@ -12,8 +12,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/xet"
-	"github.com/jamesagarside/hangar/internal/xet/xettest"
+	"github.com/hangar-hub/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet/xettest"
 )
 
 func TestSplitChunksAndBG4(t *testing.T) {

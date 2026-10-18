@@ -2,7 +2,7 @@
 
 ## Container image
 
-- `ghcr.io/jamesagarside/hangar:<version>` and `:latest`, for `linux/amd64` and `linux/arm64`.
+- `ghcr.io/hangar-hub/hangar:<version>` and `:latest`, for `linux/amd64` and `linux/arm64`.
 - Multi-stage Dockerfile: Node stage builds the UI, Go stage builds a static binary (`CGO_ENABLED=0`, `-trimpath`, version stamped with `-ldflags`), final stage Chainguard `wolfi-base` with `git` installed (the server runs `git upload-pack`; see [04](04-git.md)), no shell tools beyond what `git` needs.
 - Runs as UID 65532, read-only root filesystem (with a writable `/var/cache/hangar` and `/tmp`), data in `/var/lib/hangar` (volume), config at `/etc/hangar/hangar.yaml` (optional; env vars are enough).
 - Compose and Helm use `/readyz` for health. The image also declares `HEALTHCHECK CMD ["hangar", "healthcheck"]` (a subcommand that calls `/readyz` on localhost).
@@ -13,7 +13,7 @@
 ```sh
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
-  ghcr.io/jamesagarside/hangar:latest
+  ghcr.io/hangar-hub/hangar:latest
 docker logs hangar   # prints the generated admin password and instance key once
 ```
 
@@ -32,7 +32,7 @@ CI starts each one and runs the smoke test ([13](13-testing.md)).
 
 ## Helm chart (`deploy/helm/hangar`)
 
-- Published as an OCI chart at `oci://ghcr.io/jamesagarside/charts/hangar`.
+- Published as an OCI chart at `oci://ghcr.io/hangar-hub/charts/hangar`.
 - Values: image, `config` (rendered to a ConfigMap), `secrets` (or `existingSecret`), `web.replicas`, `worker.replicas`, autoscaling (HPA on CPU for both), resources, PodDisruptionBudgets, topology spread, `persistence` (for SQLite and filesystem mode; forces `web.replicas: 1` and `worker.replicas: 0` with role `all`, and the chart fails to render otherwise), Ingress and Gateway API `HTTPRoute`, Service, ServiceAccount (with annotations for IRSA or Workload Identity), NetworkPolicy (optional), ServiceMonitor (optional, for the Prometheus exporter), extra env and volumes.
 - Migrations run in a pre-install and pre-upgrade Job (`hangar admin migrate`), or, with `migrations.mode: initContainer` for GitOps tools that run Helm hooks before the rest of a sync, in an init container of each `web` and `worker` pod; `web` and `worker` pods wait for the expected schema version in `/readyz`.
 - Security context: non-root, read-only root filesystem, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp.
@@ -40,7 +40,7 @@ CI starts each one and runs the smoke test ([13](13-testing.md)).
 
 ## Binaries
 
-GoReleaser builds `hangar` for linux, darwin and windows on amd64 and arm64, with checksums, SBOMs and cosign signatures. Install options in the docs: release archives, `go install github.com/jamesagarside/hangar/cmd/hangar@latest`, the container image, and a Homebrew tap (`jamesagarside/homebrew-tap`, updated by GoReleaser; creating the tap repo is a release step that needs James).
+GoReleaser builds `hangar` for linux, darwin and windows on amd64 and arm64, with checksums, SBOMs and cosign signatures. Install options in the docs: release archives, `go install github.com/hangar-hub/hangar/cmd/hangar@latest`, the container image, and a Homebrew tap (`hangar-hub/homebrew-tap`, updated by GoReleaser; creating the tap repo is a release step that needs James).
 
 ## Documentation site
 
@@ -101,7 +101,7 @@ Elastic License 2.0, matching Crockery. The README says what it means in plain w
 5. Security review done (threat model in `docs/security/threat-model.md`, findings fixed or recorded).
 6. Docs complete with no "TODO" or placeholder pages; screenshots current.
 7. James buys `hangar.page` and adds it as a zone to the Cloudflare account that hosts the sites, with Cloudflare's nameservers. Hangar needs no DNS records added by hand: Cloudflare adds them when it attaches the custom domains below.
-8. James creates the public GitHub repository, enables private vulnerability reporting and the CLA app, and pushes `main`; the `docs.yml` run that follows (start it by hand if it does not) creates the `gh-pages` branch with the `dev` docs and the root files. If the repository moves to another owner, such as the `hangar-hub` organisation, James moves it before the next steps, because Cloudflare connects to a repository by owner and name.
+8. James creates the public repository `github.com/hangar-hub/hangar` in the `hangar-hub` organisation, enables private vulnerability reporting and the CLA app, and pushes `main`; the `docs.yml` run that follows (start it by hand if it does not) creates the `gh-pages` branch with the `dev` docs and the root files. The repository must be in the organisation before the next steps, because Cloudflare connects to a repository by owner and name.
 9. James connects the docs in the Cloudflare dashboard: **Workers & Pages**, **Create application**, **Pages**, **Import an existing Git repository**. He installs the Cloudflare GitHub app on the repository's owner with access to the Hangar repository only, picks the repository, names the project `hangar-docs`, sets the production branch to `gh-pages`, the framework preset to **None**, leaves the build command empty, sets the build output directory to `/`, and saves. Under the project's **Settings**, **Build**, **Branch control**, he turns off automatic deployments for preview branches. Under **Custom domains** he adds `hangar.page` and waits for it to become active. For `www`, he adds a proxied `AAAA` record for `www` to `100::` and a redirect rule from the **Redirect from WWW to root** template.
 10. James checks that `https://hangar.page/dev/` serves the docs with the headers in `deploy/cloudflare/docs-root/_headers`.
 11. James pushes the tag.

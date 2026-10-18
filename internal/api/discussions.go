@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/community"
-	"github.com/jamesagarside/hangar/internal/community/communitydb"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/community"
+	"github.com/hangar-hub/hangar/internal/community/communitydb"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // CommunityAPI serves discussions and pull requests (REPO-6).

@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/cli/clitest"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/cli/clitest"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 func sha(b []byte) string {

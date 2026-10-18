@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
-	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/upstream"
 )
 
 // Fake is an upstream.Client over Repos in Repos. RequireToken makes

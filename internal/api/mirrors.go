@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/upstream"
 )
 
 func (h *Upstreams) mirrorResource(ctx context.Context, p model.Principal, rp *repo.Repo, withUpdate bool) (gen.Mirror, error) {

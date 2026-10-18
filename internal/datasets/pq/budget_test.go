@@ -11,7 +11,7 @@ import (
 	"github.com/parquet-go/parquet-go/compress"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/pq"
+	"github.com/hangar-hub/hangar/internal/datasets/pq"
 )
 
 // writeColumn writes a valid Parquet file of one string column "s", in

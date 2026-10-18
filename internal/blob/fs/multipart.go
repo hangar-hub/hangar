@@ -16,7 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // Multipart uploads keep their parts under uploads/<upload-id>/ as

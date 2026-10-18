@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/webhook"
-	"github.com/jamesagarside/hangar/internal/webhook/webhooktest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/webhook"
+	"github.com/hangar-hub/hangar/internal/webhook/webhooktest"
 )
 
 func TestFakeRecords(t *testing.T) {

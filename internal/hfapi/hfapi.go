@@ -22,19 +22,19 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/collections"
-	"github.com/jamesagarside/hangar/internal/community"
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/httpx"
-	"github.com/jamesagarside/hangar/internal/index"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/org"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/scan"
-	"github.com/jamesagarside/hangar/internal/telemetry"
-	"github.com/jamesagarside/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/collections"
+	"github.com/hangar-hub/hangar/internal/community"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/index"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/org"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/telemetry"
+	"github.com/hangar-hub/hangar/internal/xet"
 )
 
 // Settings are the configuration values the Hub API reads. FromConfig

@@ -17,7 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/api/gen"
 )
 
 // deviceClientID names the CLI in device-code logins; the Token it creates

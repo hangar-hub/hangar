@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // commitSeeds are NDJSON commit bodies in the shapes huggingface_hub sends

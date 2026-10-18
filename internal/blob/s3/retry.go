@@ -17,7 +17,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // Defaults for uploads over slow or unreliable links, such as a home

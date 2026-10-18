@@ -5,9 +5,9 @@ package xet
 import (
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
 )
 
 // currentBackend keeps hfapitest's real-git Repo fake and stores xorbs in

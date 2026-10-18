@@ -11,11 +11,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/datasetstest"
-	"github.com/jamesagarside/hangar/internal/hfapi"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/datasetstest"
+	"github.com/hangar-hub/hangar/internal/hfapi"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 func TestWhoami(t *testing.T) {

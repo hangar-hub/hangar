@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/stats"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/stats"
 )
 
 // oracleCase is written by compat/viewer/oracle/stats_cases.py, which runs

@@ -1,6 +1,6 @@
 # Run Hangar with Docker Compose
 
-The repository has four Compose examples in [`deploy/compose`](https://github.com/jamesagarside/hangar/tree/main/deploy/compose). CI starts each of them and runs the smoke test against it.
+The repository has four Compose examples in [`deploy/compose`](https://github.com/hangar-hub/hangar/tree/main/deploy/compose). CI starts each of them and runs the smoke test against it.
 
 | File | What it runs |
 |---|---|
@@ -12,7 +12,7 @@ The repository has four Compose examples in [`deploy/compose`](https://github.co
 Get the files:
 
 ```sh
-git clone https://github.com/jamesagarside/hangar.git
+git clone https://github.com/hangar-hub/hangar.git
 cd hangar/deploy/compose
 ```
 
@@ -81,6 +81,6 @@ Open <http://localhost:8080> and choose **Sign in with Keycloak**. The realm has
 Every example takes `HANGAR_IMAGE`, `HANGAR_PORT` and `HANGAR_PUBLIC_URL`. `HANGAR_PUBLIC_URL` defaults to `http://localhost:` followed by `HANGAR_PORT`; set it when people reach Hangar at another address.
 
 ```sh
-HANGAR_IMAGE=ghcr.io/jamesagarside/hangar:1.0.0 HANGAR_PORT=9090 \
+HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.0.0 HANGAR_PORT=9090 \
   docker compose -f quickstart.yaml up -d
 ```

@@ -8,7 +8,7 @@ package httpxtest
 import (
 	"net/http"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // Protocol returns a handler that answers 501 for the named protocol.

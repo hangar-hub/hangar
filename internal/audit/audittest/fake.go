@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/audit"
+	"github.com/hangar-hub/hangar/internal/audit"
 )
 
 // Fake records events in memory, newest last.

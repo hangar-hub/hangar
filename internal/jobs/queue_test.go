@@ -12,9 +12,9 @@ import (
 	"github.com/uptrace/bun"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/jobs"
 )
 
 // clock is a settable clock for leases, backoff and schedules.

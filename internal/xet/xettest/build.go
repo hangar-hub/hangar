@@ -7,7 +7,7 @@ import (
 
 	"github.com/pierrec/lz4/v4"
 
-	"github.com/jamesagarside/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet"
 )
 
 // SHA256Hash returns data's SHA-256 in the form a shard's metadata

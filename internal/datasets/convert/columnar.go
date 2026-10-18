@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jamesagarside/hangar/internal/datasets/arrowipc"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/pq"
+	"github.com/hangar-hub/hangar/internal/datasets/arrowipc"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/pq"
 )
 
 type parquetBuilder struct{}

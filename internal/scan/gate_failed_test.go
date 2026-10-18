@@ -11,18 +11,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/hfapi"
-	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
-	"github.com/jamesagarside/hangar/internal/index"
-	"github.com/jamesagarside/hangar/internal/index/indextest"
-	"github.com/jamesagarside/hangar/internal/jobs"
-	"github.com/jamesagarside/hangar/internal/jobs/jobstest"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
-	"github.com/jamesagarside/hangar/internal/scan"
-	"github.com/jamesagarside/hangar/internal/scan/scantest"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/hfapi"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
+	"github.com/hangar-hub/hangar/internal/index"
+	"github.com/hangar-hub/hangar/internal/index/indextest"
+	"github.com/hangar-hub/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/jobs/jobstest"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/scan"
+	"github.com/hangar-hub/hangar/internal/scan/scantest"
 )
 
 // brokenFileRepos fails every read of one file while broken is set, as a

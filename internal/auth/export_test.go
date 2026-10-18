@@ -3,8 +3,8 @@ package auth
 import (
 	"context"
 
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/db"
 )
 
 // SignInWithClaims runs the OIDC sign-in decision for raw ID token claims,

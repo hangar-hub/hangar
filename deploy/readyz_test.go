@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // healthcheckWait matches readyzWait in cmd/hangar/healthcheck.go: how long

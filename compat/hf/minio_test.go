@@ -22,11 +22,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/compat/harness"
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
-	"github.com/jamesagarside/hangar/internal/blob/s3"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/compat/harness"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/blob/s3"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // minioInstance is the hangar binary on a MinIO Blob store, in its default

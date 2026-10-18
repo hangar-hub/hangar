@@ -7,7 +7,7 @@ The native API serves Hangar's web UI, the `hangar` CLI and automation, at `/api
 - Lists use cursor pagination: `?cursor=&limit=` (default 50, maximum 500), answered with `{"items": [...], "next_cursor": "..."}`.
 - Authenticate with `Authorization: Bearer hgr_...`, or the browser session cookie plus the `X-CSRF-Token` header.
 
-The OpenAPI description is [`openapi.yaml`](openapi.yaml), also in the repository at [`api/openapi.yaml`](https://github.com/jamesagarside/hangar/blob/main/api/openapi.yaml).
+The OpenAPI description is [`openapi.yaml`](openapi.yaml), also in the repository at [`api/openapi.yaml`](https://github.com/hangar-hub/hangar/blob/main/api/openapi.yaml).
 
 <div id="redoc-container"></div>
 <script src="https://cdn.jsdelivr.net/npm/redoc@2.5.4/bundles/redoc.standalone.js"></script>

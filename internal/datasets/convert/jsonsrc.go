@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // jsonChunkBytes is the JsonConfig chunksize (10 MB).

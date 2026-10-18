@@ -2,6 +2,8 @@
 
 The release dry run that Phase 4 of [`15-build-plan.md`](../spec/15-build-plan.md) asks for before James decides to release, run on 2026-10-18 from `main` at `9815b88` on branch `release/dry-run`. The release is on hold ([decisions](decisions.md), "Release on hold"), so nothing left the machine: no repository, push, tag, image, chart, Pages site or release-please run. Signing used a throwaway key with no transparency log.
 
+**Note, 2026-10-18: the GitHub owner is now `hangar-hub`.** After this run, James moved the project's GitHub home to the `hangar-hub` organisation ([decisions](decisions.md), "GitHub organisation `hangar-hub`"). This record keeps the `jamesagarside` addresses the run saw, such as `github.com/jamesagarside/hangar` in the SBOMs and `ghcr.io/jamesagarside/hangar` in the checklist; the code, docs and workflows now use `github.com/hangar-hub/hangar`, `ghcr.io/hangar-hub/hangar` and `oci://ghcr.io/hangar-hub/charts/hangar`. [What James needs to do](#what-james-needs-to-do) is updated for the organisation.
+
 ## Result
 
 Every packaging step that can run locally passed, after five fixes on this branch. The AWS S3 run was cut short by a slow home connection; see [AWS S3](#aws-s3). The v1.0.0 checklist in [`12-packaging-and-release.md`](../spec/12-packaging-and-release.md) has four items that pass and three that need James, because they need the public repository, CI runs on GitHub or a decision only he can make. No item fails.
@@ -139,9 +141,9 @@ Nothing here points at Hangar: every failure was an upload that could not finish
 
 Before the release:
 
-1. Create the public repository `github.com/jamesagarside/hangar` and push `main`.
+1. Create the public repository `github.com/hangar-hub/hangar` in the `hangar-hub` organisation and push `main`.
 2. Enable GitHub Pages from the `gh-pages` branch (the first `docs.yml` or release run creates it), private vulnerability reporting and the CLA Assistant app.
-3. Create `github.com/jamesagarside/homebrew-tap` and add a `HOMEBREW_TAP_TOKEN` secret that can push to it. Without it GoReleaser fails to publish the cask and the `binaries` job fails.
+3. Create `github.com/hangar-hub/homebrew-tap` and add a `HOMEBREW_TAP_TOKEN` secret that can push to it. Without it GoReleaser fails to publish the cask and the `binaries` job fails.
 4. Decide whether item 4 stands as it is, or whether 100,000 Repos per Instance must be measured first.
 5. Decide whether to pin the actions in `release.yml` to commit SHAs.
 6. Rerun the AWS S3 suite from a faster connection, or approve an agent doing so (see [AWS S3](#aws-s3)).
@@ -151,6 +153,6 @@ Before the release:
 After the release:
 
 1. Watch the first CI, compat and fuzz runs on GitHub, on both architectures (item 2).
-2. Make the GHCR packages `hangar` and `charts/hangar` public if they are not, and check that an anonymous `docker pull ghcr.io/jamesagarside/hangar:1.0.0` and `helm pull oci://ghcr.io/jamesagarside/charts/hangar --version 1.0.0` work.
+2. Make the GHCR packages `hangar` and `charts/hangar` public if they are not, and check that an anonymous `docker pull ghcr.io/hangar-hub/hangar:1.0.0` and `helm pull oci://ghcr.io/hangar-hub/charts/hangar --version 1.0.0` work.
 3. Run the keyless verification commands in [Security hardening](../operate/security.md#verify-the-image) against the published image and `checksums.txt`.
 4. Follow the quickstart, a Compose example and the Helm page from a clean machine (item 3).

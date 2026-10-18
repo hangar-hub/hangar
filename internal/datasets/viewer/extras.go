@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jamesagarside/hangar/internal/auth"
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/croissant"
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
-	"github.com/jamesagarside/hangar/internal/datasets/meta"
-	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/croissant"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/datasets/meta"
+	"github.com/hangar-hub/hangar/internal/datasets/pipeline"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // optInOut answers /opt-in-out-urls with the Hub's empty result: Hangar

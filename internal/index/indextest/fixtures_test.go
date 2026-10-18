@@ -8,13 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/index/gguf"
-	"github.com/jamesagarside/hangar/internal/index/indextest"
-	"github.com/jamesagarside/hangar/internal/index/safetensors"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/index/gguf"
+	"github.com/hangar-hub/hangar/internal/index/indextest"
+	"github.com/hangar-hub/hangar/internal/index/safetensors"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
 )
 
 func TestFixtureHelpers(t *testing.T) {

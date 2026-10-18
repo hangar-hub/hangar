@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/upstream"
 )
 
 // HTTPTarget is a Target over a Hangar Instance's native API, with a

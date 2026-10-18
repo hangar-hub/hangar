@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/upstream"
-	"github.com/jamesagarside/hangar/internal/upstream/upstreamtest"
+	"github.com/hangar-hub/hangar/internal/upstream"
+	"github.com/hangar-hub/hangar/internal/upstream/upstreamtest"
 )
 
 func TestQuotaFake(t *testing.T) {

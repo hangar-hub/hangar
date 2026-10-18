@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/index/gguf"
-	"github.com/jamesagarside/hangar/internal/index/rangeio"
+	"github.com/hangar-hub/hangar/internal/index/gguf"
+	"github.com/hangar-hub/hangar/internal/index/rangeio"
 )
 
 func sample(t testing.TB, extra ...gguf.KV) []byte {

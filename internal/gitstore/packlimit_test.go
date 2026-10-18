@@ -12,8 +12,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/gitstore"
-	"github.com/jamesagarside/hangar/internal/gitstore/gitstoretest"
+	"github.com/hangar-hub/hangar/internal/gitstore"
+	"github.com/hangar-hub/hangar/internal/gitstore/gitstoretest"
 )
 
 // realPack builds a pack with git of a repository with a few Commits, so

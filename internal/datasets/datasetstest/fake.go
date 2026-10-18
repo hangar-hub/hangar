@@ -16,8 +16,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // Layout is a fake datasets.Layout returning layouts set with Set.

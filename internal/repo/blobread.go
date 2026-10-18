@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // Defaults for resumingReader: how many reads in a row may fail before it

@@ -14,7 +14,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/format/pktline"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp/sideband"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // MaxUpstreamRefs is the most refs Hangar reads from an Upstream's ref

@@ -34,7 +34,7 @@ Made by James on 2026-10-13:
 - Full `git clone` and `git push` in v1.0.
 - Local login and OIDC; multiple users; versioning.
 - OpenTelemetry for all telemetry; container-first.
-- Elastic License 2.0, published at `github.com/jamesagarside/hangar`.
+- Elastic License 2.0, published at `github.com/hangar-hub/hangar`.
 - As many features as possible in v1.0, so the project needs little maintenance after release.
 - First-class datasets: Viewer, Parquet export, partial Pulls by Config and Split.
 - Accept Xet uploads (reassembled into whole files) so `huggingface_hub` uploads work with no client setup; downloads stay plain HTTP.

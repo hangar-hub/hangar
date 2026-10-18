@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/hfapi"
-	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/hfapi"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 func TestCreateRepo(t *testing.T) {

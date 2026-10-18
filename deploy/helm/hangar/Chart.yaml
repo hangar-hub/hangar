@@ -8,7 +8,7 @@ appVersion: "0.0.0"
 kubeVersion: ">=1.29.0-0"
 home: https://hangar.page/
 sources:
-  - https://github.com/jamesagarside/hangar
+  - https://github.com/hangar-hub/hangar
 icon: https://hangar.page/latest/assets/icon.svg
 keywords: [huggingface, models, datasets, ml, ollama, git-lfs]
 maintainers:

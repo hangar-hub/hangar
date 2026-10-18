@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/backends"
-	"github.com/jamesagarside/hangar/internal/cli"
-	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/backends"
+	"github.com/hangar-hub/hangar/internal/cli"
+	"github.com/hangar-hub/hangar/internal/config"
 )
 
 // Set at build time with -ldflags "-X main.version=... -X main.commit=... -X main.date=...".

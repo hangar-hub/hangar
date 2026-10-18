@@ -21,7 +21,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
 )
 
 // ErrUnsupported means a source format or option Hangar cannot convert.

@@ -27,8 +27,8 @@ concurrency:
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
-  IMAGE: ghcr.io/jamesagarside/hangar
-  CHARTS: oci://ghcr.io/jamesagarside/charts
+  IMAGE: ghcr.io/hangar-hub/hangar
+  CHARTS: oci://ghcr.io/hangar-hub/charts
 
 jobs:
   binaries:
@@ -206,7 +206,7 @@ jobs:
             echo "helm push printed no digest" >&2
             exit 1
           fi
-          cosign sign --yes "ghcr.io/jamesagarside/charts/hangar@$digest"
+          cosign sign --yes "ghcr.io/hangar-hub/charts/hangar@$digest"
 
   docs:
     name: Documentation

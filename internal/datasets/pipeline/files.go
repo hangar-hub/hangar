@@ -4,10 +4,10 @@ import (
 	"context"
 	"io"
 
-	"github.com/jamesagarside/hangar/internal/datasets/convert"
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/datasets/convert"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // OpenRepoFile returns random access to a file at a Commit; see

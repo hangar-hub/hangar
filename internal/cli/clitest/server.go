@@ -20,9 +20,9 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/model"
-	hangarrepo "github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/model"
+	hangarrepo "github.com/hangar-hub/hangar/internal/repo"
 )
 
 // server implements the native API operations the CLI uses. The rest

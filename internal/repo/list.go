@@ -13,9 +13,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 
-	"github.com/jamesagarside/hangar/internal/gitstore"
-	"github.com/jamesagarside/hangar/internal/index"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/gitstore"
+	"github.com/hangar-hub/hangar/internal/index"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // Facet names in ListResult.Facets.

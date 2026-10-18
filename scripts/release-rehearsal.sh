@@ -63,12 +63,12 @@ verify_flags=(--key "$work/cosign.pub" --insecure-ignore-tlog=true)
 # check_sbom fails unless the SPDX document lists the hangar Go module.
 check_sbom() {
   local doc="$1" what="$2"
-  if ! jq -e '.spdxVersion and ([.packages[]? | select(.name == "github.com/jamesagarside/hangar")] | length > 0)' \
+  if ! jq -e '.spdxVersion and ([.packages[]? | select(.name == "github.com/hangar-hub/hangar")] | length > 0)' \
     "$doc" >/dev/null; then
-    echo "error: the SBOM of $what is not SPDX or does not list github.com/jamesagarside/hangar" >&2
+    echo "error: the SBOM of $what is not SPDX or does not list github.com/hangar-hub/hangar" >&2
     exit 1
   fi
-  echo "ok: SPDX SBOM of $what lists $(jq '.packages | length' "$doc") packages, github.com/jamesagarside/hangar among them"
+  echo "ok: SPDX SBOM of $what lists $(jq '.packages | length' "$doc") packages, github.com/hangar-hub/hangar among them"
 }
 
 rehearse_binaries() {

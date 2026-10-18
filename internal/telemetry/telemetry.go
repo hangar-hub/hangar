@@ -38,11 +38,11 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jamesagarside/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/config"
 )
 
 // ScopeName is the instrumentation scope of Hangar's own telemetry.
-const ScopeName = "github.com/jamesagarside/hangar"
+const ScopeName = "github.com/hangar-hub/hangar"
 
 // ShutdownTimeout bounds how long Shutdown waits for exporters to flush.
 const ShutdownTimeout = 10 * time.Second

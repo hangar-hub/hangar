@@ -72,7 +72,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env, for example with openssl rand -hex 24}
 
   hangar:
-    image: ${HANGAR_IMAGE:-ghcr.io/jamesagarside/hangar:latest}
+    image: ${HANGAR_IMAGE:-ghcr.io/hangar-hub/hangar:latest}
     restart: unless-stopped
     depends_on:
       postgres: {condition: service_healthy}

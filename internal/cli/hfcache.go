@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // hfCache is a Hugging Face cache directory in the layout huggingface_hub

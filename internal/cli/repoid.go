@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // repoRef is a Repo ID as typed on the command line, with an optional quant.

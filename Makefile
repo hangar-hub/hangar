@@ -12,7 +12,7 @@ COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 BIN       := bin/hangar
-IMAGE     ?= ghcr.io/jamesagarside/hangar:dev
+IMAGE     ?= ghcr.io/hangar-hub/hangar:dev
 GOTESTFLAGS ?= -race -count=1
 # On a busy host one package can pass but take longer than go test's
 # 10-minute default. The compat suites run real git, git-lfs and Python

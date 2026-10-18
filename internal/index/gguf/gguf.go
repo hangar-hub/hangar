@@ -16,7 +16,7 @@ import (
 
 	parser "github.com/gpustack/gguf-parser-go"
 
-	"github.com/jamesagarside/hangar/internal/index/rangeio"
+	"github.com/hangar-hub/hangar/internal/index/rangeio"
 )
 
 // ErrInvalid means the file is not a valid GGUF file.

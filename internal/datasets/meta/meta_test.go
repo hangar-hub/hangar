@@ -5,10 +5,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/card"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/meta"
-	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
+	"github.com/hangar-hub/hangar/internal/datasets/card"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/meta"
+	"github.com/hangar-hub/hangar/internal/datasets/pipeline"
 )
 
 func parse(t *testing.T, js string) features.Features {

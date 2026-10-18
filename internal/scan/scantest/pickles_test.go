@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/scan/pickle"
-	"github.com/jamesagarside/hangar/internal/scan/scantest"
+	"github.com/hangar-hub/hangar/internal/scan/pickle"
+	"github.com/hangar-hub/hangar/internal/scan/scantest"
 )
 
 func TestFixturesParseAsPickles(t *testing.T) {

@@ -21,7 +21,7 @@ To try the web UI without installing anything, open the [demo](https://demo.hang
 ```sh
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
-  ghcr.io/jamesagarside/hangar:latest
+  ghcr.io/hangar-hub/hangar:latest
 docker logs hangar   # prints the generated admin password and Instance key once
 ```
 

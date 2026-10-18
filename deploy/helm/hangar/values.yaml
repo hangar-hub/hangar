@@ -5,7 +5,7 @@
 # Scaling).
 
 image:
-  repository: ghcr.io/jamesagarside/hangar
+  repository: ghcr.io/hangar-hub/hangar
   # Defaults to the chart's appVersion.
   tag: ""
   # Set to pin the image by digest, such as sha256:...

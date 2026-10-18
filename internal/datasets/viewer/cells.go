@@ -12,9 +12,9 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/media"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/media"
 )
 
 // pyFloat is a float that marshals as orjson writes floats

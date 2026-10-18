@@ -47,4 +47,4 @@ formatters:
   enable: [gofmt, goimports]
   settings:
     goimports:
-      local-prefixes: [github.com/jamesagarside/hangar]
+      local-prefixes: [github.com/hangar-hub/hangar]

@@ -11,16 +11,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
-	"github.com/jamesagarside/hangar/internal/index"
-	"github.com/jamesagarside/hangar/internal/index/gguf"
-	"github.com/jamesagarside/hangar/internal/index/indexdb"
-	"github.com/jamesagarside/hangar/internal/index/indextest"
-	"github.com/jamesagarside/hangar/internal/index/safetensors"
-	"github.com/jamesagarside/hangar/internal/model"
-	"github.com/jamesagarside/hangar/internal/repo"
-	"github.com/jamesagarside/hangar/internal/repo/repotest"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/index"
+	"github.com/hangar-hub/hangar/internal/index/gguf"
+	"github.com/hangar-hub/hangar/internal/index/indexdb"
+	"github.com/hangar-hub/hangar/internal/index/indextest"
+	"github.com/hangar-hub/hangar/internal/index/safetensors"
+	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/golden")

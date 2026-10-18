@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // ErrBlockedAddress means the Upstream client refused to connect to an

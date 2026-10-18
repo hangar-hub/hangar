@@ -18,7 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
 )
 
 // EnvServeInfo names the file TestServeHub writes the endpoint and Tokens

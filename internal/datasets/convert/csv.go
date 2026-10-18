@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // csvChunkRows is the pandas chunksize the `datasets` CSV builder uses.

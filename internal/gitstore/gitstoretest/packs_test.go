@@ -12,7 +12,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/gitstore/gitstoretest"
+	"github.com/hangar-hub/hangar/internal/gitstore/gitstoretest"
 )
 
 // scanned is one object as go-git's pack scanner reads it back.

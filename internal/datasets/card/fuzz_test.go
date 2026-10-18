@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/datasets/card"
+	"github.com/hangar-hub/hangar/internal/datasets/card"
 )
 
 // FuzzParse parses dataset cards: any card either fails with ErrInvalid

@@ -13,9 +13,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/pq"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/pq"
 )
 
 // Limits from the Hub's converter (services/worker parquet_and_info.py).

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/card"
+	"github.com/hangar-hub/hangar/internal/datasets/card"
 )
 
 func files(paths ...string) []File {

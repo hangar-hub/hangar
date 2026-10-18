@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
 )
 
 // mediaBatch is the writer batch size the Hub uses for image and audio

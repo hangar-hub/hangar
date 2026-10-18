@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/xet"
-	"github.com/jamesagarside/hangar/internal/xet/xettest"
+	"github.com/hangar-hub/hangar/internal/xet"
+	"github.com/hangar-hub/hangar/internal/xet/xettest"
 )
 
 // FuzzParseXorb checks the xorb parser never panics, never accepts more

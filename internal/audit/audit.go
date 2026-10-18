@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // Action names an audited action. The list covers docs/spec/05-auth.md

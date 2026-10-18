@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/pq"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/pq"
 )
 
 // emitFunc receives a batch of rows, one storage value per feature. A

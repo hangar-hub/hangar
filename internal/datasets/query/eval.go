@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // ErrType means a clause compares a column with a value of another type,

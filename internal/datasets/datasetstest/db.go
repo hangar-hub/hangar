@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // InsertRepoRow records a Repo of a repotest.Fake in the database, with a

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/media"
+	"github.com/hangar-hub/hangar/internal/datasets/media"
 )
 
 // The fixtures were written by soundfile (libsndfile) and Pillow; the

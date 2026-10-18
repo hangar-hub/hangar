@@ -5,7 +5,7 @@ One container, with SQLite and the filesystem Blob store in a volume.
 ```sh
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
-  ghcr.io/jamesagarside/hangar:latest
+  ghcr.io/hangar-hub/hangar:latest
 ```
 
 `HANGAR_SERVER_PUBLIC_URL` is the URL clients use to reach Hangar. It appears in git URLs, LFS links and redirects, so set it to the address your users type, such as `https://hangar.example.com` behind a reverse proxy.
@@ -28,14 +28,14 @@ Keep the Instance key: it encrypts stored secrets such as upstream tokens and we
 
 ## The image
 
-- `ghcr.io/jamesagarside/hangar:<version>` and `:latest`, for `linux/amd64` and `linux/arm64`, signed with cosign (see [Security hardening](../operate/security.md#verify-the-image)).
+- `ghcr.io/hangar-hub/hangar:<version>` and `:latest`, for `linux/amd64` and `linux/arm64`, signed with cosign (see [Security hardening](../operate/security.md#verify-the-image)).
 - It runs as UID 65532 with no shell, and works with a read-only root filesystem when `/tmp` and `/var/cache/hangar` are writable:
 
   ```sh
   docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
     --read-only --tmpfs /tmp --tmpfs /var/cache/hangar:uid=65532,gid=65532 \
     -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
-    ghcr.io/jamesagarside/hangar:latest
+    ghcr.io/hangar-hub/hangar:latest
   ```
 
 - Data lives in `/var/lib/hangar`, the git pack cache in `/var/cache/hangar`.
@@ -48,7 +48,7 @@ Every configuration key is also an environment variable: `storage.s3.bucket` is 
 ```sh
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -v "$PWD/hangar.yaml:/etc/hangar/hangar.yaml:ro" \
-  ghcr.io/jamesagarside/hangar:latest
+  ghcr.io/hangar-hub/hangar:latest
 ```
 
 Every key is listed in the [configuration reference](../reference/configuration.md).

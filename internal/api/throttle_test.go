@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/db/dbtest"
+	"github.com/hangar-hub/hangar/internal/db/dbtest"
 )
 
 // TestLoginThrottleMessage checks that the sign-in throttle answers 429

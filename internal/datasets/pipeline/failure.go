@@ -3,7 +3,7 @@ package pipeline
 import (
 	"errors"
 
-	"github.com/jamesagarside/hangar/internal/datasets/layout"
+	"github.com/hangar-hub/hangar/internal/datasets/layout"
 )
 
 // Failure codes are what SplitRow.Error and StatsDoc.Error hold: the Hub's

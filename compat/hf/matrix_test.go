@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/compat/harness"
+	"github.com/hangar-hub/hangar/compat/harness"
 )
 
 // goMatrixDir holds the outcomes of the Go tests in this package that

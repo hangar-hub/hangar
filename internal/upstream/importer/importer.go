@@ -21,7 +21,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // File is a local file to upload.

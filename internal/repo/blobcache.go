@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jamesagarside/hangar/internal/gitstore"
+	"github.com/hangar-hub/hangar/internal/gitstore"
 )
 
 // maxCachedBlob is the largest git blob kept in the blob cache: model

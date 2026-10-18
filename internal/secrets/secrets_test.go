@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/secrets"
+	"github.com/hangar-hub/hangar/internal/secrets"
 )
 
 func TestSealOpen(t *testing.T) {

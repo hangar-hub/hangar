@@ -19,8 +19,8 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 // releaseName is the release name the README and docs/get-started/helm.md

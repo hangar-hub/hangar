@@ -14,9 +14,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
-	blobfs "github.com/jamesagarside/hangar/internal/blob/fs"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
+	blobfs "github.com/hangar-hub/hangar/internal/blob/fs"
 )
 
 func newStore(t *testing.T) *blobfs.Store {

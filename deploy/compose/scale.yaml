@@ -26,7 +26,7 @@ name: hangar-scale
 x-minio-image: &minio-image pgsty/minio:RELEASE.2026-08-04T00-00-00Z
 
 x-hangar: &hangar
-  image: ${HANGAR_IMAGE:-ghcr.io/jamesagarside/hangar:latest}
+  image: ${HANGAR_IMAGE:-ghcr.io/hangar-hub/hangar:latest}
   restart: unless-stopped
   read_only: true
   tmpfs:

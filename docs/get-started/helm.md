@@ -1,13 +1,13 @@
 # Run Hangar on Kubernetes with Helm
 
-The chart is published as an OCI artefact at `oci://ghcr.io/jamesagarside/charts/hangar`.
+The chart is published as an OCI artefact at `oci://ghcr.io/hangar-hub/charts/hangar`.
 
 ## One Pod with SQLite
 
 The default runs one Pod in role `all`, with SQLite and the filesystem Blob store on a PersistentVolumeClaim:
 
 ```sh
-helm install hangar oci://ghcr.io/jamesagarside/charts/hangar \
+helm install hangar oci://ghcr.io/hangar-hub/charts/hangar \
   --namespace hangar --create-namespace \
   --set publicURL=https://hangar.example.com \
   --set ingress.enabled=true --set ingress.className=nginx \
@@ -56,10 +56,10 @@ kubectl create secret generic hangar-secrets --namespace hangar \
   --from-literal=HANGAR_DATABASE_DSN='postgres://hangar:...@postgres:5432/hangar' \
   --from-literal=HANGAR_SECURITY_INSTANCE_KEY="$(openssl rand -base64 32)" \
   --from-literal=HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD="$(openssl rand -base64 18)"
-helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml
+helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --namespace hangar -f values.yaml
 ```
 
-A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `worker` Pods report ready only when the schema is at the version they expect. With `migrations.mode: initContainer`, each `web` and `worker` Pod runs the migration in an init container instead, with no Helm hooks; see [Run with Argo CD](#run-with-argo-cd). A fuller example is [`deploy/helm/examples/scale-values.yaml`](https://github.com/jamesagarside/hangar/blob/main/deploy/helm/examples/scale-values.yaml).
+A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `worker` Pods report ready only when the schema is at the version they expect. With `migrations.mode: initContainer`, each `web` and `worker` Pod runs the migration in an init container instead, with no Helm hooks; see [Run with Argo CD](#run-with-argo-cd). A fuller example is [`deploy/helm/examples/scale-values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/examples/scale-values.yaml).
 
 ## Run with Argo CD
 
@@ -83,7 +83,7 @@ kubectl create secret generic hangar-secrets --namespace hangar \
 
 Back up `HANGAR_SECURITY_INSTANCE_KEY`: without it, stored upstream tokens and webhook secrets cannot be decrypted.
 
-Then point an Application at the chart with values like [`deploy/helm/examples/gitops-values.yaml`](https://github.com/jamesagarside/hangar/blob/main/deploy/helm/examples/gitops-values.yaml):
+Then point an Application at the chart with values like [`deploy/helm/examples/gitops-values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/examples/gitops-values.yaml):
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -97,7 +97,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: hangar
   source:
-    repoURL: ghcr.io/jamesagarside/charts
+    repoURL: ghcr.io/hangar-hub/charts
     chart: hangar
     targetRevision: 1.0.0   # the chart version to deploy
     helm:
@@ -120,12 +120,12 @@ spec:
     automated: {prune: true, selfHeal: true}
 ```
 
-Argo CD pulls OCI charts from a Helm repository with `enableOCI: true`; add `ghcr.io/jamesagarside/charts` as one, as the [Argo CD Helm guide](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/) describes. Set `releaseName: hangar` so resource names match the rest of this guide. Argo CD skips the chart's `helm test` Pod, and the PersistentVolumeClaim and generated Secret keep `helm.sh/resource-policy: keep`, which Argo CD treats as `Delete=false`.
+Argo CD pulls OCI charts from a Helm repository with `enableOCI: true`; add `ghcr.io/hangar-hub/charts` as one, as the [Argo CD Helm guide](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/) describes. Set `releaseName: hangar` so resource names match the rest of this guide. Argo CD skips the chart's `helm test` Pod, and the PersistentVolumeClaim and generated Secret keep `helm.sh/resource-policy: keep`, which Argo CD treats as `Delete=false`.
 
 To check a render before you commit it, render the chart as Argo CD does. `--skip-tests` leaves out the test Pod, as Argo CD does:
 
 ```sh
-helm template hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar -f values.yaml --skip-tests
+helm template hangar oci://ghcr.io/hangar-hub/charts/hangar --namespace hangar -f values.yaml --skip-tests
 ```
 
 To rotate a credential in the Secret, create a Secret with a new name and change `existingSecret`: the Pods' `checksum/secret` annotation covers the name, so the Pods restart and read it. Under `helm upgrade`, the chart also reads the Secret's data, so changing it in place restarts the Pods on the next upgrade.
@@ -154,4 +154,4 @@ With persistence on (SQLite in one Pod), you can instead set `generateSecrets: f
 
 Every Pod runs as non-root with a read-only root filesystem, no privilege escalation, every capability dropped and the `RuntimeDefault` seccomp profile. `helm test` checks `/readyz` from inside the cluster.
 
-The full list is in the chart's [`values.yaml`](https://github.com/jamesagarside/hangar/blob/main/deploy/helm/hangar/values.yaml).
+The full list is in the chart's [`values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/hangar/values.yaml).

@@ -10,7 +10,7 @@ import (
 	"hash"
 	"io"
 
-	"github.com/jamesagarside/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob"
 )
 
 // fileReader streams a file's bytes out of stored xorbs, term by term,

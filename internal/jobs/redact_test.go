@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/jobs"
 )
 
 func TestRedactURLs(t *testing.T) {

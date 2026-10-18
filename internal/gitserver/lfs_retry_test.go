@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/gitserver/gitservertest"
-	"github.com/jamesagarside/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/gitserver/gitservertest"
+	"github.com/hangar-hub/hangar/internal/repo"
 )
 
 // failingCompletion fails the first completion the way a Blob store read

@@ -54,20 +54,20 @@ Either way, a user who has reviewed a file can download it through the Hub API o
 Images are signed with cosign keyless signing from the release workflow, with an SPDX SBOM attestation and SLSA build provenance. The signing identity is the release workflow at `refs/heads/main` when release-please starts the release, or at the tag when someone pushes one:
 
 ```sh
-cosign verify ghcr.io/jamesagarside/hangar:1.0.0 \
-  --certificate-identity-regexp '^https://github.com/jamesagarside/hangar/.github/workflows/release.yml@refs/(heads/main|tags/v.+)$' \
+cosign verify ghcr.io/hangar-hub/hangar:1.0.0 \
+  --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/(heads/main|tags/v.+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-cosign verify-attestation --type spdxjson ghcr.io/jamesagarside/hangar:1.0.0 \
-  --certificate-identity-regexp '^https://github.com/jamesagarside/hangar/.github/workflows/release.yml@refs/(heads/main|tags/v.+)$' \
+cosign verify-attestation --type spdxjson ghcr.io/hangar-hub/hangar:1.0.0 \
+  --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/(heads/main|tags/v.+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify oci://ghcr.io/jamesagarside/hangar:1.0.0 --owner jamesagarside
+gh attestation verify oci://ghcr.io/hangar-hub/hangar:1.0.0 --owner hangar-hub
 ```
 
 Release archives come with `checksums.txt`, signed the same way into a Sigstore bundle (`checksums.txt.sigstore.json`), and an SPDX SBOM per archive (`<archive>.spdx.json`). Check the signature, then the archive you downloaded against `checksums.txt`:
 
 ```sh
 cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/jamesagarside/hangar/.github/workflows/release.yml@refs/(heads/main|tags/v.+)$' \
+  --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/(heads/main|tags/v.+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 sha256sum --ignore-missing -c checksums.txt
 ```

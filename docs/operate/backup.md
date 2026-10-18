@@ -48,14 +48,14 @@ The image runs Hangar as UID 65532 and has a `/backups` folder that belongs to t
 ```sh
 docker stop hangar
 docker run --rm -v hangar:/var/lib/hangar -v hangar-backups:/backups \
-  ghcr.io/jamesagarside/hangar:latest admin backup --output /backups/$(date +%F)
+  ghcr.io/hangar-hub/hangar:latest admin backup --output /backups/$(date +%F)
 docker start hangar
 ```
 
 To copy a backup out of the volume, create a container that mounts it and use `docker cp`:
 
 ```sh
-docker create --name hangar-backup-copy -v hangar-backups:/backups ghcr.io/jamesagarside/hangar:latest
+docker create --name hangar-backup-copy -v hangar-backups:/backups ghcr.io/hangar-hub/hangar:latest
 docker cp hangar-backup-copy:/backups/2026-10-14 ./hangar-backup-2026-10-14
 docker rm hangar-backup-copy
 ```
@@ -65,7 +65,7 @@ To restore, mount the same volume. Restoring into the Instance's own volume keep
 ```sh
 docker stop hangar
 docker run --rm -v hangar:/var/lib/hangar -v hangar-backups:/backups:ro \
-  ghcr.io/jamesagarside/hangar:latest admin restore /backups/2026-10-14 --force
+  ghcr.io/hangar-hub/hangar:latest admin restore /backups/2026-10-14 --force
 docker start hangar
 ```
 
@@ -74,7 +74,7 @@ To write the backup to a folder on a Linux host instead, give the folder to UID 
 ```sh
 sudo install -d -o 65532 -g 65532 -m 0700 /srv/hangar-backups
 docker run --rm -v hangar:/var/lib/hangar -v /srv/hangar-backups:/backups \
-  ghcr.io/jamesagarside/hangar:latest admin backup --output /backups/$(date +%F)
+  ghcr.io/hangar-hub/hangar:latest admin backup --output /backups/$(date +%F)
 ```
 
 The backup files belong to UID 65532 with mode 0600, so read them on the host with `sudo`.

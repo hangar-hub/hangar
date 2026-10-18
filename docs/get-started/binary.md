@@ -4,11 +4,11 @@ One binary is both the server and the client. Install it with any of these:
 
 === "Release archive"
 
-    Download the archive for your system from the [releases page](https://github.com/jamesagarside/hangar/releases), check it, and put `hangar` on your `PATH`:
+    Download the archive for your system from the [releases page](https://github.com/hangar-hub/hangar/releases), check it, and put `hangar` on your `PATH`:
 
     ```sh
-    curl -LO https://github.com/jamesagarside/hangar/releases/latest/download/checksums.txt
-    curl -LO https://github.com/jamesagarside/hangar/releases/latest/download/hangar_<version>_linux_amd64.tar.gz
+    curl -LO https://github.com/hangar-hub/hangar/releases/latest/download/checksums.txt
+    curl -LO https://github.com/hangar-hub/hangar/releases/latest/download/hangar_<version>_linux_amd64.tar.gz
     sha256sum --ignore-missing -c checksums.txt
     tar xzf hangar_*_linux_amd64.tar.gz hangar && sudo mv hangar /usr/local/bin/
     ```
@@ -18,13 +18,13 @@ One binary is both the server and the client. Install it with any of these:
 === "Homebrew"
 
     ```sh
-    brew install --cask jamesagarside/tap/hangar
+    brew install --cask hangar-hub/tap/hangar
     ```
 
 === "go install"
 
     ```sh
-    go install github.com/jamesagarside/hangar/cmd/hangar@latest
+    go install github.com/hangar-hub/hangar/cmd/hangar@latest
     ```
 
     This builds without the web UI embedded, which is fine for the CLI. Use a release archive or the image to run a server with the UI.

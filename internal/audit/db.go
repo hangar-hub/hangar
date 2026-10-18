@@ -16,8 +16,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // ErrBadCursor means a List cursor was not made by List.
@@ -48,7 +48,7 @@ var (
 func NewDB(d *db.DB, lp otellog.LoggerProvider) *DBRecorder {
 	r := &DBRecorder{db: d, now: time.Now}
 	if lp != nil {
-		r.logger = lp.Logger("github.com/jamesagarside/hangar/internal/audit")
+		r.logger = lp.Logger("github.com/hangar-hub/hangar/internal/audit")
 	}
 	return r
 }

@@ -15,8 +15,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets"
-	"github.com/jamesagarside/hangar/internal/datasets/card"
+	"github.com/hangar-hub/hangar/internal/datasets"
+	"github.com/hangar-hub/hangar/internal/datasets/card"
 )
 
 // module is a `datasets` packaged builder and its default options.

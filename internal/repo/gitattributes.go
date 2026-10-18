@@ -3,7 +3,7 @@ package repo
 import (
 	_ "embed"
 
-	"github.com/jamesagarside/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/model"
 )
 
 // The Hub's default .gitattributes for new Repos, copied byte for byte from

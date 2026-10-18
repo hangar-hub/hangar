@@ -15,7 +15,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/httpx"
+	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
 //go:embed all:dist

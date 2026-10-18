@@ -8,9 +8,9 @@ import (
 
 	"github.com/uptrace/bun"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/db"
-	"github.com/jamesagarside/hangar/internal/jobs"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/jobs"
 )
 
 // OrphanGrace is how old a stored xorb with no xet_xorbs row must be before

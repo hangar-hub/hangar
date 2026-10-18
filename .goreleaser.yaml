@@ -60,7 +60,7 @@ signs:
   # transparency log entry into one Sigstore bundle; it ignores
   # --output-certificate and fails without --bundle. Verify a release with:
   #   cosign verify-blob --bundle checksums.txt.sigstore.json \
-  #     --certificate-identity-regexp '^https://github.com/jamesagarside/hangar/.github/workflows/release.yml@' \
+  #     --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@' \
   #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
   # scripts/release-rehearsal.sh runs this block with a throwaway key.
   - cmd: cosign
@@ -78,20 +78,20 @@ changelog:
 
 release:
   github:
-    owner: jamesagarside
+    owner: hangar-hub
     name: hangar
   # release-please creates the release; GoReleaser adds the files to it.
   mode: keep-existing
   footer: |
-    Container image: `ghcr.io/jamesagarside/hangar:{{ .Version }}` (linux/amd64 and linux/arm64, signed with cosign).
-    Helm chart: `oci://ghcr.io/jamesagarside/charts/hangar` version {{ .Version }}.
+    Container image: `ghcr.io/hangar-hub/hangar:{{ .Version }}` (linux/amd64 and linux/arm64, signed with cosign).
+    Helm chart: `oci://ghcr.io/hangar-hub/charts/hangar` version {{ .Version }}.
     Hangar is source-available under the Elastic License 2.0.
 
 homebrew_casks:
   - name: hangar
     ids: [hangar]
     repository:
-      owner: jamesagarside
+      owner: hangar-hub
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks

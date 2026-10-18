@@ -12,8 +12,8 @@ import (
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/jamesagarside/hangar/internal/config"
-	"github.com/jamesagarside/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/db"
 )
 
 // List limits, from docs/spec/10-native-api.md.

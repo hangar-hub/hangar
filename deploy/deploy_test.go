@@ -355,7 +355,7 @@ func TestHelmInstallCommandsSetPublicURL(t *testing.T) {
 		}
 		text := strings.ReplaceAll(string(b), "\\\n", " ")
 		for _, cmd := range helmCommand.FindAllString(text, -1) {
-			if !strings.Contains(cmd, "oci://ghcr.io/jamesagarside/charts/hangar") && !strings.Contains(cmd, "deploy/helm/hangar") {
+			if !strings.Contains(cmd, "oci://ghcr.io/hangar-hub/charts/hangar") && !strings.Contains(cmd, "deploy/helm/hangar") {
 				continue
 			}
 			found++
@@ -371,7 +371,7 @@ func TestHelmInstallCommandsSetPublicURL(t *testing.T) {
 
 // helmTemplateCommand matches a helm template command of Hangar's chart in
 // a shell block, with its continuation lines joined.
-var helmTemplateCommand = regexp.MustCompile(`(?m)^helm template [^\n]*(?:oci://ghcr\.io/jamesagarside/charts/hangar|deploy/helm/hangar)[^\n]*`)
+var helmTemplateCommand = regexp.MustCompile(`(?m)^helm template [^\n]*(?:oci://ghcr\.io/hangar-hub/charts/hangar|deploy/helm/hangar)[^\n]*`)
 
 // TestHelmTemplateCommandsSkipTests checks the helm template commands in the
 // GitOps docs and the GitOps example values. helm template renders the
@@ -422,11 +422,11 @@ func setsPublicURL(cmd string) bool {
 
 func TestSetsPublicURL(t *testing.T) {
 	for cmd, ok := range map[string]bool{
-		"helm install hangar oci://ghcr.io/jamesagarside/charts/hangar":                                         false,
-		"helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --namespace hangar":                      false,
-		"helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --set publicURL=https://h.example.com":   true,
-		"helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --set 'publicURL=https://h.example.com'": true,
-		"helm install hangar oci://ghcr.io/jamesagarside/charts/hangar -f values.yaml":                          true,
+		"helm install hangar oci://ghcr.io/hangar-hub/charts/hangar":                                         false,
+		"helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --namespace hangar":                      false,
+		"helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --set publicURL=https://h.example.com":   true,
+		"helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --set 'publicURL=https://h.example.com'": true,
+		"helm install hangar oci://ghcr.io/hangar-hub/charts/hangar -f values.yaml":                          true,
 	} {
 		if got := setsPublicURL(cmd); got != ok {
 			t.Errorf("setsPublicURL(%q) = %v, want %v", cmd, got, ok)

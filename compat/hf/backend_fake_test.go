@@ -5,7 +5,7 @@ package hf
 import (
 	"testing"
 
-	"github.com/jamesagarside/hangar/internal/hfapi/hfapitest"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
 )
 
 // repoBackend leaves the Repo service as hfapitest's real-git fake.

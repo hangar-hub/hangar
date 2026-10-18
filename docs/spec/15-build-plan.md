@@ -105,4 +105,4 @@ Three agents in parallel, each fixing what it finds (within the owning packages)
 
 On hold until James says go ([decisions](../build/decisions.md), "Release on hold"): before then, nothing is pushed, tagged or published, and work stops after the release dry run.
 
-James creates `github.com/jamesagarside/hangar` (public), pushes `main`, enables Pages, private vulnerability reporting and the CLA app, creates the Homebrew tap repo, and merges the release-please PR for `v1.0.0`.
+James creates `github.com/hangar-hub/hangar` (public), pushes `main`, enables Pages, private vulnerability reporting and the CLA app, creates the Homebrew tap repo, and merges the release-please PR for `v1.0.0`.

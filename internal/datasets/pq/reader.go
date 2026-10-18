@@ -16,8 +16,8 @@ import (
 	"github.com/parquet-go/parquet-go/encoding"
 	"github.com/parquet-go/parquet-go/format"
 
-	"github.com/jamesagarside/hangar/internal/datasets/arrowipc"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/arrowipc"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // ErrInvalid means a file is not valid Parquet or has a schema Hangar

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/index/card"
+	"github.com/hangar-hub/hangar/internal/index/card"
 )
 
 func TestSplitFindsFrontMatter(t *testing.T) {

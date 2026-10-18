@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/blobtest"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
 )
 
 func newEmptyBlobs() blob.Store { return blobtest.NewFake() }

@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
 
-	"github.com/jamesagarside/hangar/internal/blob"
-	"github.com/jamesagarside/hangar/internal/blob/s3"
+	"github.com/hangar-hub/hangar/internal/blob"
+	"github.com/hangar-hub/hangar/internal/blob/s3"
 )
 
 // Environment variables that turn on tests against S3.

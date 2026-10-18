@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/media"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/media"
 )
 
 // kind returns how a column is summarised, or "" when the Hub skips it.

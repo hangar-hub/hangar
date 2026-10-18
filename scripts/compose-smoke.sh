@@ -5,7 +5,7 @@
 # Usage: scripts/compose-smoke.sh <example> [smoke.sh options]
 #   scripts/compose-smoke.sh quickstart --skip pull
 #
-# HANGAR_IMAGE picks the image (default ghcr.io/jamesagarside/hangar:latest).
+# HANGAR_IMAGE picks the image (default ghcr.io/hangar-hub/hangar:latest).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 example="${1:?usage: scripts/compose-smoke.sh <example> [smoke.sh options]}"

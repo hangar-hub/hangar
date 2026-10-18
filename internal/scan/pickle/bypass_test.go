@@ -12,8 +12,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/scan/pickle"
-	"github.com/jamesagarside/hangar/internal/scan/scantest"
+	"github.com/hangar-hub/hangar/internal/scan/pickle"
+	"github.com/hangar-hub/hangar/internal/scan/scantest"
 )
 
 // The tests in this file are regressions for ways a pickle could run code

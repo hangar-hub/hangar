@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jamesagarside/hangar/internal/api/gen"
+	"github.com/hangar-hub/hangar/internal/api/gen"
 )
 
 // nativePrefix is where the native API lives on an Instance.

@@ -16,8 +16,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jamesagarside/hangar/internal/datasets/arrowipc"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/arrowipc"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
 )
 
 // expected is types.json, written by pyarrow 26 from the same table as

@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jamesagarside/hangar/internal/datasets/card"
-	"github.com/jamesagarside/hangar/internal/datasets/features"
-	"github.com/jamesagarside/hangar/internal/datasets/pipeline"
+	"github.com/hangar-hub/hangar/internal/datasets/card"
+	"github.com/hangar-hub/hangar/internal/datasets/features"
+	"github.com/hangar-hub/hangar/internal/datasets/pipeline"
 )
 
 // SplitSummary is a Split's size.
