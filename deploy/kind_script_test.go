@@ -43,7 +43,11 @@ func runKindScript(t *testing.T, tools string, image string) (string, error) {
 	cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"), "KIND_CLUSTER=hangar-script-test")
 	start := time.Now()
 	out, err := cmd.CombinedOutput()
-	if d := time.Since(start); d > 30*time.Second {
+	// With the fakes the script takes about a second on a quiet host, but
+	// 34 seconds during a full make test on a loaded one. The failure this
+	// guards against is a 5 to 6 minute wait for a rollout, so 2 minutes
+	// still tells the two apart.
+	if d := time.Since(start); d > 2*time.Minute {
 		t.Errorf("the script took %s", d)
 	}
 	return string(out), err
