@@ -1,0 +1,7 @@
+# Headers for the static assets Workers serves without running the Worker
+# (wrangler.jsonc, run_worker_first). The Worker sets the same ones, and the
+# page headers, on everything else. make demo copies this file into dist.
+/assets/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Robots-Tag: noindex

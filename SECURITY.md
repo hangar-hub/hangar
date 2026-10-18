@@ -8,7 +8,7 @@ Include what you found, how to reproduce it, the version or commit, and the impa
 
 ## Supported versions
 
-Security fixes go into the latest minor release. Upgrade to it to get them; see [Upgrades](https://jamesagarside.github.io/hangar/operate/upgrades/).
+Security fixes go into the latest minor release. Upgrade to it to get them; see [Upgrades](https://hangar.page/latest/operate/upgrades/).
 
 ## Scope
 
@@ -16,4 +16,4 @@ In scope: the `hangar` binary and container image, the Helm chart and the Compos
 
 ## Hardening
 
-See [Security hardening](https://jamesagarside.github.io/hangar/operate/security/), which also explains how to verify image signatures.
+See [Security hardening](https://hangar.page/latest/operate/security/), which also explains how to verify image signatures.

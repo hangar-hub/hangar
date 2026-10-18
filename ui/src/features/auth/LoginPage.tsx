@@ -26,9 +26,18 @@ export const oidcErrors: Record<string, string> = {
     "Signing in with the provider failed. Try again, and ask an admin to check the logs if it keeps happening.",
 };
 
-/** Only same-origin paths are followed after sign-in, never another site. */
+/**
+ * Only same-origin paths are followed after sign-in, never another site,
+ * with the rules of internal/auth.SafeRedirect: browsers read "/\\" as "//".
+ */
 export function safeRedirect(target: unknown): string {
-  return typeof target === "string" && target.startsWith("/") && !target.startsWith("//")
+  return typeof target === "string" &&
+    target.startsWith("/") &&
+    !target.startsWith("//") &&
+    !target.startsWith("/\\") &&
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it refuses.
+    !/[\u0000-\u001f\u007f]/.test(target) &&
+    target.length <= 2000
     ? target
     : "/";
 }

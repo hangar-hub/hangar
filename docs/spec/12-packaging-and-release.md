@@ -44,7 +44,13 @@ GoReleaser builds `hangar` for linux, darwin and windows on amd64 and arm64, wit
 
 ## Documentation site
 
-MkDocs Material in `docs/`, published to GitHub Pages at `https://jamesagarside.github.io/hangar/` on every release (and `dev` from `main`). House style throughout. Pages:
+MkDocs Material in `docs/`, served by Cloudflare Pages at `https://hangar.page/`, published on every release (and `dev` from `main`). mike publishes each version to its own directory on the `gh-pages` branch (`/dev/`, `/1.0/`, with `/latest/` as an alias), and mike's `index.html` at the root sends visitors to `latest`. A Pages project connected to the repository through Cloudflare's Git integration serves `gh-pages` as it is: production branch `gh-pages`, no build command, the branch root as the output directory, and no preview deployments. The Cloudflare GitHub app sees each push to `gh-pages` and deploys it, so GitHub holds no Cloudflare credentials and the workflows stay as they were for GitHub Pages. Canonical URLs and each version's sitemap use `https://hangar.page/<version>/`, built from `site_url` in `mkdocs.yml`; nothing hard-codes a path prefix. Links from outside the site (README, chart, image, Homebrew cask, `SECURITY.md`) point at `https://hangar.page/` or, for a page, `https://hangar.page/latest/<page>/`. Pages reads `_headers`, `_redirects` and a root `404.html` from the root of the branch, which mike leaves alone, so after each publish `scripts/docs-root-files.sh` copies them there from `deploy/cloudflare/docs-root/` and commits only when they changed:
+
+- `_headers` sends the Go server's security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`) and a Content Security Policy like its one, widened for what Material and the native API page need: inline scripts, Google Fonts, the GitHub API for the repository's stars and latest release, and Redoc from `cdn.jsdelivr.net`. The `.page` top-level domain is on the browsers' HSTS preload list, so no `Strict-Transport-Security` header is needed.
+- `_redirects` sends section paths without a version, such as `/get-started/`, to `/latest/`, and serves `/assets/` and `/search/` from `latest`. MkDocs builds each version's `404.html` with links from the site root, and Pages serves that page for a missing page under the version, so without these rules its styles and links break. `TestDocsRedirectsCoverEverySection` (`deploy/cloudflare_test.go`) checks that every top-level section of `docs/` has a rule.
+- `404.html` answers paths outside every version.
+
+House style throughout. Pages:
 
 - **Home**: what Hangar is, a 30-second demo (asciinema or GIF), quickstart.
 - **Get started**: Docker, Compose, Helm, binary; first login; pull your first model; point `HF_ENDPOINT` at Hangar.
@@ -53,6 +59,18 @@ MkDocs Material in `docs/`, published to GitHub Pages at `https://jamesagarside.
 - **Operate**: configuration reference (generated), storage backends (each S3 provider tested), databases, scaling, OIDC providers (one page each), TLS and reverse proxies (Traefik, nginx, Caddy, Cloudflare Tunnel), observability (Elastic, Grafana stack, generic OTLP), backup and restore, upgrades, security hardening, troubleshooting (`hangar admin doctor`).
 - **Reference**: Hub API compatibility matrix (every endpoint with supported, partial or not supported, generated from the compat suite results), native API (rendered from OpenAPI with Redoc), CLI reference (generated from cobra), webhook events, metrics.
 - **Project**: architecture overview (adapted from this spec), contributing, security policy, changelog, licence.
+
+## Demo
+
+A demo of the web UI at `https://demo.hangar.page/`, on Cloudflare's free plan: the UI in front of the mock API in `ui/mock`, the one the Playwright suite runs against, as a Cloudflare Worker with static assets (`ui/demo`). It has no server, database or storage behind it.
+
+- **Build.** `make demo` writes `ui/demo/gen`, the Worker's entry point with the OpenAPI document and its validators compiled ahead of time (Workers cannot compile code at run time, as Ajv does under Vite), and `ui/demo/dist`, the UI built with `VITE_HANGAR_DEMO=1`. The embedded build in `internal/web/dist` is not touched. The flag adds a banner, "This is a demo with sample data. Nothing you do here is saved.", with a link to the docs; Vite drops it from every other build. `wrangler` runs through `pnpm dlx` at the version the `Makefile` pins, so it is not a dependency of the UI.
+- **Run and test.** `make demo-serve` runs the demo under `wrangler dev`. `make test-demo` runs the Playwright suite in `ui/e2e` against a second Worker that starts visitors signed out, as `vite preview` does, with the body limits raised to 64 MiB (`DEMO_TEST_LIMIT_MIB`) for the suite's 6 MiB uploads, and the demo's own checks in `ui/e2e-demo`: the banner, the headers and the body limit. `ui/mock/fetch.test.ts` and `ui/demo/worker.test.ts` test the Fetch API adapter, the session limits and the Worker.
+- **State.** Visitors start signed in as `ada`. Each visitor gets a copy of the fixture data in the Worker isolate's memory, keyed by the `mock_session` cookie, and nothing is written anywhere else. It resets when Cloudflare recycles the isolate, after an hour unused, or when the isolate drops the least recently used sessions to keep what it holds under 64 MiB (each session counts as 128 KiB plus the request bodies it sent).
+- **No shared or outbound content.** Because each visitor has their own data, nothing one visitor writes (Repos, cards, names, sign-out) reaches another, so the demo cannot be defaced or used to show others a phishing link. The mock's OIDC sign-in follows `redirect` only to a path on the demo, with the rules of `internal/auth.SafeRedirect` (a leading `/` but not `//` or `/\`, no control characters, at most 2000 characters, the same origin once resolved), so it is not an open redirect on `hangar.page`.
+- **Limits.** The Worker answers 413 to a request body over 1 MiB before the mock sees it, and to writes from a session that has sent 8 MiB in all. Upload parts are counted and dropped, so no file bytes are kept, and the demo cannot be used to host files.
+- **Headers.** Pages get the Go server's Content Security Policy with a fresh style nonce, and its other page headers; every response also gets `X-Robots-Tag: noindex`, because sample data is no use in search results. Files under `/assets/` skip the Worker and get their headers from `ui/demo/_headers`.
+- **Deploy.** Workers Builds, Cloudflare's Git integration for Workers, deploys the `demo` branch, which `release.yml` moves to each release tag, so the demo matches the release that `/latest/` documents. It runs `make demo` and then `make demo-deploy` (`wrangler deploy`), which also attaches the custom domain in `ui/demo/wrangler.jsonc`. GitHub holds no Cloudflare credentials.
 
 ## Repository files
 
@@ -71,8 +89,8 @@ Elastic License 2.0, matching Crockery. The README says what it means in plain w
 | `fuzz.yml` | nightly | 10 minutes per fuzz target. |
 | `codeql.yml` | PRs, weekly | CodeQL for Go and TypeScript. |
 | `release-please.yml` | `main` | Release PRs and changelog from Conventional Commits. |
-| `release.yml` | tags `v*` | GoReleaser, multi-arch image build and push, cosign signing, SBOM and provenance, Helm chart package and push, docs publish, Trivy scan of the image (fails on critical CVEs with fixes available). |
-| `docs.yml` | `main` | Publish `dev` docs. |
+| `release.yml` | tags `v*` | GoReleaser, multi-arch image build and push, cosign signing, SBOM and provenance, Helm chart package and push, docs publish, moving the `demo` branch to the tag for the demo, Trivy scan of the image (fails on critical CVEs with fixes available). |
+| `docs.yml` | `main` | Publish `dev` docs to `gh-pages`, which Cloudflare Pages serves. |
 
 ## Release v1.0.0 checklist
 
@@ -82,4 +100,12 @@ Elastic License 2.0, matching Crockery. The README says what it means in plain w
 4. Load test targets in [02](02-architecture.md) met on the reference setup ([13](13-testing.md)), with results committed to `docs/benchmarks.md`.
 5. Security review done (threat model in `docs/security/threat-model.md`, findings fixed or recorded).
 6. Docs complete with no "TODO" or placeholder pages; screenshots current.
-7. James creates the public GitHub repository, enables GitHub Pages, private vulnerability reporting and the CLA app, then pushes the tag.
+7. James buys `hangar.page` and adds it as a zone to the Cloudflare account that hosts the sites, with Cloudflare's nameservers. Hangar needs no DNS records added by hand: Cloudflare adds them when it attaches the custom domains below.
+8. James creates the public GitHub repository, enables private vulnerability reporting and the CLA app, and pushes `main`; the `docs.yml` run that follows (start it by hand if it does not) creates the `gh-pages` branch with the `dev` docs and the root files. If the repository moves to another owner, such as the `hangar-hub` organisation, James moves it before the next steps, because Cloudflare connects to a repository by owner and name.
+9. James connects the docs in the Cloudflare dashboard: **Workers & Pages**, **Create application**, **Pages**, **Import an existing Git repository**. He installs the Cloudflare GitHub app on the repository's owner with access to the Hangar repository only, picks the repository, names the project `hangar-docs`, sets the production branch to `gh-pages`, the framework preset to **None**, leaves the build command empty, sets the build output directory to `/`, and saves. Under the project's **Settings**, **Build**, **Branch control**, he turns off automatic deployments for preview branches. Under **Custom domains** he adds `hangar.page` and waits for it to become active. For `www`, he adds a proxied `AAAA` record for `www` to `100::` and a redirect rule from the **Redirect from WWW to root** template.
+10. James checks that `https://hangar.page/dev/` serves the docs with the headers in `deploy/cloudflare/docs-root/_headers`.
+11. James pushes the tag.
+12. When `release.yml` has pushed the `demo` branch, James connects the demo: **Workers & Pages**, **Create application**, **Import a repository**, the same repository, with the Worker name `hangar-demo` (the `name` in `ui/demo/wrangler.jsonc`), production branch `demo`, root directory `/`, build command `make demo`, deploy command `make demo-deploy`, and the build variable `NODE_VERSION` set to `24.19.0`; he turns off builds for non-production branches. The first build deploys the Worker and attaches `demo.hangar.page`. If the build log says the domain was not attached, he adds it under the Worker's **Settings**, **Domains & Routes**, **Custom domain**.
+13. James checks that `https://hangar.page/` sends visitors to `/latest/`, and that `https://demo.hangar.page/` shows the demo banner.
+
+Neither site needs a Cloudflare API token in GitHub: Pages and Workers Builds deploy from Cloudflare's side, through the GitHub app, and Workers Builds makes its own token for `wrangler deploy`.

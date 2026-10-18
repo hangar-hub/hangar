@@ -6,10 +6,10 @@ type: application
 version: 0.0.0
 appVersion: "0.0.0"
 kubeVersion: ">=1.29.0-0"
-home: https://jamesagarside.github.io/hangar/
+home: https://hangar.page/
 sources:
   - https://github.com/jamesagarside/hangar
-icon: https://jamesagarside.github.io/hangar/assets/icon.svg
+icon: https://hangar.page/latest/assets/icon.svg
 keywords: [huggingface, models, datasets, ml, ollama, git-lfs]
 maintainers:
   - name: James Garside

@@ -4,3 +4,7 @@ playwright-report/
 blob-report/
 .vite/
 playwright-report-real/
+# The demo's build output and Worker entry point (make demo)
+demo/dist/
+demo/gen/
+demo/.wrangler/

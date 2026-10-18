@@ -55,7 +55,7 @@ RUN apk add --no-cache --initdb --root /rootfs \
  && printf '%s\n' \
       '# Hangar configuration. This file sets nothing, so every key has its default.' \
       '# Mount your own file here, or set HANGAR_* environment variables, which' \
-      '# override it. Every key: https://jamesagarside.github.io/hangar/reference/configuration/' \
+      '# override it. Every key: https://hangar.page/latest/reference/configuration/' \
       > /rootfs/etc/hangar/hangar.yaml \
  && chmod 0644 /rootfs/etc/hangar/hangar.yaml \
  && chown -R 65532:65532 /rootfs/var/lib/hangar /rootfs/var/cache/hangar /rootfs/backups \
@@ -71,7 +71,7 @@ COPY --from=build /out/hangar /usr/bin/hangar
 LABEL org.opencontainers.image.title="Hangar" \
       org.opencontainers.image.description="A self-hosted home for your arsenal of models: a Hugging Face Hub-compatible model and dataset hub." \
       org.opencontainers.image.source="https://github.com/jamesagarside/hangar" \
-      org.opencontainers.image.documentation="https://jamesagarside.github.io/hangar/" \
+      org.opencontainers.image.documentation="https://hangar.page/" \
       org.opencontainers.image.licenses="Elastic-2.0" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"

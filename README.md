@@ -22,6 +22,8 @@ Hangar runs as one container on a laptop or homelab, and scales out to stateless
 |---|---|---|
 | ![A model's page with its card, files, metadata and the Use this model button](docs/assets/screenshots/model-card-desktop.webp) | ![The GGUF viewer showing a file's metadata, chat template and tensors](docs/assets/screenshots/gguf-viewer-desktop.webp) | ![The Dataset Viewer showing rows of a dataset Split with column statistics](docs/assets/screenshots/dataset-viewer-desktop.webp) |
 
+To try the web UI without installing anything, open the demo at <https://demo.hangar.page/>. It runs on sample data, and nothing you do there is saved.
+
 ## Quickstart
 
 ```sh
@@ -44,12 +46,12 @@ python -c "from transformers import AutoModel; AutoModel.from_pretrained('hf-int
 |---|---|
 | Container image | `ghcr.io/jamesagarside/hangar` for linux/amd64 and linux/arm64, signed with cosign |
 | Docker Compose | Examples for SQLite, Postgres and MinIO, a scaled-out setup and Keycloak in [`deploy/compose`](deploy/compose) |
-| Kubernetes | `helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --set publicURL=https://hangar.example.com`, with `publicURL` set to the address clients use; see the [Helm guide](https://jamesagarside.github.io/hangar/get-started/helm/) and [`deploy/helm/hangar`](deploy/helm/hangar) |
+| Kubernetes | `helm install hangar oci://ghcr.io/jamesagarside/charts/hangar --set publicURL=https://hangar.example.com`, with `publicURL` set to the address clients use; see the [Helm guide](https://hangar.page/latest/get-started/helm/) and [`deploy/helm/hangar`](deploy/helm/hangar) |
 | Binary | [Release archives](https://github.com/jamesagarside/hangar/releases) for Linux, macOS and Windows, `brew install --cask jamesagarside/tap/hangar`, or `go install github.com/jamesagarside/hangar/cmd/hangar@latest` |
 
 ## Documentation
 
-<https://jamesagarside.github.io/hangar/>: getting started, concepts, guides for every client, operating Hangar, and the API, CLI, configuration and metrics references.
+<https://hangar.page/>: getting started, concepts, guides for every client, operating Hangar, and the API, CLI, configuration and metrics references.
 
 ## Contributing
 

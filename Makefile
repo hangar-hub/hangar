@@ -176,6 +176,48 @@ e2e: ui-deps ## Run Playwright against the mock server
 e2e-real: ui-deps ## Seed the running Hangar at HANGAR_URL and its Upstream, then run the e2e-real suite (see ui/playwright.real.config.ts)
 	cd ui && $(PNPM) exec playwright test -c playwright.real.config.ts
 
+## Demo ------------------------------------------------------------------------------
+# The mock demo at https://demo.hangar.page/: the web UI with a banner, in front
+# of the mock API in ui/mock, as a Cloudflare Worker (ui/demo). wrangler runs
+# through pnpm dlx at a pinned version, so the UI's dependencies stay as they are.
+WRANGLER ?= $(PNPM) dlx wrangler@4.147.0
+DEMO_PORT ?= 8787
+DEMO_INSPECTOR_PORT ?= 9230
+# 0 starts visitors signed out, as the Playwright suite in ui/e2e expects.
+DEMO_SIGNED_IN ?= 1
+# Extra wrangler dev flags; playwright.demo.config.ts raises the upload limits
+# with --var DEMO_TEST_LIMIT_MIB:64 for the suite's 6 MiB uploads.
+DEMO_DEV_FLAGS ?=
+
+.PHONY: demo
+demo: ui-deps ## Build the demo Worker and its UI into ui/demo/gen and ui/demo/dist
+	cd ui && node demo/generate.ts
+	cd ui && VITE_HANGAR_DEMO=1 $(PNPM) exec vite build
+	cp ui/demo/_headers ui/demo/dist/_headers
+
+.PHONY: demo-serve
+demo-serve: demo ## Build the demo and run it under wrangler dev on DEMO_PORT (default 8787)
+	@$(MAKE) --no-print-directory demo-run
+
+# Runs the built demo; Playwright starts it this way (ui/playwright.demo.config.ts).
+# --local-upstream keeps request URLs on 127.0.0.1: otherwise wrangler dev
+# rewrites them to demo.hangar.page, the route in wrangler.jsonc, and the
+# upload part and invite links the mock builds from them leave the local Worker.
+.PHONY: demo-run
+demo-run:
+	cd ui/demo && WRANGLER_SEND_METRICS=false $(WRANGLER) dev --ip 127.0.0.1 --port $(DEMO_PORT) \
+	  --local-upstream 127.0.0.1:$(DEMO_PORT) --inspector-port $(DEMO_INSPECTOR_PORT) --var DEMO_SIGNED_IN:$(DEMO_SIGNED_IN) --show-interactive-dev-session=false $(DEMO_DEV_FLAGS)
+
+.PHONY: test-demo
+test-demo: demo ## Run the Playwright suite and the demo's own checks against the demo under wrangler dev
+	cd ui && $(PNPM) exec playwright test -c playwright.demo.config.ts
+
+# Workers Builds runs this after make demo (docs/spec/12-packaging-and-release.md).
+# It needs Cloudflare credentials, which only Workers Builds has.
+.PHONY: demo-deploy
+demo-deploy:
+	cd ui/demo && $(WRANGLER) deploy
+
 ## Packaging ---------------------------------------------------------------------------
 
 DOCS_REQS := docs/requirements.txt
@@ -242,5 +284,5 @@ smoke: ## Run the smoke test against HANGAR_URL
 
 .PHONY: clean
 clean: ## Remove build output
-	rm -rf bin coverage.out tmp site dist
+	rm -rf bin coverage.out tmp site dist ui/demo/dist ui/demo/gen ui/demo/.wrangler
 	find internal/web/dist -mindepth 1 ! -name .gitkeep -delete

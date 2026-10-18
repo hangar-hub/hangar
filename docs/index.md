@@ -14,6 +14,8 @@ Pull models and datasets from huggingface.co once, including only the quantisati
 
 ![Hangar in 30 seconds in a terminal: check the sign-in, pull a model from huggingface.co, download it with the hf CLI and show its details](assets/demo.gif)
 
+To try the web UI without installing anything, open the [demo](https://demo.hangar.page/). It runs on sample data, and nothing you do there is saved.
+
 ## Quickstart
 
 ```sh

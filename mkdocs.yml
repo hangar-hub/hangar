@@ -1,6 +1,6 @@
 site_name: Hangar
 site_description: A self-hosted home for your arsenal of models. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.
-site_url: https://jamesagarside.github.io/hangar/
+site_url: https://hangar.page/
 repo_url: https://github.com/jamesagarside/hangar
 repo_name: jamesagarside/hangar
 edit_uri: edit/main/docs/

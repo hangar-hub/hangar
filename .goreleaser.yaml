@@ -95,7 +95,7 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
-    homepage: https://jamesagarside.github.io/hangar/
+    homepage: https://hangar.page/
     description: Self-hosted home for your arsenal of models, compatible with the Hugging Face Hub
     license: Elastic-2.0
     commit_author:

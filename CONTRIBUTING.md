@@ -32,6 +32,7 @@ make dev          # the server on :8080 and the UI with live reload on :5173
 | `make lint-deploy` | Lint the Helm chart, check the Compose files, and check that every GitHub Action the workflows use exists at the version they name, and that every job that runs uv installs it (needs `yq`). |
 | `make image` | Build the container image. |
 | `make docs` | Build the documentation site. |
+| `make demo-serve` | Build the mock demo that runs at <https://demo.hangar.page/> and run it locally under `wrangler dev` on port 8787. `make test-demo` runs the Playwright suite against it. |
 | `make help` | Everything else. |
 
 ## Tests
