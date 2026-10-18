@@ -2,17 +2,47 @@
 
 Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the test that proves it, the Hub API contract MUSTs, the suite results, the request resolutions and the open issues.
 
-It describes branch `integration/v1` at `6610f45` (`Merge branch 'fix/p3-4-docs'`), after the Phase 3 hardening. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and the round 4 suite results at that commit. Phase 3 is **not finished**: the unit suite did not run to completion at `6610f45` and the audit found one coverage gap, so `main` stays at `382cc88`, where it was fast-forwarded after the final check of the preview feedback round. [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) describes that round, at `9f08db7` and `cd42d2b`. The sections from [Suite results](#suite-results) on describe round 8 at `195e3a2`, except where they name a later result.
+It describes branch `integration/v1` at `a998d78`, after the Phase 3 hardening and James's decisions on its open questions. [Phase 3 decisions and final check (2026-10-18)](#phase-3-decisions-and-final-check-2026-10-18) has the merges since Phase 3 and the final run of every suite, all green, after which `main` was fast-forwarded. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and its round 4 results at `6610f45`; [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) and the later sections describe earlier rounds.
 
 ## Summary
 
 - Phase 3 reviewed security (authorisation, untrusted input, the scanner and download gate), performance, the docs and the open gaps, and fixed 61 findings, 3 of them critical and 17 high. The [threat model](../security/threat-model.md), [benchmarks](../benchmarks.md) and [docs walk-through](docs-walkthrough.md) are written.
-- Round 4 at `6610f45`: lint, `actionlint` and `govulncheck` green; client compatibility green (Hub clients 42 passed, 2 skipped in all four cells; Xet 16 of 16 in six runs); deploy green (image, chart, four Compose examples, kind); UI green (mock 356 passed, real Instance 210 passed). Not green: `make test` did not finish, so `make cover` and `make check-generate` did not run, and the audit found that no full-server test covers the tag case of security input 6c.
+- Final check at `a998d78` (2026-10-18): every suite green, run one after another by the lead: lint, unit on SQLite and Postgres, coverage, generated code, client compatibility (7 Go packages, pytest 71 passed and 2 skipped), UI on the mock server (542 passed) and on two real Instances (369 passed), deploy checks, image, four Compose examples, kind (9 tests) and the docs site. Round 4 of Phase 3 at `6610f45` had left the unit suite unfinished and one coverage gap; both are closed.
 - Every feature ID has at least one named test, and every test named here exists in the tree (checked in the round 8 audit). Every MUST in section 13 of the Hub API contract has a handler and a test; the round 4 Hub matrix check lists 85 endpoint and test pairs.
-- 108 request items have a resolution; 3 are deferred. W11 8 (who may reference an LFS or Xet object by its hash) is now an open decision for James from the Phase 3 review.
-- Six questions wait for James: the five open questions in [decisions](decisions.md) (suspicious pickles, object references by hash, public Namespace profiles, concurrent Commits to one branch, Ollama and quants that are not pulled) and self-service password changes (W8 8). The release is on hold until he says go.
+- 108 request items have a resolution; 3 are deferred. W11 8 (who may reference an LFS or Xet object by its hash) was decided by James on 2026-10-18: references are checked at Commit.
+- James decided the five Phase 3 questions on 2026-10-18 (see [decisions](decisions.md)). One product question remains: self-service password changes (W8 8). The release is on hold until he says go.
 - AWS S3 passed in full on 2026-10-15 after the fixes for the 2026-10-14 failures.
-- Red: the preview Instance's 20 GB import (high) has not been rerun on a build with the fixes.
+- The preview Instance's large import, red in earlier rounds, passed on `382cc88` on 2026-10-17: a 19.85 GB GGUF imported with its SHA-256 matching huggingface.co (bellatrix PRs #121 and #122). The preview has not yet been updated past `382cc88`.
+
+## Phase 3 decisions and final check (2026-10-18)
+
+James answered the five open questions from Phase 3 on 2026-10-18; each decision, its code and its tests are in [decisions](decisions.md) under "Phase 3 decisions by James (2026-10-18)", and the [threat model](../security/threat-model.md) has no open decisions left. Merged into `integration/v1`:
+
+| Merge | Branch | What it does |
+|---|---|---|
+| `871d1bf` (fast-forward) | `fix/p3-5-lead` | The items left open after Phase 3: the tag case of security input 6c through the full server, the Viewer scan time check, a URL DSN refused with the SQLite driver, upload completion status and a size-scaled timeout in the CLI, axe in both themes on every page, and `TestKindBlobStoreStartsLate` |
+| `1f60a82` | `fix/p3-6-misc` | Namespace profiles need sign-in while `anonymous_read` is off; jittered backoff for concurrent Commits to one branch; `hangar ollama install` checks the quant first |
+| | `fix/p3-6-readyz` | `/readyz` names the Blob store only when start-up waits for it (`36e4444`): `TestReadyzWhileWaitingForMigrate` failed 6 in 50 runs under load before, 0 in 200 after |
+| `a998d78` | `fix/p3-6-scan` | `scan.block_level` (`unsafe` or `suspicious`); LFS and Xet object references checked at Commit (`lfs_uploaders`, migration `0002`) |
+
+The lead then ran every suite one after another at `a998d78` (`9ca750d` only changes one link in the threat model):
+
+| Suite | Command | Exit | Result |
+|---|---|---|---|
+| Lint | `make lint` | 0 | 198 s |
+| Unit, SQLite and Postgres, S3 on MinIO | `make test` | 0 | 581 s |
+| Coverage | `make cover` | 0 | every package at or above its floor |
+| Generated code | `make check-generate` | 0 | no differences |
+| Client compatibility | `make test-compat` | 0 | 7 Go packages ok; pytest 71 passed, 2 skipped. The first run failed only in `compat/viewer`, where two tests could not resolve `huggingface.co` (`gaierror(8, 'nodename nor servname provided, or not known')`); the rerun passed every package |
+| UI, mock server | `CI=1 make e2e` | 0 | 542 passed, 43 skipped by design |
+| UI, two real Instances | `playwright test -c playwright.real.config.ts` | 0 | 369 passed; 0 `WARN` or `ERROR` lines in either server log |
+| Chart, Compose and workflow checks | `make lint-deploy` | 0 | |
+| Image | `make image` | 0 | |
+| Compose examples | `scripts/compose-smoke.sh <example> --skip pull` | 0 | quickstart, postgres-minio, scale, oidc-keycloak |
+| Helm on kind | `make test-kind` | 0 | 9 tests passed, `TestKindBlobStoreStartsLate` included |
+| Docs site | `make docs` | 0 | `mkdocs build --strict` |
+
+Not run in this check: the floor-client cells, the diffusers cell, the 6 GiB nightly upload, fuzzing, a k6 rerun after the Commit backoff change (`docs/benchmarks.md` keeps the 2026-10-17 numbers), and the preview on bellatrix, which still runs `382cc88`.
 
 ## Phase 3 hardening (2026-10-17)
 
