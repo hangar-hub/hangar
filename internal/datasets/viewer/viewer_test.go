@@ -465,6 +465,39 @@ func TestScanLimitsMakeResultsPartial(t *testing.T) {
 	require.Equal(t, true, res.body["partial"])
 }
 
+// TestScanTimeLimitMakesResultsPartial checks MaxScanTime with a clock
+// that moves a minute each time it is read, so the deadline has passed at
+// every check. A scan reads scanTimeCheckRows (4,096) rows before its first
+// check: it used to check before the first row too, and so returned no
+// rows under heavy load, which made TestScanLimitsMakeResultsPartial flaky.
+func TestScanTimeLimitMakesResultsPartial(t *testing.T) {
+	var ticks atomic.Int64
+	start := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	now := func() time.Time { return start.Add(time.Duration(ticks.Add(1)) * time.Minute) }
+	s := viewertest.New(t, viewertest.Options{Now: now, Viewer: viewer.Options{MaxScanTime: 30 * time.Second}})
+	var b strings.Builder
+	b.WriteString("n,s\n")
+	for i := range 5000 {
+		fmt.Fprintf(&b, "%d,row %d\n", i, i)
+	}
+	r, sha := s.Dataset(t, "slow", map[string][]byte{"train.csv": []byte(b.String())})
+	s.Convert(t, r, sha)
+	res := get(t, s, "/filter", q("dataset", r.ID.String(), "config", "default", "split", "train", "where", `"n" >= 0`), "")
+	require.Equal(t, true, res.body["partial"], string(res.raw))
+	require.EqualValues(t, 4096, res.body["num_rows_total"], "the scan stops at its first check, after 4,096 rows")
+	res = get(t, s, "/search", q("dataset", r.ID.String(), "config", "default", "split", "train", "query", "row"), "")
+	require.Equal(t, true, res.body["partial"], string(res.raw))
+	require.EqualValues(t, 4096, res.body["num_rows_total"])
+
+	// With a clock that does not move, the same scan reads every row.
+	fixed := viewertest.New(t, viewertest.Options{Now: func() time.Time { return start }, Viewer: viewer.Options{MaxScanTime: 30 * time.Second}})
+	r, sha = fixed.Dataset(t, "fast", map[string][]byte{"train.csv": []byte(b.String())})
+	fixed.Convert(t, r, sha)
+	res = get(t, fixed, "/filter", q("dataset", r.ID.String(), "config", "default", "split", "train", "where", `"n" >= 0`), "")
+	require.Equal(t, false, res.body["partial"], string(res.raw))
+	require.EqualValues(t, 5000, res.body["num_rows_total"])
+}
+
 func TestLongCellsAreTruncated(t *testing.T) {
 	s := viewertest.New(t, viewertest.Options{Viewer: viewer.Options{MaxCellBytes: 50}})
 	long := strings.Repeat("é", 100)

@@ -146,7 +146,9 @@ type scanner struct {
 	columns  []string
 	deadline time.Time
 	scanned  int64
-	partial  bool
+	// sinceCheck counts rows read since the clock was last checked.
+	sinceCheck int64
+	partial    bool
 	// skip reports, from per-column min and max, whether a row group cannot match.
 	skip func(stats map[string][2]any) bool
 }
@@ -175,6 +177,22 @@ func statValue(v parquet.Value, a *features.Arrow) any {
 		return string(v.ByteArray())
 	}
 	return nil
+}
+
+// scanTimeCheckRows is how many rows a scan reads between checks of
+// MaxScanTime, so the clock is not read for every row.
+const scanTimeCheckRows = 4096
+
+// pastDeadline reports, once every scanTimeCheckRows rows read, whether the
+// scan has run past MaxScanTime. Skipped row groups do not count as read,
+// and no check runs before the first rows, so a scan always reads at least
+// scanTimeCheckRows rows unless a row limit stops it first.
+func (sc *scanner) pastDeadline() bool {
+	if sc.sinceCheck < scanTimeCheckRows {
+		return false
+	}
+	sc.sinceCheck = 0
+	return sc.s.d.Now().After(sc.deadline)
 }
 
 // each calls fn for every scanned row with the values of the scanner's
@@ -216,7 +234,7 @@ func (sc *scanner) each(ctx context.Context, fn func(rowIdx int64, vals []any) e
 				return err
 			}
 			for {
-				if sc.scanned >= sc.s.o.MaxScanRows || (sc.scanned%4096 == 0 && time.Now().After(sc.deadline)) {
+				if sc.scanned >= sc.s.o.MaxScanRows || sc.pastDeadline() {
 					it.Close()
 					sc.partial = true
 					return nil
@@ -230,6 +248,7 @@ func (sc *scanner) each(ctx context.Context, fn func(rowIdx int64, vals []any) e
 					return err
 				}
 				sc.scanned++
+				sc.sinceCheck++
 				if err := fn(base+local, row); err != nil {
 					it.Close()
 					return err
@@ -284,7 +303,7 @@ func (s *Service) SearchFor(ctx context.Context, p model.Principal, req datasets
 		for _, c := range cols {
 			names = append(names, t.features[c].Name)
 		}
-		sc := &scanner{s: s, t: t, columns: names, deadline: time.Now().Add(s.o.MaxScanTime)}
+		sc := &scanner{s: s, t: t, columns: names, deadline: s.d.Now().Add(s.o.MaxScanTime)}
 		r = &result{}
 		err := sc.each(ctx, func(rowIdx int64, vals []any) error {
 			for _, term := range terms {
@@ -391,7 +410,7 @@ func (s *Service) FilterFor(ctx context.Context, p model.Principal, req datasets
 				r.idx[i] = int64(i)
 			}
 		} else {
-			sc := &scanner{s: s, t: t, columns: plan.Columns, deadline: time.Now().Add(s.o.MaxScanTime), skip: func(stats map[string][2]any) bool {
+			sc := &scanner{s: s, t: t, columns: plan.Columns, deadline: s.d.Now().Add(s.o.MaxScanTime), skip: func(stats map[string][2]any) bool {
 				return !plan.MayMatch(stats)
 			}}
 			var keys [][]any
