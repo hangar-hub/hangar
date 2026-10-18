@@ -64,6 +64,34 @@ func TestOpenBlobStoreWaitsForTheStore(t *testing.T) {
 	require.NotContains(t, logs.String(), "hangar-secret")
 }
 
+// TestOpenBlobStoreRetriesAnAttemptThatHangs checks that an endpoint that
+// never answers, rather than refusing, does not hold start-up in one silent
+// attempt: the attempt times out, is logged and is retried.
+func TestOpenBlobStoreRetriesAnAttemptThatHangs(t *testing.T) {
+	old := blobAttemptTimeout
+	blobAttemptTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { blobAttemptTimeout = old })
+	cfg := s3ConfigAt(t, "http://minio:9000", time.Minute)
+	want := newEmptyBlobs()
+	calls := 0
+	open := func(ctx context.Context) (blob.Store, error) {
+		calls++
+		if calls == 1 {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return want, nil
+	}
+	var logs strings.Builder
+	got, err := openBlobStoreWaiting(context.Background(), cfg, open, slog.New(slog.NewTextHandler(&logs, nil)))
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+	require.Equal(t, 2, calls)
+	require.Equal(t, 1, strings.Count(logs.String(), "msg=\"waiting for the Blob store\""), logs.String())
+	require.Contains(t, logs.String(), "deadline exceeded")
+	require.Contains(t, logs.String(), "the Blob store answered")
+}
+
 // TestOpenBlobStoreGivesUpWaiting checks that storage.s3.startup_wait is a
 // bound: a store that never answers fails start-up once it has passed,
 // with the last error.

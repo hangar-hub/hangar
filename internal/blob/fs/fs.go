@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -43,6 +44,9 @@ const uploadTargetFile = "target"
 type Store struct {
 	root    string
 	staging string
+	// dirs keeps Delete from pruning a directory while a Put installs into
+	// it: installs hold it shared, pruning holds it exclusively.
+	dirs sync.RWMutex
 }
 
 var (
@@ -245,16 +249,19 @@ func (s *Store) SweepStaging(ctx context.Context, cutoff time.Time) (int, error)
 	return removed, errors.Join(errs...)
 }
 
-// installAttempts bounds how often install retries after a concurrent
-// Delete pruned the destination's directory.
+// installAttempts bounds how often install retries after something other
+// than this Store removed a directory on the destination's path.
 const installAttempts = 10
 
 // install renames a staged file into place at dst, creating parent
-// directories. A concurrent Delete may remove an empty parent between
-// MkdirAll and Rename, or while MkdirAll creates it, so it retries while the
-// error is one that a vanished directory causes. The error it returns names
-// dst relative to the root, never an absolute path.
+// directories. The dirs lock stops this Store's Delete from pruning an empty
+// parent between MkdirAll and Rename. Anything else that removes directories
+// under the root, such as another process, can still do so, so install
+// retries while the error is one that a vanished directory causes. The error
+// it returns names dst relative to the root, never an absolute path.
 func (s *Store) install(tmp, dst string) error {
+	s.dirs.RLock()
+	defer s.dirs.RUnlock()
 	var err error
 	for range installAttempts {
 		if err = os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
@@ -361,6 +368,8 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 }
 
 func (s *Store) pruneEmptyParents(dir string) {
+	s.dirs.Lock()
+	defer s.dirs.Unlock()
 	for dir != s.root && strings.HasPrefix(dir, s.root+string(filepath.Separator)) {
 		// Remove fails on a non-empty directory, which ends the walk.
 		if os.Remove(dir) != nil {

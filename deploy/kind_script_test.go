@@ -40,7 +40,10 @@ exit 0`)
 func runKindScript(t *testing.T, tools string, image string) (string, error) {
 	t.Helper()
 	cmd := exec.Command("bash", "../scripts/kind-chart-test.sh", image)
-	cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"), "KIND_CLUSTER=hangar-script-test")
+	// KIND_CLUSTER_EXISTS is cleared because the CI job that runs the real
+	// chart tests sets it, and with it the script keeps its cluster.
+	cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"KIND_CLUSTER=hangar-script-test", "KIND_CLUSTER_EXISTS=")
 	start := time.Now()
 	out, err := cmd.CombinedOutput()
 	// With the fakes the script takes about a second on a quiet host, but

@@ -406,9 +406,20 @@ func TestKindBlobStoreStartsLate(t *testing.T) {
 	if strings.TrimSpace(ready) == "True" {
 		t.Fatalf("the web Pod is Ready while the Blob store is missing")
 	}
-	logs := mustCluster(t, "", "kubectl", "logs", "--namespace", ns, pod, "-c", "hangar")
-	if !strings.Contains(logs, "waiting for the Blob store") {
-		t.Fatalf("the web Pod does not log that it waits for the Blob store:\n%s", logs)
+	// Hangar's own retry message, not the readiness probe's warning, which
+	// also says it is waiting: the store must not appear before Hangar has
+	// failed to reach it at least once.
+	retried := `"msg":"waiting for the Blob store"`
+	var logs string
+	for logDeadline := time.Now().Add(time.Minute); ; {
+		logs = mustCluster(t, "", "kubectl", "logs", "--namespace", ns, pod, "-c", "hangar")
+		if strings.Contains(logs, retried) {
+			break
+		}
+		if time.Now().After(logDeadline) {
+			t.Fatalf("the web Pod does not log that it waits for the Blob store:\n%s", logs)
+		}
+		time.Sleep(2 * time.Second)
 	}
 
 	// Start MinIO and make the bucket; Hangar must find it without a restart.
