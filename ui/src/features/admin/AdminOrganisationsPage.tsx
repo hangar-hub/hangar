@@ -80,7 +80,10 @@ export function AdminOrganisationsPage() {
       ) : (
         <ul className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface">
           {orgs.map((o) => (
-            <li key={o.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+            <li
+              key={o.name}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm"
+            >
               <AppLink
                 href={`/${o.name}?tab=members`}
                 className="font-medium underline-offset-2 wrap-anywhere hover:underline"

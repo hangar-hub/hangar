@@ -104,11 +104,7 @@ export function JobsIndicator() {
       ) : jobs.data.items.length === 0 ? (
         <EmptyState size="sm" title="No Jobs yet">
           Pulls you start from{" "}
-          <Link
-            to="/discover"
-            className="hg-link"
-            onClick={() => setOpen(false)}
-          >
+          <Link to="/discover" className="hg-link" onClick={() => setOpen(false)}>
             Discover
           </Link>{" "}
           show their progress here.

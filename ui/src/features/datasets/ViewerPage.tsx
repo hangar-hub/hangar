@@ -603,7 +603,9 @@ export function ViewerPage({
               <ErrorState error={rows.error} onRetry={() => rows.refetch()} />
             )
           ) : rows.data.rows.length === 0 ? (
-            <EmptyState size="sm" title="No rows match">Change the search or the filter.</EmptyState>
+            <EmptyState size="sm" title="No rows match">
+              Change the search or the filter.
+            </EmptyState>
           ) : (
             <>
               <RowsTable

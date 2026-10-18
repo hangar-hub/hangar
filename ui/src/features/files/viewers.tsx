@@ -229,11 +229,7 @@ export function GgufView({ repo, rev, path }: { repo: RepoRef; rev: string; path
           ))}
         </dl>
         {g.metadata.length > 30 && !showAll ? (
-          <button
-            type="button"
-            className="hg-link mt-1 text-sm"
-            onClick={() => setShowAll(true)}
-          >
+          <button type="button" className="hg-link mt-1 text-sm" onClick={() => setShowAll(true)}>
             Show all {g.metadata.length} keys
           </button>
         ) : null}

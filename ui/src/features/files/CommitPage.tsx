@@ -87,7 +87,9 @@ export function CommitPage({
       {c.changes.length ? (
         <ChangeList repo={ref} sha={c.sha} changes={c.changes} />
       ) : (
-        <EmptyState size="sm" title="No file changes">This Commit changes no files.</EmptyState>
+        <EmptyState size="sm" title="No file changes">
+          This Commit changes no files.
+        </EmptyState>
       )}
     </div>
   );

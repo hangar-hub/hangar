@@ -142,10 +142,7 @@ export function DiscoverDetailPanel({
         {d.pipeline_tag ? <Badge>{d.pipeline_tag}</Badge> : null}
         {d.library_name ? <Badge>{d.library_name}</Badge> : null}
         {local && d.arsenal !== "none" ? (
-          <AppLink
-            href={repoPath(local.kind, local.ns, local.name)}
-            className="hg-link text-sm"
-          >
+          <AppLink href={repoPath(local.kind, local.ns, local.name)} className="hg-link text-sm">
             Open in your arsenal
           </AppLink>
         ) : null}

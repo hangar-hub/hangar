@@ -274,7 +274,10 @@ export function AdminUpstreamsPage() {
                 {r ? (
                   <p
                     role="status"
-                    className={cn("tabular text-sm wrap-anywhere", r.ok ? "text-ok" : "text-danger")}
+                    className={cn(
+                      "tabular text-sm wrap-anywhere",
+                      r.ok ? "text-ok" : "text-danger",
+                    )}
                   >
                     {r.ok ? "Connected. " : "Failed. "}
                     {r.message}
