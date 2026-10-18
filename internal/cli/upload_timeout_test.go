@@ -70,7 +70,11 @@ func TestLongCompletionsSayWhatTheyWaitFor(t *testing.T) {
 				". It carries on verifying, so the CLI asks again.\n")
 			require.Equal(t, 1, strings.Count(r.stderr, "No answer from the Instance"), "one line per retry")
 			require.Contains(t, r.stderr, "Verifying "+file+" on the Instance, attempt 2 of 10\n")
-			require.Equal(t, 2, e.inst.RequestCount(completeRoute), "the completion is sent again")
+			// The fake counts a request when its handler returns, and the
+			// first, abandoned completion returns only once the server
+			// notices the client went away, which can be after the CLI exits.
+			require.Eventually(t, func() bool { return e.inst.RequestCount(completeRoute) == 2 },
+				5*time.Second, 10*time.Millisecond, "the completion is sent again")
 			require.Len(t, *waits, 1)
 		})
 	}
