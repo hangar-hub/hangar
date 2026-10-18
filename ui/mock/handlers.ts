@@ -1619,10 +1619,18 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
         "Invalid request: this user has no email change waiting for confirmation.",
       );
     }
+    // Like W5's CreateEmailLink: bound to the address the admin saw.
+    if ((b(ctx) as S["EmailLinkCreate"]).email !== u.pending_email) {
+      return problem(
+        409,
+        "Already exists: the user's pending email has changed since you looked; reload and check the new address.",
+      );
+    }
     return ok(
       {
         url: `${ctx.origin}/auth/email/${newLink(ctx.state, "email", u.username)}`,
         expires_at: iso(-72 * 3_600_000),
+        email: u.pending_email,
       },
       201,
     );

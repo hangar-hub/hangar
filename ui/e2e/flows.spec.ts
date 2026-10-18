@@ -430,7 +430,9 @@ test.describe("account", () => {
     const row = page.getByRole("row").filter({ hasText: "ada.king@example.com" });
     await expect(row).toContainText("Waiting for confirmation");
     await row.getByRole("button", { name: "Email link" }).click();
-    const dialog = page.getByRole("dialog", { name: /Email confirmation link for ada/ });
+    const dialog = page.getByRole("dialog", {
+      name: "Email confirmation link for ada, to send to ada.king@example.com",
+    });
     const url = (await dialog.locator("code").textContent()) ?? "";
     expect(url).toContain("/auth/email/");
     await dialog.getByRole("button", { name: "Done" }).click();

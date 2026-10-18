@@ -362,7 +362,7 @@ var routeMatrix = []routeCase{
 	{method: "POST", route: "/api/hangar/v1/admin/users", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users", body: `{"username":"made-{n}","email":"made{n}@example.com"}`},
 	{method: "PATCH", route: "/api/hangar/v1/admin/users/{id}", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}", body: `{"disabled":false}`},
 	{method: "POST", route: "/api/hangar/v1/admin/users/{id}/reset-link", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}/reset-link"},
-	{method: "POST", route: "/api/hangar/v1/admin/users/{id}/email-link", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}/email-link"},
+	{method: "POST", route: "/api/hangar/v1/admin/users/{id}/email-link", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/users/{uuid}/email-link", body: `{"email":"probe@example.com"}`},
 	{method: "POST", route: "/api/hangar/v1/admin/invites", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/invites", body: `{}`},
 	{method: "GET", route: "/api/hangar/v1/admin/upstreams", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/upstreams"},
 	{method: "POST", route: "/api/hangar/v1/admin/upstreams", rule: ruleInstanceAdmin, path: "/api/hangar/v1/admin/upstreams", body: `{"name":"u{n}","url":"https://upstream{n}.example.com"}`},

@@ -112,7 +112,7 @@ func TestSelfServiceAccountOnTheFullServer(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.status, r.body)
 	require.Contains(t, r.body, `"email":"alice@example.com"`)
 	require.Contains(t, r.body, `"pending_email":"alice@home.example"`)
-	link, err := in.auth.CreateEmailLink(ctx, alice.UserID, model.System())
+	link, err := in.auth.CreateEmailLink(ctx, alice.UserID, "alice@home.example", model.System())
 	require.NoError(t, err)
 	confirm := link.URL[strings.Index(link.URL, "/auth/email/"):]
 	r = send(http.DefaultClient, http.MethodPost, confirm, "", map[string]string{"Sec-Fetch-Site": "cross-site"})

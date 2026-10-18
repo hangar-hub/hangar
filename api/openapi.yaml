@@ -1160,12 +1160,19 @@ paths:
       description: >-
         Hangar sends no mail, so an admin sends this link to the user's
         `pending_email`. Opening it and confirming makes that address the
-        user's verified email. It is single use, expires in 72 hours and
-        replaces any earlier link for the user. A user with no pending email
-        gets 422.
+        user's verified email. The body names the pending email the admin
+        saw, and the link is bound to it: if the user has changed their
+        pending email since, the answer is 409 and no link is made. The
+        response repeats the bound address, to send the link to. It is
+        single use, expires in 72 hours and replaces any earlier link for
+        the user; a new pending email also ends every earlier link. A user
+        with no pending email gets 422.
       parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/EmailLinkCreate"}}}
       responses:
-        "201": {description: A single-use link that expires in 72 hours., content: {application/json: {schema: {$ref: "#/components/schemas/Link"}}}}
+        "201": {description: A single-use link that expires in 72 hours., content: {application/json: {schema: {$ref: "#/components/schemas/EmailLink"}}}}
         default: {$ref: "#/components/responses/Problem"}
   /admin/users/{id}/reset-link:
     post:
@@ -2428,6 +2435,18 @@ components:
       properties:
         url: {type: string}
         expires_at: {type: string, format: date-time}
+    EmailLinkCreate:
+      type: object
+      required: [email]
+      properties:
+        email: {type: string, description: The pending email the admin saw and approves.}
+    EmailLink:
+      type: object
+      required: [url, expires_at, email]
+      properties:
+        url: {type: string}
+        expires_at: {type: string, format: date-time}
+        email: {type: string, description: The address the link confirms. Send the link there.}
     InstanceSettings:
       type: object
       properties:

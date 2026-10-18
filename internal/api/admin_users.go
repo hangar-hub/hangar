@@ -133,12 +133,16 @@ func (h *Identity) AdminCreateEmailLink(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	link, err := h.auth.CreateEmailLink(r.Context(), id, p)
+	var body gen.EmailLinkCreate
+	if !h.decode(w, r, &body) {
+		return
+	}
+	link, err := h.auth.CreateEmailLink(r.Context(), id, body.Email, p)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, r, http.StatusCreated, gen.Link{Url: link.URL, ExpiresAt: link.ExpiresAt})
+	httpx.WriteJSON(w, r, http.StatusCreated, gen.EmailLink{Url: link.URL, ExpiresAt: link.ExpiresAt, Email: link.Email})
 }
 
 // AdminCreateInvite implements POST /admin/invites.

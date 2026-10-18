@@ -167,7 +167,7 @@ func TestSelfSetEmailsNeedConfirmation(t *testing.T) {
 		require.Equal(t, victim, got.PendingEmail)
 		_, err = s.Users.GetByEmail(ctx, victim)
 		require.ErrorIs(t, err, auth.ErrNotFound)
-		_, err = s.CreateEmailLink(ctx, bob.ID, root)
+		_, err = s.CreateEmailLink(ctx, bob.ID, "anything@example.com", root)
 		require.ErrorIs(t, err, auth.ErrNoEmailChange)
 
 		// It blocks no other user's request for the address.
@@ -186,7 +186,7 @@ func TestSelfSetEmailsNeedConfirmation(t *testing.T) {
 
 		// Mallory's link now fails: the address is taken. The link stays
 		// until it expires, and confirming it keeps failing.
-		link, err := s.CreateEmailLink(ctx, mallory.ID, root)
+		link, err := s.CreateEmailLink(ctx, mallory.ID, victim, root)
 		require.NoError(t, err)
 		code := link.URL[strings.LastIndex(link.URL, "/")+1:]
 		require.Contains(t, link.URL, auth.EmailPath)
@@ -212,9 +212,10 @@ func TestSelfSetEmailsNeedConfirmation(t *testing.T) {
 		// Bob confirms an address he owns: the link works once.
 		_, err = s.UpdateProfile(ctx, bp, auth.ProfileUpdate{Email: ptr("bob@home.example")}, "", "")
 		require.NoError(t, err)
-		first, err := s.CreateEmailLink(ctx, bob.ID, root)
+		first, err := s.CreateEmailLink(ctx, bob.ID, "bob@home.example", root)
 		require.NoError(t, err)
-		second, err := s.CreateEmailLink(ctx, bob.ID, root)
+		require.Equal(t, "bob@home.example", first.Email, "the link carries the address it is bound to")
+		second, err := s.CreateEmailLink(ctx, bob.ID, "bob@home.example", root)
 		require.NoError(t, err)
 		codeOf := func(l *auth.Link) string { return l.URL[strings.LastIndex(l.URL, "/")+1:] }
 		_, err = s.ConfirmEmail(ctx, codeOf(first), "", "")
@@ -231,7 +232,7 @@ func TestSelfSetEmailsNeedConfirmation(t *testing.T) {
 		// An expired link fails.
 		_, err = s.UpdateProfile(ctx, bp, auth.ProfileUpdate{Email: ptr("bob@work.example")}, "", "")
 		require.NoError(t, err)
-		expiring, err := s.CreateEmailLink(ctx, bob.ID, root)
+		expiring, err := s.CreateEmailLink(ctx, bob.ID, "bob@work.example", root)
 		require.NoError(t, err)
 		_, err = d.NewUpdate().Model((*db.EmailChange)(nil)).Where("user_id = ?", bob.ID).
 			Set("expires_at = ?", time.Now().UTC().Add(-time.Minute)).Exec(ctx)
@@ -240,6 +241,29 @@ func TestSelfSetEmailsNeedConfirmation(t *testing.T) {
 		require.ErrorIs(t, err, auth.ErrLinkInvalid)
 		_, err = s.ConfirmEmail(ctx, "made-up-code", "", "")
 		require.ErrorIs(t, err, auth.ErrLinkInvalid)
+
+		// The admin approves the address they saw: if the user changed
+		// their pending email since, no link is made. A new pending email
+		// ends an earlier link, even for the same address.
+		_, err = s.UpdateProfile(ctx, bp, auth.ProfileUpdate{Email: ptr("bob@a.example")}, "", "")
+		require.NoError(t, err)
+		seen := "bob@a.example"
+		early, err := s.CreateEmailLink(ctx, bob.ID, seen, root)
+		require.NoError(t, err)
+		_, err = s.UpdateProfile(ctx, bp, auth.ProfileUpdate{Email: ptr("bob@b.example")}, "", "")
+		require.NoError(t, err)
+		_, err = s.CreateEmailLink(ctx, bob.ID, seen, root)
+		require.ErrorIs(t, err, auth.ErrPendingEmailChanged)
+		require.ErrorIs(t, err, auth.ErrConflict)
+		_, err = s.ConfirmEmail(ctx, codeOf(early), "", "")
+		require.ErrorIs(t, err, auth.ErrLinkInvalid, "a link for an earlier pending email stops working")
+		_, err = s.UpdateProfile(ctx, bp, auth.ProfileUpdate{Email: ptr("bob@a.example")}, "", "")
+		require.NoError(t, err)
+		_, err = s.ConfirmEmail(ctx, codeOf(early), "", "")
+		require.ErrorIs(t, err, auth.ErrLinkInvalid, "asking for the same address again makes a new request")
+		u, err = s.Users.Get(ctx, bob.ID)
+		require.NoError(t, err)
+		require.Equal(t, "bob@home.example", u.Email)
 
 		// An admin sets an email at once, verified, and it replaces the
 		// pending change.

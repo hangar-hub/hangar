@@ -74,8 +74,9 @@ func TestUpdateMe(t *testing.T) {
 		var au gen.AdminUserList
 		rootClient.do(http.MethodGet, "/api/hangar/v1/admin/users?q=alice", nil, http.StatusOK, &au)
 		require.Equal(t, "alice@example.com", *au.Items[0].PendingEmail)
-		var link gen.Link
-		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+alice.ID.String()+"/email-link", nil, http.StatusCreated, &link)
+		var link gen.EmailLink
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+alice.ID.String()+"/email-link", map[string]any{"email": "alice@example.com"}, http.StatusCreated, &link)
+		require.Equal(t, "alice@example.com", link.Email, "the response carries the bound address")
 		require.Contains(t, link.Url, "http://hangar.test/auth/email/")
 		path := strings.TrimPrefix(link.Url, "http://hangar.test")
 		anon.do(http.MethodPost, path, nil, http.StatusNoContent, nil)
@@ -87,8 +88,17 @@ func TestUpdateMe(t *testing.T) {
 		bob, err := e.svc.Users.GetByUsername(ctx, "bob")
 		require.NoError(t, err)
 		var none gen.Problem
-		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", nil, http.StatusUnprocessableEntity, &none)
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", map[string]any{"email": "bob@example.com"}, http.StatusUnprocessableEntity, &none)
 		require.Contains(t, *none.Detail, "no email change waiting")
+		// A change the user makes between the admin viewing the list and
+		// approving gives a conflict, not a link for another address.
+		bobClient0 := e.login("bob")
+		bobClient0.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "bob@seen.example"}, http.StatusOK, nil)
+		bobClient0.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "bob@other.example"}, http.StatusOK, nil)
+		var stale gen.Problem
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", map[string]any{"email": "bob@seen.example"}, http.StatusConflict, &stale)
+		require.Contains(t, *stale.Detail, "pending email has changed")
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", map[string]any{}, http.StatusConflict, nil)
 		// The link is the credential, so it ignores a session cookie sent
 		// without the CSRF header.
 		e.user("lena", false)
@@ -96,7 +106,7 @@ func TestUpdateMe(t *testing.T) {
 		lena.do(http.MethodPatch, "/api/hangar/v1/me", map[string]any{"email": "lena@example.com"}, http.StatusOK, nil)
 		lenaUser, err := e.svc.Users.GetByUsername(ctx, "lena")
 		require.NoError(t, err)
-		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+lenaUser.ID.String()+"/email-link", nil, http.StatusCreated, &link)
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+lenaUser.ID.String()+"/email-link", map[string]any{"email": "lena@example.com"}, http.StatusCreated, &link)
 		lenaCSRF := lena.csrf
 		lena.csrf = ""
 		lena.do(http.MethodPost, strings.TrimPrefix(link.Url, "http://hangar.test"), nil, http.StatusNoContent, nil)
@@ -128,7 +138,7 @@ func TestUpdateMe(t *testing.T) {
 		require.Equal(t, "boss@example.com", *bm.PendingEmail)
 		_, err = e.svc.Users.GetByEmail(ctx, "boss@example.com")
 		require.ErrorIs(t, err, auth.ErrNotFound)
-		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", nil, http.StatusCreated, &link)
+		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users/"+bob.ID.String()+"/email-link", map[string]any{"email": "boss@example.com"}, http.StatusCreated, &link)
 		rootClient.do(http.MethodPost, "/api/hangar/v1/admin/users", map[string]any{"username": "boss", "email": "boss@example.com"}, http.StatusCreated, nil)
 		anon.do(http.MethodPost, strings.TrimPrefix(link.Url, "http://hangar.test"), nil, http.StatusConflict, nil)
 
@@ -160,7 +170,7 @@ func TestUpdateMe(t *testing.T) {
 		require.False(t, om.HasPassword)
 
 		got := e.auditActions()
-		require.Len(t, got[audit.UserProfileChanged], 6, "every change is audited, and failed ones are not")
+		require.Len(t, got[audit.UserProfileChanged], 8, "every change is audited, and failed ones are not")
 		require.NotEmpty(t, got[audit.UserEmailConfirmation])
 	})
 }

@@ -133,38 +133,60 @@ func (s *Service) UpdateProfile(ctx context.Context, p model.Principal, up Profi
 	return u, nil
 }
 
+// ErrPendingEmailChanged means the User's pending email is no longer the
+// one the admin approved.
+var ErrPendingEmailChanged = fmt.Errorf("%w: the user's pending email has changed since you looked; reload and check the new address", ErrConflict)
+
 // CreateEmailLink makes the single-use link that confirms a User's pending
-// email, for an admin to send to that address. It expires in 72 hours, like
-// reset links, and replaces any earlier link for the User. It records
-// user.email_confirmation with step link_created.
-func (s *Service) CreateEmailLink(ctx context.Context, userID uuid.UUID, actor model.Principal) (*Link, error) {
+// email, for an admin to send to that address. expected is the pending
+// email the admin saw: the link is bound to it, in one statement that
+// checks the row still holds it, so a change the User makes meanwhile gives
+// ErrPendingEmailChanged instead of a link for another address. The link
+// expires in 72 hours, like reset links, and replaces any earlier link for
+// the User; a new pending email (setPendingEmail) ends it too. The Link
+// carries the bound address. It records user.email_confirmation with step
+// link_created.
+func (s *Service) CreateEmailLink(ctx context.Context, userID uuid.UUID, expected string, actor model.Principal) (*Link, error) {
 	u, err := s.Users.Get(ctx, userID)
 	if err != nil {
 		return nil, err
-	}
-	if u.PendingEmail == "" {
-		return nil, ErrNoEmailChange
 	}
 	code, err := randomString(32)
 	if err != nil {
 		return nil, err
 	}
 	hash, expires := hashSecret(code), s.nowUTC().Add(LinkTTL)
-	q := s.db.NewUpdate().Model((*db.EmailChange)(nil)).Where("user_id = ?", userID).
-		Set("code_hash = ?", hash).Set("expires_at = ?", expires).Set("updated_at = ?", s.nowUTC())
-	if actor.UserID != uuid.Nil {
-		q = q.Set("created_by = ?", actor.UserID)
-	}
-	res, err := q.Exec(ctx)
+	var bound string
+	err = s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		q := tx.NewUpdate().Model((*db.EmailChange)(nil)).Where("user_id = ? AND email = ?", userID, strings.TrimSpace(expected)).
+			Set("code_hash = ?", hash).Set("expires_at = ?", expires).Set("updated_at = ?", s.nowUTC())
+		if actor.UserID != uuid.Nil {
+			q = q.Set("created_by = ?", actor.UserID)
+		}
+		res, err := q.Exec(ctx)
+		if err != nil {
+			return err
+		}
+		var row db.EmailChange
+		err = tx.NewSelect().Model(&row).Where("user_id = ?", userID).Scan(ctx)
+		switch {
+		case db.IsNotFound(err):
+			return ErrNoEmailChange
+		case err != nil:
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 || row.CodeHash == nil || *row.CodeHash != hash {
+			return ErrPendingEmailChanged
+		}
+		bound = row.Email
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, ErrNoEmailChange
-	}
 	s.record(ctx, audit.Event{Action: audit.UserEmailConfirmation, Actor: actor, TargetType: "user", TargetID: u.Username,
 		Data: map[string]any{"step": "link_created"}})
-	return &Link{URL: s.publicURL() + EmailPath + code, ExpiresAt: expires}, nil
+	return &Link{URL: s.publicURL() + EmailPath + code, ExpiresAt: expires, Email: bound}, nil
 }
 
 // ConfirmEmail applies the pending email that a confirmation link's code

@@ -37,6 +37,8 @@ var ErrLinkInvalid = fmt.Errorf("%w: the link is invalid, used or expired; ask a
 type Link struct {
 	URL       string
 	ExpiresAt time.Time
+	// Email is the address an email confirmation link is bound to.
+	Email string
 }
 
 // InviteParams describes an invite.

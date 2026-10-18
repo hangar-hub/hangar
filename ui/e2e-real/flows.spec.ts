@@ -635,8 +635,11 @@ test("changes the display name, email and password on the Profile page", async (
     await expect(
       page.getByRole("status").filter({ hasText: "waits for confirmation" }),
     ).toContainText(`${name}@home.example`);
-    const link = await admin.call("POST", `/admin/users/${ids[name]}/email-link`);
+    const link = await admin.call("POST", `/admin/users/${ids[name]}/email-link`, {
+      email: `${name}@home.example`,
+    });
     expect(link.status(), await link.text()).toBe(201);
+    expect((await link.json()).email).toBe(`${name}@home.example`);
     const confirmPath = new URL((await link.json()).url as string).pathname;
     await page.goto(confirmPath);
     await page.getByRole("button", { name: "Confirm email" }).click();

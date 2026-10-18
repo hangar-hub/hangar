@@ -1662,7 +1662,7 @@ export interface paths {
         put?: never;
         /**
          * Create a link that confirms a user's pending email
-         * @description Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. It is single use, expires in 72 hours and replaces any earlier link for the user. A user with no pending email gets 422.
+         * @description Hangar sends no mail, so an admin sends this link to the user's `pending_email`. Opening it and confirming makes that address the user's verified email. The body names the pending email the admin saw, and the link is bound to it: if the user has changed their pending email since, the answer is 409 and no link is made. The response repeats the bound address, to send the link to. It is single use, expires in 72 hours and replaces any earlier link for the user; a new pending email also ends every earlier link. A user with no pending email gets 422.
          */
         post: operations["adminCreateEmailLink"];
         delete?: never;
@@ -2902,6 +2902,17 @@ export interface components {
             url: string;
             /** Format: date-time */
             expires_at: string;
+        };
+        EmailLinkCreate: {
+            /** @description The pending email the admin saw and approves. */
+            email: string;
+        };
+        EmailLink: {
+            url: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description The address the link confirms. Send the link there. */
+            email: string;
         };
         InstanceSettings: {
             anonymous_read?: boolean;
@@ -5832,7 +5843,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkCreate"];
+            };
+        };
         responses: {
             /** @description A single-use link that expires in 72 hours. */
             201: {
@@ -5840,7 +5855,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Link"];
+                    "application/json": components["schemas"]["EmailLink"];
                 };
             };
             default: components["responses"]["Problem"];
