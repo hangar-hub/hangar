@@ -59,6 +59,48 @@ paths:
         "200": {description: The signed-in user., content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
         "204": {description: Nobody is signed in.}
         default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [session]
+      operationId: updateMe
+      summary: Change my display name or email
+      description: >-
+        Changes the signed-in user's display name and email address, with the
+        same checks as the admin user editor: a display name of at most 100
+        characters, and an email address that is valid and not used by
+        another user (409). An empty string clears the field; a field left
+        out is unchanged. Changing the email address marks it unverified.
+        Session callers need the `X-CSRF-Token` header, and Token callers
+        need the `write` scope. Users who sign in with OIDC can change both
+        fields too: Hangar copies them from the provider only when it
+        creates the account.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/MeUpdate"}}}
+      responses:
+        "200": {description: The updated user., content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/password:
+    post:
+      tags: [session]
+      operationId: changeMyPassword
+      summary: Change my password
+      description: >-
+        Changes the signed-in user's password. It needs a web UI session and
+        the `X-CSRF-Token` header; every Token is refused with 403. The
+        current password must be right (403, with an error on
+        `current_password`) and the new one must meet the password policy
+        (422, with an error on `new_password`). Wrong current passwords count
+        towards the same throttle as failed sign-ins for the username and
+        the client's IP address (429 with `Retry-After`). Users without a
+        Hangar password, who sign in with OIDC, get 403. On success every
+        other session of the user ends; the current session and the user's
+        Tokens stay.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PasswordChange"}}}
+      responses:
+        "204": {description: Changed. The user's other sessions have ended.}
+        default: {$ref: "#/components/responses/Problem"}
   /auth/login:
     post:
       tags: [session]
@@ -1335,7 +1377,7 @@ components:
     # Session and users
     Me:
       type: object
-      required: [id, username, display_name, is_admin, orgs]
+      required: [id, username, display_name, is_admin, has_password, orgs]
       properties:
         id: {type: string, format: uuid}
         username: {type: string}
@@ -1344,7 +1386,23 @@ components:
         avatar_url: {type: string}
         is_admin: {type: boolean}
         orgs: {type: array, items: {$ref: "#/components/schemas/OrgMembership"}}
+        has_password:
+          type: boolean
+          description: >-
+            Whether the user has a Hangar password. Users who sign in only
+            with OIDC have none and cannot change it in Hangar.
         csrf_token: {type: string, description: Send as X-CSRF-Token on state-changing calls.}
+    MeUpdate:
+      type: object
+      properties:
+        display_name: {type: string, description: "The name shown instead of the username, at most 100 bytes. An empty string clears it."}
+        email: {type: string, description: The email address. An empty string clears it.}
+    PasswordChange:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: {type: string, format: password}
+        new_password: {type: string, format: password, description: At least 10 characters and not a common password.}
     OrgMembership:
       type: object
       required: [name, role]

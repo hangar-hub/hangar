@@ -251,6 +251,11 @@ var routeMatrix = []routeCase{
 
 	// Native API.
 	{method: "GET", route: "/api/hangar/v1/me", rule: ruleOpen, path: "/api/hangar/v1/me"},
+	// Self-service profile and password (W8 8, decided by James on
+	// 2026-10-18): a write Token may change the profile, as for the other
+	// /me changes, but only a UI session may change a password.
+	{method: "PATCH", route: "/api/hangar/v1/me", rule: ruleSignedInWrite, path: "/api/hangar/v1/me", body: `{"display_name":"Probe {n}"}`},
+	{method: "POST", route: "/api/hangar/v1/me/password", rule: ruleSessionOnly, path: "/api/hangar/v1/me/password", body: `{"current_password":"wrong password 1","new_password":"a new password 2"}`},
 	{method: "POST", route: "/api/hangar/v1/auth/login", rule: ruleCredentialExchange, path: "/api/hangar/v1/auth/login", body: `{"username":"nobody","password":"wrong password 1"}`},
 	{method: "POST", route: "/api/hangar/v1/auth/logout", rule: ruleOpen, path: "/api/hangar/v1/auth/logout"},
 	{method: "GET", route: "/api/hangar/v1/auth/providers", rule: ruleOpen, path: "/api/hangar/v1/auth/providers"},

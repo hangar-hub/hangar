@@ -1,7 +1,9 @@
 package api
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jamesagarside/hangar/internal/api/gen"
@@ -29,6 +31,65 @@ func (h *Identity) GetMe(w http.ResponseWriter, r *http.Request) {
 		csrf = sess.CSRFToken
 	}
 	h.writeMe(w, r, p, csrf)
+}
+
+// UpdateMe implements PATCH /me: the signed-in user changes their display
+// name or email, with the admin user editor's checks. Token callers need
+// the write scope, as for the other /me changes.
+func (h *Identity) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.signedIn(w, r)
+	if !ok || !h.needScope(w, r, p, model.ScopeWrite) {
+		return
+	}
+	var body gen.MeUpdate
+	if !h.decode(w, r, &body) {
+		return
+	}
+	if _, err := h.auth.UpdateProfile(r.Context(), p, auth.ProfileUpdate{DisplayName: body.DisplayName, Email: body.Email},
+		httpx.ClientIP(r), r.UserAgent()); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	csrf := ""
+	if sess, err := h.auth.CurrentSession(r.Context(), p); err == nil {
+		csrf = sess.CSRFToken
+	}
+	h.writeMe(w, r, p, csrf)
+}
+
+// ChangeMyPassword implements POST /me/password. Only a web UI session may
+// change a password; see auth.Service.ChangePassword.
+func (h *Identity) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.signedIn(w, r)
+	if !ok {
+		return
+	}
+	if p.Method != model.AuthSession {
+		h.fail(w, r, auth.ErrPasswordNeedsSession)
+		return
+	}
+	var body gen.PasswordChange
+	if !h.decode(w, r, &body) {
+		return
+	}
+	err := h.auth.ChangePassword(r.Context(), p, auth.PasswordChange{Current: body.CurrentPassword, New: body.NewPassword,
+		IP: httpx.ClientIP(r), UserAgent: r.UserAgent()})
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, auth.ErrWrongPassword):
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden, Detail: "The current password is wrong.",
+			Errors: []httpx.ProblemError{{Pointer: "/current_password", Detail: "The current password is wrong."}}})
+	case errors.Is(err, auth.ErrWeakPassword):
+		// "weak password: use at least 10 characters" becomes "Use at
+		// least 10 characters.", next to the new password field.
+		_, reason, _ := strings.Cut(err.Error(), auth.ErrWeakPassword.Error()+": ")
+		detail := idSentence(errors.New(reason))
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusUnprocessableEntity, Detail: detail,
+			Errors: []httpx.ProblemError{{Pointer: "/new_password", Detail: detail}}})
+	default:
+		h.fail(w, r, err)
+	}
 }
 
 // ListMySessions implements GET /me/sessions.
