@@ -142,6 +142,13 @@ func TestOllamaKeyRegisterAndInstall(t *testing.T) {
 
 	r := e.run("ollama", "key", "register")
 	require.Equal(t, ExitNotFound, r.code, "no key yet")
+	// The quants are in the Arsenal, so install goes straight to the key.
+	_, files := ggufRepo(e)
+	var local []clitest.File
+	for p, c := range files {
+		local = append(local, clitest.File{Path: p, Content: c})
+	}
+	e.inst.AddRepo(mustID(t, model.RepoTypeModel, "bartowski/Tiny-GGUF"), local...)
 
 	fp := writeOllamaKey(t, e.home)
 	// Install asks first; "n" leaves the key unregistered but still pulls.
@@ -179,7 +186,110 @@ func TestOllamaInstallWithYesRegistersTheKey(t *testing.T) {
 	orig := runOllama
 	defer func() { runOllama = orig }()
 	runOllama = func(context.Context, []string, io.Writer, io.Writer) error { return nil }
+	e.inst.AddRepo(mustID(t, model.RepoTypeModel, "acme/model"), clitest.File{Path: "Model-Q4_0.gguf", Content: blobOf("m", 1000)})
 	r := e.ok("ollama", "install", "acme/model:Q4_0", "--yes", "--json")
 	require.Contains(t, r.stdout, `"model"`)
 	require.Len(t, e.inst.OllamaKeys(), 1)
+}
+
+// TestOllamaInstallChecksTheQuantIsInTheArsenal checks James's decision of
+// 2026-10-18: the Ollama registry keeps its 404 MANIFEST_UNKNOWN for a quant
+// that is not pulled, which Ollama 0.31 shows only as "file does not
+// exist", so hangar ollama install checks the quant first. When it is
+// missing, the command says so, prints the hangar pull command, and offers
+// to run it; --pull runs it without asking. Ollama never runs for a quant
+// that is not in the Arsenal.
+func TestOllamaInstallChecksTheQuantIsInTheArsenal(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	var ran [][]string
+	orig := runOllama
+	defer func() { runOllama = orig }()
+	runOllama = func(_ context.Context, argv []string, _, _ io.Writer) error {
+		ran = append(ran, argv)
+		return nil
+	}
+	host := strings.TrimPrefix(e.inst.URL, "http://")
+	id, _ := ggufRepo(e)
+	install := func(stdin string, args ...string) result {
+		t.Helper()
+		return e.runIn(stdin, append([]string{"ollama", "install", "--skip-key-check"}, args...)...)
+	}
+	const fails = `so Ollama would fail with "file does not exist"`
+
+	// Not in the Arsenal at all: "n" (or no answer) leaves it, exits 3 and
+	// names the command, with the quant the Upstream would give for latest.
+	r := install("n\n", "bartowski/Tiny-GGUF:Q4_K_M")
+	require.Equal(t, ExitNotFound, r.code, r.stderr)
+	require.Contains(t, r.stderr, "bartowski/Tiny-GGUF:Q4_K_M is not in the Arsenal, "+fails)
+	require.Contains(t, r.stderr, "  hangar pull bartowski/Tiny-GGUF:Q4_K_M --server-only\n")
+	require.Contains(t, r.stderr, "Pull it now? [y/N]")
+	require.Contains(t, r.err.Error(), "pull it with: hangar pull bartowski/Tiny-GGUF:Q4_K_M --server-only")
+	r = install("", "bartowski/Tiny-GGUF")
+	require.Equal(t, ExitNotFound, r.code, r.stderr)
+	require.Contains(t, r.stderr, "hangar pull bartowski/Tiny-GGUF:Q4_K_M --server-only", "latest is Q4_K_M")
+	require.Empty(t, ran, "Ollama does not run for a quant that is not in the Arsenal")
+	require.Nil(t, e.inst.Repo(id), "nothing was pulled without a yes")
+
+	// "y" pulls that quant only, then runs Ollama.
+	r = install("y\n", "bartowski/Tiny-GGUF:Q4_K_M")
+	require.NoError(t, r.err, r.stderr)
+	require.Contains(t, r.stderr, "bartowski/Tiny-GGUF:Q4_K_M is in the Arsenal.")
+	require.True(t, e.inst.Present(id, "main", "Tiny-Q4_K_M.gguf"))
+	require.True(t, e.inst.Present(id, "main", "mmproj-Tiny-f16.gguf"), "the projector comes with the quant")
+	require.False(t, e.inst.Present(id, "main", "Tiny-Q8_0.gguf"))
+	require.Equal(t, []string{"pull", "--insecure", host + "/bartowski/Tiny-GGUF:Q4_K_M"}, ran[0])
+
+	// A quant the Partial mirror does not hold, matched without regard to
+	// case as the registry matches it.
+	r = install("", "bartowski/Tiny-GGUF:q8_0")
+	require.Equal(t, ExitNotFound, r.code, r.stderr)
+	require.Contains(t, r.stderr, "bartowski/Tiny-GGUF:Q8_0 is not in the Arsenal, "+fails)
+	require.Contains(t, r.stderr, "hangar pull bartowski/Tiny-GGUF:Q8_0 --server-only")
+	require.Len(t, ran, 1)
+	r = install("", "bartowski/Tiny-GGUF:q8_0", "--pull")
+	require.NoError(t, r.err, r.stderr)
+	require.NotContains(t, r.stderr, "Pull it now?", "--pull does not ask")
+	require.True(t, e.inst.Present(id, "main", "Tiny-Q8_0.gguf"))
+	require.Equal(t, host+"/bartowski/Tiny-GGUF:q8_0", ran[1][2])
+
+	// Present quants run Ollama at once, without a question, by group name
+	// or by file name.
+	for _, tag := range []string{"", ":Q4_K_M", ":Tiny-Q8_0.gguf", ":latest"} {
+		r = install("", "bartowski/Tiny-GGUF"+tag)
+		require.NoError(t, r.err, r.stderr)
+		require.NotContains(t, r.stderr, "not in the Arsenal", tag)
+	}
+	require.Len(t, ran, 6)
+
+	// A quant the Repo does not have is not something a Pull can fix.
+	r = install("y\n", "bartowski/Tiny-GGUF:Q2_K")
+	require.Equal(t, ExitNotFound, r.code)
+	require.Contains(t, r.err.Error(), `has no quant "Q2_K"; it has Q4_K_M, Q8_0`)
+	require.NotContains(t, r.stderr, "hangar pull")
+
+	// The quant's files are present but its projector is not.
+	vision := mustID(t, model.RepoTypeModel, "acme/Vision-GGUF")
+	e.inst.AddUpstream(vision, clitest.File{Path: "Vision-Q4_K_M.gguf", Content: blobOf("v", 3000)},
+		clitest.File{Path: "mmproj-Vision-f16.gguf", Content: blobOf("vp", 2000)})
+	e.ok("pull", "acme/Vision-GGUF", "--include", "Vision-Q4_K_M.gguf", "--server-only")
+	require.False(t, e.inst.Present(vision, "main", "mmproj-Vision-f16.gguf"))
+	r = install("", "acme/Vision-GGUF")
+	require.Equal(t, ExitNotFound, r.code, r.stderr)
+	require.Contains(t, r.stderr, "hangar pull acme/Vision-GGUF:Q4_K_M --server-only")
+	r = install("yes\n", "acme/Vision-GGUF")
+	require.NoError(t, r.err, r.stderr)
+	require.True(t, e.inst.Present(vision, "main", "mmproj-Vision-f16.gguf"))
+	require.Equal(t, host+"/acme/Vision-GGUF", ran[len(ran)-1][2])
+
+	// A Repo neither the Arsenal nor the Upstream has: the Pull to run is
+	// the whole Repo.
+	r = install("", "acme/nowhere")
+	require.Equal(t, ExitNotFound, r.code)
+	require.Contains(t, r.stderr, "hangar pull acme/nowhere --server-only")
+
+	// A JSON caller gets the same refusal and nothing on stdout.
+	r = install("", "bartowski/Tiny-GGUF:Q2_K", "--json")
+	require.Equal(t, ExitNotFound, r.code)
+	require.Empty(t, r.stdout)
 }

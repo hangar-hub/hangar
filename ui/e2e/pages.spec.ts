@@ -166,6 +166,35 @@ for (const path of signedOut) {
   }
 }
 
+// While anonymous reads are off (the mock's Instance, like a default one),
+// profiles answer 401 to signed-out visitors (decided 2026-10-18). The
+// page asks them to sign in and sends no other request that would fail.
+for (const scheme of schemes) {
+  test(`a profile asks signed-out visitors to sign in (${scheme})`, async ({ page }) => {
+    const problems = watchConsole(page);
+    const failedLoads = watchFailedLoads(page);
+    const api: string[] = [];
+    page.on("request", (r) => {
+      const path = new URL(r.url()).pathname;
+      if (path.startsWith("/api/hangar/v1/") && path !== "/api/hangar/v1/me") api.push(path);
+    });
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/ml-team?tab=members");
+    await expect(page.locator("h1")).toHaveText("Sign in to see this profile");
+    await expect(page.locator("#main").getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      `/auth/login?redirect=${encodeURIComponent("/ml-team?tab=members")}`,
+    );
+    await settled(page);
+    await expectTheme(page, scheme);
+    await expectNoHorizontalOverflow(page);
+    await expectAccessible(page);
+    expect(problems).toEqual([]);
+    expect(api).toEqual(["/api/hangar/v1/namespaces/ml-team"]);
+    expect(failedLoads.filter((f) => !f.includes("/namespaces/ml-team"))).toEqual([]);
+  });
+}
+
 test("a wide Markdown table scrolls in a region keyboard users can focus", async ({ page }) => {
   const csrf = await signIn(page);
   const columns = Array.from({ length: 16 }, (_, i) => `measurement_column_${i}`);

@@ -13,9 +13,9 @@ import { eachChunk, newBase, part } from "./lib/payload.js";
 
 const SIZE = Number(__ENV.UPLOAD_SIZE || 1 << 30);
 const VUS = Number(__ENV.VUS || 4);
-// Each VU commits to its own Repo, <UPLOAD_REPO>-<vu>. Concurrent Commits
-// to one branch may get 409 by design (04-git.md "Server-side Commits"),
-// and this scenario measures uploads, not ref contention.
+// Each VU commits to its own Repo, <UPLOAD_REPO>-<vu>, because this
+// scenario measures uploads, not ref contention: concurrent Commits to one
+// branch wait and retry (04-git.md "Server-side Commits").
 const REPO = __ENV.UPLOAD_REPO || `${NS}/uploads`;
 const repoOf = (vu) => `${REPO}-${vu}`;
 const uploadTime = new Trend("upload_object_duration", true);

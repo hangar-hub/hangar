@@ -90,7 +90,8 @@ type roleKey struct {
 // Namespace whose name equals their username; Instance admins can do
 // anything.
 type Authz struct {
-	// AnonymousRead lets anonymous users read public Repos.
+	// AnonymousRead lets anonymous users read public Repos and see
+	// Namespaces, their members and public Collections.
 	AnonymousRead bool
 
 	mu        sync.Mutex
@@ -170,6 +171,13 @@ func (a *Authz) Can(_ context.Context, p model.Principal, action auth.Action, t 
 		return auth.ErrForbidden
 	case t.Repo != nil:
 		return a.canRepo(p, action, t.Repo)
+	case t.Namespace != nil && action == auth.ActionRead:
+		// As auth.Authorizer: anyone while anonymous reads are on, else
+		// signed-in callers.
+		if a.AnonymousRead || !p.IsAnonymous() {
+			return nil
+		}
+		return fmt.Errorf("%w: sign in to see users and Organisations", auth.ErrForbidden)
 	case t.Namespace != nil:
 		role := a.roleIn(p, t.Namespace.ID, t.Namespace.Name, uuid.Nil)
 		need := model.RoleWrite

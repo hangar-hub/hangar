@@ -27,7 +27,7 @@ The native API serves the web UI, the CLI and automation. It lives under `/api/h
 | Mirrors | `GET/PATCH .../mirror` (selection, tracking, schedule), `POST .../mirror/sync`, `POST .../mirror/detach`, `POST .../mirror/pull` (more files) |
 | Discover | `GET /upstreams` (enabled ones, for users), `GET /discover/models?upstream=&search=&author=&filter=&sort=&cursor=`, `GET /discover/models/{ns}/{name}?upstream=&rev=` (upstream detail with files, quants, Dependencies preview, arsenal state), `POST /pulls` (upstream, repo, type, revision, selection), `GET /pulls/{id}` |
 | Jobs | `GET /jobs?mine=&kind=&status=`, `GET /jobs/{id}` (progress, per-file detail for Pulls), `POST /jobs/{id}/cancel`, `POST /jobs/{id}/retry` |
-| Namespaces | `GET /namespaces/{ns}`, `POST /orgs`, `PATCH/DELETE /orgs/{ns}`, `GET/PUT/DELETE /orgs/{ns}/members[/{user}]` |
+| Namespaces | `GET /namespaces/{ns}`, `POST /orgs`, `PATCH/DELETE /orgs/{ns}`, `GET/PUT/DELETE /orgs/{ns}/members[/{user}]`. The `GET`s need a signed-in caller while `anonymous_read` is off ([05](05-auth.md) "Permission rules"). |
 | Collections | `GET/POST /collections`, `GET/PATCH/DELETE /collections/{ns}/{slug}`, `POST/PATCH/DELETE /collections/{ns}/{slug}/items[/{id}]` |
 | Community | `GET/POST .../discussions`, `GET/PATCH .../discussions/{num}`, `POST .../discussions/{num}/comments`, `POST .../discussions/{num}/merge` |
 | Webhooks | `GET/POST /webhooks`, `GET/PATCH/DELETE /webhooks/{id}`, `GET /webhooks/{id}/deliveries`, `POST /webhooks/{id}/deliveries/{id}/redeliver`, `POST /webhooks/{id}/test` |

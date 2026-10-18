@@ -41,6 +41,12 @@ const (
 	ruleSignedIn rule = "signed_in"
 	// ruleSignedInWrite is ruleSignedIn for changes: a read Token is refused.
 	ruleSignedInWrite rule = "signed_in_write"
+	// ruleProfile is a user's or Organisation's profile or member list
+	// (read on a Namespace): any signed-in user while
+	// security.anonymous_read is off, as on the matrix's Instance, and
+	// anyone while it is on, which TestRouteAuthorisationMatrix also
+	// probes. Decided by James on 2026-10-18.
+	ruleProfile rule = "profile"
 	// Rows of the permission table, on a private Repo of alice's.
 	ruleRead      rule = "read"
 	ruleReadFiles rule = "read_files"
@@ -78,6 +84,7 @@ var allowedBy = map[rule][]string{
 	ruleOpen:            personas,
 	ruleSignedIn:        {"outsider", "alice-read", "alice-write", "alice-admin", "root"},
 	ruleSignedInWrite:   {"outsider", "alice-write", "alice-admin", "root"},
+	ruleProfile:         {"outsider", "alice-read", "alice-write", "alice-admin", "root"},
 	ruleRead:            {"alice-read", "alice-write", "alice-admin", "root"},
 	ruleReadFiles:       {"alice-read", "alice-write", "alice-admin", "root"},
 	rulePull:            {"alice-write", "alice-admin", "root"},
@@ -133,7 +140,7 @@ var routeMatrix = []routeCase{
 	// Hub API.
 	{method: "GET", route: "/api/whoami-v2", rule: ruleSignedIn, path: "/api/whoami-v2"},
 	{method: "POST", route: "/api/validate-yaml", rule: ruleOpen, path: "/api/validate-yaml", body: `{"content":"a: 1","repoType":"model"}`},
-	{method: "GET", route: "/api/users/{user}/likes", rule: ruleOpen, path: "/api/users/alice/likes"},
+	{method: "GET", route: "/api/users/{user}/likes", rule: ruleProfile, path: "/api/users/alice/likes"},
 	{method: "GET", route: "/api/models", rule: ruleOpen, path: "/api/models"},
 	{method: "GET", route: "/api/datasets", rule: ruleOpen, path: "/api/datasets"},
 	{method: "GET", route: "/api/models/{name}", rule: ruleOpen, path: "/api/models/gpt2"},
@@ -311,12 +318,12 @@ var routeMatrix = []routeCase{
 	{method: "GET", route: "/api/hangar/v1/jobs/{id}", rule: ruleReadFiles, path: "/api/hangar/v1/jobs/{job}"},
 	{method: "POST", route: "/api/hangar/v1/jobs/{id}/cancel", rule: ruleWrite, path: "/api/hangar/v1/jobs/{job}/cancel"},
 	{method: "POST", route: "/api/hangar/v1/jobs/{id}/retry", rule: ruleWrite, path: "/api/hangar/v1/jobs/{job}/retry"},
-	{method: "GET", route: "/api/hangar/v1/namespaces/{ns}", rule: ruleOpen, path: "/api/hangar/v1/namespaces/{org}"},
+	{method: "GET", route: "/api/hangar/v1/namespaces/{ns}", rule: ruleProfile, path: "/api/hangar/v1/namespaces/{org}"},
 	{method: "POST", route: "/api/hangar/v1/orgs", rule: ruleSignedInWrite, path: "/api/hangar/v1/orgs", body: `{"name":"probe-org-{n}"}`},
 	{method: "PATCH", route: "/api/hangar/v1/orgs/{ns}", rule: ruleManageNamespace, path: "/api/hangar/v1/orgs/{org}", body: `{"display_name":"X"}`},
 	{method: "DELETE", route: "/api/hangar/v1/orgs/{ns}", rule: ruleManageNamespace, path: "/api/hangar/v1/orgs/{org}"},
-	{method: "GET", route: "/api/hangar/v1/orgs/{ns}/members", rule: ruleOpen, path: "/api/hangar/v1/orgs/{org}/members"},
-	{method: "GET", route: "/api/hangar/v1/orgs/{ns}/members/{user}", rule: ruleOpen, path: "/api/hangar/v1/orgs/{org}/members/alice"},
+	{method: "GET", route: "/api/hangar/v1/orgs/{ns}/members", rule: ruleProfile, path: "/api/hangar/v1/orgs/{org}/members"},
+	{method: "GET", route: "/api/hangar/v1/orgs/{ns}/members/{user}", rule: ruleProfile, path: "/api/hangar/v1/orgs/{org}/members/alice"},
 	{method: "PUT", route: "/api/hangar/v1/orgs/{ns}/members/{user}", rule: ruleManageNamespace, path: "/api/hangar/v1/orgs/{org}/members/outsider", body: `{"role":"read"}`},
 	{method: "DELETE", route: "/api/hangar/v1/orgs/{ns}/members/{user}", rule: ruleManageNamespace, path: "/api/hangar/v1/orgs/{org}/members/outsider"},
 	{method: "GET", route: "/api/hangar/v1/collections", rule: ruleOpen, path: "/api/hangar/v1/collections"},
@@ -888,6 +895,24 @@ func TestRouteAuthorisationMatrix(t *testing.T) {
 		}
 	}
 	t.Logf("%d routes probed as %d callers", len(routeMatrix), len(personas))
+
+	// ruleProfile routes open to anonymous callers once an admin turns
+	// security.anonymous_read on, with no restart.
+	on := ps.do("root", http.MethodPatch, "/api/hangar/v1/admin/settings", `{"anonymous_read":true}`, nil)
+	require.Equal(t, http.StatusOK, on.status, on.body)
+	profiles := 0
+	for i, c := range routeMatrix {
+		if c.rule != ruleProfile {
+			continue
+		}
+		profiles++
+		rep := ps.fixtures(len(routeMatrix)+i+1, c)
+		r := ps.do("anonymous", c.method, expand(c.path, rep), expand(c.body, rep), c.header)
+		if r.route != c.route || r.status == http.StatusUnauthorized || r.status == http.StatusForbidden {
+			t.Errorf("%s with anonymous_read on: anonymous got %d at route %q: %s", c.key(), r.status, r.route, r.body)
+		}
+	}
+	require.NotZero(t, profiles, "the matrix has profile routes")
 }
 
 // viewerEndpoints returns the Dataset Viewer endpoints the Viewer serves,

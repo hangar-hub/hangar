@@ -376,10 +376,34 @@ func TestListAndSearchEndpoints(t *testing.T) {
 	require.Nil(t, ns.MemberCount)
 	f.expect(http.StatusOK, http.MethodGet, "alice", "/namespaces/alice", nil).json(t, &ns)
 	require.Equal(t, 3, *ns.RepoCount)
-	f.expect(http.StatusOK, http.MethodGet, "", "/namespaces/LAB", nil).json(t, &ns)
+	f.expect(http.StatusOK, http.MethodGet, "alice", "/namespaces/LAB", nil).json(t, &ns)
 	require.Equal(t, gen.NamespaceKind("org"), ns.Kind)
 	require.Equal(t, 1, *ns.MemberCount)
+	f.expect(http.StatusNotFound, http.MethodGet, "alice", "/namespaces/nobody", nil)
+
+	// While anonymous reads are off (the fake's default), anonymous callers
+	// get 401 for every profile, whether or not it exists, and search finds
+	// no users or Organisations for them.
+	for _, path := range []string{"/namespaces/LAB", "/namespaces/alice", "/namespaces/nobody"} {
+		var problem httpx.Problem
+		f.expect(http.StatusUnauthorized, http.MethodGet, "", path, nil).json(t, &problem)
+		require.Equal(t, "Sign in to see users and Organisations on this Instance.", problem.Detail, path)
+	}
+	sr = gen.SearchResults{}
+	f.expect(http.StatusOK, http.MethodGet, "", "/search?q=ali", nil).json(t, &sr)
+	require.Empty(t, sr.Namespaces)
+	require.Empty(t, sr.Repos)
+
+	// With anonymous reads on, profiles are public, as on the Hub.
+	f.authz.AnonymousRead = true
+	f.expect(http.StatusOK, http.MethodGet, "", "/namespaces/LAB", nil).json(t, &ns)
+	require.Equal(t, 1, *ns.MemberCount)
+	f.expect(http.StatusOK, http.MethodGet, "", "/namespaces/alice", nil).json(t, &ns)
+	require.Equal(t, "alice", ns.Name)
 	f.expect(http.StatusNotFound, http.MethodGet, "", "/namespaces/nobody", nil)
+	f.expect(http.StatusOK, http.MethodGet, "", "/search?q=ali&types=namespaces", nil).json(t, &sr)
+	require.Equal(t, "alice", sr.Namespaces[0].Name)
+	f.authz.AnonymousRead = false
 }
 
 func sum256(b []byte) string {

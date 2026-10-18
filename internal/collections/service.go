@@ -75,6 +75,8 @@ type viewerCache struct {
 	viewer model.Principal
 	roles  map[uuid.UUID]bool
 	names  map[uuid.UUID]string
+	// public is whether the viewer may see public Collections, asked once.
+	public *bool
 }
 
 func (s *DB) cache(viewer model.Principal) *viewerCache {
@@ -100,12 +102,26 @@ func (c *viewerCache) member(ctx context.Context, nsID uuid.UUID) bool {
 func (c *viewerCache) visible(ctx context.Context, row *db.Collection) bool {
 	switch model.Visibility(row.Visibility) {
 	case model.VisibilityPublic:
-		return true
+		return c.seesPublic(ctx, row.NamespaceID)
 	case model.VisibilityInternal:
 		return !c.viewer.IsAnonymous()
 	default:
 		return c.member(ctx, row.NamespaceID)
 	}
+}
+
+// seesPublic reports whether the viewer may see public Collections:
+// anyone while security.anonymous_read is on, only signed-in viewers
+// while it is off, as for the Namespaces that own them (auth.Authorizer).
+func (c *viewerCache) seesPublic(ctx context.Context, nsID uuid.UUID) bool {
+	if !c.viewer.IsAnonymous() {
+		return true
+	}
+	if c.public == nil {
+		ok := c.s.o.Authz.Can(ctx, c.viewer, auth.ActionRead, auth.Target{Namespace: &auth.NamespaceTarget{ID: nsID}}) == nil
+		c.public = &ok
+	}
+	return *c.public
 }
 
 func (c *viewerCache) nsName(ctx context.Context, id uuid.UUID) string {

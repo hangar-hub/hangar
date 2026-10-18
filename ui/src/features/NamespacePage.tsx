@@ -143,17 +143,29 @@ export function NamespacePage({ ns }: { ns: string }) {
     queryKey: ["namespace", ns],
     queryFn: async () => unwrap(await api.GET("/namespaces/{ns}", { params: { path: { ns } } })),
   });
+  // The Repos and Collections wait for the profile: while anonymous reads
+  // are off, the Instance answers 401 to signed-out visitors, and the page
+  // asks them to sign in instead of sending requests that would fail too.
   const repos = useQuery({
     queryKey: ["repos", { ns }],
     queryFn: async () => unwrap(await api.GET("/repos", { params: { query: { ns, limit: 100 } } })),
+    enabled: n.isSuccess,
   });
   const collections = useQuery({
     queryKey: ["collections", "owner", ns],
     queryFn: async () =>
       unwrap(await api.GET("/collections", { params: { query: { owner: ns } } })),
+    enabled: n.isSuccess,
   });
   if (n.isPending) return <LoadingRows rows={4} label="Loading the profile" />;
   if (n.isError) {
+    if (errorStatus(n.error) === 401) {
+      return (
+        <PageShell title="Sign in to see this profile">
+          <ErrorState error={n.error} />
+        </PageShell>
+      );
+    }
     if (errorStatus(n.error) === 404) {
       return (
         <PageShell title="Not found">

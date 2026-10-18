@@ -279,7 +279,9 @@ func (a *app) lmInstall(ctx context.Context, ref repoRef, lmDir, linkMode, revis
 	return inst, st.save(p)
 }
 
-// preferredQuant picks a quant group by the default order, else the smallest.
+// preferredQuant picks a quant group by the default order, else the
+// smallest, then the first by name: the group the Ollama registry serves
+// for "latest" (index.PreferredQuant).
 func preferredQuant(groups []gen.QuantGroup) string {
 	for _, want := range defaultQuantOrder {
 		for _, g := range groups {
@@ -290,7 +292,7 @@ func preferredQuant(groups []gen.QuantGroup) string {
 	}
 	best := groups[0]
 	for _, g := range groups[1:] {
-		if g.Size < best.Size {
+		if g.Size < best.Size || g.Size == best.Size && g.Name < best.Name {
 			best = g
 		}
 	}

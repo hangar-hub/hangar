@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -41,7 +42,47 @@ type RepoJob struct {
 
 // maxCommitAttempts bounds retries of a Commit without a parent Commit
 // when the branch moves underneath it (04-git.md "Server-side Commits").
-const maxCommitAttempts = 4
+// Decided by James on 2026-10-18: keep a bound, raised from 4 to 8, and
+// wait a jittered, growing time between attempts (commitBackoff), so
+// concurrent Commits to one branch spread out instead of colliding again.
+const maxCommitAttempts = 8
+
+// Backoff between attempts of a Commit without a parent Commit. The wait
+// before retry n (n = 1 after the first conflict) is a random time up to
+// min(commitBackoffCap, base * 2^(n-1)), where base is the longer of
+// commitBackoffBase and the time the attempt took: a slow attempt (a large
+// pack to the Blob store) gives its rivals a longer window to finish in.
+const (
+	commitBackoffBase = 20 * time.Millisecond
+	commitBackoffCap  = 2 * time.Second
+)
+
+// commitBackoff returns the wait before retry n of a Commit whose last
+// attempt took took. rnd returns a uniform value in [0, n) for n > 0; the
+// waits are "full jitter", so rivals that collided at once retry apart.
+func commitBackoff(retry int, took time.Duration, rnd func(int64) int64) time.Duration {
+	base := max(took, commitBackoffBase)
+	limit := commitBackoffCap
+	if retry < 1 {
+		retry = 1
+	}
+	if shift := retry - 1; shift < 20 && base<<shift < commitBackoffCap {
+		limit = base << shift
+	}
+	return time.Duration(rnd(int64(limit)) + 1)
+}
+
+// sleepCtx waits for d or until ctx ends.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
 
 // applyParams describes a set of ref updates and the pack, if any, that
 // holds their new objects.
@@ -744,6 +785,7 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 		msg += "\n\n" + p.Description
 	}
 	for attempt := 1; ; attempt++ {
+		began := time.Now()
 		tree, err := s.buildTree(ctx, row, st, parent, ops)
 		if err != nil {
 			return nil, err
@@ -794,12 +836,19 @@ func (s *Store) commit(ctx context.Context, row *repoRow, p CommitParams) (*Comm
 		if attempt >= maxCommitAttempts {
 			return nil, err
 		}
-		// Retry on the new tip if no path in this Commit changed meanwhile.
+		if !exists {
+			return nil, err
+		}
+		// Wait a jittered, growing time, then retry on the new tip if no
+		// path in this Commit changed meanwhile.
+		if werr := s.retryWait(ctx, commitBackoff(attempt, time.Since(began), rand.Int64N)); werr != nil {
+			return nil, werr
+		}
 		newTip, newExists, lerr := gitstore.LookupRef(ctx, s.db, row.ID, ref)
 		if lerr != nil {
 			return nil, lerr
 		}
-		if !newExists || !exists {
+		if !newExists {
 			return nil, err
 		}
 		if conflict, cerr := s.pathsChanged(ctx, st, row.ID, tip, newTip, ops); cerr != nil || conflict {

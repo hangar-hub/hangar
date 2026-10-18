@@ -62,7 +62,7 @@ Secrets, sign-in and access defaults.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `security.instance_key`<br>`HANGAR_SECURITY_INSTANCE_KEY` | string | `""` | 32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. Generated on first start if empty. |
-| `security.anonymous_read`<br>`HANGAR_SECURITY_ANONYMOUS_READ` | bool | `false` | Let anonymous users read public Repos. |
+| `security.anonymous_read`<br>`HANGAR_SECURITY_ANONYMOUS_READ` | bool | `false` | Let anonymous users read public Repos and see user and Organisation profiles. |
 | `security.registration`<br>`HANGAR_SECURITY_REGISTRATION` | string | `closed` | Who can create an account: open, invite or closed. |
 | `security.local_login`<br>`HANGAR_SECURITY_LOCAL_LOGIN` | bool | `true` | Show the username and password form. The bootstrap admin can always sign in at /auth/login?local=1. |
 | `security.session_ttl`<br>`HANGAR_SECURITY_SESSION_TTL` | duration | `720h` | Lifetime of a UI session. |

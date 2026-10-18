@@ -16,13 +16,29 @@ ollama run hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 - The tag after `:` picks a quant, case-insensitively, or a full GGUF file name. Without a tag (Ollama's `latest`), Hangar picks `Q4_K_M` if the Repo has it, otherwise the closest quant.
 - The chat template comes from the Repo's `template` file, or is matched from the GGUF's own chat template. `system`, `params` and `LICENSE` files in the Repo become the system prompt, parameters and licence.
 - A matching `mmproj-*.gguf` projector is included for vision models.
-- The quant must be in the Arsenal. For a Partial mirror without it, `ollama pull` fails with `file does not exist`: Ollama does not show the message Hangar sends with it, which names the Pull to run. Pull the quant first with `hangar pull <repo>:<quant> --server-only`. If an admin turned on Pull-through, the request starts the Pull and `ollama pull` asks you to try again when it finishes.
+- The quant must be in the Arsenal. For a Partial mirror without it, `ollama pull` fails with `file does not exist`: Ollama does not show the message Hangar sends with it, which names the Pull to run. Pull the quant first with `hangar pull <repo>:<quant> --server-only`, or use `hangar ollama install`, which checks for you. If an admin turned on Pull-through, the request starts the Pull and `ollama pull` asks you to try again when it finishes.
 
-The `hangar` CLI wraps this, and checks that your Ollama key is registered first and offers to register it:
+## Install with the hangar CLI
+
+`hangar ollama install` runs `ollama pull` for you, after two checks:
 
 ```sh
 hangar ollama install bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 ```
+
+1. It checks that the quant is in the Arsenal. Without a quant, it checks the one Ollama asks for as `latest`. If the quant is missing, it says so, prints the command that pulls it into the Instance, and asks whether to run it:
+
+    ```text
+    bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M is not in the Arsenal, so Ollama would fail with "file does not exist". Pull it into the Instance first:
+      hangar pull bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M --server-only
+    Pull it now? [y/N]
+    ```
+
+    Answer `y` to pull it and continue. Any other answer stops with exit code 3 and leaves the command for you to run. To pull without the question, add `--pull`.
+
+2. It checks that your Ollama key is registered and offers to register it. Add `--yes` to register it without the question.
+
+A quant the Repo does not have stops the command with the list of quants it does have.
 
 ## HTTPS or HTTP
 
