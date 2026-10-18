@@ -1,0 +1,16 @@
+# Response headers for https://hangar.page/, served by Cloudflare Pages from
+# the gh-pages branch. scripts/docs-root-files.sh copies this file to the root
+# of gh-pages, where Pages reads it (docs/spec/12-packaging-and-release.md).
+#
+# The Content Security Policy follows the Go server's (internal/web), with
+# what MkDocs Material and the native API page need: Material's inline
+# scripts, whose text changes with each page's depth, Google Fonts, the GitHub
+# API for the repository's stars and latest release, and Redoc from
+# cdn.jsdelivr.net. The site has no user content and no forms.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.github.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), bluetooth=()
