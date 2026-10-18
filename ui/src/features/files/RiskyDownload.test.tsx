@@ -25,6 +25,22 @@ describe("RiskyDownload", () => {
     );
   });
 
+  it("explains suspicious imports", async () => {
+    const navigate = vi.fn();
+    render(
+      <RiskyDownload
+        href="/alice/m/resolve/main/model.joblib"
+        path="model.joblib"
+        status="suspicious"
+        navigate={navigate}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Download" }));
+    expect(screen.getByText(/does not know to be safe/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Download anyway" }));
+    expect(navigate).toHaveBeenCalledWith("/alice/m/resolve/main/model.joblib?accept_risk=1");
+  });
+
   it("explains a pending scan", async () => {
     const navigate = vi.fn();
     render(

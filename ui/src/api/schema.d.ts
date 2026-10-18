@@ -2845,6 +2845,11 @@ export interface components {
             local_login?: boolean;
             ui_external_images?: boolean;
             scan_block_unsafe_downloads?: boolean;
+            /**
+             * @description How strict scan_block_unsafe_downloads is: unsafe refuses files with imports on the deny list; suspicious also refuses files with imports on neither list.
+             * @enum {string}
+             */
+            scan_block_level?: "unsafe" | "suspicious";
             webhooks_allow_private_targets?: boolean;
             /** Format: int64 */
             pull_bandwidth_limit?: number;

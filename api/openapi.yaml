@@ -2353,6 +2353,7 @@ components:
         local_login: {type: boolean}
         ui_external_images: {type: boolean}
         scan_block_unsafe_downloads: {type: boolean}
+        scan_block_level: {type: string, enum: [unsafe, suspicious], description: "How strict scan_block_unsafe_downloads is: unsafe refuses files with imports on the deny list; suspicious also refuses files with imports on neither list."}
         webhooks_allow_private_targets: {type: boolean}
         pull_bandwidth_limit: {type: integer, format: int64}
         pull_concurrency: {type: integer}

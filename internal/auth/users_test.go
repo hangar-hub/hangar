@@ -239,10 +239,13 @@ func TestSettings(t *testing.T) {
 		require.Equal(t, "closed", st.Registration)
 		require.True(t, st.UIExternalImages)
 		require.True(t, st.WebhooksAllowPrivateTargets)
+		require.Equal(t, auth.ScanBlockLevelUnsafe, st.ScanBlockLevel, "unsafe is the default level")
 
-		yes, conc, wins, mr := true, 8, []string{}, "anonymous"
-		st, err = s.Settings.Update(ctx, auth.SettingsPatch{AnonymousRead: &yes, PullConcurrency: &conc, PullWindows: &wins, PullThroughMinRole: &mr}, model.System())
+		yes, conc, wins, mr, level := true, 8, []string{}, "anonymous", auth.ScanBlockLevelSuspicious
+		st, err = s.Settings.Update(ctx, auth.SettingsPatch{AnonymousRead: &yes, PullConcurrency: &conc, PullWindows: &wins, PullThroughMinRole: &mr,
+			ScanBlockLevel: &level}, model.System())
 		require.NoError(t, err)
+		require.Equal(t, auth.ScanBlockLevelSuspicious, st.ScanBlockLevel)
 		require.True(t, st.AnonymousRead)
 		require.Equal(t, 8, st.PullConcurrency)
 		require.Empty(t, st.PullWindows)
@@ -265,12 +268,12 @@ func TestSettings(t *testing.T) {
 		st2, _ = s2.Settings.Get(ctx)
 		require.False(t, st2.AnonymousRead)
 
-		badReg, badRole, neg, zero := "maybe", "admin", int64(-1), 0
+		badReg, badRole, neg, zero, badLevel := "maybe", "admin", int64(-1), 0, "error"
 		badWin, badGlob := []string{"25:00-01:00"}, []string{"["}
 		_, err = s.Settings.Update(ctx, auth.SettingsPatch{Registration: &badReg, PullThroughMinRole: &badRole, PullBandwidthLimit: &neg,
-			PullConcurrency: &zero, PullWindows: &badWin, PullThroughAllow: &badGlob}, model.System())
+			PullConcurrency: &zero, PullWindows: &badWin, PullThroughAllow: &badGlob, ScanBlockLevel: &badLevel}, model.System())
 		require.ErrorIs(t, err, auth.ErrInvalidSettings)
-		for _, part := range []string{"registration", "pull_through_min_role", "pull_bandwidth_limit", "pull_concurrency", "pull_windows", "pull_through_allow"} {
+		for _, part := range []string{"registration", "pull_through_min_role", "pull_bandwidth_limit", "pull_concurrency", "pull_windows", "pull_through_allow", "scan_block_level"} {
 			require.ErrorContains(t, err, part, "every error is reported")
 		}
 		before := len(rec.Actions())

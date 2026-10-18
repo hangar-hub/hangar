@@ -223,13 +223,14 @@ Hangar-signed links for LFS, Pull-through and zip exports run the download gate 
 
 ## The download gate
 
-Pickle-based files (PyTorch, joblib, NumPy object arrays and raw pickles) can run code when a client loads them. Hangar scans them and, with `scan.block_unsafe_downloads` on, refuses to serve risky ones. The setting is off by default. The rules for users are in [Blocking unsafe downloads](../operate/security.md#blocking-unsafe-downloads).
+Pickle-based files (PyTorch, joblib, NumPy object arrays and raw pickles) can run code when a client loads them. Hangar scans them and, with `scan.block_unsafe_downloads` on, refuses to serve risky ones. The setting is off by default. `scan.block_level` sets how strict it is: `unsafe` (the default) or `suspicious`. The rules for users are in [Blocking unsafe downloads](../operate/security.md#blocking-unsafe-downloads).
 
 ### One gate for every route
 
 Every route that serves a Repo's file bytes calls `scan.Gate` (`internal/scan/gate.go`): `CheckFile` for paths, `CheckTree` for zip exports, `CheckObjects` for objects requested by OID (git-lfs, Pull-through, Ollama) and `CheckGit` for git fetches. The gate refuses a file that can run code when:
 
 - The scan marked it unsafe (`BlockUnsafe`).
+- The scan marked it suspicious and `scan.block_level` is `suspicious` (`BlockSuspicious`).
 - It has no scan result yet, because the scan is running or its Job failed (`BlockNotScanned`).
 - The scan could not follow it to where every loader stops (`BlockPartial`).
 - The history is too long to check (`BlockHistory`).
@@ -241,7 +242,8 @@ The Hub API and web UI accept `accept_risk=1`; git-lfs and Ollama answer 403 wit
 | `TestServingSurfaceIsClassified` (`cmd/hangar/unsafe_surface_test.go`) | Enumerates the router's protocols, its signed-link routes and every function that reads a Repo file's bytes, and fails on any that is not classified. |
 | `TestUnsafeDownloadGateCoversEveryRoute` (`cmd/hangar/unsafe_test.go`) | Every download route refuses an unsafe file. |
 | `TestUnsafeDownloadGateCatchesScannerBypasses` (`cmd/hangar/unsafe_bypass_test.go`) | Each known bypass is refused through the full server. |
-| `TestGateRefusesUnsafeAndUnscannedFilesThatRunCode`, `TestGateRefusesPartialScans`, `TestGateChecksEveryCommitThatHoldsAnObject`, `TestGateChecksObjectsOfTags`, `TestGateChecksGitFetches` (`internal/scan/`) | The gate's rules, including objects held only by older Commits or tags. |
+| `TestSuspiciousDownloadsFollowTheBlockLevel` (`cmd/hangar/unsafe_level_test.go`) | Every download route serves a suspicious pickle at level `unsafe` and refuses it at level `suspicious`, where `accept_risk=1` still works on the Hub API. |
+| `TestGateRefusesUnsafeAndUnscannedFilesThatRunCode`, `TestGateBlockLevel`, `TestGateRefusesPartialScans`, `TestGateChecksEveryCommitThatHoldsAnObject`, `TestGateChecksObjectsOfTags`, `TestGateChecksGitFetches` (`internal/scan/`) | The gate's rules, including objects held only by older Commits or tags. |
 
 ### How the scanner reads files
 
@@ -261,7 +263,7 @@ Bypasses fixed in phase 3, each with a regression test in `internal/scan/bypass_
 
 These are accepted, documented, or waiting for a decision:
 
-- **Suspicious imports download.** Only imports on the deny list block. A function that runs code and is on neither list is suspicious and downloads, because model classes from `transformers` and `sklearn` are on neither list. This is an [open decision](#open-decisions).
+- **Suspicious imports download at the default level.** At `scan.block_level: unsafe`, only imports on the deny list block, so a function that runs code and is on neither list is suspicious and downloads; the level is the default because model classes from `transformers` and `sklearn` are on neither list. Operators who want what `torch.load(weights_only=True)` refuses set the level to `suspicious` (decided by James on 2026-10-18; `TestSuspiciousDownloadsFollowTheBlockLevel`).
 - **Files are chosen by name.** A pickle under a name no standard loader uses is neither scanned nor gated. Code loaded with `trust_remote_code` can load anything, but it already runs the Repo's Python.
 - **Some formats give partial results** and are refused when blocking is on: xz and lzma compression (Go's standard library has no decoder), old PyTorch tar archives, unusual joblib arrays, and zip archives Go cannot open.
 - **joblib wrapper aliases.** The scanner recognises `NumpyArrayWrapper` by name; a module that imports it under another name is not recognised, although its import still shows.
@@ -347,7 +349,6 @@ How to verify signatures is in [Verify the image](../operate/security.md#verify-
 
 These are not decided yet, so the current behaviour stands and is listed as a residual risk above. Each is recorded with its options in `docs/build/decisions.md`:
 
-- **Should the download gate also refuse suspicious pickles?** Keep the deny list only; block suspicious pickles too, as `torch.load(weights_only=True)` would, which refuses most `sklearn` and full-model pickles; or make the level a setting.
 - **Who may reference an LFS or Xet object by its hash?** Accept and document the global deduplication; deduplicate only objects the caller can read or uploaded; or keep global storage and check at Commit time that each new pointer was uploaded by the caller or is readable by them, and stop the batch API from revealing an object's stored size.
 - **Are Namespace profiles and Organisation member lists public when `anonymous_read` is off?** Keep them public, as on the Hub, or require sign-in.
 

@@ -207,13 +207,25 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	in.datasets = &pipeline.Store{DB: d, Blobs: in.blobs}
 
 	// The security scan (W7). One gate enforces scan.block_unsafe_downloads
-	// for every protocol that serves file bytes, Pull-through links
-	// included, so it exists before the Upstream service.
+	// and scan.block_level for every protocol that serves file bytes,
+	// Pull-through links included, so it exists before the Upstream service.
 	in.scanner = scan.New(scan.Options{DB: d, Repos: in.repos, LFS: in.lfs, Webhooks: in.webhooks, Instruments: inst, Log: in.log})
 	in.unsafeGate = in.scanner.NewGate(func(ctx context.Context) (bool, error) {
 		s, err := in.auth.Settings.Get(ctx)
 		return s.ScanBlockUnsafeDownloads, err
 	})
+	in.unsafeGate.Level = func(ctx context.Context) (scan.Level, error) {
+		s, err := in.auth.Settings.Get(ctx)
+		if err != nil {
+			return "", err
+		}
+		level, ok := scan.ParseLevel(s.ScanBlockLevel)
+		if !ok {
+			// An unreadable stored value: the default.
+			return scan.LevelUnsafe, nil
+		}
+		return level, nil
+	}
 
 	// Upstreams and Pulls (W6).
 	in.client = upstream.NewHTTPClient(upstream.HTTPOptions{Version: version, Tracer: tel.Tracer()})

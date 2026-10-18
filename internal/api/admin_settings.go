@@ -11,10 +11,11 @@ import (
 func (h *Identity) settingsOut(st auth.InstanceSettings) gen.InstanceSettings {
 	reg := gen.InstanceSettingsRegistration(st.Registration)
 	minRole := gen.InstanceSettingsPullThroughMinRole(st.PullThroughMinRole)
+	level := gen.InstanceSettingsScanBlockLevel(st.ScanBlockLevel)
 	windows, allow := append([]string{}, st.PullWindows...), append([]string{}, st.PullThroughAllow...)
 	out := gen.InstanceSettings{
 		AnonymousRead: &st.AnonymousRead, Registration: &reg, LocalLogin: &st.LocalLogin, UiExternalImages: &st.UIExternalImages,
-		ScanBlockUnsafeDownloads: &st.ScanBlockUnsafeDownloads, WebhooksAllowPrivateTargets: &st.WebhooksAllowPrivateTargets,
+		ScanBlockUnsafeDownloads: &st.ScanBlockUnsafeDownloads, ScanBlockLevel: &level, WebhooksAllowPrivateTargets: &st.WebhooksAllowPrivateTargets,
 		PullBandwidthLimit: &st.PullBandwidthLimit, PullConcurrency: &st.PullConcurrency, PullWindows: &windows,
 		PullAllowOverrideWindows: &st.PullAllowOverrideWindows, PullThroughEnabled: &st.PullThroughEnabled,
 		PullThroughAllow: &allow, PullThroughMinRole: &minRole,
@@ -75,6 +76,10 @@ func (h *Identity) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if body.PullThroughMinRole != nil {
 		s := string(*body.PullThroughMinRole)
 		patch.PullThroughMinRole = &s
+	}
+	if body.ScanBlockLevel != nil {
+		s := string(*body.ScanBlockLevel)
+		patch.ScanBlockLevel = &s
 	}
 	st, err := h.auth.Settings.Update(r.Context(), patch, p)
 	if err != nil {
