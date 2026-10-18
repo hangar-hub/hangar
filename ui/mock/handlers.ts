@@ -360,7 +360,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       return problem(401, "Wrong username or password.");
     }
     state.signedIn = true;
-    state.me = { ...state.me, username: username || state.me.username };
+    state.me = { ...state.me, username: username || state.me.username, has_password: true };
     return {
       status: 200,
       body: state.me,
@@ -378,6 +378,56 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       ui_external_images: state.settings.ui_external_images ?? true,
       providers: [{ id: "unifi", name: "UniFi", login_url: "/auth/oidc/unifi" }],
     }),
+  updateMe: (ctx) => {
+    const { state } = ctx;
+    const p = b(ctx) as S["MeUpdate"];
+    if (p.display_name !== undefined && p.display_name.length > 100) {
+      return problem(422, "Invalid request: the display name can be at most 100 characters.", [
+        { pointer: "/display_name", detail: "Use at most 100 characters." },
+      ]);
+    }
+    if (p.email !== undefined) {
+      const email = p.email.trim();
+      if (email && !/^[^\s@]+@[^\s@]+$/.test(email)) {
+        return problem(422, `Invalid request: "${email}" is not a valid email address.`);
+      }
+      const clash = state.users.find(
+        (u) => u.username !== state.me.username && u.email?.toLowerCase() === email.toLowerCase(),
+      );
+      if (email && clash) {
+        return problem(409, "Already exists: the email address is already used.");
+      }
+      state.me = { ...state.me, email: email || undefined };
+    }
+    if (p.display_name !== undefined) {
+      state.me = { ...state.me, display_name: p.display_name || state.me.username };
+    }
+    const self = state.users.find((u) => u.username === state.me.username);
+    if (self) Object.assign(self, { display_name: state.me.display_name, email: state.me.email });
+    return ok(state.me);
+  },
+  changeMyPassword: (ctx) => {
+    const { state } = ctx;
+    const p = b(ctx) as S["PasswordChange"];
+    if (!state.me.has_password) {
+      return problem(
+        403,
+        "Forbidden: this account signs in with a sign-in provider and has no Hangar password; change your password with your provider.",
+      );
+    }
+    if (p.current_password === "wrong-password" || !p.current_password) {
+      return problem(403, "The current password is wrong.", [
+        { pointer: "/current_password", detail: "The current password is wrong." },
+      ]);
+    }
+    if ([...p.new_password].length < 10) {
+      return problem(422, "Use at least 10 characters.", [
+        { pointer: "/new_password", detail: "Use at least 10 characters." },
+      ]);
+    }
+    state.sessions = state.sessions.filter((s) => s.current);
+    return noContent;
+  },
   listMySessions: ({ state }) => ok({ items: state.sessions }),
   revokeMySession: ({ state, params }) => {
     state.sessions = state.sessions.filter((s) => s.id !== params.id);

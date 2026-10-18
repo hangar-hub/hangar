@@ -569,6 +569,102 @@ test("changes Instance settings and puts them back", async ({ page }) => {
   }
 });
 
+/**
+ * Clicks Change password and returns the answer. A wrong current password
+ * counts towards the sign-in throttle for this host (docs/spec/05-auth.md),
+ * so while the Instance locks it the form must say how long to wait; the
+ * flow waits that long and submits again, as a person would.
+ */
+async function submitPasswordChange(page: Page): Promise<number> {
+  for (let tries = 1; ; tries++) {
+    const [res] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.request().method() === "POST" && new URL(r.url()).pathname === `${api}/me/password`,
+      ),
+      page.getByRole("button", { name: "Change password" }).click(),
+    ]);
+    const lock = signInLock(res);
+    if (lock === undefined || tries === 3) return res.status();
+    await expect(page.getByRole("alert")).toHaveText(
+      /^Too many failed sign-in attempts\. Try again in [\dhms.]+\.$/,
+    );
+    await waitOutLock(lock);
+  }
+}
+
+test("changes the display name, email and password on the Profile page", async ({ page }) => {
+  const problems = watchConsole(page);
+  const admin = await session(env("HANGAR_URL"), "hangar-admin", adminPassword);
+  // Users of the flow's own, so other flows keep their passwords.
+  const name = `kit${unique()}`;
+  const other = `ivy${unique()}`;
+  const first = "a-long-enough-password";
+  const second = "an-even-longer-passphrase";
+  let elsewhere: Awaited<ReturnType<typeof session>> | undefined;
+  try {
+    for (const [username, email] of [
+      [name, `${name}@example.com`],
+      [other, `${other}@example.com`],
+    ]) {
+      const made = await admin.call("POST", "/admin/users", { username, password: first, email });
+      expect(made.status(), await made.text()).toBe(201);
+    }
+    // Another browser signed in as the same user, which the change signs out.
+    elsewhere = await session(env("HANGAR_URL"), name, first);
+    expect((await elsewhere.call("GET", "/me/sessions")).status()).toBe(200);
+
+    await signIn(page, name, first);
+    await page.goto("/settings/profile");
+    await expect(page.getByText(/ask an admin/i)).toHaveCount(0);
+    await page.getByLabel("Display name").fill("Kit Marlowe");
+    await page.getByRole("textbox", { name: "Email" }).fill(`${other}@example.com`);
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+      "Already exists: the email address is already used.",
+    );
+    await page.getByRole("textbox", { name: "Email" }).fill(`${name}@home.example`);
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Profile saved." })).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Display name")).toHaveValue("Kit Marlowe");
+    await expect(page.getByRole("textbox", { name: "Email" })).toHaveValue(`${name}@home.example`);
+
+    const current = page.getByLabel("Current password");
+    await current.fill("not-my-password-at-all");
+    await page.getByLabel("New password", { exact: true }).fill(second);
+    await page.getByLabel("Confirm new password").fill(second);
+    expect(await submitPasswordChange(page)).toBe(403);
+    await expect(page.getByText("The current password is wrong.")).toBeVisible();
+    await current.fill(first);
+    await page.getByLabel("New password", { exact: true }).fill("password1");
+    await page.getByLabel("Confirm new password").fill("password1");
+    expect(await submitPasswordChange(page)).toBe(422);
+    await expect(page.getByLabel("New password", { exact: true })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await page.getByLabel("New password", { exact: true }).fill(second);
+    await page.getByLabel("Confirm new password").fill(second);
+    expect(await submitPasswordChange(page)).toBe(204);
+    await expect(page.getByRole("status").filter({ hasText: "Password changed." })).toBeVisible();
+    await settled(page);
+    await expectAccessible(page);
+
+    // The other browser is signed out; this one stays signed in.
+    expect((await elsewhere.call("GET", "/me/sessions")).status()).toBe(401);
+    await page.goto("/settings/sessions");
+    await expect(page.getByText("This browser")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
+    // Sign-in takes the new password.
+    await (await session(env("HANGAR_URL"), name, second)).dispose();
+  } finally {
+    await elsewhere?.dispose();
+    await admin.dispose();
+  }
+  expect(problems).toEqual([]);
+});
+
 test("manages users, Upstreams, storage and the audit log", async ({ page }) => {
   const problems = watchConsole(page);
   const admin = await session(env("HANGAR_URL"), "hangar-admin", adminPassword);

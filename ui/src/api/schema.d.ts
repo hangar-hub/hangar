@@ -21,6 +21,30 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Change my display name or email
+         * @description Changes the signed-in user's display name and email address, with the same checks as the admin user editor: a display name of at most 100 characters, and an email address that is valid and not used by another user (409). An empty string clears the field; a field left out is unchanged. Changing the email address marks it unverified. Session callers need the `X-CSRF-Token` header, and Token callers need the `write` scope. Users who sign in with OIDC can change both fields too: Hangar copies them from the provider only when it creates the account.
+         */
+        patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change my password
+         * @description Changes the signed-in user's password. It needs a web UI session and the `X-CSRF-Token` header; every Token is refused with 403. The current password must be right (403, with an error on `current_password`) and the new one must meet the password policy (422, with an error on `new_password`). Wrong current passwords count towards the same throttle as failed sign-ins for the username and the client's IP address (429 with `Retry-After`). Users without a Hangar password, who sign in with OIDC, get 403. On success every other session of the user ends; the current session and the user's Tokens stay.
+         */
+        post: operations["changeMyPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1890,8 +1914,25 @@ export interface components {
             avatar_url?: string;
             is_admin: boolean;
             orgs: components["schemas"]["OrgMembership"][];
+            /** @description Whether the user has a Hangar password. Users who sign in only with OIDC have none and cannot change it in Hangar. */
+            has_password: boolean;
             /** @description Send as X-CSRF-Token on state-changing calls. */
             csrf_token?: string;
+        };
+        MeUpdate: {
+            /** @description The name shown instead of the username */
+            display_name?: string;
+            /** @description The email address. An empty string clears it. */
+            email?: string;
+        };
+        PasswordChange: {
+            /** Format: password */
+            current_password: string;
+            /**
+             * Format: password
+             * @description At least 10 characters and not a common password.
+             */
+            new_password: string;
         };
         OrgMembership: {
             name: string;
@@ -2995,6 +3036,54 @@ export interface operations {
                 };
             };
             /** @description Nobody is signed in. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    changeMyPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Changed. The user's other sessions have ended. */
             204: {
                 headers: {
                     [name: string]: unknown;

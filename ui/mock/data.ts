@@ -980,6 +980,7 @@ export function createState(): MockState {
     display_name: "Ada Lovelace",
     email: "ada@example.com",
     is_admin: true,
+    has_password: true,
     orgs: [{ name: "ml-team", display_name: "ML team", role: "admin" }],
     csrf_token: "mock-csrf-token",
   };

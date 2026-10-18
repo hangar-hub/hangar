@@ -307,6 +307,8 @@ async function authHandler(
   const oidc = /^\/auth\/oidc\/([^/]+)$/.exec(path);
   if (oidc && method === "GET") {
     state.signedIn = true;
+    // As for a User that OIDC sign-in created: no Hangar password.
+    state.me = { ...state.me, has_password: false };
     res.statusCode = 302;
     res.setHeader("Location", url.searchParams.get("redirect") || "/");
     res.end();
