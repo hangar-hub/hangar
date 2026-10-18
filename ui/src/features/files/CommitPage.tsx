@@ -40,21 +40,23 @@ export function CommitPage({
     <div className="space-y-4">
       <section
         aria-labelledby="commit-title"
-        className="rounded-lg border border-line bg-surface p-4"
+        className="hg-enter rounded-lg border border-line bg-surface p-4"
       >
-        <h2 id="commit-title" className="text-lg font-semibold">
+        <h2 id="commit-title" className="text-lg font-semibold wrap-anywhere">
           {c.title}
         </h2>
         {body ? <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{body}</p> : null}
         <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
           <dt className="text-muted">Author</dt>
-          <dd>
+          <dd className="wrap-anywhere">
             {c.author.name} <span className="text-muted">&lt;{c.author.email}&gt;</span>,{" "}
-            {formatDateTime(c.author.date)}
+            <time dateTime={c.author.date} className="tabular">
+              {formatDateTime(c.author.date)}
+            </time>
           </dd>
           <dt className="text-muted">Commit</dt>
-          <dd className="flex items-center gap-1 font-mono text-xs">
-            {c.sha}
+          <dd className="flex min-w-0 items-center gap-1 font-mono text-xs">
+            <span className="min-w-0 break-all">{c.sha}</span>
             <CopyButton value={c.sha} label="Copy the Commit SHA" />
           </dd>
           {c.parents.length ? (
@@ -65,7 +67,8 @@ export function CommitPage({
                   <AppLink
                     key={p}
                     href={`${repoPath(kind, ns, name)}/commit/${p}`}
-                    className="text-accent hover:underline"
+                    title={p}
+                    className="hg-link"
                   >
                     {shortSha(p)}
                   </AppLink>
@@ -78,13 +81,13 @@ export function CommitPage({
           <AppLink href={treePath(kind, ns, name, c.sha)}>Browse files at this Commit</AppLink>
         </Button>
       </section>
-      <h3 className="text-sm font-semibold">
+      <h3 className="tabular text-sm font-semibold">
         {c.changes.length} {c.changes.length === 1 ? "file" : "files"} changed
       </h3>
       {c.changes.length ? (
         <ChangeList repo={ref} sha={c.sha} changes={c.changes} />
       ) : (
-        <EmptyState title="No file changes">This Commit changes no files.</EmptyState>
+        <EmptyState size="sm" title="No file changes">This Commit changes no files.</EmptyState>
       )}
     </div>
   );

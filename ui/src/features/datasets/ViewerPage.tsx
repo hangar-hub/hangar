@@ -101,7 +101,7 @@ function FilterBar({
   return (
     <form
       aria-label="Filter rows"
-      className="space-y-2 rounded-lg border border-line bg-surface p-3"
+      className="hg-enter space-y-2 rounded-lg border border-line bg-surface p-3"
       onSubmit={(e) => {
         e.preventDefault();
         onApply(raw ? rawText.trim() : built);
@@ -138,7 +138,8 @@ function FilterBar({
               {i > 0 ? <span className="text-xs text-muted">and</span> : null}
               <Select
                 aria-label="Column"
-                className="w-auto font-mono text-xs"
+                compact
+                className="font-mono"
                 value={c.column}
                 onChange={(e) => update(i, { column: e.target.value })}
               >
@@ -150,7 +151,7 @@ function FilterBar({
               </Select>
               <Select
                 aria-label="Operator"
-                className="w-auto text-xs"
+                compact
                 value={c.op}
                 onChange={(e) => update(i, { op: e.target.value as Operator })}
               >
@@ -163,7 +164,8 @@ function FilterBar({
               {needsValue(c.op) ? (
                 <Input
                   aria-label="Value"
-                  className="w-48 font-mono text-xs"
+                  compact
+                  className="w-48 font-mono"
                   placeholder={c.op === "IN" ? "a, b, c" : "Value"}
                   value={c.value}
                   onChange={(e) => update(i, { value: e.target.value })}
@@ -272,7 +274,8 @@ function RowsTable({
                     type="button"
                     onClick={() => onSort(f.name)}
                     aria-label={`Sort by ${f.name}`}
-                    className="flex min-w-0 items-center gap-1 text-left text-xs font-semibold hover:text-accent"
+                    title={f.name}
+                    className="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-semibold transition-colors duration-100 hover:text-accent"
                   >
                     <span className="truncate font-mono">{f.name}</span>
                     <Icon
@@ -280,7 +283,10 @@ function RowsTable({
                       aria-hidden="true"
                     />
                   </button>
-                  <span className="truncate font-mono text-[10px] text-muted">
+                  <span
+                    className="truncate font-mono text-[10px] text-muted"
+                    title={f.type._type === "Value" ? f.type.dtype : (f.type._type ?? "struct")}
+                  >
                     {f.type._type === "Value" ? f.type.dtype : (f.type._type ?? "struct")}
                   </span>
                   <ColumnStatsButton stats={stats?.[f.name]} column={f.name} />
@@ -299,7 +305,7 @@ function RowsTable({
                   aria-rowindex={r.row_idx + 2}
                   data-index={item.index}
                   ref={v.measureElement}
-                  className="absolute inset-x-0 top-0 grid border-b border-line text-[13px]"
+                  className="absolute inset-x-0 top-0 grid border-b border-line text-[13px] hover:bg-raised/50"
                   style={{
                     gridTemplateColumns: template,
                     transform: `translateY(${item.start}px)`,
@@ -444,7 +450,8 @@ export function ViewerPage({
         <label className="space-y-1">
           <span className="block text-xs text-muted">Config</span>
           <Select
-            className="w-auto font-mono text-xs"
+            compact
+            className="font-mono"
             value={cfg.config}
             onChange={(e) => {
               const next = list.find((c) => c.config === e.target.value);
@@ -461,7 +468,8 @@ export function ViewerPage({
         <label className="space-y-1">
           <span className="block text-xs text-muted">Split</span>
           <Select
-            className="w-auto font-mono text-xs"
+            compact
+            className="font-mono"
             value={sp.split}
             onChange={(e) => go2(cfg.config, e.target.value)}
           >
@@ -572,7 +580,7 @@ export function ViewerPage({
             />
           ) : null}
           {search.q || search.where ? (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-muted wrap-anywhere">
               {search.q ? (
                 <>
                   Rows where any text contains every word of{" "}
@@ -595,7 +603,7 @@ export function ViewerPage({
               <ErrorState error={rows.error} onRetry={() => rows.refetch()} />
             )
           ) : rows.data.rows.length === 0 ? (
-            <EmptyState title="No rows match">Change the search or the filter.</EmptyState>
+            <EmptyState size="sm" title="No rows match">Change the search or the filter.</EmptyState>
           ) : (
             <>
               <RowsTable

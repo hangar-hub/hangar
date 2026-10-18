@@ -22,7 +22,7 @@ export function diffLines(
 export function DiffView({ patch, label = "Diff" }: { patch: string; label?: string }) {
   return (
     <ScrollRegion label={label} className="overflow-y-hidden">
-      <pre className="font-mono text-[12px] leading-5">
+      <pre className="py-1 font-mono text-[12px] leading-5">
         <code>
           {diffLines(patch).map((l, i) => (
             <div

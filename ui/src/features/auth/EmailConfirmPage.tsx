@@ -28,14 +28,14 @@ export function EmailConfirmPage({ code }: { code: string }) {
         Confirm your email
       </h1>
       {confirm.isSuccess ? (
-        <div className="mt-4 space-y-3">
+        <div className="hg-enter mt-4 space-y-3">
           <p
             role="status"
             className="rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok"
           >
             Email confirmed. It is now the email of your Hangar account.
           </p>
-          <AppLink href="/settings/profile" className="text-sm text-accent underline">
+          <AppLink href="/settings/profile" className="hg-link text-sm">
             Go to your profile
           </AppLink>
         </div>

@@ -28,19 +28,23 @@ export function EmptyState({
   children,
   action,
   icon,
+  size = "md",
   className,
 }: {
   title: string;
   children?: ReactNode;
   action?: ReactNode;
   icon?: ReactNode;
+  /** `sm` for empty states inside tabs, drawers and dialogs. */
+  size?: "sm" | "md";
   className?: string;
 }) {
   return (
     <div
       className={cn(
         // IDs and paths in titles have no spaces, so let them wrap anywhere.
-        "flex flex-col items-start gap-2 rounded-lg border border-dashed border-line-strong px-5 py-8 wrap-anywhere",
+        "hg-enter flex flex-col items-start gap-2 rounded-lg border border-dashed border-line-strong wrap-anywhere",
+        size === "sm" ? "px-4 py-5" : "px-5 py-8",
         className,
       )}
     >
@@ -103,7 +107,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger-soft px-5 py-4"
+      className="hg-enter flex items-start gap-3 rounded-lg border border-danger/30 bg-danger-soft px-5 py-4"
     >
       <AlertTriangle className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden="true" />
       <div className="min-w-0 flex-1">

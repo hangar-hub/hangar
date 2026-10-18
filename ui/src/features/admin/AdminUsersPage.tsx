@@ -7,7 +7,7 @@ import { PageShell } from "@/components/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, Field, Input, Select } from "@/components/ui/form";
 import { ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
@@ -38,11 +38,8 @@ function LinkDialog({
     >
       {link ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 rounded-md border border-line bg-raised px-3 py-2">
-            <code className="min-w-0 flex-1 break-all font-mono text-xs">{link.url}</code>
-            <CopyButton value={link.url} label="Copy the link" />
-          </div>
-          <p className="text-xs text-muted">Expires {formatDateTime(link.expires_at)}.</p>
+          <CopyField value={link.url} label="Copy the link" small />
+          <p className="tabular text-xs text-muted">Expires {formatDateTime(link.expires_at)}.</p>
         </div>
       ) : null}
     </Dialog>
@@ -264,14 +261,14 @@ function AdminTokens() {
   if (tokens.isPending) return <LoadingRows rows={2} label="Loading Tokens" />;
   if (tokens.isError) return <ErrorState error={tokens.error} onRetry={() => tokens.refetch()} />;
   return (
-    <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+    <ul className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface">
       {tokens.data.items.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
+        <li key={t.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm">
           <span className="font-mono">{t.username}</span>
           <span>{t.name}</span>
           <span className="font-mono text-xs text-muted">{t.prefix}...</span>
           <Badge mono>{t.scope}</Badge>
-          <span className="text-xs text-muted">
+          <span className="tabular text-xs text-muted">
             {t.last_used_at ? `Used ${relativeTime(t.last_used_at)}` : "Never used"}
           </span>
           <ConfirmDialog
@@ -369,7 +366,7 @@ export function AdminUsersPage() {
       primary: true,
       cell: (u) => (
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono font-medium">{u.username}</span>
+          <span className="font-mono font-medium wrap-anywhere">{u.username}</span>
           {u.display_name ? <span className="text-muted">{u.display_name}</span> : null}
           {u.is_admin ? <Badge tone="accent">Admin</Badge> : null}
           {u.disabled ? <Badge tone="danger">Disabled</Badge> : null}
@@ -385,8 +382,8 @@ export function AdminUsersPage() {
       key: "email",
       header: "Email",
       cell: (u) => (
-        <span className="flex flex-col text-xs">
-          <span>{u.email || "Not set"}</span>
+        <span className="flex flex-col text-xs wrap-anywhere">
+          <span className={u.email ? undefined : "text-muted"}>{u.email || "Not set"}</span>
           {u.pending_email ? (
             <span className="text-muted">Waiting for confirmation: {u.pending_email}</span>
           ) : null}
@@ -397,7 +394,12 @@ export function AdminUsersPage() {
       key: "login",
       header: "Last sign-in",
       cell: (u) => (
-        <span className="text-xs">{u.last_login_at ? relativeTime(u.last_login_at) : "Never"}</span>
+        <span
+          className="tabular text-xs"
+          title={u.last_login_at ? formatDateTime(u.last_login_at) : undefined}
+        >
+          {u.last_login_at ? relativeTime(u.last_login_at) : "Never"}
+        </span>
       ),
     },
     {
@@ -470,7 +472,14 @@ export function AdminUsersPage() {
       ) : users.isError ? (
         <ErrorState error={users.error} onRetry={() => users.refetch()} />
       ) : (
-        <DataTable caption="Users" columns={columns} rows={items} rowKey={(u) => u.id} />
+        <DataTable
+          className="hg-enter"
+          caption="Users"
+          rowHover
+          columns={columns}
+          rows={items}
+          rowKey={(u) => u.id}
+        />
       )}
       {users.hasNextPage ? <Button onClick={() => users.fetchNextPage()}>More users</Button> : null}
       <section aria-labelledby="all-tokens" className="space-y-2 pt-4">

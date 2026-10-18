@@ -57,7 +57,7 @@ function Members({ ns, canAdmin }: { ns: string; canAdmin: boolean }) {
       <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
         {list.data.items.map((m) => (
           <li key={m.username} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
-            <AppLink href={`/${m.username}`} className="font-mono hover:underline">
+            <AppLink href={`/${m.username}`} className="min-w-0 font-mono underline-offset-2 wrap-anywhere hover:underline">
               {m.username}
             </AppLink>
             {m.display_name ? <span className="text-muted">{m.display_name}</span> : null}
@@ -67,7 +67,7 @@ function Members({ ns, canAdmin }: { ns: string; canAdmin: boolean }) {
                 <>
                   <Select
                     aria-label={`Role of ${m.username}`}
-                    className="h-8 w-auto text-xs"
+                    compact
                     value={m.role}
                     onChange={(e) =>
                       set.mutate({ username: m.username, role: e.target.value as Role })
@@ -185,19 +185,20 @@ export function NamespacePage({ ns }: { ns: string }) {
   const tab = search.tab ?? "repos";
   return (
     <PageShell
+      className="hg-enter"
       title={
         <span className="flex items-center gap-2">
           {isOrg ? (
-            <Building2 className="size-6 text-muted" aria-hidden="true" />
+            <Building2 className="size-6 shrink-0 text-muted" aria-hidden="true" />
           ) : (
-            <User className="size-6 text-muted" aria-hidden="true" />
+            <User className="size-6 shrink-0 text-muted" aria-hidden="true" />
           )}
-          {x.display_name || x.name}
+          <span className="min-w-0 wrap-anywhere">{x.display_name || x.name}</span>
         </span>
       }
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
-          <span className="font-mono">{x.name}</span>
+          <span className="font-mono wrap-anywhere">{x.name}</span>
           <Badge>{isOrg ? "Organisation" : "User"}</Badge>
           {x.reserved_mirror ? <Badge tone="info">Holds Mirrors</Badge> : null}
         </span>
@@ -217,7 +218,7 @@ export function NamespacePage({ ns }: { ns: string }) {
             ) : repos.isError ? (
               <ErrorState error={repos.error} onRetry={() => repos.refetch()} />
             ) : repos.data.items.length === 0 ? (
-              <EmptyState title="No Repos you can see" />
+              <EmptyState size="sm" title="No Repos you can see" />
             ) : (
               // Models and datasets are separate lists, as in the top bar.
               <div className="space-y-6">
@@ -247,22 +248,28 @@ export function NamespacePage({ ns }: { ns: string }) {
           {
             value: "collections",
             label: "Collections",
-            content: collections.data?.items.length ? (
-              <ul className="space-y-2">
+            content: collections.isPending ? (
+              <LoadingRows rows={2} label="Loading Collections" />
+            ) : collections.isError ? (
+              <ErrorState error={collections.error} onRetry={() => collections.refetch()} />
+            ) : collections.data.items.length ? (
+              <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
                 {collections.data.items.map((c) => (
-                  <li key={c.slug}>
+                  <li key={c.slug} className="flex items-baseline gap-3 px-4 py-2 text-sm">
                     <AppLink
                       href={`/collections/${c.namespace}/${c.slug}`}
-                      className="font-medium hover:underline"
+                      className="min-w-0 font-medium underline-offset-2 wrap-anywhere hover:underline"
                     >
                       {c.title}
                     </AppLink>
-                    <span className="ml-2 text-xs text-muted">{c.items.length} items</span>
+                    <span className="tabular ml-auto shrink-0 text-xs text-muted">
+                      {c.items.length} items
+                    </span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <EmptyState title="No Collections" />
+              <EmptyState size="sm" title="No Collections" />
             ),
           },
           ...(isOrg

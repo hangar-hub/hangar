@@ -220,9 +220,19 @@ export function watchFailedLoads(page: Page): string[] {
 /**
  * Runs every axe rule, as phase 0's shell test did: the WCAG 2.2 AA rules
  * (09-web-ui.md "Accessibility") and axe's best practices, such as heading
- * order.
+ * order. It waits for enter animations first, since axe reads the colour
+ * contrast of text that is still fading in as too low. Infinite ones, such
+ * as a skeleton's pulse, never finish, so it does not wait for those.
  */
 export async function expectAccessible(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().endTime !== Number.POSITIVE_INFINITY)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
   const results = await new AxeBuilder({ page }).analyze();
   const summary = results.violations.map(
     (v) =>

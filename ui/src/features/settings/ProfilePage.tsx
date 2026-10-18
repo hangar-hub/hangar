@@ -237,7 +237,7 @@ function PasswordForm({ me }: { me: Me }) {
       {change.isSuccess ? (
         <p
           role="status"
-          className="rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok"
+          className="hg-enter rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok"
         >
           Password changed. Your other sessions are signed out; this one stays signed in. Tokens
           keep working.

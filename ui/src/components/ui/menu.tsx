@@ -17,7 +17,7 @@ export function MenuContent({
       <DropdownMenu.Content
         align={align}
         sideOffset={6}
-        className="z-50 min-w-48 rounded-md border border-line bg-surface p-1 text-sm text-ink shadow-lg"
+        className="hg-popover z-50 min-w-48 rounded-md border border-line bg-surface p-1 text-sm text-ink shadow-lg"
       >
         {children}
       </DropdownMenu.Content>

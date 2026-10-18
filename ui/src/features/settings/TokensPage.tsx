@@ -8,7 +8,7 @@ import { ScrollRegion } from "@/components/ScrollRegion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/form";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
@@ -136,11 +136,14 @@ function CreateToken({ onCreated }: { onCreated: (t: TokenCreated) => void }) {
         <fieldset className="space-y-1.5">
           <legend className="text-sm font-medium">Scope</legend>
           {(["read", "write", "admin"] as Scope[]).map((s) => (
-            <label key={s} className="flex items-start gap-2 text-sm">
+            <label
+              key={s}
+              className="flex cursor-pointer items-start gap-2 rounded-md border border-line px-3 py-2 text-sm transition-[border-color,background-color] duration-150 hover:border-line-strong has-[:checked]:border-accent/50 has-[:checked]:bg-accent-soft/50"
+            >
               <input
                 type="radio"
                 name="scope"
-                className="mt-0.5 size-4 accent-[var(--hg-accent-fill)]"
+                className="mt-0.5 size-4 shrink-0 accent-[var(--hg-accent-fill)]"
                 checked={form.scope === s}
                 onChange={() => setForm({ ...form, scope: s })}
               />
@@ -217,7 +220,7 @@ export function TokensPage() {
       primary: true,
       cell: (t) => (
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="font-medium">{t.name}</span>
+          <span className="font-medium wrap-anywhere">{t.name}</span>
           <span className="font-mono text-xs text-muted">{t.prefix}...</span>
         </span>
       ),
@@ -227,7 +230,7 @@ export function TokensPage() {
       key: "limits",
       header: "Limited to",
       cell: (t) => (
-        <span className="font-mono text-xs">
+        <span className="font-mono text-xs wrap-anywhere">
           {[...(t.restrictions?.namespaces ?? []), ...(t.restrictions?.repos ?? [])].join(", ") ||
             "Everything you can access"}
         </span>
@@ -237,14 +240,18 @@ export function TokensPage() {
       key: "used",
       header: "Last used",
       cell: (t) => (
-        <span className="text-xs">{t.last_used_at ? relativeTime(t.last_used_at) : "Never"}</span>
+        <span className="tabular text-xs">
+          {t.last_used_at ? relativeTime(t.last_used_at) : "Never"}
+        </span>
       ),
     },
     {
       key: "expires",
       header: "Expires",
       cell: (t) => (
-        <span className="text-xs">{t.expires_at ? formatDate(t.expires_at) : "Never"}</span>
+        <span className="tabular whitespace-nowrap text-xs">
+          {t.expires_at ? formatDate(t.expires_at) : "Never"}
+        </span>
       ),
     },
     {
@@ -295,15 +302,12 @@ export function TokensPage() {
       >
         {created ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-md border border-line bg-raised px-3 py-2">
-              <code
-                className="min-w-0 flex-1 break-all font-mono text-sm"
-                data-testid="token-secret"
-              >
-                {created.secret}
-              </code>
-              <CopyButton value={created.secret} label="Copy the Token" />
-            </div>
+            <CopyField
+              value={created.secret}
+              label="Copy the Token"
+              icon={<KeyRound aria-hidden="true" />}
+              testId="token-secret"
+            />
             <p className="text-sm text-muted">Sign in the hf CLI with it:</p>
             <ScrollRegion
               label="Sign-in commands"
@@ -327,6 +331,7 @@ export function TokensPage() {
         </EmptyState>
       ) : (
         <DataTable
+          className="hg-enter"
           caption="Your Tokens"
           columns={columns}
           rows={tokens.data.items}

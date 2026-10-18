@@ -29,6 +29,7 @@ import { useToast } from "@/components/ui/toast";
 import { errorMessage, unwrap } from "@/lib/problem";
 import { parseRepoId, repoLabel } from "@/lib/repo";
 import { useMe, writableNamespaces } from "@/lib/session";
+import { cn } from "@/lib/utils";
 import { VisibilityBadge } from "../repos/badges";
 import { RepoCard } from "../repos/RepoCard";
 
@@ -71,13 +72,16 @@ function SortableItem({
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={isDragging ? "relative z-10 opacity-80" : undefined}
+      className={isDragging ? "relative z-10" : undefined}
     >
       <div className="flex items-start gap-2">
         {editing ? (
           <button
             type="button"
-            className="mt-3 cursor-grab rounded-sm p-1 text-muted hover:bg-raised active:cursor-grabbing"
+            className={cn(
+              "mt-3 cursor-grab touch-none rounded-sm p-1 text-muted transition-[color,background-color] duration-150 hover:bg-raised hover:text-ink active:cursor-grabbing",
+              isDragging && "cursor-grabbing bg-raised text-ink",
+            )}
             aria-label={`Move ${item.item_id}`}
             {...attributes}
             {...listeners}
@@ -86,7 +90,15 @@ function SortableItem({
           </button>
         ) : null}
         <div className="min-w-0 flex-1 space-y-1">
-          <ItemView item={item} />
+          <div
+            className={cn(
+              "rounded-lg transition-shadow duration-200 ease-out",
+              isDragging &&
+                "shadow-[0_8px_24px_-6px_rgb(0_0_0/0.18),0_2px_6px_-2px_rgb(0_0_0/0.12)]",
+            )}
+          >
+            <ItemView item={item} />
+          </div>
           {editing ? (
             <form
               className="flex gap-2"
@@ -100,7 +112,7 @@ function SortableItem({
                 placeholder="Add a note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="h-8 text-xs"
+                compact
               />
               <Button size="sm" type="submit" disabled={note === (item.note ?? "")}>
                 Save note

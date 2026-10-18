@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * A modal dialog. `side` turns it into a sheet that slides in from the
- * right (drawers, filters on phones).
+ * right (drawers, filters on phones). `instant` skips the open and close
+ * motion, for dialogs opened from the keyboard many times a day.
  */
 export function Dialog({
   open,
@@ -18,6 +19,7 @@ export function Dialog({
   wide,
   trigger,
   initialFocus,
+  instant,
 }: {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -33,12 +35,15 @@ export function Dialog({
    * the first focusable element, which is the Close button.
    */
   initialFocus?: RefObject<HTMLElement | null>;
+  instant?: boolean;
 }) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       {trigger ? <RadixDialog.Trigger asChild>{trigger}</RadixDialog.Trigger> : null}
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-steel-950/50" />
+        <RadixDialog.Overlay
+          className={cn("fixed inset-0 z-40 bg-steel-950/50", !instant && "hg-overlay")}
+        />
         <RadixDialog.Content
           onOpenAutoFocus={(e) => {
             if (!initialFocus?.current) return;
@@ -47,6 +52,7 @@ export function Dialog({
           }}
           className={cn(
             "fixed z-50 flex flex-col border border-line bg-surface text-ink shadow-xl focus:outline-none",
+            !instant && (side ? `hg-sheet-${side}` : "hg-modal"),
             side
               ? cn(
                   "inset-y-0 w-full max-w-md",
@@ -61,7 +67,9 @@ export function Dialog({
         >
           <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-3.5">
             <div>
-              <RadixDialog.Title className="text-base font-semibold">{title}</RadixDialog.Title>
+              <RadixDialog.Title className="text-base font-semibold tracking-tight">
+                {title}
+              </RadixDialog.Title>
               {description ? (
                 <RadixDialog.Description className="mt-0.5 text-sm text-muted">
                   {description}
@@ -71,7 +79,7 @@ export function Dialog({
               )}
             </div>
             <RadixDialog.Close
-              className="-mr-1 rounded-md p-1 text-muted hover:bg-raised hover:text-ink"
+              className="-mr-1 rounded-md p-1 text-muted transition-[color,background-color,scale] duration-150 ease-out hover:bg-raised hover:text-ink active:scale-[0.97]"
               aria-label="Close"
             >
               <X className="size-4" />

@@ -26,7 +26,7 @@ export function Tabs({
           <RadixTabs.Trigger
             key={t.value}
             value={t.value}
-            className="-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-muted hover:text-ink data-[state=active]:border-accent-fill data-[state=active]:font-medium data-[state=active]:text-ink"
+            className="-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-muted transition-[color,border-color] duration-150 hover:text-ink data-[state=active]:border-accent-fill data-[state=active]:font-medium data-[state=active]:text-ink"
           >
             {t.label}
           </RadixTabs.Trigger>

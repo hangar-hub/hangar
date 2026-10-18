@@ -8,12 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/form";
+import { SegmentedControl } from "@/components/ui/segmented";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
-import { relativeTime } from "@/lib/format";
+import { formatDateTime, relativeTime } from "@/lib/format";
 import { unwrap } from "@/lib/problem";
 import { type RepoKind, repoPath } from "@/lib/repo";
 import { useSearchState } from "@/lib/use-search-state";
-import { cn } from "@/lib/utils";
 import { type RepoRef, repoKey, repoPathParams, useRepo } from "../repos/hooks";
 
 export const statusTone = {
@@ -118,14 +118,23 @@ function Item({ d, base }: { d: Discussion; base: string }) {
         aria-label={d.kind === "pull_request" ? "Pull request" : "Discussion"}
       />
       <div className="min-w-0 flex-1">
-        <AppLink href={`${base}/discussions/${d.num}`} className="font-medium hover:underline">
+        <AppLink
+          href={`${base}/discussions/${d.num}`}
+          className="font-medium underline-offset-2 wrap-anywhere hover:underline"
+        >
           {d.title}
         </AppLink>
         <p className="mt-0.5 text-xs text-muted">
-          #{d.num} opened {relativeTime(d.created_at)} by {d.author}
+          <span className="tabular">#{d.num}</span> opened{" "}
+          <time dateTime={d.created_at} title={formatDateTime(d.created_at)} className="tabular">
+            {relativeTime(d.created_at)}
+          </time>{" "}
+          by {d.author}
         </p>
       </div>
-      <Badge tone={statusTone[d.status]}>{statusText[d.status]}</Badge>
+      <Badge tone={statusTone[d.status]} className="shrink-0">
+        {statusText[d.status]}
+      </Badge>
     </li>
   );
 }
@@ -159,46 +168,28 @@ export function DiscussionsPage({ kind, ns, name }: { kind: RepoKind; ns: string
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const base = repoPath(kind, ns, name);
   const canDiscuss = Boolean(repo.data?.permissions?.discuss);
-  const pill = (active: boolean) =>
-    cn(
-      "rounded-md px-2.5 py-1 text-sm",
-      active ? "bg-raised font-medium text-ink" : "text-muted hover:text-ink",
-    );
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <fieldset className="flex gap-1">
-          <legend className="sr-only">Type</legend>
-          {[
-            { v: undefined, l: "All" },
-            { v: "discussion", l: "Discussions" },
-            { v: "pull_request", l: "Pull requests" },
-          ].map((o) => (
-            <button
-              key={o.l}
-              type="button"
-              aria-pressed={filterKind === o.v}
-              className={pill(filterKind === o.v)}
-              onClick={() => update({ kind: o.v })}
-            >
-              {o.l}
-            </button>
-          ))}
-        </fieldset>
-        <fieldset className="flex gap-1">
-          <legend className="sr-only">Status</legend>
-          {["open", "closed"].map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={status === s}
-              className={pill(status === s)}
-              onClick={() => update({ status: s === "open" ? undefined : s })}
-            >
-              {s === "open" ? "Open" : "Closed"}
-            </button>
-          ))}
-        </fieldset>
+        <SegmentedControl<typeof filterKind>
+          legend="Type"
+          value={filterKind}
+          onValueChange={(v) => update({ kind: v })}
+          options={[
+            { value: undefined, label: "All" },
+            { value: "discussion", label: "Discussions" },
+            { value: "pull_request", label: "Pull requests" },
+          ]}
+        />
+        <SegmentedControl
+          legend="Status"
+          value={status}
+          onValueChange={(v) => update({ status: v === "open" ? undefined : v })}
+          options={[
+            { value: "open", label: "Open" },
+            { value: "closed", label: "Closed" },
+          ]}
+        />
         <div className="ml-auto">{canDiscuss ? <NewDiscussion repo={ref} /> : null}</div>
       </div>
       {list.isPending ? (
@@ -206,13 +197,16 @@ export function DiscussionsPage({ kind, ns, name }: { kind: RepoKind; ns: string
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : items.length === 0 ? (
-        <EmptyState title={status === "open" ? "No open discussions" : "No closed discussions"}>
+        <EmptyState
+          className="hg-enter"
+          title={status === "open" ? "No open discussions" : "No closed discussions"}
+        >
           Discussions and pull requests about this Repo appear here.
         </EmptyState>
       ) : (
         <ul
           aria-label="Discussions"
-          className="divide-y divide-line rounded-lg border border-line bg-surface"
+          className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface"
         >
           {items.map((d) => (
             <Item key={d.num} d={d} base={base} />

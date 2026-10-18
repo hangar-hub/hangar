@@ -132,7 +132,7 @@ export function DiscoverDetailPanel({
   const toggle = (list: string[], v: string) =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
   return (
-    <div className="space-y-4">
+    <div className="hg-enter space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <ArsenalBadge
           state={d.arsenal}
@@ -144,7 +144,7 @@ export function DiscoverDetailPanel({
         {local && d.arsenal !== "none" ? (
           <AppLink
             href={repoPath(local.kind, local.ns, local.name)}
-            className="text-sm text-accent underline"
+            className="hg-link text-sm"
           >
             Open in your arsenal
           </AppLink>
@@ -158,8 +158,10 @@ export function DiscoverDetailPanel({
           </p>
           <ul className="grid gap-1.5 sm:grid-cols-2">
             {d.quants.map((q) => (
-              <li key={q.name} className="rounded-md border border-line px-2 py-1.5">
+              <li key={q.name}>
                 <Checkbox
+                  card
+                  className="h-full px-2 py-1.5"
                   checked={quants.includes(q.name)}
                   onChange={() => setQuants(toggle(quants, q.name))}
                   label={
@@ -186,7 +188,10 @@ export function DiscoverDetailPanel({
           <p className="text-xs text-muted">Pick none to pull everything.</p>
           <ul className="space-y-1.5">
             {d.configs.map((c) => (
-              <li key={c.config} className="rounded-md border border-line px-2 py-1.5">
+              <li
+                key={c.config}
+                className="rounded-md border border-line px-2 py-1.5 transition-[border-color,background-color] duration-150 has-[>div>input:checked]:border-accent/40 has-[>div>input:checked]:bg-accent-soft/40"
+              >
                 <Checkbox
                   checked={configs.includes(c.config)}
                   onChange={() => setConfigs(toggle(configs, c.config))}
@@ -201,7 +206,7 @@ export function DiscoverDetailPanel({
                       label={
                         <span className="text-xs">
                           <span className="font-mono">{s.split}</span>{" "}
-                          <span className="text-muted">
+                          <span className="tabular text-muted">
                             {s.num_rows !== undefined ? `${formatCount(s.num_rows)} rows` : ""}
                             {s.num_bytes_parquet
                               ? `, ${formatBytes(s.num_bytes_parquet)} Parquet`
@@ -231,7 +236,7 @@ export function DiscoverDetailPanel({
           <ul className="space-y-1 text-sm">
             {d.dependencies.map((dep) => (
               <li key={dep.repo} className="flex flex-wrap items-center gap-1.5">
-                <span className="font-mono">{dep.repo}</span>
+                <span className="break-all font-mono">{dep.repo}</span>
                 {dep.required ? (
                   <Badge tone="info">Pulled with it</Badge>
                 ) : (
@@ -304,7 +309,7 @@ export function DiscoverDetailPanel({
             content: card ? (
               <LazyMarkdown headingLevel={3}>{card}</LazyMarkdown>
             ) : (
-              <EmptyState title="No card on the Upstream" />
+              <EmptyState size="sm" title="No card on the Upstream" />
             ),
           },
           ...(d.preview

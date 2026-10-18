@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/api/client";
 import type { FileChange } from "@/api/types";
@@ -6,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState, Skeleton } from "@/components/ui/states";
 import { formatBytes, shortSha } from "@/lib/format";
 import { unwrap } from "@/lib/problem";
+import { cn } from "@/lib/utils";
 import { type RepoRef, repoKey, repoPathParams } from "../repos/hooks";
 import { DiffView } from "./DiffView";
 
@@ -47,7 +49,11 @@ function Diff({
   if (diff.isPending) return <Skeleton className="m-3 h-20" />;
   if (diff.isError) return <ErrorState error={diff.error} onRetry={() => diff.refetch()} />;
   if (!diff.data.patch) return <SizeChange change={change} />;
-  return <DiffView patch={diff.data.patch} label={`Diff of ${change.path}`} />;
+  return (
+    <div className="hg-enter">
+      <DiffView patch={diff.data.patch} label={`Diff of ${change.path}`} />
+    </div>
+  );
 }
 
 /** For LFS, binary and large files: the size and SHA change instead of a text diff (REPO-3). */
@@ -58,8 +64,9 @@ function SizeChange({ change }: { change: FileChange }) {
         <>
           <dt className="text-muted">Before</dt>
           <dd>
-            {formatBytes(change.old_size)}, {change.lfs ? "SHA-256" : "object"}{" "}
-            {shortSha(change.old_oid)}
+            <span className="tabular">{formatBytes(change.old_size)}</span>,{" "}
+            {change.lfs ? "SHA-256" : "object"}{" "}
+            <span title={change.old_oid}>{shortSha(change.old_oid)}</span>
           </dd>
         </>
       ) : null}
@@ -67,8 +74,9 @@ function SizeChange({ change }: { change: FileChange }) {
         <>
           <dt className="text-muted">After</dt>
           <dd>
-            {formatBytes(change.new_size)}, {change.lfs ? "SHA-256" : "object"}{" "}
-            {shortSha(change.new_oid)}
+            <span className="tabular">{formatBytes(change.new_size)}</span>,{" "}
+            {change.lfs ? "SHA-256" : "object"}{" "}
+            <span title={change.new_oid}>{shortSha(change.new_oid)}</span>
           </dd>
         </>
       ) : null}
@@ -105,8 +113,15 @@ export function ChangeList({
               type="button"
               aria-expanded={isOpen}
               onClick={() => setOpen({ ...open, [c.path]: !isOpen })}
-              className="flex w-full flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-left hover:bg-raised"
+              className={cn(
+                "flex w-full flex-wrap items-center gap-2 px-3 py-2 text-left transition-colors duration-100 hover:bg-raised",
+                isOpen && "border-b border-line",
+              )}
             >
+              <ChevronRight
+                className={cn("size-4 shrink-0 text-muted", isOpen && "rotate-90")}
+                aria-hidden="true"
+              />
               <Badge tone={statusTone[c.status]}>{statusText[c.status]}</Badge>
               <span className="min-w-0 flex-1 break-all font-mono text-[13px]">
                 {c.old_path && c.old_path !== c.path ? `${c.old_path} to ${c.path}` : c.path}

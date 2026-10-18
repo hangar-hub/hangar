@@ -30,8 +30,10 @@ export function JobRow({ job, onCancel }: { job: Job; onCancel?: () => void }) {
   return (
     <li className="space-y-1.5 py-3">
       <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 break-words text-sm font-medium">{jobTitle(job)}</p>
-        <Badge tone={statusTone(job.status)}>{statusLabel(job.status)}</Badge>
+        <p className="min-w-0 text-sm font-medium wrap-anywhere">{jobTitle(job)}</p>
+        <Badge tone={statusTone(job.status)} className="shrink-0">
+          {statusLabel(job.status)}
+        </Badge>
       </div>
       {p.bytes_total > 0 ? (
         <>
@@ -50,7 +52,7 @@ export function JobRow({ job, onCancel }: { job: Job; onCancel?: () => void }) {
         </>
       ) : null}
       {p.message ? <p className="text-xs text-muted">{p.message}</p> : null}
-      {job.error ? <p className="text-xs text-danger">{job.error}</p> : null}
+      {job.error ? <p className="text-xs text-danger wrap-anywhere">{job.error}</p> : null}
       {onCancel && isActive(job.status) ? (
         <Button size="sm" variant="ghost" onClick={onCancel}>
           Cancel
@@ -86,7 +88,7 @@ export function JobsIndicator() {
           className="relative"
         >
           <Activity aria-hidden="true" />
-          <span className="tabular hidden sm:inline">Jobs</span>
+          <span className="hidden sm:inline">Jobs</span>
           {active.length > 0 ? (
             <span className="tabular rounded-sm bg-accent-fill px-1 text-[11px] font-semibold text-accent-ink">
               {active.length}
@@ -100,9 +102,13 @@ export function JobsIndicator() {
       ) : jobs.isError ? (
         <ErrorState error={jobs.error} onRetry={() => jobs.refetch()} />
       ) : jobs.data.items.length === 0 ? (
-        <EmptyState title="No Jobs yet">
+        <EmptyState size="sm" title="No Jobs yet">
           Pulls you start from{" "}
-          <Link to="/discover" className="text-accent underline" onClick={() => setOpen(false)}>
+          <Link
+            to="/discover"
+            className="hg-link"
+            onClick={() => setOpen(false)}
+          >
             Discover
           </Link>{" "}
           show their progress here.

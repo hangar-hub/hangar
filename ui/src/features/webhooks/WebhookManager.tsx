@@ -192,13 +192,13 @@ function Deliveries({ hook }: { hook: Webhook }) {
               {d.status_code ?? "Pending"}
             </Badge>
             <span className="font-mono text-xs">{d.event}</span>
-            <span className="text-xs text-muted">
+            <span className="tabular text-xs text-muted">
               attempt {d.attempt}, {relativeTime(d.created_at)}
               {d.duration_ms !== undefined ? `, ${d.duration_ms} ms` : ""}
             </span>
-            {d.error ? <span className="text-xs text-danger">{d.error}</span> : null}
+            {d.error ? <span className="text-xs text-danger wrap-anywhere">{d.error}</span> : null}
             {d.next_attempt_at ? (
-              <span className="text-xs text-muted">
+              <span className="tabular text-xs text-muted">
                 Next try {formatDateTime(d.next_attempt_at)}
               </span>
             ) : null}
@@ -280,11 +280,11 @@ export function WebhookManager({
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : list.data.items.length === 0 ? (
-        <EmptyState title="No webhooks">
+        <EmptyState size="sm" title="No webhooks">
           Add one to tell CI or chat about new Commits, Pulls and discussions.
         </EmptyState>
       ) : (
-        <ul className="space-y-2">
+        <ul className="hg-enter space-y-2">
           {list.data.items.map((h) => (
             <li key={h.id} className="rounded-lg border border-line bg-surface p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -292,6 +292,7 @@ export function WebhookManager({
                 {h.namespace ? <Badge>{h.namespace}</Badge> : null}
                 {h.repo ? <Badge mono>{h.repo}</Badge> : null}
                 <Switch
+                  className="gap-0 py-0"
                   label={<span className="sr-only">Enabled</span>}
                   checked={h.enabled}
                   onCheckedChange={() => toggle.mutate(h)}
@@ -333,9 +334,9 @@ export function WebhookManager({
                   </p>
                 </ConfirmDialog>
               </div>
-              <p className="mt-1 font-mono text-xs text-muted">{h.events.join(", ")}</p>
+              <p className="mt-1.5 font-mono text-xs text-muted">{h.events.join(", ")}</p>
               {open === h.id ? (
-                <div className="mt-2 border-t border-line pt-2">
+                <div className="mt-3 border-t border-line pt-2">
                   <Deliveries hook={h} />
                 </div>
               ) : null}

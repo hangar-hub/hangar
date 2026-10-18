@@ -24,7 +24,9 @@ export function StatsSummary({ stats }: { stats: ColumnStatistics }) {
         {top.map(([k, n]) => (
           <div key={k} className="text-xs">
             <div className="flex justify-between gap-2">
-              <span className="truncate">{k}</span>
+              <span className="truncate" title={k}>
+                {k}
+              </span>
               <span className="tabular font-mono">{formatCount(n)}</span>
             </div>
             <div className="h-1 rounded-full bg-raised">
@@ -60,7 +62,7 @@ export function StatsSummary({ stats }: { stats: ColumnStatistics }) {
           ))}
         </div>
       ) : null}
-      <dl className="grid grid-cols-2 gap-x-2 font-mono text-[11px]">
+      <dl className="tabular grid grid-cols-2 gap-x-2 font-mono text-[11px]">
         <dt className="text-muted">min</dt>
         <dd>{fmt(s.min)}</dd>
         <dt className="text-muted">max</dt>
@@ -90,7 +92,7 @@ export function ColumnStatsButton({ stats, column }: { stats?: ColumnStatistics;
           <button
             type="button"
             aria-label={`Statistics for ${column}`}
-            className="rounded-sm p-0.5 text-muted hover:bg-raised hover:text-ink"
+            className="rounded-sm p-0.5 text-muted transition-colors duration-100 hover:bg-raised hover:text-ink"
           >
             <BarChart3 className="size-3.5" aria-hidden="true" />
           </button>
@@ -99,7 +101,7 @@ export function ColumnStatsButton({ stats, column }: { stats?: ColumnStatistics;
           <Tooltip.Content
             side="bottom"
             sideOffset={6}
-            className="z-50 rounded-md border border-line bg-surface p-3 text-ink shadow-lg"
+            className="hg-popover z-50 rounded-md border border-line bg-surface p-3 text-ink shadow-lg"
           >
             <StatsSummary stats={stats} />
           </Tooltip.Content>

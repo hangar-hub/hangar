@@ -35,8 +35,11 @@ export function OrganisationsPage() {
       {orgs.length ? (
         <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
           {orgs.map((o) => (
-            <li key={o.name} className="flex items-center gap-2 px-4 py-2 text-sm">
-              <AppLink href={`/${o.name}`} className="font-medium hover:underline">
+            <li key={o.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+              <AppLink
+                href={`/${o.name}`}
+                className="font-medium underline-offset-2 wrap-anywhere hover:underline"
+              >
                 {o.display_name || o.name}
               </AppLink>
               <span className="font-mono text-xs text-muted">{o.name}</span>
@@ -54,7 +57,7 @@ export function OrganisationsPage() {
           create.mutate();
         }}
       >
-        <h2 className="font-semibold">Create an Organisation</h2>
+        <h2 className="pt-2 font-semibold">Create an Organisation</h2>
         <Field label="Name" hint="Used in Repo IDs, such as ml-team/model." error={errs.name}>
           {(p) => (
             <Input

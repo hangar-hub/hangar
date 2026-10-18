@@ -251,7 +251,7 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
               <Link
                 to="/$ns"
                 params={{ ns: r.namespace }}
-                className="text-muted hover:text-ink hover:underline"
+                className="text-muted transition-[color] duration-150 hover:text-ink hover:underline"
               >
                 {r.namespace}
               </Link>
@@ -294,7 +294,7 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
                   href={t.to}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-muted hover:text-ink",
+                    "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-muted transition-[color,border-color] duration-150 hover:text-ink",
                     active && "border-accent-fill font-medium text-ink",
                   )}
                 >

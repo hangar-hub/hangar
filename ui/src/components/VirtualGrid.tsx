@@ -1,5 +1,6 @@
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 /** Lists longer than this render only the rows on screen (09-web-ui.md "Performance"). */
 export const virtualiseOver = 200;
@@ -23,6 +24,8 @@ function useColumns(ref: React.RefObject<HTMLElement | null>, minWidth: number):
  * against the window once there are more than 200, so long lists stay fast.
  * Each item fills its cell, so items in a row are the same height.
  * `onEnd` fires when the last row comes into view, to load the next page.
+ * `fadeIn` fades the grid in when it mounts; it changes only opacity, so
+ * it cannot upset the virtualiser's measurements.
  */
 export function VirtualGrid<T>({
   items,
@@ -32,6 +35,7 @@ export function VirtualGrid<T>({
   estimateRowHeight = 132,
   onEnd,
   label,
+  fadeIn,
 }: {
   items: T[];
   render: (item: T) => ReactNode;
@@ -40,6 +44,7 @@ export function VirtualGrid<T>({
   estimateRowHeight?: number;
   onEnd?: () => void;
   label: string;
+  fadeIn?: boolean;
 }) {
   const ref = useRef<HTMLUListElement>(null);
   const cols = useColumns(ref, minColumnWidth);
@@ -64,7 +69,12 @@ export function VirtualGrid<T>({
   const gridStyle = { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` };
   if (!virtual) {
     return (
-      <ul ref={ref} aria-label={label} className="grid gap-3" style={gridStyle}>
+      <ul
+        ref={ref}
+        aria-label={label}
+        className={cn("grid gap-3", fadeIn && "hg-fade-enter")}
+        style={gridStyle}
+      >
         {items.map((it) => (
           // A one-cell grid, so the item fills the row's height.
           <li key={itemKey(it)} className="grid">
@@ -75,7 +85,12 @@ export function VirtualGrid<T>({
     );
   }
   return (
-    <ul ref={ref} aria-label={label} className="relative" style={{ height: v.getTotalSize() }}>
+    <ul
+      ref={ref}
+      aria-label={label}
+      className={cn("relative", fadeIn && "hg-fade-enter")}
+      style={{ height: v.getTotalSize() }}
+    >
       {vItems.map((row) => (
         <li
           key={row.key}

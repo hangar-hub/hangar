@@ -216,7 +216,7 @@ function Sidebar({ repo, cardData }: { repo: Repo; cardData: Record<string, unkn
               None. The Viewer has no data files it can read here, so the files are in the{" "}
               <AppLink
                 href={treePath("dataset", repo.namespace, repo.name, repo.default_branch)}
-                className="text-accent underline underline-offset-2"
+                className="hg-link"
               >
                 Files
               </AppLink>{" "}
@@ -288,7 +288,7 @@ function Sidebar({ repo, cardData }: { repo: Repo; cardData: Record<string, unkn
             No datasets listed.{" "}
             <AppLink
               href={`${repoPath(repo.type, repo.namespace, repo.name)}/settings`}
-              className="text-accent underline underline-offset-2"
+              className="hg-link"
             >
               Choose datasets
             </AppLink>

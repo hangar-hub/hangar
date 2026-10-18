@@ -32,7 +32,9 @@ export function RefPicker({
     <label className="flex items-center gap-2">
       <span className="sr-only">Branch or tag</span>
       <Select
-        className="w-auto max-w-56 font-mono text-xs"
+        compact
+        className="max-w-56 font-mono"
+        title={rev}
         value={rev}
         onChange={(e) => go(build(e.target.value))}
         disabled={!d}

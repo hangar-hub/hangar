@@ -81,7 +81,9 @@ export function AdminJobsPage() {
       cell: (j) => (
         <span className="block space-y-1">
           <span className="block font-medium">{jobTitle(j)}</span>
-          {j.error ? <span className="block text-xs text-danger">{j.error}</span> : null}
+          {j.error ? (
+            <span className="block text-xs text-danger wrap-anywhere">{j.error}</span>
+          ) : null}
           {j.progress.message ? (
             <span className="block text-xs text-muted">{j.progress.message}</span>
           ) : null}
@@ -110,7 +112,7 @@ export function AdminJobsPage() {
             </span>
           </span>
         ) : (
-          <span className="text-xs text-muted">
+          <span className="tabular text-xs text-muted">
             {j.progress.files_total
               ? `${j.progress.files_done} of ${j.progress.files_total} files`
               : ""}
@@ -121,7 +123,7 @@ export function AdminJobsPage() {
       key: "who",
       header: "Started",
       cell: (j) => (
-        <span className="text-xs" title={formatDateTime(j.created_at)}>
+        <span className="tabular text-xs" title={formatDateTime(j.created_at)}>
           {relativeTime(j.created_at)}
           {j.created_by ? ` by ${j.created_by}` : ""}, attempt {j.attempts} of {j.max_attempts}
         </span>
@@ -149,7 +151,7 @@ export function AdminJobsPage() {
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Kind</span>
           <Select
-            className="w-auto"
+            compact
             value={search.kind ?? ""}
             onChange={(e) => update({ kind: e.target.value || undefined })}
           >
@@ -164,7 +166,7 @@ export function AdminJobsPage() {
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Status</span>
           <Select
-            className="w-auto"
+            compact
             value={status ?? ""}
             onChange={(e) => update({ status: e.target.value || undefined })}
           >
@@ -184,7 +186,7 @@ export function AdminJobsPage() {
       ) : items.length === 0 ? (
         <EmptyState title="No Jobs match" />
       ) : (
-        <DataTable caption="Jobs" columns={columns} rows={items} rowKey={(j) => j.id} />
+        <DataTable caption="Jobs" columns={columns} rows={items} rowKey={(j) => j.id} rowHover />
       )}
       {jobs.hasNextPage ? <Button onClick={() => jobs.fetchNextPage()}>More Jobs</Button> : null}
     </PageShell>

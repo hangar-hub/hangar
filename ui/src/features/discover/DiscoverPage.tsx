@@ -51,12 +51,12 @@ const facetLabels: Record<string, string> = {
 function Result({ item, onOpen }: { item: DiscoverItem; onOpen: () => void }) {
   const updateAvailable = Boolean(item.local_sha && item.sha && item.local_sha !== item.sha);
   return (
-    <li className="relative flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-raised/60">
+    <li className="relative flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-[background-color] duration-150 hover:bg-raised/60">
       <div className="min-w-0 flex-1">
         <button
           type="button"
           onClick={onOpen}
-          className="text-left font-mono text-sm font-medium after:absolute after:inset-0 hover:underline"
+          className="text-left font-mono text-sm font-medium wrap-anywhere after:absolute after:inset-0 hover:underline"
         >
           {item.id}
         </button>
@@ -153,7 +153,7 @@ export function DiscoverPage() {
         })
       }
       className={cn(
-        "-mb-px border-b-2 border-transparent px-3 py-2 text-sm text-muted hover:text-ink",
+        "-mb-px border-b-2 border-transparent px-3 py-2 text-sm text-muted transition-[color,border-color] duration-150 hover:text-ink",
         type === t && "border-accent-fill font-medium text-ink",
       )}
     >
@@ -229,7 +229,7 @@ export function DiscoverPage() {
           <label key={facet} className="flex items-center gap-1.5 text-sm">
             <span className="text-muted">{facetLabels[facet]}</span>
             <Select
-              className="h-8 w-auto text-xs"
+              compact
               value={search[facet as keyof DiscoverSearch] ?? ""}
               onChange={(e) => update({ [facet]: e.target.value || undefined })}
             >
@@ -264,16 +264,18 @@ export function DiscoverPage() {
         <>
           <ul
             aria-label="Results"
-            className="divide-y divide-line rounded-lg border border-line bg-surface"
+            className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface"
           >
             {items.map((i) => (
               <Result key={i.id} item={i} onOpen={() => update({ repo: i.id })} />
             ))}
           </ul>
           {list.hasNextPage ? (
-            <Button onClick={() => list.fetchNextPage()} disabled={list.isFetchingNextPage}>
-              More results
-            </Button>
+            <div className="flex justify-center">
+              <Button onClick={() => list.fetchNextPage()} disabled={list.isFetchingNextPage}>
+                More results
+              </Button>
+            </div>
           ) : null}
         </>
       )}

@@ -78,16 +78,19 @@ export function AdminOrganisationsPage() {
           title={search.q ? `No Organisations match ${search.q}` : "No Organisations yet"}
         />
       ) : (
-        <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+        <ul className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface">
           {orgs.map((o) => (
-            <li key={o.name} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
-              <AppLink href={`/${o.name}?tab=members`} className="font-medium hover:underline">
+            <li key={o.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+              <AppLink
+                href={`/${o.name}?tab=members`}
+                className="font-medium underline-offset-2 wrap-anywhere hover:underline"
+              >
                 {o.display_name || o.name}
               </AppLink>
               <span className="font-mono text-xs text-muted">{o.name}</span>
               {o.reserved_mirror ? <Badge tone="info">Created by a Pull</Badge> : null}
               {o.member_count !== undefined ? (
-                <span className="ml-auto text-xs text-muted">{o.member_count} members</span>
+                <span className="tabular ml-auto text-xs text-muted">{o.member_count} members</span>
               ) : null}
             </li>
           ))}

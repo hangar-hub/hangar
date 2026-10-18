@@ -90,7 +90,7 @@ export function LoginPage() {
   const p = providers.data;
   const canRegister = p.registration === "open";
   return (
-    <section aria-labelledby="page-title" className="mx-auto max-w-sm py-8">
+    <section aria-labelledby="page-title" className="hg-enter mx-auto max-w-sm py-8">
       <h1 id="page-title" className="text-2xl font-semibold tracking-tight">
         {register ? "Create an account" : "Sign in to Hangar"}
       </h1>
@@ -119,7 +119,9 @@ export function LoginPage() {
       {p.local_login || register ? (
         <>
           {p.providers.length ? (
-            <p className="my-5 text-center text-xs text-muted">or use a username and password</p>
+            <p className="mt-6 flex items-center gap-3 text-xs text-muted before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line">
+              or use a username and password
+            </p>
           ) : null}
           <form
             className="mt-6 space-y-4"
@@ -206,7 +208,7 @@ export function LoginPage() {
           {register ? "Already have an account? " : "New to this Instance? "}
           <button
             type="button"
-            className="text-accent underline"
+            className="hg-link font-medium"
             onClick={() => {
               setRegister(!register);
               navigate({

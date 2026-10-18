@@ -109,7 +109,11 @@ function TensorTable({ tensors, label }: { tensors: TensorRow[]; label: string }
           { header: "Type", cell: (t) => <span className="font-mono">{t.dtype}</span> },
           {
             header: "Shape",
-            cell: (t) => <span className="font-mono">[{t.shape.join(", ")}]</span>,
+            cell: (t) => (
+              <span className="tabular font-mono" title={`[${t.shape.join(", ")}]`}>
+                [{t.shape.join(", ")}]
+              </span>
+            ),
           },
           {
             header: "Parameters",
@@ -126,7 +130,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-md border border-line bg-surface px-3 py-2">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-0.5 font-mono text-sm">{value}</dd>
+      <dd className="tabular mt-0.5 font-mono text-sm wrap-anywhere">{value}</dd>
     </div>
   );
 }
@@ -138,7 +142,7 @@ export function SafetensorsView({ repo, rev, path }: { repo: RepoRef; rev: strin
   if (h.isError) return <ErrorState error={h.error} onRetry={() => h.refetch()} />;
   const s = safetensorsTensors(h.data.header);
   return (
-    <div className="space-y-4">
+    <div className="hg-enter space-y-4">
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Parameters" value={`${formatParams(s.total)} (${formatCount(s.total)})`} />
         <Stat label="Tensors" value={formatCount(s.tensors.length)} />
@@ -177,7 +181,7 @@ export function GgufView({ repo, rev, path }: { repo: RepoRef; rev: string; path
     g.fileType !== undefined ? (ggufFileTypes[g.fileType] ?? `file type ${g.fileType}`) : undefined;
   const meta = showAll ? g.metadata : g.metadata.slice(0, 30);
   return (
-    <div className="space-y-5">
+    <div className="hg-enter space-y-5">
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {g.architecture ? <Stat label="Architecture" value={g.architecture} /> : null}
         {quant ? <Stat label="Quantisation" value={<Badge mono>{quant}</Badge>} /> : null}
@@ -227,7 +231,7 @@ export function GgufView({ repo, rev, path }: { repo: RepoRef; rev: string; path
         {g.metadata.length > 30 && !showAll ? (
           <button
             type="button"
-            className="mt-1 text-sm text-accent underline"
+            className="hg-link mt-1 text-sm"
             onClick={() => setShowAll(true)}
           >
             Show all {g.metadata.length} keys

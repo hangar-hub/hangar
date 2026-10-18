@@ -108,7 +108,7 @@ export function AdminStoragePage() {
       key: "ns",
       header: "Namespace",
       primary: true,
-      cell: (r) => <span className="font-mono">{r.namespace}</span>,
+      cell: (r) => <span className="font-mono wrap-anywhere">{r.namespace}</span>,
     },
     {
       key: "repos",
@@ -184,7 +184,7 @@ export function AdminStoragePage() {
         <ErrorState error={usage.error} onRetry={() => usage.refetch()} />
       ) : (
         <>
-          <dl className="grid gap-3 sm:grid-cols-4">
+          <dl className="hg-enter grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               ["LFS objects", formatBytes(usage.data.total_lfs_bytes)],
               ["git data", formatBytes(usage.data.total_git_bytes)],
@@ -198,7 +198,9 @@ export function AdminStoragePage() {
             ))}
           </dl>
           <DataTable
+            className="hg-enter"
             caption="Usage by Namespace"
+            rowHover
             columns={columns}
             rows={[...usage.data.namespaces].sort(
               (a, b) => b.lfs_bytes + b.git_bytes - (a.lfs_bytes + a.git_bytes),

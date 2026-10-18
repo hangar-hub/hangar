@@ -35,7 +35,7 @@ function TextCell({ text, truncated }: { text: string; truncated: boolean }) {
       </span>
       <button
         type="button"
-        className="mt-0.5 text-xs text-accent underline"
+        className="hg-link mt-0.5 text-xs"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
@@ -79,6 +79,7 @@ export function Cell({
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Open the full-size image for ${label}`}
+        className="inline-block rounded-sm"
       >
         <img
           src={value.src}

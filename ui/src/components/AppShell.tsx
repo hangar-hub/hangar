@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { LogOut, Menu, Settings, Shield, User } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -32,7 +33,7 @@ function UserMenu() {
   const signOut = useSignOut();
   const navigate = useNavigate();
   const toast = useToast();
-  if (me.isPending) return <div className="h-8 w-16" aria-hidden="true" />;
+  if (me.isPending) return <div className="h-7 w-16" aria-hidden="true" />;
   if (!me.data) {
     return (
       <Button asChild size="sm" variant="primary">
@@ -45,9 +46,7 @@ function UserMenu() {
     <MenuRoot>
       <MenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label={`Account menu for ${user.username}`}>
-          <span className="grid size-6 place-items-center rounded-sm bg-steel-700 font-mono text-xs uppercase text-steel-50">
-            {user.username.slice(0, 1)}
-          </span>
+          <Avatar name={user.username} size="sm" />
         </Button>
       </MenuTrigger>
       <MenuContent>
@@ -113,7 +112,7 @@ function MobileNav() {
             key={item.to}
             to={item.to}
             onClick={() => setOpen(false)}
-            className="rounded-md px-3 py-2 hover:bg-raised"
+            className="rounded-md px-3 py-2 transition-[color,background-color] duration-150 hover:bg-raised"
             activeProps={{ className: "bg-raised font-semibold" }}
           >
             {item.label}
@@ -122,7 +121,7 @@ function MobileNav() {
         <Link
           to="/settings/tokens"
           onClick={() => setOpen(false)}
-          className="rounded-md px-3 py-2 hover:bg-raised"
+          className="rounded-md px-3 py-2 transition-[color,background-color] duration-150 hover:bg-raised"
         >
           Settings
         </Link>
@@ -148,7 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <MobileNav />
           <Link
             to="/"
-            className="flex shrink-0 items-center gap-2 font-semibold tracking-tight"
+            className="flex shrink-0 items-center gap-2 rounded-md font-semibold tracking-tight"
             aria-label="Hangar home"
           >
             <Logo className="size-6" />
@@ -159,7 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={item.to}
                 to={item.to}
-                className="rounded-md px-2.5 py-1 text-sm text-muted hover:bg-raised hover:text-ink"
+                className="rounded-md px-2.5 py-1 text-sm text-muted transition-[color,background-color] duration-150 hover:bg-raised hover:text-ink"
                 activeProps={{ className: "!text-ink font-semibold bg-raised" }}
               >
                 {item.label}

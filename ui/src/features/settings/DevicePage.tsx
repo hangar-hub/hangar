@@ -35,7 +35,7 @@ export function DevicePage() {
       {decide.isSuccess ? (
         <p
           role="status"
-          className="rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok"
+          className="hg-enter max-w-sm rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok"
         >
           {decide.data
             ? "Approved. Go back to your terminal: it signs in within a few seconds."

@@ -22,16 +22,18 @@ export function SessionsPage() {
       ) : sessions.isError ? (
         <ErrorState error={sessions.error} onRetry={() => sessions.refetch()} />
       ) : (
-        <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+        <ul className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface">
           {sessions.data.items.map((s) => (
             <li
               key={s.id}
               className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm"
             >
-              <span className="min-w-0 flex-1 truncate">{s.user_agent || "Unknown browser"}</span>
+              <span className="min-w-0 flex-1 truncate" title={s.user_agent || undefined}>
+                {s.user_agent || "Unknown browser"}
+              </span>
               {s.current ? <Badge tone="ok">This browser</Badge> : null}
-              <span className="font-mono text-xs text-muted">{s.ip}</span>
-              <span className="text-xs text-muted">
+              <span className="tabular font-mono text-xs text-muted">{s.ip}</span>
+              <span className="tabular text-xs text-muted">
                 Active {relativeTime(s.last_seen_at ?? s.created_at)}, expires{" "}
                 {formatDate(s.expires_at)}
               </span>

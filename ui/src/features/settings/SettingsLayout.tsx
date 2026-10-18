@@ -12,6 +12,12 @@ const items = [
   { to: "/settings/organisations", label: "Organisations" },
 ] as const;
 
+// A bar on the left marks the current page on wide screens; on phones the
+// nav scrolls sideways and the filled background marks it instead.
+const sideNavItem =
+  "relative whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted transition-[color,background-color] duration-150 hover:bg-raised hover:text-ink md:before:absolute md:before:inset-y-1.5 md:before:left-0 md:before:w-0.5 md:before:rounded-full md:before:transition-[background-color] md:before:duration-150";
+const sideNavActive = "bg-raised font-medium !text-ink md:before:bg-accent";
+
 /** `/settings/...`: the signed-in user's own settings. */
 export function SettingsLayout() {
   const me = useMe();
@@ -38,8 +44,8 @@ export function SettingsLayout() {
           <Link
             key={i.to}
             to={i.to}
-            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted hover:bg-raised hover:text-ink"
-            activeProps={{ className: "bg-raised font-medium !text-ink", "aria-current": "page" }}
+            className={sideNavItem}
+            activeProps={{ className: sideNavActive, "aria-current": "page" }}
           >
             {i.label}
           </Link>

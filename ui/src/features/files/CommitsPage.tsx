@@ -59,7 +59,7 @@ export function CommitsPage({
               to{" "}
               <AppLink
                 href={blobPath(kind, ns, name, rev, path)}
-                className="font-mono text-accent hover:underline"
+                className="hg-link font-mono break-all"
               >
                 {path}
               </AppLink>
@@ -78,12 +78,15 @@ export function CommitsPage({
       ) : (
         <ol
           aria-label="Commits"
-          className="divide-y divide-line rounded-lg border border-line bg-surface"
+          className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface"
         >
           {items.map((c) => (
             <li key={c.sha} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
               <div className="min-w-0 flex-1">
-                <AppLink href={`${base}/commit/${c.sha}`} className="font-medium hover:underline">
+                <AppLink
+                  href={`${base}/commit/${c.sha}`}
+                  className="font-medium wrap-anywhere hover:underline"
+                >
                   {c.title}
                 </AppLink>
                 <p className="mt-0.5 text-xs text-muted">
@@ -96,7 +99,8 @@ export function CommitsPage({
               <span className="flex items-center gap-1">
                 <AppLink
                   href={`${base}/commit/${c.sha}`}
-                  className="rounded-sm border border-line px-1.5 font-mono text-xs hover:bg-raised"
+                  title={c.sha}
+                  className="rounded-sm border border-line px-1.5 py-0.5 font-mono text-xs transition-colors duration-100 hover:bg-raised"
                 >
                   {shortSha(c.sha)}
                 </AppLink>

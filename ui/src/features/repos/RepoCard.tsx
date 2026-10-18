@@ -33,7 +33,7 @@ export function RepoCard({ repo, layout = "grid" }: { repo: Repo; layout?: "grid
   return (
     <article
       className={cn(
-        "group relative min-w-0 rounded-lg border border-line bg-surface p-3.5 hover:border-line-strong",
+        "group relative min-w-0 rounded-lg border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-line-strong",
         layout === "grid" && "flex h-full flex-col",
         layout === "list" && "sm:flex sm:items-center sm:gap-4",
       )}
@@ -46,6 +46,7 @@ export function RepoCard({ repo, layout = "grid" }: { repo: Repo; layout?: "grid
           <AppLink
             href={repoPath(repo.type, repo.namespace, repo.name)}
             className="truncate after:absolute after:inset-0 hover:underline"
+            title={repoLabel(repo.type, repo.namespace, repo.name)}
           >
             {repoLabel(repo.type, repo.namespace, repo.name)}
           </AppLink>

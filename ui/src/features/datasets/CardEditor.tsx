@@ -11,6 +11,7 @@ import { InlineError } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { joinFrontMatter } from "@/lib/frontmatter";
 import { unwrap } from "@/lib/problem";
+import { cn } from "@/lib/utils";
 import { repoKey, repoPathParams } from "../repos/hooks";
 import {
   type CardForm,
@@ -138,7 +139,12 @@ export function CardEditor({
                         : [...form.taskCategories, t],
                     })
                   }
-                  className={`rounded-sm border px-2 py-0.5 text-xs ${on ? "border-accent/40 bg-accent-soft font-medium text-accent" : "border-line text-muted hover:bg-raised"}`}
+                  className={cn(
+                    "rounded-sm border px-2 py-0.5 text-xs transition-[color,background-color,border-color,scale] duration-100 ease-out active:scale-[0.97]",
+                    on
+                      ? "border-accent/40 bg-accent-soft font-medium text-accent"
+                      : "border-line text-muted hover:bg-raised hover:text-ink",
+                  )}
                 >
                   {t}
                 </button>

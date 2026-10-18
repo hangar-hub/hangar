@@ -11,7 +11,7 @@ import { Field, Input, Textarea } from "@/components/ui/form";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { type Column, DataTable } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
-import { formatBytes, relativeTime } from "@/lib/format";
+import { formatBytes, formatDateTime, relativeTime } from "@/lib/format";
 import { errorMessage, unwrap } from "@/lib/problem";
 import { baseName, blobPath, joinPath, type RepoKind, repoPath, treePath } from "@/lib/repo";
 import { NotPresentBadge, ScanBadge } from "../repos/badges";
@@ -244,7 +244,8 @@ export function TreePage({
         e.last_commit ? (
           <AppLink
             href={`${repoPath(kind, ns, name)}/commit/${e.last_commit.sha}`}
-            className="line-clamp-1 text-xs text-muted hover:text-ink hover:underline"
+            title={e.last_commit.title}
+            className="line-clamp-1 text-xs text-muted transition-colors duration-100 hover:text-ink hover:underline"
           >
             {e.last_commit.title}
           </AppLink>
@@ -254,11 +255,16 @@ export function TreePage({
       key: "date",
       header: "Updated",
       className: "w-32",
-      cell: (e) => (
-        <span className="text-xs text-muted">
-          {e.last_commit ? relativeTime(e.last_commit.date) : ""}
-        </span>
-      ),
+      cell: (e) =>
+        e.last_commit ? (
+          <time
+            dateTime={e.last_commit.date}
+            title={formatDateTime(e.last_commit.date)}
+            className="text-xs whitespace-nowrap text-muted"
+          >
+            {relativeTime(e.last_commit.date)}
+          </time>
+        ) : null,
     },
   ];
   return (
@@ -326,6 +332,8 @@ export function TreePage({
         <>
           <DataTable
             caption={`Files in ${dir || "the Repo root"}`}
+            className="hg-enter"
+            rowHover
             columns={columns}
             rows={entries}
             rowKey={(e) => e.path}

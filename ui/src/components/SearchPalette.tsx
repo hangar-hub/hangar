@@ -42,7 +42,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 const itemClass =
-  "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm aria-selected:bg-raised [&_svg]:size-4 [&_svg]:text-muted";
+  "flex min-w-0 cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm aria-selected:bg-raised aria-selected:[&_svg]:text-ink [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted";
 
 /**
  * The command palette over models, datasets, Namespaces, Collections and
@@ -118,7 +118,7 @@ export function SearchPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-bg px-2.5 text-sm text-muted hover:border-line-strong sm:max-w-xs"
+        className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-bg px-2.5 text-sm text-muted transition-[color,border-color] duration-150 hover:border-line-strong hover:text-ink sm:max-w-xs"
       >
         <Search className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">Search Hangar</span>
@@ -132,6 +132,7 @@ export function SearchPalette() {
         title="Search"
         description="Models, datasets, Namespaces, Collections and actions."
         initialFocus={input}
+        instant
       >
         <Command label="Search Hangar" shouldFilter={false} className="-mx-1">
           <Command.Input
@@ -164,7 +165,7 @@ export function SearchPalette() {
                       className={itemClass}
                     >
                       {r.type === "dataset" ? <Database /> : <Boxes />}
-                      <span className="font-mono text-ink">
+                      <span className="truncate font-mono text-ink">
                         {repoLabel(r.type, r.namespace, r.name)}
                       </span>
                     </Command.Item>
@@ -185,8 +186,8 @@ export function SearchPalette() {
                     className={itemClass}
                   >
                     <User />
-                    <span className="text-ink">{n.display_name || n.name}</span>
-                    <span className="font-mono text-xs">{n.name}</span>
+                    <span className="truncate text-ink">{n.display_name || n.name}</span>
+                    <span className="ml-auto shrink-0 font-mono text-xs">{n.name}</span>
                   </Command.Item>
                 ))}
               </Command.Group>
@@ -204,8 +205,8 @@ export function SearchPalette() {
                     className={itemClass}
                   >
                     <Library />
-                    <span className="text-ink">{c.title}</span>
-                    <span className="font-mono text-xs">{c.namespace}</span>
+                    <span className="truncate text-ink">{c.title}</span>
+                    <span className="ml-auto shrink-0 font-mono text-xs">{c.namespace}</span>
                   </Command.Item>
                 ))}
               </Command.Group>

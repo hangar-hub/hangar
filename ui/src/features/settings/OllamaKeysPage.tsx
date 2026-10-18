@@ -47,12 +47,12 @@ export function OllamaKeysPage() {
           Public Repos work without a key. Add one for private and internal Repos.
         </EmptyState>
       ) : (
-        <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+        <ul className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface">
           {keys.data.items.map((k) => (
-            <li key={k.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
+            <li key={k.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
               <span className="font-medium">{k.name || "Unnamed key"}</span>
               <span className="break-all font-mono text-xs text-muted">{k.fingerprint}</span>
-              <span className="text-xs text-muted">Added {relativeTime(k.created_at)}</span>
+              <span className="tabular text-xs text-muted">Added {relativeTime(k.created_at)}</span>
               <ConfirmDialog
                 trigger={
                   <Button
@@ -87,7 +87,7 @@ export function OllamaKeysPage() {
           add.mutate();
         }}
       >
-        <h2 className="font-semibold">Add a key</h2>
+        <h2 className="pt-2 font-semibold">Add a key</h2>
         <Field label="Name" hint="Optional, such as the machine's name.">
           {(p) => <Input {...p} value={name} onChange={(e) => setName(e.target.value)} />}
         </Field>

@@ -176,11 +176,11 @@ export function CollectionsPage() {
           Group the models and datasets you use together, such as the ones that run on a laptop.
         </EmptyState>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="hg-enter grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {list.data.items.map((c) => (
             <li
               key={`${c.namespace}/${c.slug}`}
-              className="relative rounded-lg border border-line bg-surface p-4 hover:border-line-strong"
+              className="relative rounded-lg border border-line bg-surface p-4 transition-[border-color] duration-150 hover:border-line-strong"
             >
               <h2 className="font-medium">
                 <AppLink
@@ -194,8 +194,8 @@ export function CollectionsPage() {
                 <p className="mt-1 line-clamp-2 text-sm text-muted">{c.description}</p>
               ) : null}
               <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span className="font-mono">{c.namespace}</span>
-                <span>
+                <span className="break-all font-mono">{c.namespace}</span>
+                <span className="tabular">
                   {c.items.length} {c.items.length === 1 ? "item" : "items"}
                 </span>
                 <span>Updated {relativeTime(c.updated_at)}</span>

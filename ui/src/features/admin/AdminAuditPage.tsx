@@ -52,7 +52,7 @@ export function AdminAuditPage() {
       key: "time",
       header: "Time",
       cell: (e) => (
-        <span className="whitespace-nowrap text-xs">{formatDateTime(e.created_at)}</span>
+        <span className="tabular whitespace-nowrap text-xs">{formatDateTime(e.created_at)}</span>
       ),
     },
     { key: "action", header: "Action", primary: true, cell: (e) => <Badge mono>{e.action}</Badge> },
@@ -73,7 +73,7 @@ export function AdminAuditPage() {
     {
       key: "ip",
       header: "IP address",
-      cell: (e) => <span className="font-mono text-xs">{e.ip ?? ""}</span>,
+      cell: (e) => <span className="tabular font-mono text-xs">{e.ip ?? ""}</span>,
     },
   ];
   return (
@@ -151,7 +151,14 @@ export function AdminAuditPage() {
       ) : items.length === 0 ? (
         <EmptyState title="No audit events match" />
       ) : (
-        <DataTable caption="Audit events" columns={columns} rows={items} rowKey={(e) => e.id} />
+        <DataTable
+          className="hg-enter"
+          caption="Audit events"
+          rowHover
+          columns={columns}
+          rows={items}
+          rowKey={(e) => e.id}
+        />
       )}
       {events.hasNextPage ? (
         <Button onClick={() => events.fetchNextPage()}>Older events</Button>

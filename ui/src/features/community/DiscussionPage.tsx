@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/api/client";
 import type { Discussion, DiscussionEvent } from "@/api/types";
 import { AppLink } from "@/components/AppLink";
 import { LazyMarkdown } from "@/components/content/LazyMarkdown";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -20,25 +22,33 @@ import { type RepoRef, repoKey, repoPathParams, useRefs, useRepo } from "../repo
 import { useExternalImages } from "../repos/useInstance";
 import { statusText, statusTone } from "./DiscussionsPage";
 
+function When({ iso }: { iso: string }) {
+  return (
+    <time dateTime={iso} title={formatDateTime(iso)} className="tabular">
+      {relativeTime(iso)}
+    </time>
+  );
+}
+
 function Event({ e }: { e: DiscussionEvent }) {
   const external = useExternalImages();
   if (e.type === "comment") {
     return (
-      <li className="rounded-lg border border-line bg-surface">
-        <p className="border-b border-line px-4 py-2 text-xs text-muted">
-          <span className="font-medium text-ink">{e.author}</span> commented{" "}
-          <time dateTime={e.created_at} title={formatDateTime(e.created_at)}>
-            {relativeTime(e.created_at)}
-          </time>
-        </p>
-        <div className="px-4 py-3">
-          {e.hidden ? (
-            <p className="text-sm text-muted">This comment is hidden.</p>
-          ) : (
-            <LazyMarkdown externalImages={external} headingLevel={3}>
-              {e.body ?? ""}
-            </LazyMarkdown>
-          )}
+      <li className="flex items-start gap-3">
+        <Avatar name={e.author} />
+        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-line bg-surface">
+          <p className="border-b border-line bg-raised/40 px-4 py-2 text-xs text-muted">
+            <span className="font-medium text-ink">{e.author}</span> commented <When iso={e.created_at} />
+          </p>
+          <div className="px-4 py-3">
+            {e.hidden ? (
+              <p className="text-sm italic text-muted">This comment is hidden.</p>
+            ) : (
+              <LazyMarkdown externalImages={external} headingLevel={3}>
+                {e.body ?? ""}
+              </LazyMarkdown>
+            )}
+          </div>
         </div>
       </li>
     );
@@ -51,8 +61,9 @@ function Event({ e }: { e: DiscussionEvent }) {
         ? `renamed this from "${data.from}" to "${data.to}"`
         : "added a Commit";
   return (
-    <li className="px-4 text-sm text-muted">
-      <span className="font-medium text-ink">{e.author}</span> {text} {relativeTime(e.created_at)}
+    // Aligned with the comment cards, past the column of initials.
+    <li className="pl-10 text-sm text-muted wrap-anywhere">
+      <span className="font-medium text-ink">{e.author}</span> {text} <When iso={e.created_at} />
       {e.body ? <span>: {e.body}</span> : null}
     </li>
   );
@@ -134,13 +145,15 @@ export function DiscussionPage({
         ))}
       </ol>
       {r?.permissions?.discuss ? (
-        <form
-          className="space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (comment.trim()) post.mutate();
-          }}
-        >
+        <div className="flex items-start gap-3">
+          {me.data ? <Avatar name={me.data.username} /> : <span className="size-7 shrink-0" />}
+          <form
+            className="min-w-0 flex-1 space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (comment.trim()) post.mutate();
+            }}
+          >
           <Field label="Add a comment" hint="Markdown is supported.">
             {(p) => (
               <Textarea
@@ -165,30 +178,33 @@ export function DiscussionPage({
               </Button>
             ) : null}
           </div>
-        </form>
+          </form>
+        </div>
       ) : null}
     </div>
   );
   return (
-    <div className="space-y-4">
+    <div className="hg-enter space-y-4">
       <header className="space-y-2">
         <AppLink
           href={`${repoPath(kind, ns, name)}/discussions`}
-          className="text-sm text-accent hover:underline"
+          className="inline-flex items-center gap-0.5 text-sm text-accent underline-offset-2 hover:underline"
         >
+          <ChevronLeft className="size-4" aria-hidden="true" />
           All discussions
         </AppLink>
-        <h2 className="text-xl font-semibold">
-          {x.title} <span className="font-normal text-muted">#{x.num}</span>
+        <h2 className="text-xl font-semibold tracking-tight wrap-anywhere">
+          {x.title} <span className="tabular font-normal text-muted">#{x.num}</span>
         </h2>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
           <Badge tone={statusTone[x.status]}>{statusText[x.status]}</Badge>
           <Badge>{isPr ? "Pull request" : "Discussion"}</Badge>
           <span>
-            {x.author} opened this {relativeTime(x.created_at)}
+            <span className="font-medium text-ink">{x.author}</span> opened this{" "}
+            <When iso={x.created_at} />
           </span>
           {isPr && x.pr_ref ? (
-            <span className="font-mono text-xs">
+            <span className="font-mono text-xs wrap-anywhere">
               {x.pr_ref} into {x.pr_base ?? r?.default_branch}
             </span>
           ) : null}

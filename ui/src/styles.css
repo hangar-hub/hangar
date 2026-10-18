@@ -55,6 +55,14 @@
   --radius-sm: 3px;
   --radius-md: 6px;
   --radius-lg: 10px;
+
+  /* Motion. The built-in curves are too soft for UI, so ease-out and
+     ease-in-out are replaced with stronger ones. Entering and exiting uses
+     ease-out; moving on screen uses ease-in-out; sheets use the drawer
+     curve. UI motion stays under 300ms. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root {
@@ -121,6 +129,19 @@ body {
 :focus-visible {
   outline: 2px solid var(--hg-accent);
   outline-offset: 2px;
+}
+
+/* An inline text link in running text, outside rendered Markdown. */
+@utility hg-link {
+  border-radius: var(--radius-sm);
+  color: var(--hg-accent);
+  text-decoration-line: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  transition: text-decoration-color 150ms ease;
+  &:hover {
+    text-decoration-color: currentColor;
+  }
 }
 
 /* Numbers line up in tables and progress readouts. */
@@ -212,13 +233,142 @@ body {
   height: auto;
 }
 
+/*
+ * Enter and exit motion for overlays. Radix keeps an element mounted until
+ * its exit animation ends, so these are keyframes keyed off data-state.
+ * Exits are faster than entrances: the system is responding, not the user
+ * deciding.
+ */
+@keyframes hg-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes hg-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes hg-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes hg-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes hg-sheet-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes hg-sheet-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes hg-sheet-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes hg-sheet-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes hg-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.hg-overlay[data-state="open"] {
+  animation: hg-fade-in 200ms var(--ease-out);
+}
+.hg-overlay[data-state="closed"] {
+  animation: hg-fade-out 150ms var(--ease-out);
+}
+/* Modals stay centred, so they scale from the centre. */
+.hg-modal[data-state="open"] {
+  animation: hg-pop-in 200ms var(--ease-out);
+}
+.hg-modal[data-state="closed"] {
+  animation: hg-pop-out 150ms var(--ease-out);
+}
+.hg-sheet-right[data-state="open"] {
+  animation: hg-sheet-in-right 280ms var(--ease-drawer);
+}
+.hg-sheet-right[data-state="closed"] {
+  animation: hg-sheet-out-right 200ms var(--ease-drawer);
+}
+.hg-sheet-left[data-state="open"] {
+  animation: hg-sheet-in-left 280ms var(--ease-drawer);
+}
+.hg-sheet-left[data-state="closed"] {
+  animation: hg-sheet-out-left 200ms var(--ease-drawer);
+}
+/* Popovers grow out of their trigger, not from their centre. */
+.hg-popover {
+  transform-origin: var(
+    --radix-dropdown-menu-content-transform-origin,
+    var(--radix-popper-transform-origin)
+  );
+}
+/* Tooltips open as delayed-open; instant-open, when moving between
+   adjacent tooltips, has no animation so the second one feels immediate. */
+.hg-popover[data-state="open"],
+.hg-popover[data-state="delayed-open"] {
+  animation: hg-pop-in 150ms var(--ease-out);
+}
+.hg-popover[data-state="closed"] {
+  animation: hg-fade-out 100ms var(--ease-out);
+}
+/* Content that replaces a skeleton or a previous state settles in. */
+.hg-enter {
+  animation: hg-rise-in 200ms var(--ease-out);
+}
+/* Opacity only, for containers whose layout is measured as they mount. */
+.hg-fade-enter {
+  animation: hg-fade-in 200ms var(--ease-out);
+}
+
+/* Reduced motion keeps fades, which aid comprehension, and drops movement. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component's transitions */
-    animation-duration: 0.01ms !important;
-    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component's transitions */
     transition-duration: 0.01ms !important;
+  }
+  :not(
+    .hg-overlay,
+    .hg-modal,
+    .hg-sheet-right,
+    .hg-sheet-left,
+    .hg-popover,
+    .hg-enter,
+    .hg-fade-enter
+  ) {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component's animations */
+    animation-duration: 0.01ms !important;
+  }
+  .hg-modal[data-state="open"],
+  .hg-popover[data-state="open"],
+  .hg-popover[data-state="delayed-open"],
+  .hg-sheet-right[data-state="open"],
+  .hg-sheet-left[data-state="open"],
+  .hg-enter {
+    animation-name: hg-fade-in;
+  }
+  .hg-modal[data-state="closed"],
+  .hg-sheet-right[data-state="closed"],
+  .hg-sheet-left[data-state="closed"] {
+    animation-name: hg-fade-out;
   }
 }

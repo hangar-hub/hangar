@@ -9,7 +9,10 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 
-type Toast = { id: number; message: string; tone: "ok" | "danger" };
+type Toast = { id: number; message: string; tone: "ok" | "danger"; leaving?: boolean };
+
+/** How long a toast takes to leave; matches its exit transition. */
+const EXIT_MS = 150;
 
 const ToastContext = createContext<(message: string, tone?: "ok" | "danger") => void>(() => {});
 
@@ -20,7 +23,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback((message: string, tone: "ok" | "danger" = "ok") => {
     const id = next.current++;
     setToasts((t) => [...t, { id, message, tone }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
+    setTimeout(() => {
+      setToasts((t) => t.map((x) => (x.id === id ? { ...x, leaving: true } : x)));
+      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), EXIT_MS);
+    }, 5000);
   }, []);
   const value = useMemo(() => show, [show]);
   return (
@@ -35,7 +41,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={cn(
-              "pointer-events-auto rounded-md border px-4 py-2 text-sm shadow-lg",
+              // Enters from below with a transition, not keyframes, so a
+              // toast added mid-animation retargets instead of restarting.
+              "pointer-events-auto rounded-md border px-4 py-2 text-sm shadow-lg transition-[opacity,translate] duration-200 ease-out starting:translate-y-2 starting:opacity-0",
+              t.leaving && "translate-y-1 opacity-0 duration-150",
               t.tone === "ok"
                 ? "border-line bg-steel-900 text-steel-50"
                 : "border-danger/40 bg-danger-soft text-danger",

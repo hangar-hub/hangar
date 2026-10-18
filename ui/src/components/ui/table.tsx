@@ -21,12 +21,15 @@ export function DataTable<T>({
   rows,
   rowKey,
   caption,
+  rowHover,
   className,
 }: {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
   caption: string;
+  /** Tints the row under the pointer, for long lists that are read across. */
+  rowHover?: boolean;
   className?: string;
 }) {
   return (
@@ -51,7 +54,10 @@ export function DataTable<T>({
           {rows.map((row) => (
             <tr
               key={rowKey(row)}
-              className="border-b border-line last:border-0 max-md:block max-md:rounded-lg max-md:border max-md:bg-surface max-md:p-3 max-md:last:border"
+              className={cn(
+                "border-b border-line last:border-0 max-md:block max-md:rounded-lg max-md:border max-md:bg-surface max-md:p-3 max-md:last:border",
+                rowHover && "transition-colors duration-100 md:hover:bg-raised/50",
+              )}
             >
               {columns.map((c) => (
                 <td

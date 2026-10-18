@@ -28,6 +28,7 @@ export function AdminSettingsPage() {
         }}
       >
         <Switch
+          className="py-3"
           label="Anonymous read"
           hint="People who are not signed in can see and download public Repos."
           checked={Boolean(s.anonymous_read)}
@@ -52,18 +53,21 @@ export function AdminSettingsPage() {
           </Field>
         </div>
         <Switch
+          className="py-3"
           label="Local sign-in"
           hint="Sign in with a username and password. When off, only OIDC works, except for the bootstrap admin."
           checked={Boolean(s.local_login)}
           onCheckedChange={(v) => set({ local_login: v })}
         />
         <Switch
+          className="py-3"
           label="Load external images in cards"
           hint="Turn off for air-gapped Instances so pages never try to reach the internet."
           checked={Boolean(s.ui_external_images)}
           onCheckedChange={(v) => set({ ui_external_images: v })}
         />
         <Switch
+          className="py-3"
           label="Block downloads of unsafe files"
           hint="Files with unsafe pickle imports, and pickle files not scanned yet, need explicit confirmation in the UI and are refused to API clients, git-lfs, Ollama and zip exports."
           checked={Boolean(s.scan_block_unsafe_downloads)}
@@ -93,6 +97,7 @@ export function AdminSettingsPage() {
           </Field>
         </div>
         <Switch
+          className="py-3"
           label="Allow webhooks to private addresses"
           hint="Turn off on multi-tenant Instances so webhooks cannot reach internal services."
           checked={Boolean(s.webhooks_allow_private_targets)}

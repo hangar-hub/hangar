@@ -3,7 +3,7 @@ import { FolderUp, Trash2, Upload } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Repo } from "@/api/types";
 import { useGo } from "@/components/AppLink";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/form";
 import { ProgressBar } from "@/components/ui/progress";
 import { InlineError } from "@/components/ui/states";
@@ -110,7 +110,7 @@ export function UploadPanel({
   return (
     <section
       aria-labelledby="upload-title"
-      className="space-y-4 rounded-lg border border-line bg-surface p-4"
+      className="hg-enter space-y-4 rounded-lg border border-line bg-surface p-4"
     >
       <div className="flex items-center justify-between gap-2">
         <h2 id="upload-title" className="font-semibold">
@@ -134,23 +134,35 @@ export function UploadPanel({
             e.preventDefault();
             setDragging(true);
           }}
-          onDragLeave={() => setDragging(false)}
+          onDragLeave={(e) => {
+            // Moving onto a child also fires dragleave; only leaving the zone ends the drag.
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          }}
           onDrop={async (e) => {
             e.preventDefault();
             setDragging(false);
             add(await filesFromDrop(e.dataTransfer.items));
           }}
           className={cn(
-            "flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-line-strong px-4 py-8 text-center",
+            "flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-line-strong px-4 py-8 text-center transition-colors duration-150",
             dragging && "border-accent-fill bg-accent-soft",
           )}
         >
-          <Upload className="size-6 text-muted" aria-hidden="true" />
+          <Upload
+            className={cn(
+              "size-6 transition-colors duration-150",
+              dragging ? "text-accent" : "text-muted",
+            )}
+            aria-hidden="true"
+          />
           <p className="text-sm">Drag files or a folder here, or choose them.</p>
           <div className="flex flex-wrap justify-center gap-2">
             <label
               htmlFor={fileInput}
-              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3.5 text-sm font-medium hover:bg-raised focus-within:outline-2 focus-within:outline-accent"
+              className={cn(
+                buttonVariants(),
+                "cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent",
+              )}
             >
               Choose files
               <input
@@ -168,7 +180,10 @@ export function UploadPanel({
             </label>
             <label
               htmlFor={folderInput}
-              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3.5 text-sm font-medium hover:bg-raised focus-within:outline-2 focus-within:outline-accent"
+              className={cn(
+                buttonVariants(),
+                "cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent",
+              )}
             >
               <FolderUp className="size-4" aria-hidden="true" />
               Choose a folder
@@ -220,7 +235,20 @@ export function UploadPanel({
                       <span className="tabular font-mono text-xs text-muted">
                         {formatBytes(f.file.size)}
                       </span>
-                      {p ? <span className="text-xs">{stateText[p.state]}</span> : null}
+                      {p ? (
+                        <span
+                          className={cn(
+                            "min-w-24 text-right text-xs",
+                            p.state === "error"
+                              ? "text-danger"
+                              : p.state === "done" || p.state === "stored"
+                                ? "text-ok"
+                                : "text-muted",
+                          )}
+                        >
+                          {stateText[p.state]}
+                        </span>
+                      ) : null}
                       {!run.isPending ? (
                         <Button
                           size="icon-sm"

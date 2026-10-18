@@ -9,12 +9,13 @@ import {
   Telescope,
   Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/form";
+import { SegmentedControl } from "@/components/ui/segmented";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { VirtualGrid } from "@/components/VirtualGrid";
 import { formatCount } from "@/lib/format";
@@ -63,8 +64,8 @@ function FacetGroup({
             aria-pressed={on}
             onClick={() => onToggle(value)}
             className={cn(
-              "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-raised",
-              on && "bg-accent-soft font-medium text-ink",
+              "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-sm transition-[color,background-color] duration-150 hover:bg-raised",
+              on && "bg-accent-soft font-medium text-ink hover:bg-accent-soft",
             )}
           >
             <span className="truncate">{value}</span>
@@ -96,26 +97,23 @@ function Filters({
     Object.entries(facets[name] ?? {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return (
     <div className="space-y-5">
-      <fieldset className="space-y-1">
-        <legend className="mb-1 text-xs font-semibold text-muted">Mirror or local</legend>
-        <div className="flex flex-wrap gap-1">
-          {[
-            { v: undefined, l: "Any" },
-            { v: "true", l: "Mirrors" },
-            { v: "false", l: "Local" },
-          ].map((o) => (
-            <Button
-              key={o.l}
-              size="sm"
-              variant={search.mirror === o.v ? "primary" : "secondary"}
-              aria-pressed={search.mirror === o.v}
-              onClick={() => update({ mirror: o.v })}
-            >
-              {o.l}
-            </Button>
-          ))}
-        </div>
-      </fieldset>
+      <div className="space-y-1">
+        {/* The group's legend names it for assistive technology. */}
+        <p aria-hidden="true" className="mb-1 text-xs font-semibold text-muted">
+          Mirror or local
+        </p>
+        <SegmentedControl<string | undefined>
+          legend="Mirror or local"
+          className="w-fit"
+          value={search.mirror}
+          onValueChange={(v) => update({ mirror: v })}
+          options={[
+            { value: undefined, label: "Any" },
+            { value: "true", label: "Mirrors" },
+            { value: "false", label: "Local" },
+          ]}
+        />
+      </div>
       {facetGroupsFor(kind).map((g) => {
         const current = search[g.param];
         const selected =
@@ -254,6 +252,13 @@ export function RepoListPage({ kind }: { kind: RepoKind }) {
   const sort = sortOptionsFor(kind).some((o) => o.value === search.sort)
     ? (search.sort ?? "updated")
     : "updated";
+  // Fade the grid in on its first appearance only: a filter change remounts
+  // it after the loading rows, and fading every result set would feel slow.
+  const gridShown = useRef(false);
+  const showsGrid = items.length > 0;
+  useEffect(() => {
+    if (showsGrid) gridShown.current = true;
+  }, [showsGrid]);
 
   return (
     <PageShell
@@ -386,6 +391,7 @@ export function RepoListPage({ kind }: { kind: RepoKind }) {
               <h2 className="sr-only">{text.listLabel}</h2>
               <VirtualGrid
                 label={text.listLabel}
+                fadeIn={!gridShown.current}
                 items={items}
                 itemKey={(r) => `${r.type}/${r.id}`}
                 minColumnWidth={view === "list" ? 10_000 : 300}

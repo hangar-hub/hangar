@@ -14,7 +14,7 @@ import { Field, Input, Textarea } from "@/components/ui/form";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
-import { formatBytes, relativeTime, shortSha } from "@/lib/format";
+import { formatBytes, formatDateTime, relativeTime, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/frontmatter";
 import { errorStatus, unwrap } from "@/lib/problem";
 import {
@@ -388,7 +388,7 @@ export function BlobPage({
       {header}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface px-3 py-2">
         <span className="flex flex-wrap items-center gap-1.5">
-          <FileCode className="size-4 text-muted" aria-hidden="true" />
+          <FileCode className="size-4 shrink-0 text-muted" aria-hidden="true" />
           <span className="tabular font-mono text-xs">{formatBytes(e.size)}</span>
           {e.lfs ? (
             <Badge mono title={`SHA-256 ${e.lfs.oid}`}>
@@ -401,7 +401,8 @@ export function BlobPage({
         {e.last_commit ? (
           <AppLink
             href={`${repoPath(kind, ns, name)}/commit/${e.last_commit.sha}`}
-            className="min-w-0 truncate text-xs text-muted hover:text-ink hover:underline"
+            title={`${e.last_commit.title}, ${formatDateTime(e.last_commit.date)}`}
+            className="min-w-0 truncate text-xs text-muted transition-colors duration-100 hover:text-ink hover:underline"
           >
             <span className="font-mono">{shortSha(e.last_commit.sha)}</span> {e.last_commit.title},{" "}
             {relativeTime(e.last_commit.date)}
@@ -452,7 +453,7 @@ export function BlobPage({
         <ScanPanel status={e.scan_status} repo={ref} rev={commit} path={path} />
       ) : null}
       {!e.present ? (
-        <EmptyState title="This file is not in the arsenal">
+        <EmptyState size="sm" title="This file is not in the arsenal">
           This Mirror holds the file's history but not its content yet. Pull it from the Files tab
           to read it here.
         </EmptyState>
@@ -470,12 +471,17 @@ export function BlobPage({
         <GgufView repo={ref} rev={rev} path={path} />
       ) : view === "image" ? (
         <div className="rounded-lg border border-line bg-surface p-4">
-          <img src={raw} alt={baseName(path)} className="mx-auto max-h-[70vh] max-w-full" />
+          <img
+            src={raw}
+            alt={baseName(path)}
+            className="hg-enter mx-auto max-h-[70vh] max-w-full"
+          />
         </div>
       ) : textual && e.size <= maxPreview && !e.lfs ? (
         <TextContent repo={ref} rev={rev} path={path} view={view} />
       ) : (
         <EmptyState
+          size="sm"
           title={textual ? "This file is too large to show here" : "No preview for this file type"}
         >
           Download it to open it with another tool.

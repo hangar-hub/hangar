@@ -54,7 +54,7 @@ function UpstreamToken({ u }: { u: Upstream }) {
     <li className="space-y-3 rounded-lg border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-semibold">{u.display_name}</h2>
-        <span className="font-mono text-xs text-muted">{u.base_url}</span>
+        <span className="min-w-0 font-mono text-xs text-muted wrap-anywhere">{u.base_url}</span>
         {status.data?.saved ? (
           <Badge tone="ok">
             Token saved{status.data.updated_at ? ` ${formatDate(status.data.updated_at)}` : ""}
@@ -114,7 +114,7 @@ export function UpstreamTokensPage() {
       ) : upstreams.data.items.length === 0 ? (
         <EmptyState title="No Upstreams are enabled" />
       ) : (
-        <ul className="space-y-3">
+        <ul className="hg-enter space-y-3">
           {upstreams.data.items.map((u) => (
             <UpstreamToken key={u.name} u={u} />
           ))}

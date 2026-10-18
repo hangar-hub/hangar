@@ -12,6 +12,7 @@ import { Field, Input, Switch } from "@/components/ui/form";
 import { ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { errorMessage, fieldErrors, unwrap } from "@/lib/problem";
+import { cn } from "@/lib/utils";
 
 type Form = {
   name: string;
@@ -221,7 +222,7 @@ export function AdminUpstreamsPage() {
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : (
-        <ul className="space-y-2">
+        <ul className="hg-enter space-y-2">
           {list.data.items.map((u) => {
             const r = results[u.id];
             return (
@@ -229,12 +230,13 @@ export function AdminUpstreamsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold">{u.display_name}</h2>
                   <span className="font-mono text-xs text-muted">{u.name}</span>
-                  <span className="font-mono text-xs">{u.base_url}</span>
+                  <span className="min-w-0 font-mono text-xs wrap-anywhere">{u.base_url}</span>
                   {u.source === "config" ? <Badge>From configuration</Badge> : null}
                   {u.has_instance_token ? <Badge tone="info">Instance token</Badge> : null}
                   {u.namespace_prefix ? <Badge mono>prefix {u.namespace_prefix}</Badge> : null}
                   <span className="ml-auto flex items-center gap-1">
                     <Switch
+                      className="gap-0 py-0"
                       label={<span className="sr-only">Enabled</span>}
                       checked={u.enabled}
                       onCheckedChange={() => toggle.mutate(u)}
@@ -270,7 +272,10 @@ export function AdminUpstreamsPage() {
                   </span>
                 </div>
                 {r ? (
-                  <p role="status" className={r.ok ? "text-sm text-ok" : "text-sm text-danger"}>
+                  <p
+                    role="status"
+                    className={cn("tabular text-sm wrap-anywhere", r.ok ? "text-ok" : "text-danger")}
+                  >
                     {r.ok ? "Connected. " : "Failed. "}
                     {r.message}
                     {r.latency_ms !== undefined ? ` (${r.latency_ms} ms)` : ""}
