@@ -50,3 +50,10 @@ Branch `fix/p3-2-docs`, from `132da07`, for two audit findings in `docs/build/de
 
 - **Broken link.** An open question linked `../spec/03-hub-api.md`; the file is `03-hf-api.md`. Nothing caught it because MkDocs builds neither `docs/build` nor `docs/spec`. `scripts/check-doc-links.py` now checks every relative Markdown link under `docs/` and in the root Markdown files, and `make lint-style` runs it. `TestDocLinkCheck` in `deploy/scripts_test.go` covers it, and the check fails on `decisions.md` as it was at `132da07`.
 - **Heading case.** The section headings now say "Phase 3", as [15](../../spec/15-build-plan.md) does. Body text that names agents ("the phase 3 scan agent") is unchanged.
+
+## Round 4 fixes
+
+Branch `fix/p3-4-docs`, from `f16466b`, for two audit findings.
+
+- **Threat model test citations.** Boundary 7 cited `TestHTTPClientRedactsPresignedURLs` at `internal/cli/redact_test.go`; it is in `internal/upstream/client_test.go`. `scripts/check-test-citations.py` now checks that every test or fuzz name the docs cite is defined in the test file cited after it, or in some test file when none is cited, and `make lint-style` runs it. It found one more: boundary 2 cited `TestPermissionMatrix` at `cmd/hangar/hub_admin_test.go`; it is in `internal/auth/authz_test.go`. Both now name their own files. `TestTestCitationCheck` in `deploy/scripts_test.go` covers the check.
+- **Percent signs.** `docs/benchmarks.md` wrote "0.11 % against 0.1 %", and `CONTRIBUTING.md` "75 %" and "85 %". The Google style writes no space before the percent sign. `scripts/check-spelling.sh` now flags a number followed by a spaced percent sign in prose, outside code spans. `TestPercentSpacingCheck` covers it.

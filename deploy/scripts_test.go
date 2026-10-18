@@ -121,3 +121,83 @@ func TestDocLinkCheck(t *testing.T) {
 		})
 	}
 }
+
+// TestTestCitationCheck checks that scripts/check-test-citations.py catches a
+// test cited at a file that does not define it, such as the threat model
+// putting TestHTTPClientRedactsPresignedURLs in internal/cli/redact_test.go,
+// and a name no test file defines. The fixtures cite real tests and files in
+// the repository.
+func TestTestCitationCheck(t *testing.T) {
+	for name, tc := range map[string]struct {
+		src  string
+		want string
+	}{
+		"cites two tests at the file of only one": {
+			want: "page.md:3: TestHTTPClientRedactsPresignedURLs is not in internal/cli/redact_test.go",
+			src:  "Intro.\n\n| I | Leak. | Redact. | `TestHTTPClientRedactsPresignedURLs`, `TestPullDoesNotPrintPresignedDownloadURLs` (`internal/cli/redact_test.go`). |\n",
+		},
+		"cites a test that does not exist": {
+			want: "page.md:3: TestNoSuchThingAnywhere is not defined in any test file",
+			src:  "Intro.\n\nKept by `TestNoSuchThingAnywhere`.\n",
+		},
+		"cites each test at its file": {
+			src: "Intro.\n\n| I | Leak. | Redact. | `TestHTTPClientRedactsPresignedURLs` (`internal/upstream/client_test.go`), `TestPullDoesNotPrintPresignedDownloadURLs` (`internal/cli/redact_test.go`); `TestSecretsStayOutOfLogsAndTelemetry`. |\n",
+		},
+		"cites a test with a note and no file": {
+			src: "Intro.\n\n`TestPermissionMatrix` (with its `hub_admin` column), `FuzzWhere` (`internal/datasets/query/query_test.go`).\n",
+		},
+		"names a test inside a code block": {
+			src: "Intro.\n\n```text\nTestNoSuchThingAnywhere\n`TestNoSuchThingAnywhere`\n```\n",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			page := filepath.Join(t.TempDir(), "page.md")
+			if err := os.WriteFile(page, []byte(tc.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			out, err := exec.Command("python3", "../scripts/check-test-citations.py", page).CombinedOutput()
+			if tc.want != "" {
+				if err == nil {
+					t.Fatalf("the check passed:\n%s", out)
+				}
+				if !strings.Contains(string(out), tc.want) {
+					t.Errorf("the check did not report %q:\n%s", tc.want, out)
+				}
+			} else if err != nil {
+				t.Fatalf("the check failed: %v\n%s", err, out)
+			}
+		})
+	}
+}
+
+// TestPercentSpacingCheck checks that scripts/check-spelling.sh catches a
+// space before a percent sign, as in "0.11 % against 0.1 %", and leaves
+// percentages written without one, and ones in code, alone.
+func TestPercentSpacingCheck(t *testing.T) {
+	for name, tc := range map[string]struct {
+		src  string
+		fail bool
+	}{
+		"spaces a percentage":     {fail: true, src: "Intro.\n\nIt failed (0.11 % against 0.1%).\n"},
+		"writes it without space": {src: "Intro.\n\nIt failed (0.11% against 0.1%), at 75% per package.\n"},
+		"spaces it inside code":   {src: "Intro.\n\nRun `printf '%d %%' 5 %`.\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			page := filepath.Join(t.TempDir(), "page.md")
+			if err := os.WriteFile(page, []byte(tc.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			out, err := exec.Command("bash", "../scripts/check-spelling.sh", page).CombinedOutput()
+			if tc.fail {
+				if err == nil {
+					t.Fatalf("the check passed:\n%s", out)
+				}
+				if !strings.Contains(string(out), "page.md:3:") || !strings.Contains(string(out), "no space before the percent sign") {
+					t.Errorf("the check did not name the line:\n%s", out)
+				}
+			} else if err != nil {
+				t.Fatalf("the check failed: %v\n%s", err, out)
+			}
+		})
+	}
+}

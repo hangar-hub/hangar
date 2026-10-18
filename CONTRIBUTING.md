@@ -36,7 +36,7 @@ make dev          # the server on :8080 and the UI with live reload on :5173
 
 ## Tests
 
-Tests ship with code. Every change needs tests that fail without it, and `make lint test` must pass. Database tests run on SQLite and Postgres with `dbtest.ForEachDriver`; the Blob store conformance suite runs on the filesystem and MinIO. Coverage must stay at 75 % per package, 85 % for `internal/auth`, `internal/repo`, `internal/gitserver` and `internal/hfapi`.
+Tests ship with code. Every change needs tests that fail without it, and `make lint test` must pass. Database tests run on SQLite and Postgres with `dbtest.ForEachDriver`; the Blob store conformance suite runs on the filesystem and MinIO. Coverage must stay at 75% per package, 85% for `internal/auth`, `internal/repo`, `internal/gitserver` and `internal/hfapi`.
 
 Never skip, disable or weaken a test to get a change through. No stubs, placeholder data or `TODO`s in shipped code; fakes live in `*test` packages.
 
@@ -44,7 +44,7 @@ Never skip, disable or weaken a test to get a change through. No stubs, placehol
 
 - Go: `gofmt` and `goimports`, checked by golangci-lint.
 - UI: Biome.
-- Prose, UI text, error messages and CLI help: the Google developer documentation style guide, in British English, with no em dashes. `make lint-style` catches the dashes, common American spellings in the docs (`scripts/check-spelling.sh`), and relative Markdown links that name no file (`scripts/check-doc-links.py`), including in `docs/spec` and `docs/build`, which the docs site does not build; put API names and identifiers in backticks and quotations in double quotes so the spelling check leaves them alone.
+- Prose, UI text, error messages and CLI help: the Google developer documentation style guide, in British English, with no em dashes. `make lint-style` catches the dashes, common American spellings and a space before a percent sign in the docs (`scripts/check-spelling.sh`), tests the docs cite by a name or file that does not exist (`scripts/check-test-citations.py`), and relative Markdown links that name no file (`scripts/check-doc-links.py`), including in `docs/spec` and `docs/build`, which the docs site does not build; put API names and identifiers in backticks and quotations in double quotes so the spelling check leaves them alone.
 - Never log or record on spans: tokens, passwords, cookies, presigned URLs or `Authorization` headers.
 
 ## Commits and pull requests
