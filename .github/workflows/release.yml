@@ -3,7 +3,8 @@ name: Release
 # Builds and publishes a release (docs/spec/12-packaging-and-release.md):
 # binaries with GoReleaser, the multi-arch image (signed with cosign keyless,
 # with an SPDX SBOM attestation and SLSA provenance, scanned with Trivy),
-# the Helm chart as an OCI artefact, and the documentation site.
+# the Helm chart as an OCI artefact, the documentation site, and the demo
+# branch that Cloudflare deploys the mock demo from.
 #
 # release-please.yml calls it when it creates a release; a tag pushed by a
 # person also starts it.
@@ -223,3 +224,21 @@ jobs:
             mike deploy --push --update-aliases "${version%.*}" latest
           uv run --no-project --with-requirements docs/requirements.txt mike set-default --push latest
           ./scripts/docs-cname.sh --push
+
+  demo:
+    name: Demo
+    needs: [binaries, image, chart]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          # A shallow clone cannot always push a new branch.
+          fetch-depth: 0
+      # Workers Builds watches the demo branch and deploys the mock demo at
+      # https://demo.hangar.page/ from it (make demo, then make demo-deploy),
+      # so the demo shows the release that /latest/ documents.
+      - name: Point the demo branch at this release
+        run: git push --force origin "HEAD:refs/heads/demo"

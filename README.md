@@ -22,6 +22,8 @@ Hangar runs as one container on a laptop or homelab, and scales out to stateless
 |---|---|---|
 | ![A model's page with its card, files, metadata and the Use this model button](docs/assets/screenshots/model-card-desktop.webp) | ![The GGUF viewer showing a file's metadata, chat template and tensors](docs/assets/screenshots/gguf-viewer-desktop.webp) | ![The Dataset Viewer showing rows of a dataset Split with column statistics](docs/assets/screenshots/dataset-viewer-desktop.webp) |
 
+To try the web UI without installing anything, open the demo at <https://demo.hangar.page/>. It runs on sample data, and nothing you do there is saved.
+
 ## Quickstart
 
 ```sh

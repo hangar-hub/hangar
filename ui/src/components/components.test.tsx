@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DiffView, diffLines } from "@/features/files/DiffView";
 import { ApiError } from "@/lib/problem";
+import { DemoBanner, docsUrl, isDemo } from "./DemoBanner";
 import { PageShell } from "./PageShell";
 import { isSearchShortcut } from "./SearchPalette";
 import { Dialog } from "./ui/dialog";
@@ -122,5 +123,26 @@ describe("search shortcut", () => {
     expect(
       isSearchShortcut({ key: "a", metaKey: false, ctrlKey: false, target: document.body }),
     ).toBe(false);
+  });
+});
+
+describe("DemoBanner", () => {
+  it("says the data is sample data and links to the docs", () => {
+    render(<DemoBanner />);
+    const banner = screen.getByRole("region", { name: "Demo" });
+    expect(banner).toHaveTextContent(
+      "This is a demo with sample data. Nothing you do here is saved. Read the documentation",
+    );
+    expect(screen.getByRole("link", { name: "Read the documentation" })).toHaveAttribute(
+      "href",
+      "https://hangar.page/",
+    );
+    expect(docsUrl).toBe("https://hangar.page/");
+  });
+
+  it("is off unless the build sets VITE_HANGAR_DEMO=1", () => {
+    // make ui and the tests build without the flag; make demo sets it.
+    expect(import.meta.env.VITE_HANGAR_DEMO).toBeUndefined();
+    expect(isDemo).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { errorMessage } from "@/lib/problem";
 import { useMe, useSignOut } from "@/lib/session";
+import { DemoBanner, isDemo } from "./DemoBanner";
 import { JobsIndicator } from "./JobsDrawer";
 import { Logo } from "./Logo";
 import { SearchPalette } from "./SearchPalette";
@@ -141,6 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
+      {isDemo ? <DemoBanner /> : null}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-12 max-w-[1440px] items-center gap-2 px-4 sm:gap-3">
           <MobileNav />

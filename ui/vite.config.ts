@@ -37,6 +37,9 @@ function mockApi(): Plugin {
 }
 
 const mock = process.env.HANGAR_MOCK === "1";
+// VITE_HANGAR_DEMO=1 builds the demo at demo.hangar.page (make demo): the
+// same UI with a banner, into demo/dist, leaving the embedded build alone.
+const demo = process.env.VITE_HANGAR_DEMO === "1";
 
 // The UI builds into internal/web/dist, which the Go binary embeds.
 export default defineConfig({
@@ -44,12 +47,12 @@ export default defineConfig({
     tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
     tailwindcss(),
-    keepGitkeep(),
+    ...(demo ? [] : [keepGitkeep()]),
     ...(mock ? [mockApi()] : []),
   ],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   build: {
-    outDir: "../internal/web/dist",
+    outDir: demo ? "demo/dist" : "../internal/web/dist",
     emptyOutDir: true,
     assetsDir: "assets",
     sourcemap: false,
@@ -81,6 +84,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}", "mock/**/*.test.ts", "plugins/**/*.test.ts"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "mock/**/*.test.ts",
+      "plugins/**/*.test.ts",
+      "demo/**/*.test.ts",
+    ],
   },
 });

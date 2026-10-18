@@ -24,9 +24,11 @@
     "e2e",
     "e2e-real",
     "mock",
+    "demo",
     "plugins",
     "vite.config.ts",
     "playwright.config.ts",
-    "playwright.real.config.ts"
+    "playwright.real.config.ts",
+    "playwright.demo.config.ts"
   ]
 }

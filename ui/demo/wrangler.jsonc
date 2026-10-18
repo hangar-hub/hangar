@@ -1,0 +1,24 @@
+// The mock demo at https://demo.hangar.page/ (docs/spec/12-packaging-and-release.md).
+// Build it with `make demo` (demo/gen and demo/dist), run it with
+// `make demo-serve`. Workers Builds deploys it from the `demo` branch, which
+// release.yml moves to each release tag.
+{
+  "$schema": "https://unpkg.com/wrangler@4.147.0/config-schema.json",
+  "name": "hangar-demo",
+  "main": "gen/index.js",
+  "compatibility_date": "2026-09-28",
+  // node:crypto and Buffer, which the mock's fixtures and handlers use.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    // Hashed assets skip the Worker; pages, the API and files go through it,
+    // so pages get a fresh CSP nonce and the API answers from the mock.
+    "run_worker_first": ["/*", "!/assets/*"]
+  },
+  "routes": [{ "pattern": "demo.hangar.page", "custom_domain": true }],
+  "vars": { "DEMO_SIGNED_IN": "1" },
+  "observability": { "enabled": false },
+  "workers_dev": false,
+  "preview_urls": false
+}
