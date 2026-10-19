@@ -2,7 +2,7 @@
 
 Phase 2 step 5 of [`15-build-plan.md`](../spec/15-build-plan.md): every feature ID in [`01-product.md`](../spec/01-product.md) and [`14-datasets.md`](../spec/14-datasets.md) with the test that proves it, the Hub API contract MUSTs, the suite results, the request resolutions and the open issues.
 
-It describes branch `integration/v1` at `97d17c1`, ready for release. [Pre-release check (2026-10-18)](#pre-release-check-2026-10-18) has the last run of every suite, all green; earlier sections describe earlier rounds. [Phase 3 decisions and final check (2026-10-18)](#phase-3-decisions-and-final-check-2026-10-18) has the merges since Phase 3 and the final run of every suite, all green, after which `main` was fast-forwarded. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and its round 4 results at `6610f45`; [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) and the later sections describe earlier rounds.
+It describes branch `integration/v1` at `97d17c1`, ready for release, and [Releases (2026-10-18 and 2026-10-19)](#releases-2026-10-18-and-2026-10-19) records v1.0.0 and v1.1.0 and the CI fixes after them. [Pre-release check (2026-10-18)](#pre-release-check-2026-10-18) has the last run of every suite, all green; earlier sections describe earlier rounds. [Phase 3 decisions and final check (2026-10-18)](#phase-3-decisions-and-final-check-2026-10-18) has the merges since Phase 3 and the final run of every suite, all green, after which `main` was fast-forwarded. [Phase 3 hardening (2026-10-17)](#phase-3-hardening-2026-10-17) describes what Phase 3 found and fixed and its round 4 results at `6610f45`; [Preview feedback round (2026-10-17)](#preview-feedback-round-2026-10-17) and the later sections describe earlier rounds.
 
 ## Summary
 
@@ -10,9 +10,39 @@ It describes branch `integration/v1` at `97d17c1`, ready for release. [Pre-relea
 - Final check at `a998d78` (2026-10-18): every suite green, run one after another by the lead: lint, unit on SQLite and Postgres, coverage, generated code, client compatibility (7 Go packages, pytest 71 passed and 2 skipped), UI on the mock server (542 passed) and on two real Instances (369 passed), deploy checks, image, four Compose examples, kind (9 tests) and the docs site. Round 4 of Phase 3 at `6610f45` had left the unit suite unfinished and one coverage gap; both are closed.
 - Every feature ID has at least one named test, and every test named here exists in the tree (checked in the round 8 audit). Every MUST in section 13 of the Hub API contract has a handler and a test; the round 4 Hub matrix check lists 85 endpoint and test pairs.
 - 108 request items have a resolution; 3 are deferred. W11 8 (who may reference an LFS or Xet object by its hash) was decided by James on 2026-10-18: references are checked at Commit.
-- James decided the five Phase 3 questions on 2026-10-18 (see [decisions](decisions.md)). He decided the last product question, self-service profile and password changes (W8 8), the same day; it is closed on branch `feat/self-service-account` (see [W8 8 closed](#w8-8-closed-self-service-profile-and-password)). The release is on hold until he says go.
+- James decided the five Phase 3 questions on 2026-10-18 (see [decisions](decisions.md)). He decided the last product question, self-service profile and password changes (W8 8), the same day; it is closed on branch `feat/self-service-account` (see [W8 8 closed](#w8-8-closed-self-service-profile-and-password)). He gave the go-ahead on 2026-10-18, and v1.0.0 and v1.1.0 are released (see [Releases](#releases-2026-10-18-and-2026-10-19)).
 - AWS S3 passed in full on 2026-10-15 after the fixes for the 2026-10-14 failures.
 - The preview Instance's large import, red in earlier rounds, passed on `382cc88` on 2026-10-17: a 19.85 GB GGUF imported with its SHA-256 matching huggingface.co (bellatrix PRs #121 and #122). The preview has not yet been updated past `382cc88`.
+
+## Releases (2026-10-18 and 2026-10-19)
+
+James gave the go-ahead on 2026-10-18. Both releases ran through release-please and `release.yml` on GitHub Actions, with no manual publishing step.
+
+| Release | Tag commit | Release run | Checked after |
+|---|---|---|---|
+| v1.0.0 | `91f5535` | passed, 2026-10-18 | `cosign verify` of the image and the checksums, anonymous GHCR pulls of the image and the chart, Homebrew cask `hangar-hub/tap/hangar` installed and `hangar version` prints 1.0.0 |
+| v1.1.0 | `268d6eb` | passed, 2026-10-19 | `cosign verify ghcr.io/hangar-hub/hangar:1.1.0` (identity `release.yml@refs/tags/v*`, issuer GitHub Actions), image for `linux/amd64` and `linux/arm64`, chart 1.1.0 from `oci://ghcr.io/hangar-hub/charts/hangar`, cask 1.1.0 upgraded and `hangar version` prints 1.1.0 at `268d6eb`, docs `versions.json` lists 1.1 as `latest` |
+
+The docs and the demo moved from GitHub Pages to Cloudflare Workers Builds, with branch Previews under `hangar.page` (see [decisions](decisions.md), 2026-10-19). Checked on 2026-10-19 with a throwaway branch: `<name>.docs.hangar.page` served that branch's docs with `X-Robots-Tag: noindex` and the security headers, and `<name>.demo.hangar.page` served the demo with its CSP, `X-Frame-Options: DENY` and `noindex`, and answered `/api/hangar/v1/me`. Neither Worker answers on `workers.dev`. The v1.1.0 deploy of `demo` used the configuration from before Previews, which turned off Previews on `demo.hangar.page`; they were turned back on, and from the next release the `demo` branch's configuration keeps them on.
+
+### CI failures fixed after the release
+
+The first public CI runs showed intermittent failures that did not appear on the development machine. Each was traced to a cause and fixed; no test was skipped, retried by the harness or loosened.
+
+| PR | Failure | Cause and fix |
+|---|---|---|
+| #11 | `TestPullFromUpstreamIntoTheHFCache` counted 5 requests, not 4, on arm64 | The test fake counted a request after its handler returned. It now counts when the response starts |
+| #14 | `TestPartUploadRetriesFaults/NoResponse` on arm64 | A 200 with no `ETag` was taken as a finished part. `PutPart` now retries it, and a `NoETag` fault covers it |
+| #14 | `TestCacheEvictsLeastRecentlyUsed` on amd64 | `gitstore.Store.Acquire` chose at random between a finished sync and a cancelled context. It now returns the context's error first |
+| #19 | `TestRealBandwidthCapAcrossTwoWorkers` moved 60.9 to 89.5% of the cap | The shared bandwidth limiter left budget unused when a worker finished or joined. An idle worker now gives its slice back, and a worker with less than the whole budget looks for more every quarter of a refresh period. All 48 local runs of a 10-second window passed after the fix; all 27 that split the files across workers failed before it. Some CI failures took about 30 seconds longer than the limiter explains; the test now logs each Job's attempts, so a recurrence shows the cause |
+| #21 | The chart's helm test was refused on the Service address | `helm install --wait` returns when the Pod is ready, a moment before the Service routes to it. `hangar healthcheck --retry-for` retries while the connection fails, and the helm test uses it. A `/readyz` answer other than 200 still fails at once |
+
+### Still open after the releases
+
+- **100,000 repositories per Instance** is not measured. The benchmarks stop well short of it.
+- **AWS S3** was last run in full on 2026-10-15, before the releases. It is to be rerun from James's home network.
+- **The bellatrix preview** still runs the Harbor build `preview-c79363e`, not a released image. Moving it to the GHCR image and chart needs a `pg_dump` first, because migrations 0002 and 0003 are new.
+- **Manual checks for James:** LM Studio against a real server, and the quickstart on a clean machine.
 
 ## Pre-release check (2026-10-18)
 
@@ -289,7 +319,7 @@ As of `cd42d2b`. Phase 3 closed the first three items and the release rehearsal;
 - **Rerun the import on the preview.** James approved the lead running it on 2026-10-17. Nothing here has moved a multi-GB file through Nginx Proxy Manager, and no Compose or kind setup exercises presigned single-PUT uploads (only `compat/hf` against MinIO does). The lead rebuilds the preview and the CLI from `integration/v1`, runs `hangar admin doctor --large-read` against Aquila's MinIO, and reruns the `Qwen2.5-Coder-32B-Instruct-GGUF` import. This closes the red item in [Open issues](#open-issues).
 - **Local `govulncheck`.** `~/go/bin/govulncheck` was built with Go 1.26 and cannot load this module; rebuild it with Go 1.27. `go run ...@v1.9.0` works.
 - **Not run this round.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, fuzz, LM Studio against a real server, and `make release-rehearsal` (which the Phase 3 gaps review ran and passed).
-- **Release on hold.** Nothing is published until James says go.
+- **Release on hold.** Lifted on 2026-10-18; see [Releases](#releases-2026-10-18-and-2026-10-19).
 
 ## Suite results
 
@@ -517,9 +547,9 @@ Open:
 - **Unit suite at `6610f45`, and the 6c tag test.** See [Still open after Phase 3](#still-open-after-phase-3). Both must be closed before `main` moves.
 - **Questions for James.** The open questions in [decisions](decisions.md): whether `scan.block_unsafe_downloads` also refuses suspicious pickles; who may reference an LFS or Xet object by its hash (W11 8, deferred from Phase 2; global deduplication stays and is documented in the [threat model](../security/threat-model.md)); whether Namespace profiles and member lists are public when `anonymous_read` is off; how concurrent server-side Commits to one branch should behave; and how Ollama should learn that a quant is not pulled. The current behaviour stands until he decides.
 - **Dark-theme axe coverage.** Whether every page needs a dark-theme axe check; see [Still open after Phase 3](#still-open-after-phase-3).
-- **Release on hold.** James decided on 2026-10-16 that nothing is published until he says go ([decisions](decisions.md), "Release on hold"). Work stops after the release dry run.
-- **Release partly exercised.** `make release-rehearsal` passed in the Phase 3 gaps review with a throwaway key, but keyless signing through GitHub OIDC and the multi-arch push run only in `release.yml`, for the first time in James's release (W9 11).
-- **Local-only checks.** There is no remote, so every result here comes from the development machine, not CI, and every benchmark from one shared laptop.
+- **Release on hold.** Lifted by James on 2026-10-18; v1.0.0 and v1.1.0 are released (see [Releases](#releases-2026-10-18-and-2026-10-19)).
+- **Release exercised.** Keyless signing through GitHub OIDC and the multi-arch push ran in `release.yml` for v1.0.0 and v1.1.0, and both verify (see [Releases](#releases-2026-10-18-and-2026-10-19)).
+- **Local-only checks.** Results before 2026-10-18 come from the development machine. Since then every pull request runs the suites on GitHub Actions on amd64 and arm64; every benchmark still comes from one shared laptop.
 - **Not covered in Phase 3.** The floor-client, latest-Python and without-`hf_xet` Hub cells, the `diffusers` and `upload_large_folder` cells, the 6 GiB nightly file, a timed fuzz run (round 4 ran the fuzz seeds only), LM Studio against a real server, and a kind install that starts the Blob store late.
 - **`govulncheck` binary.** The installed `govulncheck` is built with an older Go and cannot load this module; the `go run ...@v1.9.0` form works. This is a local tool problem.
 
