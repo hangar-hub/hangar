@@ -180,6 +180,41 @@ func TestChartReadinessProbeOutwaitsReadyz(t *testing.T) {
 	}
 }
 
+// TestChartTestPodRetriesThroughTheService checks that the helm test Pod
+// calls hangar healthcheck with --retry-for. It reaches Hangar through the
+// Service, which refuses connections until the Service proxy routes to the
+// newly ready Pod; helm install --wait does not wait for that, and with one
+// try ct install failed on GitHub's runners with "connect: connection
+// refused" against a ready Pod.
+func TestChartTestPodRetriesThroughTheService(t *testing.T) {
+	found := 0
+	for _, doc := range renderChart(t, offlineValues[0]...) {
+		md, _ := doc["metadata"].(map[string]any)
+		annotations, _ := md["annotations"].(map[string]any)
+		if doc["kind"] != "Pod" || annotations["helm.sh/hook"] != "test" {
+			continue
+		}
+		found++
+		containers, _ := podSpec(doc)["containers"].([]any)
+		for _, c := range containers {
+			cm, _ := c.(map[string]any)
+			args, _ := cm["args"].([]any)
+			i := slices.Index(args, any("--retry-for"))
+			if i < 0 || i+1 >= len(args) {
+				t.Errorf("helm test Pod %v container %v: args %v have no --retry-for", md["name"], cm["name"], args)
+				continue
+			}
+			d, err := time.ParseDuration(fmt.Sprint(args[i+1]))
+			if err != nil || d < 10*time.Second {
+				t.Errorf("helm test Pod %v container %v: --retry-for %v; want at least 10s", md["name"], cm["name"], args[i+1])
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("rendered no helm test Pod; the check no longer covers it")
+	}
+}
+
 // renderNotes runs a client-side dry-run install with the documented release
 // name and returns the NOTES it prints. It reads no kubeconfig, so it needs
 // no cluster.
