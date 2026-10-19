@@ -4405,6 +4405,13 @@ Namespaces involved. A file that fails to upload does not stop the other
 files or Repos: files that went up into a Mirror are added to it, and the
 results name what failed, so running the command again sends only that.
 Use --dry-run to see what would be imported.
+
+To import some models and not the rest, give --only once for each, as it
+appears in the source: a Repo ID such as bartowski/Qwen2.5-7B-Instruct-GGUF
+for a Hugging Face cache, a &lt;publisher&gt;/&lt;repo&gt; folder for LM Studio, or a
+model and tag such as llama3.2:1b for Ollama (llama3.2 means llama3.2:latest).
+Patterns can use * and ?, which do not match /, and ignore case. A pattern
+that matches nothing stops the import before anything is uploaded.
 </code></pre></div>
 <p>Usage:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
@@ -4412,6 +4419,7 @@ Use --dry-run to see what would be imported.
 <p>Examples:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache
 hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w"> </span>/mnt/models/hf<span class="w"> </span>--offline<span class="w"> </span>--namespace<span class="w"> </span>acme
+hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w"> </span>--only<span class="w"> </span><span class="s1">'bartowski/*'</span><span class="w"> </span>--only<span class="w"> </span>Qwen/Qwen2.5-7B-Instruct<span class="w"> </span>--dry-run
 hangar<span class="w"> </span>import<span class="w"> </span>--from-dir<span class="w"> </span>./weights<span class="w"> </span>--repo<span class="w"> </span>acme/my-model
 hangar<span class="w"> </span>import<span class="w"> </span>--from-lmstudio
 hangar<span class="w"> </span>import<span class="w"> </span>--from-ollama<span class="w"> </span>--namespace<span class="w"> </span>acme
@@ -4469,6 +4477,11 @@ hangar<span class="w"> </span>import<span class="w"> </span>--from-ollama<span c
 <tr>
 <td><code>--ollama-models</code></td>
 <td>Ollama's models folder (default: $OLLAMA_MODELS or ~/.ollama/models)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--only</code></td>
+<td>only import models matching this pattern, such as 'bartowski/*' or llama3.2:1b (repeatable)</td>
 <td></td>
 </tr>
 <tr>

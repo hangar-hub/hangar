@@ -1419,6 +1419,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#choose-which-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choose which models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#symbolic-links" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2853,6 +2864,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#choose-which-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choose which models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#symbolic-links" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2915,6 +2937,18 @@ hangar<span class="w"> </span>import<span class="w"> </span>--from-lmstudio<span
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-ollama<span class="w"> </span>--namespace<span class="w"> </span>acme
 </code></pre></div>
 <p>Each model and tag in Ollama's store (<code>~/.ollama/models</code>, or <code>$OLLAMA_MODELS</code>) becomes a local Repo, such as <code>acme/llama3.2</code> for <code>llama3.2:latest</code> and <code>acme/llama3.2-1b</code> for <code>llama3.2:1b</code>, with the GGUF file and Ollama's <code>template</code>, <code>system</code>, <code>params</code> and <code>LICENSE</code> files. Hangar's Ollama endpoint then serves it back with the same template.</p>
+<h2 id="choose-which-models">Choose which models<a class="headerlink" href="#choose-which-models" title="Permanent link">&para;</a></h2>
+<p>By default, a source imports every model it holds. To import only some, give <code>--only</code> once for each model, as the source names it:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w"> </span>--only<span class="w"> </span>Qwen/Qwen2.5-7B-Instruct<span class="w"> </span>--only<span class="w"> </span><span class="s1">'bartowski/*'</span>
+hangar<span class="w"> </span>import<span class="w"> </span>--from-lmstudio<span class="w"> </span>--only<span class="w"> </span>lmstudio-community/gemma-3-12b-it-GGUF
+hangar<span class="w"> </span>import<span class="w"> </span>--from-ollama<span class="w"> </span>--only<span class="w"> </span>llama3.2:1b<span class="w"> </span>--only<span class="w"> </span><span class="s1">'qwen3:*'</span>
+</code></pre></div>
+<ul>
+<li>For a Hugging Face cache, give the Repo ID. Datasets start with <code>datasets/</code>, such as <code>datasets/acme/data</code>.</li>
+<li>For LM Studio, give the <code>&lt;publisher&gt;/&lt;repo&gt;</code> folder, or the Repo ID it becomes.</li>
+<li>For Ollama, give the model and tag as <code>ollama list</code> shows them. A model without a tag means <code>:latest</code>, as in Ollama, so use <code>llama3.2:*</code> for every tag.</li>
+</ul>
+<p>Patterns can use <code>*</code> and <code>?</code>, which do not match <code>/</code>, and ignore case. If a pattern matches nothing, the import stops before it uploads anything and names the pattern, so a typo does not leave a model out. <code>--only</code> does not apply to <code>--from-dir</code>.</p>
 <h2 id="symbolic-links">Symbolic links<a class="headerlink" href="#symbolic-links" title="Permanent link">&para;</a></h2>
 <p>Every source follows symbolic links only to files inside the folder it reads, or to files in a Hugging Face cache. Other links are skipped and named on stderr, as <code>hangar push</code> does.</p>
 <h2 id="check-first">Check first<a class="headerlink" href="#check-first" title="Permanent link">&para;</a></h2>
