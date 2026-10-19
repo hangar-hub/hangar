@@ -1,0 +1,1791 @@
+<!doctype html>
+<!--
+  The home page of https://hangar.page/. scripts/docs-root-files.sh copies it
+  to the root of gh-pages, where it replaces mike's redirect to /latest/; the
+  documentation stays under each version's directory. It is one file with no
+  build step: styles and scripts are inline, which the Content Security Policy
+  in _headers allows, and the screenshots come from the latest docs version.
+  deploy/cloudflare_test.go (TestDocsHomePage) checks its metadata and links.
+-->
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hangar: self-hosted Hugging Face Hub for models and datasets</title>
+    <meta
+      name="description"
+      content="Keep ML models and datasets on your own storage. Hangar is a self-hosted, Hugging Face Hub-compatible server with git, Ollama and LM Studio support."
+    />
+    <link rel="canonical" href="https://hangar.page/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f7f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#13171c" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Hangar" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:url" content="https://hangar.page/" />
+    <meta property="og:title" content="Hangar: a self-hosted home for your arsenal of models" />
+    <meta
+      property="og:description"
+      content="Keep models and datasets on your own storage, with full version history, and serve them to huggingface_hub, transformers, git, Ollama and LM Studio."
+    />
+    <meta property="og:image" content="https://hangar.page/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Hangar logo and tagline: a self-hosted home for your arsenal of models"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Hangar: a self-hosted home for your arsenal of models" />
+    <meta
+      name="twitter:description"
+      content="A self-hosted, Hugging Face Hub-compatible server for models and datasets, with git, Ollama and LM Studio support."
+    />
+    <meta name="twitter:image" content="https://hangar.page/og.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://hangar.page/#website",
+            "url": "https://hangar.page/",
+            "name": "Hangar",
+            "inLanguage": "en-GB"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://hangar.page/#software",
+            "name": "Hangar",
+            "url": "https://hangar.page/",
+            "description": "A self-hosted model and dataset hub, compatible with the Hugging Face Hub API, with git, Ollama, LM Studio and Dataset Viewer support.",
+            "applicationCategory": "DeveloperApplication",
+            "applicationSubCategory": "Model and dataset hub",
+            "operatingSystem": "Linux, macOS, Windows",
+            "image": "https://hangar.page/og.png",
+            "screenshot": "https://hangar.page/latest/assets/screenshots/models-desktop.webp",
+            "downloadUrl": "https://github.com/hangar-hub/hangar/releases",
+            "installUrl": "https://hangar.page/latest/get-started/",
+            "softwareHelp": { "@type": "CreativeWork", "url": "https://hangar.page/latest/" },
+            "license": "https://hangar.page/latest/project/licence/",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+            "sameAs": ["https://github.com/hangar-hub/hangar"]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://hangar.page/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Does Hangar run models?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Hangar stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do I need to change my code?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Set HF_ENDPOINT to your Instance and HF_TOKEN to a Token you create in Hangar. huggingface_hub, the hf CLI, transformers, diffusers, sentence-transformers, datasets and vLLM then work unchanged."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can Hangar run without internet access?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. An air-gapped Instance can pull from another Hangar Instance that has internet access, as its Upstream. You can also import an existing Hugging Face cache."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does it work with hf_xet?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes for uploads. Hangar accepts Xet uploads, so huggingface_hub with hf_xet installed works with no setup. It stores whole files and serves them over plain HTTP."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What does it cost?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Nothing. Hangar is source-available under the Elastic License 2.0. You can use, change and self-host it, including inside your company. You can't offer it to others as a hosted or managed service, or remove licence notices."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+
+    <script>
+      document.documentElement.classList.add("js");
+    </script>
+
+    <style>
+      /* Hangar's palette, from ui/src/styles.css: a cool steel neutral and
+         one accent, Taxiway teal. */
+      :root {
+        color-scheme: light;
+        --bg: #f5f7f9;
+        --surface: #ffffff;
+        --raised: #eceff3;
+        --ink: #181c22;
+        --muted: #4d5662;
+        --line: #dde2e8;
+        --line-strong: #c3cad3;
+        --accent: #0b6e64;
+        --accent-fill: #0b7a6e;
+        --accent-ink: #ffffff;
+        --accent-soft: #dff3ef;
+        --term-bg: #181c22;
+        --term-line: #39414b;
+        --term-ink: #eceff3;
+        --term-muted: #8f99a6;
+        --term-prompt: #5fd4c2;
+        --shadow: 0 1px 2px rgb(24 28 34 / 0.06), 0 12px 32px -12px rgb(24 28 34 / 0.18);
+
+        --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+        --radius-sm: 3px;
+        --radius-md: 6px;
+        --radius-lg: 10px;
+        --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+        --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+        --gutter: 24px;
+        --max: 1120px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --bg: #13171c;
+          --surface: #1a1f25;
+          --raised: #232a32;
+          --ink: #e8ecf0;
+          --muted: #a5afbb;
+          --line: #2e3640;
+          --line-strong: #46505c;
+          --accent: #5fd4c2;
+          --accent-fill: #2bb3a0;
+          --accent-ink: #021a17;
+          --accent-soft: #12332e;
+          --term-bg: #0e1216;
+          --term-line: #2e3640;
+          --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -16px rgb(0 0 0 / 0.6);
+        }
+      }
+      @media (max-width: 640px) {
+        :root {
+          --gutter: 16px;
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        scroll-padding-top: 72px;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      img,
+      svg {
+        display: block;
+        max-width: 100%;
+      }
+      a {
+        color: inherit;
+      }
+      code,
+      pre {
+        font-family: var(--font-mono);
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        font-weight: 650;
+        text-wrap: balance;
+      }
+      p {
+        margin: 0;
+        text-wrap: pretty;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+      .wrap {
+        width: 100%;
+        max-width: calc(var(--max) + 2 * var(--gutter));
+        margin: 0 auto;
+        padding: 0 var(--gutter);
+      }
+      .skip {
+        position: absolute;
+        left: var(--gutter);
+        top: -48px;
+        z-index: 20;
+        padding: 8px 12px;
+        background: var(--accent-fill);
+        color: var(--accent-ink);
+        border-radius: var(--radius-md);
+        text-decoration: none;
+      }
+      .skip:focus {
+        top: 12px;
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+      }
+      .link {
+        color: var(--accent);
+        text-decoration-line: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+        transition: text-decoration-color 150ms ease;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .link:hover {
+          text-decoration-color: currentColor;
+        }
+      }
+
+      /* Header */
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: color-mix(in srgb, var(--bg) 85%, transparent);
+        backdrop-filter: saturate(1.4) blur(10px);
+        -webkit-backdrop-filter: saturate(1.4) blur(10px);
+        border-bottom: 1px solid var(--line);
+      }
+      .site-header .wrap {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        height: 60px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 650;
+        font-size: 17px;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand svg {
+        width: 26px;
+        height: 26px;
+      }
+      .mark-door,
+      .mark-floor {
+        fill: var(--ink);
+      }
+      .mark-floor {
+        opacity: 0.35;
+      }
+      .mark-bay {
+        fill: var(--accent-fill);
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: auto;
+      }
+      .nav a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: var(--radius-md);
+        color: var(--muted);
+        font-size: 15px;
+        text-decoration: none;
+        transition:
+          color 150ms ease,
+          background-color 150ms ease;
+      }
+      .nav a svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav a:hover {
+          color: var(--ink);
+          background: var(--raised);
+        }
+      }
+      .nav a.btn-primary {
+        margin-left: 6px;
+        color: var(--accent-ink);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav a.btn-primary:hover {
+          color: var(--accent-ink);
+          background: var(--accent);
+        }
+      }
+      @media (max-width: 520px) {
+        .nav .label-wide,
+        .nav .nav-demo {
+          display: none;
+        }
+      }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 44px;
+        padding: 0 18px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--line-strong);
+        background: var(--surface);
+        color: var(--ink);
+        font: inherit;
+        font-weight: 550;
+        font-size: 15px;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+          transform 160ms var(--ease-out),
+          background-color 150ms ease,
+          border-color 150ms ease;
+      }
+      .btn:active {
+        transform: scale(0.97);
+      }
+      .btn svg {
+        width: 16px;
+        height: 16px;
+        transition: transform 200ms var(--ease-out);
+      }
+      .btn-primary {
+        background: var(--accent-fill);
+        border-color: var(--accent-fill);
+        color: var(--accent-ink);
+      }
+      .btn-sm {
+        height: 36px;
+        padding: 0 14px;
+        font-size: 14px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .btn:hover {
+          border-color: var(--muted);
+        }
+        .btn-primary:hover {
+          background: var(--accent);
+          border-color: var(--accent);
+        }
+        .btn:hover .arrow {
+          transform: translateX(2px);
+        }
+      }
+
+      /* Hero */
+      .hero {
+        position: relative;
+        padding: 72px 0 40px;
+        overflow: hidden;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 48px;
+        align-items: center;
+      }
+      @media (min-width: 960px) {
+        .hero {
+          padding: 104px 0 64px;
+        }
+        .hero-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 56px;
+        }
+      }
+      .eyebrow {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 22px;
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        text-decoration: none;
+        transition: background-color 150ms ease;
+      }
+      .pill[hidden] {
+        display: none;
+      }
+      .pill .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent-fill);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        a.pill:hover {
+          background: color-mix(in srgb, var(--accent-soft) 70%, var(--accent-fill));
+        }
+      }
+      .hero h1 {
+        font-size: clamp(2.35rem, 1.4rem + 3.6vw, 3.6rem);
+        line-height: 1.04;
+        letter-spacing: -0.035em;
+        max-width: 16ch;
+      }
+      .hero h1 em {
+        font-style: normal;
+        color: var(--accent);
+      }
+      .lead {
+        margin-top: 22px;
+        max-width: 34rem;
+        font-size: 1.15rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+      .fineprint {
+        margin-top: 18px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      /* The terminal: the same in both themes, like the UI's landing page. */
+      .terminal {
+        border-radius: var(--radius-lg);
+        background: var(--term-bg);
+        border: 1px solid var(--term-line);
+        color: var(--term-ink);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--term-line);
+      }
+      .terminal-bar span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #4d5662;
+      }
+      .terminal-bar span:nth-child(3) {
+        background: #2bb3a0;
+      }
+      .terminal-bar .title {
+        width: auto;
+        height: auto;
+        background: none;
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--term-muted);
+        border-radius: 0;
+      }
+      .terminal pre {
+        margin: 0;
+        padding: 18px 20px 20px;
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.75;
+      }
+      .terminal .c {
+        color: var(--term-muted);
+      }
+      .terminal .p {
+        color: var(--term-prompt);
+        user-select: none;
+      }
+      .terminal .o {
+        color: #a5afbb;
+      }
+      .works {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .works li::before {
+        content: "";
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin: 0 8px 2px 0;
+        border-radius: 50%;
+        background: var(--accent-fill);
+        opacity: 0.7;
+      }
+
+      /* Taxiway lights: the row of teal dots under the hero. */
+      .taxiway {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 64px;
+        height: 6px;
+      }
+      .taxiway i {
+        flex: none;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent-fill);
+        opacity: 0.55;
+      }
+      .taxiway i:nth-child(even) {
+        opacity: 0.25;
+      }
+      @media (max-width: 640px) {
+        .taxiway i:nth-child(n + 17) {
+          display: none;
+        }
+      }
+
+      /* Sections */
+      section {
+        padding: 88px 0;
+      }
+      .section-alt {
+        background: var(--surface);
+        border-block: 1px solid var(--line);
+      }
+      .kicker {
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        color: var(--accent);
+        margin-bottom: 12px;
+      }
+      .section-head {
+        max-width: 40rem;
+        margin-bottom: 44px;
+      }
+      .section-head h2 {
+        font-size: clamp(1.75rem, 1.25rem + 1.7vw, 2.4rem);
+      }
+      .section-head p:not(.kicker) {
+        margin-top: 14px;
+        font-size: 1.075rem;
+        color: var(--muted);
+      }
+
+      /* Screenshots */
+      .tabs {
+        position: relative;
+        display: flex;
+        width: max-content;
+        max-width: 100%;
+        margin-bottom: 18px;
+        padding: 4px;
+        border-radius: 999px;
+        background: var(--raised);
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .tabs::-webkit-scrollbar {
+        display: none;
+      }
+      .tab-list {
+        display: flex;
+        gap: 2px;
+      }
+      .tab {
+        flex: none;
+        padding: 7px 14px;
+        border: 0;
+        border-radius: 999px;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 550;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      /* The active copy of the tab list sits on top and is clipped to the
+         selected tab, so the highlight and its text colour move together. */
+      .tab-list-active {
+        position: absolute;
+        inset: 4px auto 4px 4px;
+        pointer-events: none;
+        clip-path: inset(0 100% 0 0 round 999px);
+      }
+      .tab-list-active .tab {
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .tab-list-active.ready {
+        transition: clip-path 260ms var(--ease-in-out);
+      }
+      .no-js-tab {
+        color: var(--ink);
+      }
+      .js .no-js-tab {
+        color: var(--muted);
+      }
+      .browser {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--line);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .browser-bar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        background: var(--raised);
+      }
+      .browser-bar .dots {
+        display: flex;
+        gap: 6px;
+      }
+      .browser-bar .dots i {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--line-strong);
+      }
+      .address {
+        flex: 1;
+        max-width: 360px;
+        margin: 0 auto;
+        padding: 3px 12px;
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .shots {
+        display: grid;
+        aspect-ratio: 1440 / 900;
+        background: #f5f7f9;
+      }
+      .shots figure {
+        grid-area: 1 / 1;
+        margin: 0;
+        opacity: 0;
+        filter: blur(3px);
+        transition:
+          opacity 220ms ease,
+          filter 220ms ease;
+      }
+      .shots figure.active {
+        opacity: 1;
+        filter: blur(0);
+      }
+      .shots img {
+        width: 100%;
+        height: auto;
+      }
+      .shot-caption {
+        margin-top: 14px;
+        min-height: 1.6em;
+        font-size: 14.5px;
+        color: var(--muted);
+      }
+
+      /* Client cards */
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      @media (min-width: 680px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1000px) {
+        .grid-3 {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 22px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--line);
+        background: var(--surface);
+        text-decoration: none;
+        transition:
+          border-color 150ms ease,
+          transform 160ms var(--ease-out);
+      }
+      .section-alt .card {
+        background: var(--bg);
+      }
+      a.card:active {
+        transform: scale(0.99);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        a.card:hover {
+          border-color: var(--line-strong);
+        }
+        a.card:hover .more .arrow {
+          transform: translateX(2px);
+        }
+      }
+      .card h3 {
+        font-size: 1.1rem;
+        letter-spacing: -0.01em;
+      }
+      .card p {
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .card > code {
+        display: block;
+        margin-top: auto;
+        padding: 9px 12px;
+        border-radius: var(--radius-md);
+        background: var(--raised);
+        font-size: 12.5px;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: thin;
+      }
+      .more {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
+        font-weight: 550;
+        color: var(--accent);
+      }
+      .more .arrow {
+        width: 14px;
+        height: 14px;
+        transition: transform 200ms var(--ease-out);
+      }
+
+      /* Steps */
+      .steps {
+        display: grid;
+        gap: 16px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: step;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      @media (min-width: 860px) {
+        .steps {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 0;
+        }
+        .steps li + li {
+          border-left: 1px solid var(--line);
+        }
+        .steps li {
+          padding: 4px 32px 4px 32px;
+        }
+        .steps li:first-child {
+          padding-left: 0;
+        }
+      }
+      .steps li {
+        counter-increment: step;
+      }
+      .steps li::before {
+        content: "0" counter(step);
+        display: block;
+        margin-bottom: 14px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        color: var(--accent);
+      }
+      .steps h3 {
+        font-size: 1.2rem;
+        margin-bottom: 10px;
+      }
+      .steps p {
+        color: var(--muted);
+      }
+
+      /* Scale */
+      .split {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      @media (min-width: 760px) {
+        .split {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .tier {
+        padding: 26px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .tier h3 {
+        font-size: 1.15rem;
+      }
+      .tier .stack {
+        margin-top: 4px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        color: var(--accent);
+      }
+      .tier p {
+        margin-top: 14px;
+        color: var(--muted);
+      }
+      .features {
+        display: grid;
+        gap: 28px 32px;
+        margin: 48px 0 0;
+        padding: 0;
+        list-style: none;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      @media (min-width: 680px) {
+        .features {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1000px) {
+        .features {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .features h3 {
+        font-size: 1rem;
+        letter-spacing: 0;
+        margin-bottom: 6px;
+      }
+      .features p {
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      /* Quickstart */
+      .quick {
+        display: grid;
+        gap: 40px;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
+      @media (min-width: 960px) {
+        .quick {
+          grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+          gap: 56px;
+        }
+      }
+      .quick .section-head {
+        margin-bottom: 0;
+      }
+      .code-block .terminal-bar {
+        padding-block: 4px;
+        padding-right: 6px;
+      }
+      .copy {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        margin-left: auto;
+        border-radius: var(--radius-md);
+        border: 1px solid transparent;
+        background: none;
+        color: var(--term-muted);
+        cursor: pointer;
+        transition:
+          transform 160ms var(--ease-out),
+          color 150ms ease,
+          border-color 150ms ease;
+      }
+      .copy:active {
+        transform: scale(0.94);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .copy:hover {
+          color: var(--term-ink);
+          border-color: #67717e;
+        }
+      }
+      .copy svg {
+        grid-area: 1 / 1;
+        width: 16px;
+        height: 16px;
+        transition:
+          opacity 200ms ease,
+          transform 200ms var(--ease-out),
+          filter 200ms ease;
+      }
+      .copy .icon-done {
+        opacity: 0;
+        transform: scale(0.6);
+        filter: blur(2px);
+        color: var(--term-prompt);
+      }
+      .copy.done .icon-copy {
+        opacity: 0;
+        transform: scale(0.6);
+        filter: blur(2px);
+      }
+      .copy.done .icon-done {
+        opacity: 1;
+        transform: scale(1);
+        filter: blur(0);
+      }
+      .next-steps {
+        margin: 24px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+        counter-reset: next;
+      }
+      .next-steps li {
+        position: relative;
+        padding-left: 34px;
+        color: var(--muted);
+        counter-increment: next;
+      }
+      .next-steps li::before {
+        content: counter(next);
+        position: absolute;
+        left: 0;
+        top: 1px;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 12px;
+      }
+      .next-steps code,
+      .faq code,
+      .features code,
+      .card p code {
+        font-size: 0.88em;
+        padding: 0.1em 0.35em;
+        border-radius: var(--radius-sm);
+        background: var(--raised);
+        color: var(--ink);
+      }
+
+      /* FAQ */
+      .faq {
+        max-width: 48rem;
+        border-top: 1px solid var(--line);
+      }
+      .faq details {
+        border-bottom: 1px solid var(--line);
+      }
+      .faq summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 0;
+        font-weight: 600;
+        font-size: 1.05rem;
+        cursor: pointer;
+        list-style: none;
+      }
+      .faq summary::-webkit-details-marker {
+        display: none;
+      }
+      .faq summary svg {
+        flex: none;
+        width: 18px;
+        height: 18px;
+        color: var(--muted);
+        transition: transform 200ms var(--ease-out);
+      }
+      .faq details[open] summary svg {
+        transform: rotate(45deg);
+      }
+      .faq details p {
+        padding: 0 40px 22px 0;
+        color: var(--muted);
+      }
+      .faq details[open] p {
+        animation: rise 240ms var(--ease-out);
+      }
+
+      /* Closing call to action */
+      .cta {
+        text-align: center;
+      }
+      .cta h2 {
+        font-size: clamp(1.9rem, 1.3rem + 2vw, 2.75rem);
+        max-width: 18ch;
+        margin: 0 auto;
+      }
+      .cta p {
+        margin: 16px auto 0;
+        max-width: 34rem;
+        color: var(--muted);
+        font-size: 1.075rem;
+      }
+      .cta .actions {
+        justify-content: center;
+      }
+      .cta .mark-big {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 24px;
+      }
+
+      /* Footer */
+      .site-footer {
+        padding: 40px 0 48px;
+        border-top: 1px solid var(--line);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .site-footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .site-footer nav ul {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 20px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .site-footer a {
+        text-decoration: none;
+        transition: color 150ms ease;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .site-footer a:hover {
+          color: var(--ink);
+        }
+      }
+
+      /* Motion. The hero settles in once on load, with a short stagger.
+         Sections below rise in as they scroll into view. Both are gated on
+         JavaScript, so the page reads the same without it. */
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+      }
+      @keyframes light {
+        from {
+          opacity: 0;
+          transform: scale(0.6);
+        }
+      }
+      .js .hero [data-stagger] {
+        animation: rise 560ms var(--ease-out) both;
+        animation-delay: calc(var(--i, 0) * 60ms);
+      }
+      .js .taxiway i {
+        animation: light 400ms var(--ease-out) both;
+        animation-delay: calc(400ms + var(--i, 0) * 18ms);
+      }
+      .js [data-reveal] {
+        transition:
+          opacity 600ms var(--ease-out),
+          transform 600ms var(--ease-out);
+        transition-delay: calc(var(--i, 0) * 50ms);
+      }
+      .js [data-reveal]:not(.in) {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .js .hero [data-stagger],
+        .js .taxiway i,
+        .faq details[open] p {
+          animation-name: fade;
+          animation-duration: 200ms;
+        }
+        .js [data-reveal]:not(.in) {
+          transform: none;
+        }
+        .js [data-reveal] {
+          transition-property: opacity;
+          transition-duration: 200ms;
+        }
+        .tab-list-active.ready,
+        .btn,
+        .btn svg,
+        .copy,
+        .copy svg,
+        .faq summary svg {
+          transition-duration: 0.01ms;
+        }
+        .shots figure {
+          filter: none;
+        }
+        .btn:active,
+        .copy:active,
+        a.card:active {
+          transform: none;
+        }
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="/" aria-label="Hangar home">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path class="mark-door" d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z" />
+            <rect class="mark-bay" x="5.5" y="15" width="13" height="2" />
+            <rect class="mark-floor" x="5.5" y="18.5" width="13" height="2.5" />
+          </svg>
+          Hangar
+        </a>
+        <nav class="nav" aria-label="Main">
+          <a href="/latest/">Docs</a>
+          <a class="nav-demo" href="https://demo.hangar.page/">Demo</a>
+          <a href="https://github.com/hangar-hub/hangar" aria-label="Hangar on GitHub">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+              <path
+                d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.38 7.86 10.9.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.4-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"
+              />
+            </svg>
+            <span class="label-wide">GitHub</span>
+          </a>
+          <a class="btn btn-primary btn-sm" href="/latest/get-started/">Get started</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="hero">
+        <div class="wrap">
+          <div class="hero-grid">
+            <div>
+              <p class="eyebrow" data-stagger style="--i: 0">
+                <a class="pill" id="release" href="/latest/project/changelog/" hidden>
+                  <span class="dot" aria-hidden="true"></span>
+                  <span id="release-label">Latest release</span>
+                </a>
+                <span>Self-hosted model and dataset hub</span>
+              </p>
+              <h1 data-stagger style="--i: 1">
+                A self-hosted home for your <em>arsenal of models</em>.
+              </h1>
+              <p class="lead" data-stagger style="--i: 2">
+                Hangar is a Hugging Face Hub-compatible server for your machine learning models and
+                datasets. Pull from huggingface.co once, keep full version history on your own
+                storage, and serve it to the tools you already use.
+              </p>
+              <div class="actions" data-stagger style="--i: 3">
+                <a class="btn btn-primary" href="/latest/get-started/">
+                  Get started
+                  <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+                </a>
+                <a class="btn" href="https://demo.hangar.page/">Try the demo</a>
+              </div>
+              <p class="fineprint" data-stagger style="--i: 4">
+                Free to self-host. Source-available under the
+                <a class="link" href="/latest/project/licence/">Elastic License 2.0</a>.
+              </p>
+            </div>
+
+            <div data-stagger style="--i: 3">
+              <div class="terminal">
+                <div class="terminal-bar" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                  <span class="title">~/project</span>
+                </div>
+                <pre
+                  tabindex="0"
+                  aria-label="Example commands"
+                ><code><span class="c"># Point any Hugging Face client at Hangar</span>
+<span class="p">$ </span>export HF_ENDPOINT=https://hangar.example.com
+<span class="p">$ </span>hf download Qwen/Qwen3-0.6B
+
+<span class="c"># Or pull one quant straight into Ollama</span>
+<span class="p">$ </span>ollama pull hangar.example.com/unsloth/Qwen3-0.6B-GGUF:Q4_K_M
+
+<span class="c"># Or clone a Repo, LFS files and all</span>
+<span class="p">$ </span>git clone https://hangar.example.com/Qwen/Qwen3-0.6B</code></pre>
+              </div>
+              <ul class="works" aria-label="Works with">
+                <li>huggingface_hub</li>
+                <li>transformers</li>
+                <li>datasets</li>
+                <li>git</li>
+                <li>Ollama</li>
+                <li>LM Studio</li>
+                <li>vLLM</li>
+                <li>DuckDB</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="taxiway" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+      </div>
+
+      <section id="tour" aria-labelledby="tour-title" style="padding-top: 24px">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="kicker">The web UI</p>
+            <h2 id="tour-title">Browse everything you have, and everything you could pull</h2>
+            <p>
+              Model cards, files, GGUF metadata and dataset rows, with filters for format, task,
+              quantisation and size. Search huggingface.co from the same place, with what is
+              already in your Arsenal marked.
+            </p>
+          </div>
+
+          <div data-reveal>
+            <div class="tabs" id="tabs">
+              <div class="tab-list" role="tablist" aria-label="Screenshots">
+                <button class="tab no-js-tab" role="tab" id="tab-models" aria-controls="shot-models" aria-selected="true" tabindex="0">Models</button>
+                <button class="tab" role="tab" id="tab-card" aria-controls="shot-card" aria-selected="false" tabindex="-1">Model card</button>
+                <button class="tab" role="tab" id="tab-gguf" aria-controls="shot-gguf" aria-selected="false" tabindex="-1">GGUF viewer</button>
+                <button class="tab" role="tab" id="tab-viewer" aria-controls="shot-viewer" aria-selected="false" tabindex="-1">Dataset Viewer</button>
+                <button class="tab" role="tab" id="tab-discover" aria-controls="shot-discover" aria-selected="false" tabindex="-1">Discover</button>
+              </div>
+              <div class="tab-list tab-list-active" aria-hidden="true">
+                <span class="tab">Models</span>
+                <span class="tab">Model card</span>
+                <span class="tab">GGUF viewer</span>
+                <span class="tab">Dataset Viewer</span>
+                <span class="tab">Discover</span>
+              </div>
+            </div>
+
+            <div class="browser">
+              <div class="browser-bar" aria-hidden="true">
+                <div class="dots"><i></i><i></i><i></i></div>
+                <div class="address" id="address">hangar.example.com/models</div>
+              </div>
+              <div class="shots">
+                <figure class="active" id="shot-models" role="tabpanel" aria-labelledby="tab-models" data-path="/models">
+                  <img
+                    src="/latest/assets/screenshots/models-desktop.webp"
+                    width="1440"
+                    height="900"
+                    alt="The Models list in Hangar's web UI, with filters for format, task, quantisation and size"
+                    decoding="async"
+                  />
+                </figure>
+                <figure id="shot-card" role="tabpanel" aria-labelledby="tab-card" data-path="/TinyLlama/TinyLlama-1.1B-Chat-GGUF" hidden>
+                  <img
+                    src="/latest/assets/screenshots/model-card-desktop.webp"
+                    width="1440"
+                    height="900"
+                    alt="A model's page with its card, files, metadata and the Use this model button"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </figure>
+                <figure id="shot-gguf" role="tabpanel" aria-labelledby="tab-gguf" data-path="/TinyLlama/TinyLlama-1.1B-Chat-GGUF/gguf" hidden>
+                  <img
+                    src="/latest/assets/screenshots/gguf-viewer-desktop.webp"
+                    width="1440"
+                    height="900"
+                    alt="The GGUF viewer showing a file's metadata, chat template and tensors"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </figure>
+                <figure id="shot-viewer" role="tabpanel" aria-labelledby="tab-viewer" data-path="/datasets/ada/reviews/viewer" hidden>
+                  <img
+                    src="/latest/assets/screenshots/dataset-viewer-desktop.webp"
+                    width="1440"
+                    height="900"
+                    alt="The Dataset Viewer showing rows of a dataset Split with column statistics"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </figure>
+                <figure id="shot-discover" role="tabpanel" aria-labelledby="tab-discover" data-path="/discover" hidden>
+                  <img
+                    src="/latest/assets/screenshots/discover-desktop.webp"
+                    width="1440"
+                    height="900"
+                    alt="Discover searching huggingface.co, with the Repos already in the Arsenal marked"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </figure>
+              </div>
+            </div>
+            <p class="shot-caption">
+              No install needed to look around: the
+              <a class="link" href="https://demo.hangar.page/">demo</a> runs on sample data, and
+              nothing you do there is saved.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="clients" class="section-alt" aria-labelledby="clients-title">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="kicker">Compatibility</p>
+            <h2 id="clients-title">Works with the tools you already use</h2>
+            <p>
+              Compatibility with the Hugging Face Hub API is the product. Hangar speaks the same
+              API, so your code, scripts and pipelines keep working.
+            </p>
+          </div>
+          <div class="grid grid-3">
+            <a class="card" href="/latest/guides/python/" data-reveal style="--i: 0">
+              <h3>Hugging Face libraries</h3>
+              <p>
+                Set <code>HF_ENDPOINT</code> and huggingface_hub, the hf CLI, transformers,
+                diffusers, sentence-transformers, datasets and vLLM work unchanged.
+              </p>
+              <code>export HF_ENDPOINT=https://hangar.example.com</code>
+              <span class="more">Python guide <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></span>
+            </a>
+            <a class="card" href="/latest/guides/git/" data-reveal style="--i: 1">
+              <h3>git and git-lfs</h3>
+              <p>Every Repo is a git repository. Clone it, push to it, and keep large files in LFS.</p>
+              <code>git clone https://hangar.example.com/acme/my-model.git</code>
+              <span class="more">git guide <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></span>
+            </a>
+            <a class="card" href="/latest/guides/ollama/" data-reveal style="--i: 2">
+              <h3>Ollama</h3>
+              <p>Pull any GGUF Repo into Ollama by quantisation, straight from your Instance.</p>
+              <code>ollama pull hangar.example.com/org/model:Q4_K_M</code>
+              <span class="more">Ollama guide <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></span>
+            </a>
+            <a class="card" href="/latest/guides/lm-studio/" data-reveal style="--i: 0">
+              <h3>LM Studio</h3>
+              <p>Install a GGUF quantisation into LM Studio with one command from the hangar CLI.</p>
+              <code>hangar lmstudio install org/model:Q4_K_M</code>
+              <span class="more">LM Studio guide <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></span>
+            </a>
+            <a class="card" href="/latest/guides/datasets/" data-reveal style="--i: 1">
+              <h3>Datasets</h3>
+              <p>
+                load_dataset, pandas and Polars over <code>hf://</code>, DuckDB over HTTPS, and a
+                Dataset Viewer to preview, search, filter and profile rows.
+              </p>
+              <code>load_dataset("acme/reviews")</code>
+              <span class="more">Datasets guide <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></span>
+            </a>
+            <a class="card" href="/latest/guides/uploading/" data-reveal style="--i: 2">
+              <h3>Your own models</h3>
+              <p>
+                Upload models that exist nowhere else, from the browser, the hf CLI, git or
+                huggingface_hub. Xet uploads work with no setup.
+              </p>
+              <code>hf upload acme/my-model ./weights</code>
+              <span class="more">Uploading guide <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="how" aria-labelledby="how-title">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="kicker">How it works</p>
+            <h2 id="how-title">Pull once. Load from your own storage as often as you like.</h2>
+          </div>
+          <ol class="steps">
+            <li data-reveal style="--i: 0">
+              <h3>Discover</h3>
+              <p>
+                Search huggingface.co, or another Hangar Instance, from the web UI or the hangar
+                CLI. What is already in your Arsenal is marked.
+              </p>
+            </li>
+            <li data-reveal style="--i: 1">
+              <h3>Pull</h3>
+              <p>
+                Fetch a whole Repo, or only the quantisation, Config or Split you want, with any
+                code it depends on. Pulls run as background Jobs, inside
+                <a class="link" href="/latest/guides/pull-windows/">pull windows</a> if your
+                bandwidth needs them.
+              </p>
+            </li>
+            <li data-reveal style="--i: 2">
+              <h3>Serve</h3>
+              <p>
+                A Mirror keeps the upstream Repo ID and Commit SHAs, so pinned Revisions keep
+                working. Clients load from fast local storage, even on an
+                <a class="link" href="/latest/guides/air-gapped/">air-gapped network</a>.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="operate" class="section-alt" aria-labelledby="operate-title">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="kicker">Operate</p>
+            <h2 id="operate-title">From a laptop to a cluster</h2>
+            <p>
+              Start with one container and grow into a highly available deployment without
+              changing how clients connect.
+            </p>
+          </div>
+          <div class="split">
+            <div class="tier" data-reveal style="--i: 0">
+              <h3>Start small</h3>
+              <p class="stack">1 container · SQLite · a local folder</p>
+              <p>
+                Run Hangar on a laptop, a homelab or a single VM with Docker, Docker Compose or one
+                binary for Linux, macOS or Windows.
+              </p>
+            </div>
+            <div class="tier" data-reveal style="--i: 1">
+              <h3>Scale out</h3>
+              <p class="stack">Replicas · Postgres · S3-compatible storage</p>
+              <p>
+                Run stateless replicas with separate web and worker processes, installed with the
+                <a class="link" href="/latest/get-started/helm/">Helm chart</a>. See
+                <a class="link" href="/latest/operate/scaling/">Scaling</a>.
+              </p>
+            </div>
+          </div>
+          <ul class="features">
+            <li data-reveal style="--i: 0">
+              <h3>Sign in with your identity provider</h3>
+              <p>
+                Local accounts and OIDC, with guides for Keycloak, Authentik, Microsoft Entra ID,
+                Google, Okta and GitLab.
+              </p>
+            </li>
+            <li data-reveal style="--i: 1">
+              <h3>Organisations, Roles and Tokens</h3>
+              <p>
+                Share Repos with read, write and admin Roles, and give each client a scoped Token
+                with an optional expiry.
+              </p>
+            </li>
+            <li data-reveal style="--i: 2">
+              <h3>Security scans</h3>
+              <p>
+                Every Commit is scanned for pickle files that run code when loaded, and you choose
+                what to block.
+              </p>
+            </li>
+            <li data-reveal style="--i: 0">
+              <h3>OpenTelemetry built in</h3>
+              <p>Traces, metrics and logs, with ready-made Grafana and Kibana dashboards.</p>
+            </li>
+            <li data-reveal style="--i: 1">
+              <h3>Webhooks and Collections</h3>
+              <p>
+                React to pushes and Pulls with webhooks, and curate ordered Collections of Repos
+                for your team.
+              </p>
+            </li>
+            <li data-reveal style="--i: 2">
+              <h3>Import what you already have</h3>
+              <p>
+                Bring an existing Hugging Face cache into Hangar, and back up and restore an
+                Instance when you need to.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="quickstart" aria-labelledby="quickstart-title">
+        <div class="wrap quick">
+          <div class="section-head" data-reveal>
+            <p class="kicker">Quickstart</p>
+            <h2 id="quickstart-title">Start with one command</h2>
+            <p>
+              Run the container, then sign in. Compose, Helm and binary installs are in
+              <a class="link" href="/latest/get-started/">Get started</a>.
+            </p>
+          </div>
+          <div data-reveal style="--i: 1">
+            <div class="terminal code-block">
+              <div class="terminal-bar">
+                <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+                <button class="copy" type="button" data-copy="quickstart-cmd" aria-label="Copy the command">
+                  <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+                  <svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>
+                </button>
+              </div>
+              <pre tabindex="0" aria-label="Command to run Hangar with Docker"><code id="quickstart-cmd">docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
+  -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
+  ghcr.io/hangar-hub/hangar:latest
+docker logs hangar</code></pre>
+              <span class="visually-hidden" id="copy-status" role="status" aria-live="polite"></span>
+            </div>
+            <ol class="next-steps">
+              <li><code>docker logs</code> prints the generated admin password and Instance key once.</li>
+              <li>Open <code>http://localhost:8080</code>, sign in as <code>hangar-admin</code>, and pull a model from <strong>Discover</strong>.</li>
+              <li>Set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code>, and load it with the tools you already use.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" class="section-alt" aria-labelledby="faq-title">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="kicker">Questions</p>
+            <h2 id="faq-title">Frequently asked questions</h2>
+          </div>
+          <div class="faq" data-reveal>
+            <details>
+              <summary>Does Hangar run models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>No. Hangar stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope.</p>
+            </details>
+            <details>
+              <summary>Do I need to change my code?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>No. Set HF_ENDPOINT to your Instance and HF_TOKEN to a Token you create in Hangar. huggingface_hub, the hf CLI, transformers, diffusers, sentence-transformers, datasets and vLLM then work unchanged.</p>
+            </details>
+            <details>
+              <summary>Can Hangar run without internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes. An air-gapped Instance can pull from another Hangar Instance that has internet access, as its Upstream. You can also import an existing Hugging Face cache.</p>
+            </details>
+            <details>
+              <summary>Does it work with hf_xet?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes for uploads. Hangar accepts Xet uploads, so huggingface_hub with hf_xet installed works with no setup. It stores whole files and serves them over plain HTTP.</p>
+            </details>
+            <details>
+              <summary>What does it cost?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Nothing. Hangar is source-available under the Elastic License 2.0. You can use, change and self-host it, including inside your company. You can't offer it to others as a hosted or managed service, or remove licence notices.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta" aria-labelledby="cta-title">
+        <div class="wrap" data-reveal>
+          <svg class="mark-big" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path class="mark-door" d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z" />
+            <rect class="mark-bay" x="5.5" y="15" width="13" height="2" />
+            <rect class="mark-floor" x="5.5" y="18.5" width="13" height="2.5" />
+          </svg>
+          <h2 id="cta-title">Give your models a home</h2>
+          <p>Install Hangar in a few minutes, or look around the demo first.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="/latest/get-started/">
+              Get started
+              <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+            </a>
+            <a class="btn" href="/latest/">Read the docs</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>Hangar is source-available under the Elastic License 2.0.</p>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/latest/">Documentation</a></li>
+            <li><a href="https://demo.hangar.page/">Demo</a></li>
+            <li><a href="https://github.com/hangar-hub/hangar">GitHub</a></li>
+            <li><a href="https://github.com/hangar-hub/hangar/releases">Releases</a></li>
+            <li><a href="/latest/project/changelog/">Changelog</a></li>
+            <li><a href="/latest/project/security/">Security</a></li>
+            <li><a href="/latest/project/licence/">Licence</a></li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
+
+
+    <script>
+      (() => {
+        // The latest version, from the versions.json that mike keeps at the
+        // root. The pill stays hidden if it cannot be read.
+        fetch("/versions.json")
+          .then((r) => (r.ok ? r.json() : []))
+          .then((versions) => {
+            const latest = versions.find((v) => (v.aliases || []).includes("latest"));
+            if (!latest) return;
+            document.getElementById("release-label").textContent = "v" + latest.version + " is out";
+            document.getElementById("release").hidden = false;
+          })
+          .catch(() => {});
+
+        // Sections rise in as they scroll into view, once.
+        const reveal = document.querySelectorAll("[data-reveal]");
+        if ("IntersectionObserver" in window) {
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (!e.isIntersecting) continue;
+                e.target.classList.add("in");
+                io.unobserve(e.target);
+              }
+            },
+            { rootMargin: "0px 0px -8% 0px" },
+          );
+          for (const el of reveal) io.observe(el);
+        } else {
+          for (const el of reveal) el.classList.add("in");
+        }
+
+        // Taxiway lights come on left to right.
+        document.querySelectorAll(".taxiway i").forEach((el, i) => el.style.setProperty("--i", i));
+
+        // Screenshot tabs, with arrow-key navigation as the ARIA tabs
+        // pattern describes. The active copy of the list is clipped to the
+        // selected tab.
+        const tabs = [...document.querySelectorAll('#tabs [role="tab"]')];
+        const active = document.querySelector(".tab-list-active");
+        const address = document.getElementById("address");
+        const clipTo = (tab) => {
+          const left = tab.offsetLeft;
+          const right = active.offsetWidth - (left + tab.offsetWidth);
+          active.style.clipPath = `inset(0 ${right}px 0 ${left}px round 999px)`;
+        };
+        const select = (tab, focus) => {
+          for (const t of tabs) {
+            const on = t === tab;
+            t.setAttribute("aria-selected", String(on));
+            t.tabIndex = on ? 0 : -1;
+            const panel = document.getElementById(t.getAttribute("aria-controls"));
+            if (on) {
+              panel.hidden = false;
+              // Lay it out hidden first, so its opacity has a start to fade from.
+              void panel.offsetWidth;
+              panel.classList.add("active");
+              address.textContent = "hangar.example.com" + panel.dataset.path;
+            } else {
+              panel.classList.remove("active");
+              // Hidden once it has faded, so only the selected panel stays in
+              // the accessibility tree.
+              panel.addEventListener(
+                "transitionend",
+                () => {
+                  if (!panel.classList.contains("active")) panel.hidden = true;
+                },
+                { once: true },
+              );
+            }
+          }
+          clipTo(tab);
+          if (focus) tab.focus();
+        };
+        tabs.forEach((tab, i) => {
+          tab.addEventListener("click", () => select(tab, false));
+          tab.addEventListener("keydown", (e) => {
+            const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+            if (next === undefined) return;
+            e.preventDefault();
+            select(tabs[(next + tabs.length) % tabs.length], true);
+          });
+        });
+        clipTo(tabs[0]);
+        requestAnimationFrame(() => active.classList.add("ready"));
+        addEventListener("resize", () => clipTo(tabs.find((t) => t.tabIndex === 0)));
+
+        // Copy buttons.
+        for (const btn of document.querySelectorAll("[data-copy]")) {
+          let timer;
+          btn.addEventListener("click", async () => {
+            const text = document.getElementById(btn.dataset.copy).textContent;
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch {
+              return;
+            }
+            btn.classList.add("done");
+            document.getElementById("copy-status").textContent = "Copied";
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+              btn.classList.remove("done");
+              document.getElementById("copy-status").textContent = "";
+            }, 1600);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

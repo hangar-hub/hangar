@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The home page of https://hangar.page/. Each docs version has its own
+     sitemap, which robots.txt lists. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://hangar.page/</loc>
+  </url>
+</urlset>
