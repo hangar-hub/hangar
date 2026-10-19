@@ -3,9 +3,8 @@
 // scripts/docs-preview.sh on each push to such a branch, which builds the
 // branch's docs into site/ and runs `wrangler preview` with this file. The
 // Worker is the production one, hangar-docs, whose configuration lives on
-// gh-pages (deploy/cloudflare/docs-root/wrangler.jsonc); a Preview has no
-// route, only its Preview URL on workers.dev, which sends
-// X-Robots-Tag: noindex.
+// gh-pages (deploy/cloudflare/docs-root/wrangler.jsonc), whose preview-only
+// route docs.hangar.page serves each Preview at <name>.docs.hangar.page.
 {
   "$schema": "https://unpkg.com/wrangler@4.147.0/config-schema.json",
   "name": "hangar-docs",
@@ -19,5 +18,5 @@
   "previews": {},
   "observability": { "enabled": false },
   "workers_dev": false,
-  "preview_urls": true
+  "preview_urls": false
 }
