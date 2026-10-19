@@ -161,8 +161,11 @@ type Instance struct {
 	stalePlans int
 	// partStored is closed, and replaced, each time a part is stored.
 	partStored chan struct{}
-	// Requests counts requests by "METHOD path-template".
+	// Requests counts requests by "METHOD path-template"; read it with
+	// RequestCount. reqMu guards it, not mu: requests are counted as their
+	// responses start, and handlers write while holding mu.
 	Requests map[string]int
+	reqMu    sync.Mutex
 	partPuts int
 }
 
@@ -215,15 +218,59 @@ func New(t testing.TB) *Instance {
 	return i
 }
 
+// count adds each request to Requests under its route pattern. It counts
+// before the first byte of the response leaves, when routing has set the
+// pattern, so a client that has its response always sees the request counted.
+// Counting after the handler returned let a test read the count between the
+// client finishing and the handler goroutine counting.
 func (i *Instance) count(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-		pattern := chi.RouteContext(r.Context()).RoutePattern()
-		i.mu.Lock()
-		i.Requests[r.Method+" "+pattern]++
-		i.mu.Unlock()
+		cw := &countingWriter{ResponseWriter: w, count: func() {
+			pattern := chi.RouteContext(r.Context()).RoutePattern()
+			i.reqMu.Lock()
+			i.Requests[r.Method+" "+pattern]++
+			i.reqMu.Unlock()
+		}}
+		next.ServeHTTP(cw, r)
+		// A handler that wrote nothing: net/http sends its response after
+		// this returns.
+		cw.once()
 	})
 }
+
+// countingWriter calls count once, before the response's first byte.
+type countingWriter struct {
+	http.ResponseWriter
+	count   func()
+	counted bool
+}
+
+func (w *countingWriter) once() {
+	if !w.counted {
+		w.counted = true
+		w.count()
+	}
+}
+
+func (w *countingWriter) WriteHeader(code int) {
+	w.once()
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *countingWriter) Write(b []byte) (int, error) {
+	w.once()
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *countingWriter) Flush() {
+	w.once()
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (w *countingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func repoKey(id model.RepoID) string { return id.Path() }
 
@@ -576,8 +623,8 @@ func (i *Instance) AddOllamaKey(fingerprint string) {
 // RequestCount returns how many requests matched a route, such as
 // "POST /api/hangar/v1/pulls".
 func (i *Instance) RequestCount(route string) int {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.reqMu.Lock()
+	defer i.reqMu.Unlock()
 	return i.Requests[route]
 }
 
