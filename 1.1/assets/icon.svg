@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Hangar">
+  <path d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z" fill="#37474f"/>
+  <rect x="5.5" y="15" width="13" height="2" fill="#2bb3a0"/>
+  <rect x="5.5" y="18.5" width="13" height="2.5" fill="#37474f" opacity="0.35"/>
+</svg>

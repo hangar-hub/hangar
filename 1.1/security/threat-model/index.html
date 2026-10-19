@@ -1,0 +1,4394 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A self-hosted home for your arsenal of models. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.">
+      
+      
+      
+        <link rel="canonical" href="https://hangar.page/1.1/security/threat-model/">
+      
+      
+        <link rel="prev" href="../../operate/security/">
+      
+      
+        <link rel="next" href="../../operate/troubleshooting/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/icon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Threat model - Hangar</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#threat-model" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Hangar" class="md-header__button md-logo" aria-label="Hangar" data-md-component="logo">
+      
+  <img src="../../assets/icon.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Hangar
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Threat model
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="teal"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="blue-grey" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/hangar-hub/hangar" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hangar-hub/hangar
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../get-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../concepts/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Concepts
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../operate/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../project/architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Hangar" class="md-nav__button md-logo" aria-label="Hangar" data-md-component="logo">
+      
+  <img src="../../assets/icon.svg" alt="logo">
+
+    </a>
+    Hangar
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/hangar-hub/hangar" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hangar-hub/hangar
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../get-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/docker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/compose/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Compose
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/helm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Helm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/binary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Binary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/first-login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First sign-in
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/first-pull/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pull your first model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/hf-endpoint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Point HF_ENDPOINT at Hangar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../concepts/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/repos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repos and Revisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/mirrors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mirrors and Upstreams
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/pulls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pulls and Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Jobs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Permissions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/hf-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The hf CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/uploading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uploading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/datasets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    git and git-lfs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ollama
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/lm-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/vllm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    vLLM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/hangar-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The hangar CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/pull-windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pull windows and bandwidth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/air-gapped/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Air-gapped Instances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/gated/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gated models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/collections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/webhooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage backends
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/databases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Databases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/scaling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/oidc/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OIDC
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    OIDC
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/keycloak/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keycloak
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/authentik/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentik
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/entra-id/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Microsoft Entra ID
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/google/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/okta/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Okta
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/gitlab/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitLab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/unifi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UniFi Identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/proxies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TLS and reverse proxies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/backup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup and restore
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/upgrades/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrades
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security hardening
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threat model
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threat model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#actors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trust-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#threats-by-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threats by boundary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Threats by boundary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#every-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every route
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#1-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Browser
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-cli-and-hub-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. CLI and Hub clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-git-git-lfs-and-xet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. git, git-lfs and Xet
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-ollama" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Ollama
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-upstreams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Upstreams
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Webhooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-the-blob-store-and-presigned-urls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. The Blob store and presigned URLs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-the-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. The database
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-the-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. The worker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-operators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Operators
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-download-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The download gate
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The download gate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-gate-for-every-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One gate for every route
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-the-scanner-reads-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the scanner reads files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scanner-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scanner limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lfs-object-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LFS object references
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#token-scopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token scopes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csrf-and-csp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CSRF and CSP
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ssrf-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SSRF policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supply-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supply chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open decisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#report-a-vulnerability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report a vulnerability
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/hub-api-compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub API compatibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/native-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/webhooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhook events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/licence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Licence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#actors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trust-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#threats-by-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threats by boundary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Threats by boundary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#every-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every route
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#1-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Browser
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-cli-and-hub-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. CLI and Hub clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-git-git-lfs-and-xet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. git, git-lfs and Xet
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-ollama" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Ollama
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-upstreams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Upstreams
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Webhooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-the-blob-store-and-presigned-urls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. The Blob store and presigned URLs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-the-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. The database
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-the-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. The worker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-operators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Operators
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-download-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The download gate
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The download gate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-gate-for-every-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One gate for every route
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-the-scanner-reads-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the scanner reads files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scanner-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scanner limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lfs-object-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LFS object references
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#token-scopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token scopes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csrf-and-csp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CSRF and CSP
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ssrf-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SSRF policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supply-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supply chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open decisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#report-a-vulnerability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report a vulnerability
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="threat-model">Threat model<a class="headerlink" href="#threat-model" title="Permanent link">&para;</a></h1>
+<p>This page describes what Hangar protects, where its trust boundaries are, the threats at each boundary, and how each threat is mitigated or why it remains. It is written for operators who decide how to deploy Hangar, and for contributors who change code near a boundary.</p>
+<p>Every mitigation on this page names the code that implements it and the test that keeps it in place. Where no test exists, or a threat is accepted, the page says so under <strong>Residual risk</strong>. Paths are relative to the repository root. The page reflects the <code>integration/v1</code> branch after the phase 3 security review (October 2026).</p>
+<p>For deployment advice, see <a href="../../operate/security/">Security hardening</a>. To report a vulnerability, see <a href="#report-a-vulnerability">Report a vulnerability</a>.</p>
+<h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
+<p>In scope:</p>
+<ul>
+<li>The <code>hangar</code> binary in each process role (web server, worker, and the <code>hangar</code> CLI and <code>hangar admin</code> commands).</li>
+<li>The container image, the Helm chart and the Compose examples in <code>deploy/</code>.</li>
+<li>The protocols Hangar serves: the web UI and native API, the Hugging Face Hub API (including Xet), git smart HTTP and git-lfs, the Ollama registry and the Dataset Viewer API.</li>
+<li>The connections Hangar makes: to Upstreams, webhook receivers, OIDC providers, the database and the Blob store.</li>
+<li>The build and release pipeline in <code>.github/workflows/</code>.</li>
+</ul>
+<p>Out of scope, as in the <a href="../../project/security/">security policy</a>:</p>
+<ul>
+<li>Malicious content in models and datasets that users store. Hangar never loads or runs stored files, and it scans pickle-based files and can refuse to serve them (see <a href="#the-download-gate">The download gate</a>), but it cannot make an unsafe file safe to load.</li>
+<li>Denial of service through traffic volume. Put a reverse proxy with rate limits in front of Hangar.</li>
+<li>The security of the host, Kubernetes cluster, database server, object store and identity provider that an operator runs Hangar on.</li>
+</ul>
+<h2 id="assets">Assets<a class="headerlink" href="#assets" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>Why it matters</th>
+<th>Where it lives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Private and gated Repos</td>
+<td>Their files, names and history must reach only people with access.</td>
+<td>Git data and LFS objects in the Blob store; metadata in the database.</td>
+</tr>
+<tr>
+<td>Integrity of Repos</td>
+<td>Clients trust that a file at a Commit is what was uploaded, and that a Mirror matches its Upstream.</td>
+<td>git objects (SHA-1), LFS objects (addressed by SHA-256).</td>
+</tr>
+<tr>
+<td>Users' machines</td>
+<td>A pickle-based model file can run code when a client loads it.</td>
+<td>The client; Hangar is the distribution point.</td>
+</tr>
+<tr>
+<td>Tokens, sessions and passwords</td>
+<td>Each lets its holder act as a User.</td>
+<td>The database holds only hashes: SHA-256 for Tokens and session IDs (<code>internal/auth/tokens.go</code>, <code>sessions.go</code>), argon2id for passwords (<code>internal/auth/passwords.go</code>).</td>
+</tr>
+<tr>
+<td>The Instance key</td>
+<td>Encrypts stored secrets and derives the URL-signing key.</td>
+<td>Configuration or <code>secrets.yaml</code> in <code>server.data_dir</code>; never in the database.</td>
+</tr>
+<tr>
+<td>Stored secrets</td>
+<td>Upstream tokens, webhook secrets and OIDC client secrets give access to other systems.</td>
+<td>The database, encrypted with AES-256-GCM under the Instance key (<code>internal/secrets/secrets.go</code>).</td>
+</tr>
+<tr>
+<td>Infrastructure credentials</td>
+<td>The database DSN and S3 keys give full access to an Instance's data.</td>
+<td>Configuration, environment or Kubernetes Secrets.</td>
+</tr>
+<tr>
+<td>The audit log</td>
+<td>The record of who did what.</td>
+<td>The database, also exported as OpenTelemetry log records.</td>
+</tr>
+<tr>
+<td>Availability</td>
+<td>One user should not be able to stop an Instance serving everyone else.</td>
+<td>Web and worker processes, the database and the Blob store.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="actors">Actors<a class="headerlink" href="#actors" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Anonymous caller:</strong> anyone who can reach the Instance over the network.</li>
+<li><strong>Signed-in User:</strong> with <code>open</code> or <code>invite</code> registration, anyone who gets an account. Every User administers their own Namespace, so they can create Repos, push, add webhooks and start Pulls into it.</li>
+<li><strong>Organisation Member and collaborator:</strong> access to other Namespaces' Repos through a Role.</li>
+<li><strong>Instance admin:</strong> manages Upstreams, settings, quotas and users. Trusted.</li>
+<li><strong>Operator:</strong> runs the deployment, holds the configuration, the Instance key and infrastructure credentials. Trusted.</li>
+<li><strong>Malicious model author:</strong> uploads, or publishes on an Upstream, a file built to run code on whoever loads it.</li>
+<li><strong>Hostile or compromised Upstream:</strong> a Hub that Hangar Pulls from and that answers with crafted data or redirects.</li>
+<li><strong>Cross-site attacker:</strong> a web page that a signed-in user visits in the same browser.</li>
+<li><strong>Compromised dependency or build step:</strong> code that reaches the binary or image through the supply chain.</li>
+</ul>
+<h2 id="trust-boundaries">Trust boundaries<a class="headerlink" href="#trust-boundaries" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>              Browser                CLI, huggingface_hub,           Ollama
+          (UI, native API)          hf, git, git-lfs, Xet          (registry)
+                 |                           |                          |
+=================|== 1 ======================|== 2, 3 ==================|== 4 ====
+                 v                           v                          v
+          +------------------------------------------------------------------+
+          |  Web process: authenticate, authorise, gate downloads            |
+          +------------------------------------------------------------------+
+               |            |                 |                 |
+         ==== 8 ====   ==== 7 ====       ==== 5 ====       ==== 6 ====
+               v            v                 v                 v
+           Database     Blob store        Upstreams         Webhook receivers
+               ^         (presigned       (outbound)          (outbound)
+               |          URLs to
+         ==== 9 ====      clients)
+               |
+          Worker process: Pulls, scan, index, Parquet export, webhook
+          delivery; it also crosses 5, 6 and 7
+
+ 10: operators, configuration and `hangar admin` commands, across all of the above
+</code></pre></div>
+<ol>
+<li><strong>Browser:</strong> the web UI and the native API it calls, with the session cookie.</li>
+<li><strong>CLI and Hub clients:</strong> the Hub API and native API, with Tokens as bearer credentials.</li>
+<li><strong>git, git-lfs and Xet:</strong> smart HTTP, the LFS batch API and signed object URLs, and the Xet CAS.</li>
+<li><strong>Ollama:</strong> the registry API, with Ollama key signatures and registry tokens.</li>
+<li><strong>Upstreams:</strong> outbound requests to other Hubs, which answer with untrusted data.</li>
+<li><strong>Webhooks:</strong> outbound POSTs to addresses that Namespace admins choose.</li>
+<li><strong>The Blob store and presigned URLs:</strong> object storage that clients may reach directly.</li>
+<li><strong>The database:</strong> every row of state, shared by all processes.</li>
+<li><strong>The worker:</strong> processes that parse untrusted files and act for Users after the request that started the work has ended.</li>
+<li><strong>Operators:</strong> configuration, secrets and administrative commands.</li>
+</ol>
+<h2 id="threats-by-boundary">Threats by boundary<a class="headerlink" href="#threats-by-boundary" title="Permanent link">&para;</a></h2>
+<p>The tables use STRIDE: <strong>S</strong>poofing, <strong>T</strong>ampering, <strong>R</strong>epudiation, <strong>I</strong>nformation disclosure, <strong>D</strong>enial of service and <strong>E</strong>levation of privilege. Tests are Go tests unless named otherwise.</p>
+<h3 id="every-route">Every route<a class="headerlink" href="#every-route" title="Permanent link">&para;</a></h3>
+<p>Two checks apply to every boundary that accepts requests:</p>
+<ul>
+<li><strong>Authorisation on every route.</strong> Every handler calls <code>auth.Authz.Can</code> (<code>internal/auth/authz.go</code>). <code>TestRouteAuthorisationMatrix</code> (<code>cmd/hangar/routes_authz_test.go</code>) finds every route of every router (the native API with <code>chi.Walk</code>, the others by parsing the routing packages), fails when a route has no entry in its permission matrix, and probes all 222 routes on a full server as six callers. A new route cannot ship without an authorisation decision.</li>
+<li><strong>Private Repos stay hidden.</strong> A caller who cannot read a private Repo gets 404, as for a Repo that does not exist, on every protocol. The route matrix checks this for every Repo route; <code>TestPrivateDatasetsAreHidden</code> (<code>internal/datasets/viewer/viewer_test.go</code>) covers the Viewer.</li>
+</ul>
+<h3 id="1-browser">1. Browser<a class="headerlink" href="#1-browser" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S</td>
+<td>A cross-site page makes a signed-in browser change state (CSRF) with the session cookie.</td>
+<td><code>SameSite=Lax</code> cookie, a double-submit CSRF header on every state-changing call, and a cross-origin check on <code>Sec-Fetch-Site</code> and <code>Origin</code> (<code>internal/auth/crossorigin.go</code>, <code>authenticator.go</code>).</td>
+<td><code>TestAuthenticateSessionsAndCSRF</code>, <code>TestCrossOriginBrowserCredentials</code> (<code>internal/auth/</code>).</td>
+</tr>
+<tr>
+<td>S</td>
+<td>A browser that once opened a git URL caches HTTP Basic credentials and replays them on cross-site requests.</td>
+<td>Basic credentials are accepted only on git and git-lfs routes, and the cross-origin check applies to them too.</td>
+<td><code>TestBasicCredentialsOnlyForGit</code>, <code>TestCrossOriginBrowserCredentials</code> (<code>internal/auth/crossorigin_test.go</code>).</td>
+</tr>
+<tr>
+<td>S</td>
+<td>Login CSRF: another site signs the browser in to an attacker's account.</td>
+<td>Sign-in, registration, invite and reset calls get the cross-origin check without a cookie.</td>
+<td><code>TestCrossOriginBrowserCredentials</code> (<code>internal/auth/crossorigin_test.go</code>), which includes sign-in calls.</td>
+</tr>
+<tr>
+<td>S</td>
+<td>Password guessing.</td>
+<td>Throttling per username and per IP, stored in the database so it holds across replicas; a common-password list; argon2id hashing (<code>internal/auth/login.go</code>, <code>passwords.go</code>).</td>
+<td><code>TestPasswordLoginAndThrottling</code>, <code>TestPasswordPolicy</code> (<code>internal/auth/login_test.go</code>).</td>
+</tr>
+<tr>
+<td>S</td>
+<td>OIDC sign-in is forged or replayed.</td>
+<td>Authorisation code flow with PKCE, <code>state</code> stored hashed and <code>nonce</code> checked (<code>internal/auth/oidc.go</code>); an existing account with the same email is linked only after its owner signs in locally (<code>ErrOIDCLinkRequired</code>).</td>
+<td><code>TestOIDCKeycloak</code> (<code>internal/auth/oidc_integration_test.go</code>), which also refuses a reused or made-up <code>state</code> and a tampered code, and checks the link rule.</td>
+</tr>
+<tr>
+<td>T</td>
+<td>Stored cross-site scripting through a Model card, discussion or file.</td>
+<td>Markdown is sanitised with GitHub's schema (no scripts, event handlers or iframes) in <code>ui/src/components/content/Markdown.tsx</code>; external links get <code>noopener noreferrer</code>. Files are served as attachments with <code>nosniff</code> (<code>internal/blob/download.go</code>). A strict CSP blocks inline scripts.</td>
+<td>Vitest "removes scripts, event handlers and iframes" (<code>ui/src/components/content/Markdown.test.tsx</code>); <code>TestServesIndexForUIRoutesWithCSP</code> (<code>internal/web/web_test.go</code>).</td>
+</tr>
+<tr>
+<td>T</td>
+<td>Clickjacking.</td>
+<td><code>frame-ancestors 'none'</code> and <code>X-Frame-Options: DENY</code> (<code>internal/web/web.go</code>).</td>
+<td><code>TestServesIndexForUIRoutesWithCSP</code>.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Session theft over plain HTTP or by script.</td>
+<td>Cookie is <code>HttpOnly</code>, and <code>Secure</code> when <code>server.public_url</code> is HTTPS (<code>internal/auth/sessions.go</code>).</td>
+<td><code>TestSecureCookiesOnHTTPS</code> (<code>internal/auth/authenticator_test.go</code>). <strong>Residual risk:</strong> Hangar sends no HSTS header; the TLS proxy should.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>External images in a card track who views it.</td>
+<td><code>ui.external_images</code> can turn them off.</td>
+<td>Vitest "does not load external images when the Instance turns them off".</td>
+</tr>
+<tr>
+<td>D</td>
+<td>A burst of sign-ins exhausts memory (each argon2id check holds 64 MiB).</td>
+<td>At most two hashes run at once per process; the rest wait and give up with their request (<code>internal/auth/passwords.go</code>).</td>
+<td><code>TestPasswordHashingIsBounded</code>, <code>TestPasswordHashingWaitEndsWithContext</code> (<code>internal/auth/passwords_internal_test.go</code>). <strong>Residual risk:</strong> a flood still delays sign-ins on that replica; Hangar has no per-IP limit before the hash. Rate-limit <code>/auth/login</code> at the proxy.</td>
+</tr>
+<tr>
+<td>S</td>
+<td>Someone with a user's session (an unlocked browser, a stolen cookie) changes the password and locks the owner out, or guesses the password through the change form.</td>
+<td><code>POST /me/password</code> needs the current password, the CSRF header and a same-origin request. Wrong current passwords count towards the sign-in throttle for the username and IP, so the form is no faster to guess through than sign-in. Success and failure are audited (<code>user.password_changed</code>, <code>user.password_change_failed</code>) (<code>internal/auth/account.go</code>).</td>
+<td><code>TestChangePassword</code> (<code>internal/auth/account_test.go</code>), <code>TestChangeMyPassword</code>, <code>TestChangeMyPasswordIsThrottled</code> (<code>internal/api/account_test.go</code>), <code>TestSelfServiceAccountOnTheFullServer</code> (<code>cmd/hangar/account_test.go</code>). <strong>Residual risk:</strong> wrong current passwords also lock the user's own sign-in for a while, as failed sign-ins do.</td>
+</tr>
+<tr>
+<td>S</td>
+<td>After a password change, a session or Token that someone else holds keeps working.</td>
+<td>The change ends every session of the user but the current one.</td>
+<td><code>TestChangeMyPassword</code>, <code>TestSelfServiceAccountOnTheFullServer</code>. <strong>Residual risk:</strong> Tokens are kept, so automation does not break; a user who thinks their account was used must revoke their Tokens too (<a href="../../operate/security/">Security hardening</a>).</td>
+</tr>
+<tr>
+<td>S</td>
+<td>A user sets their email to someone else's address to squat it: blocking that person's OIDC first sign-in (<code>ErrOIDCLinkRequired</code>), invite or change, or claiming the address before its owner.</td>
+<td>A self-set email (<code>PATCH /me</code>, registration) is only pending (<code>email_changes</code>), outside <code>users.email</code> and its uniqueness, until a single-use, 72-hour confirmation link that an admin creates and sends to that address is used. The link is bound to the pending email the admin saw, in one transaction, so a change the user makes before the admin approves gives 409 rather than a link for another address, and a new pending email ends every earlier link; only verified emails match OIDC sign-ins. Admin-set, invite, bootstrap and verified-claim emails are verified at once (<code>internal/auth/account.go</code>, <code>oidc.go</code>, <code>invites.go</code>).</td>
+<td><code>TestSelfSetEmailsNeedConfirmation</code> (which also covers the binding), <code>TestRegistrationEmailsNeedConfirmation</code> (<code>internal/auth/account_test.go</code>), <code>TestUpdateMe</code> (<code>internal/api/account_test.go</code>), <code>TestSelfServiceAccountOnTheFullServer</code>. <strong>Residual risk:</strong> Hangar sends no mail, so the proof of ownership is only as good as the admin sending the link to the right address; an admin who sets an email vouches for it. Emails stored before migration <code>0003</code> were marked verified, including any typed at open registration.</td>
+</tr>
+<tr>
+<td>E</td>
+<td>A Token mints a longer-lived Token, or a Token links an OIDC identity, approves a device login or changes a password.</td>
+<td>An expiring Token can create only Tokens that expire no later; linking a provider, approving a device and changing a password need a UI session. A <code>write</code> Token may change only the display name and email (<code>PATCH /me</code>).</td>
+<td><code>TestSessionsTokensAndKeys</code>, <code>TestChangeMyPassword</code> (<code>internal/api/</code>); <code>TestRouteAuthorisationMatrix</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-cli-and-hub-clients">2. CLI and Hub clients<a class="headerlink" href="#2-cli-and-hub-clients" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S</td>
+<td>A stolen Token is used.</td>
+<td>Tokens are stored as SHA-256, shown once, can expire and be limited to Namespaces or Repos, and can be revoked by the user or an Instance admin. <code>last_used_at</code> shows use.</td>
+<td><code>TestAuthenticateTokens</code>, <code>TestTokenValidation</code> (<code>internal/auth/authenticator_test.go</code>); <code>TestPermissionMatrix</code> (<code>internal/auth/authz_test.go</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>A Token does more than its scope allows.</td>
+<td>Scopes <code>read</code>, <code>write</code> and <code>admin</code>, applied by <code>auth.Authz</code> on top of the user's Role (see <a href="#token-scopes">Token scopes</a>).</td>
+<td><code>TestPermissionMatrix</code> (<code>internal/auth/authz_test.go</code>), <code>TestWriteTokenAdministersReposThroughHubAPIOnly</code> (<code>cmd/hangar/hub_admin_test.go</code>), compat <code>test_write_token_administers_own_repos</code> (<code>compat/hf/test_repos.py</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>A rename that follows an old Repo ID's redirect into another Namespace turns into a transfer.</td>
+<td><code>hub_admin</code> checks the Namespace the Repo is in now.</td>
+<td><code>TestWriteTokenAdministersReposThroughHubAPIOnly</code> (redirect case).</td>
+</tr>
+<tr>
+<td>T</td>
+<td>A path escapes the Repo (<code>../</code>, absolute, backslash, NUL) or names <code>.git</code> in a spelling a client checks out as <code>.git</code> (CVE-2014-9390).</td>
+<td><code>model.CleanRepoPath</code> and <code>model.ValidPathComponent</code> port git's NTFS and HFS+ checks and limit paths to 4,096 bytes (<code>internal/model/entry.go</code>).</td>
+<td><code>TestCleanRepoPath</code>, <code>TestValidPathComponent</code> (<code>internal/model/model_test.go</code>). <strong>Residual risk:</strong> paths that differ only in case or Unicode normalisation can coexist, as on the Hub.</td>
+</tr>
+<tr>
+<td>T</td>
+<td>A zip export entry lands outside the export folder.</td>
+<td>Every entry must pass <code>CleanRepoPath</code> unchanged, or the Job fails (<code>internal/repo/jobs.go</code>).</td>
+<td><code>TestZipExportRefusesUnsafePaths</code> (<code>internal/repo/treecheck_test.go</code>).</td>
+</tr>
+<tr>
+<td>T</td>
+<td>A folder uploaded with <code>hangar push</code> or <code>hangar import</code> holds a symbolic link out of it, such as to <code>~/.ssh</code>.</td>
+<td>Links are followed only into the folder or the Hugging Face cache (<code>internal/cli/symlinks.go</code>).</td>
+<td><code>TestPushSkipsSymlinksOutOfTheFolder</code>, <code>TestWithin</code>, <code>TestSymlinksToCacheBlobsAreFollowed</code> (<code>internal/cli/symlinks_test.go</code>).</td>
+</tr>
+<tr>
+<td>I</td>
+<td>A user learns that an LFS or Xet object exists, or downloads it, by committing a pointer to its hash.</td>
+<td>Objects stay stored once per Instance, but a Commit, push or pull request may reference one only when its author uploaded the bytes (<code>lfs_uploaders</code>) or can read a Repo that holds it (<code>repo.Store.Referable</code>, <code>internal/repo/references.go</code>). Anything else is refused as an object that was never uploaded. The batch API, the native upload plan and verify ask for the bytes of such an object as if it did not exist, never giving its size; an upload of bytes already stored is checked and discarded, with no second copy (decided by James on 2026-10-18).</td>
+<td><code>TestLFSObjectsOfPrivateReposCannotBeReferenced</code> (<code>cmd/hangar/lfs_references_test.go</code>: batch, Hub API commit and <code>create_pr</code>, git push and Xet, a reader who may reference it, and uploads through git-lfs and Xet that succeed); <code>TestCommitsReferenceOnlyObjectsTheActorUploadedOrCanRead</code>, <code>TestUploadsOfStoredObjectsProveTheBytes</code> (<code>internal/repo/references_test.go</code>); <code>TestLFSBatchAsksForObjectsTheCallerCannotUse</code> (<code>internal/gitserver</code>); <code>TestCommitsCannotReferenceObjectsOfPrivateRepos</code> (<code>internal/hfapi</code>); <code>TestXetUploadsRecordUploadersAndRevealNothing</code> (<code>internal/xet</code>); compat <code>TestLFSObjectsOfOtherReposNeedTheirBytes</code> (<code>compat/git</code>), <code>test_upload_of_an_object_stored_in_another_users_private_repo</code> (<code>compat/hf</code>, with and without Xet), <code>test_file_stored_in_another_users_private_repo</code> (<code>compat/xet</code>). <strong>Residual risk:</strong> see <a href="#lfs-object-references">LFS object references</a>.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Usernames and Roles on a closed Instance are listed through Namespace profiles, Organisation member lists, a user's likes, Namespace search results or public Collections.</td>
+<td>While <code>anonymous_read</code> is off, reading a Namespace needs a signed-in caller (<code>Authorizer.canSeeNamespace</code> in <code>internal/auth/authz.go</code>), checked before any lookup, so anonymous callers get 401 whether or not the Namespace exists; search and Collection lists leave the closed items out (<code>internal/api/namespaces.go</code>, <code>orgs.go</code>, <code>search.go</code>, <code>internal/hfapi/likes.go</code>, <code>internal/collections/service.go</code>). Decided by James on 2026-10-18.</td>
+<td><code>TestNamespacesNeedSignInWhileAnonymousReadIsOff</code> (<code>cmd/hangar/namespace_access_test.go</code>), <code>TestNamespaceReadFollowsAnonymousRead</code> (<code>internal/auth/authz_test.go</code>), and the <code>profile</code> rule of <code>TestRouteAuthorisationMatrix</code> (<code>cmd/hangar/routes_authz_test.go</code>), which probes each profile route with the setting off and on. <strong>Residual risk:</strong> every signed-in user, whatever their Roles, can still list every username and Organisation through search and profiles; with <code>anonymous_read</code> on, they are public, as on the Hub.</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Large or many requests exhaust a replica.</td>
+<td>Request bodies and batches are bounded per protocol (below).</td>
+<td><strong>Residual risk:</strong> no per-user or per-IP request rate limit; use the proxy.</td>
+</tr>
+<tr>
+<td>R</td>
+<td>A user denies a change.</td>
+<td>Security-relevant actions are audited: sign-ins, Tokens, Members, Repo visibility, rename, transfer and delete, settings (<code>internal/audit</code>).</td>
+<td><code>TestEveryW5ActionIsAudited</code> (<code>internal/api/identity_test.go</code>) for sign-ins, Tokens, users, invites and Members; <code>TestCreateAndSettings</code> and <code>TestRenameAndTransferRedirect</code> (<code>internal/repo/lifecycle_test.go</code>) for visibility, renames and transfers.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="3-git-git-lfs-and-xet">3. git, git-lfs and Xet<a class="headerlink" href="#3-git-git-lfs-and-xet" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D</td>
+<td>Delta bomb: a 16 KiB pack expands to gigabytes in memory before any hook runs.</td>
+<td>The pack is checked as it streams, and its trailer held back until every object and delta is within limits (<code>internal/gitstore/packlimit.go</code>, <code>internal/gitserver/receive.go</code>).</td>
+<td><code>TestPushRefusesDeltaBomb</code> (<code>internal/gitserver/limits_test.go</code>), <code>TestLimitPackRefusesHostilePacks</code> (<code>internal/gitstore/packlimit_test.go</code>).</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Tree fan-out bomb: a 666-byte pack names millions of paths.</td>
+<td>Each distinct tree is read once; Commits over 1,000,000 paths or with a path over 4,096 bytes are refused (<code>internal/repo/treecheck.go</code>).</td>
+<td><code>TestApplyPackRefusesTreeBombs</code>, <code>TestApplyPackPathLimitIsConfigurable</code> (<code>internal/repo/treecheck_test.go</code>).</td>
+</tr>
+<tr>
+<td>D</td>
+<td>A push with endless ref updates, objects or malformed data.</td>
+<td>10,000 ref updates, 2,000,000 objects and four times <code>git.max_pack_size</code> unpacked per push; malformed packs are refused.</td>
+<td><code>TestPushRefusesTooManyRefUpdates</code>, <code>TestPushRefusesMalformedPack</code> (<code>internal/gitserver/limits_test.go</code>). <strong>Residual risk:</strong> no limit on concurrent pushes per user, and clone memory is git's (a replica peaked at 496 MiB in four parallel clones of a 10,000-Commit Repo).</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Oversized LFS batch requests.</td>
+<td>1,000 objects and a 4 MiB body per batch (<code>internal/gitserver/lfs.go</code>).</td>
+<td><code>TestLFSRequestErrors</code> (<code>internal/gitserver/lfs_errors_test.go</code>), <code>FuzzParseBatch</code> (<code>internal/gitserver/fuzz_test.go</code>).</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Xet shards that make the server reload indexes without end (CPU amplification).</td>
+<td>Index reloads are paid for by what a shard names (<code>internal/xet/indexcache.go</code>).</td>
+<td><code>TestShardIndexMemoryIsBounded</code> (<code>internal/xet/index_limits_test.go</code>), <code>TestIndexReloadAllowance</code>; <code>FuzzParseXorb</code>, <code>FuzzParseShard</code> (<code>internal/xet/fuzz_test.go</code>).</td>
+</tr>
+<tr>
+<td>S</td>
+<td>A signed LFS or Xet URL is forged, reused for another object or extended.</td>
+<td>HMAC-SHA256 over the path, scope, expiry and every query parameter, with a key derived from the Instance key by HKDF, compared in constant time; keys and values are escaped before signing (<code>internal/httpx/signer.go</code>). Xet CAS tokens carry a scope and an expiry.</td>
+<td><code>TestSigner</code> (<code>internal/httpx/httpx_test.go</code>), <code>TestCASScopesExpiryAndReject</code> (<code>internal/xet/cas_test.go</code>).</td>
+</tr>
+<tr>
+<td>I</td>
+<td>The git-lfs batch, verify or a Xet shard answer says whether an object exists, or its size.</td>
+<td>Objects the caller may not reference get upload actions like missing ones; verify answers 404 until the caller's own upload is checked; Xet errors give no stored size, and a xorb Hangar has is verified before <code>was_inserted: false</code> is answered.</td>
+<td><code>TestLFSBatchAsksForObjectsTheCallerCannotUse</code> (<code>internal/gitserver/references_test.go</code>), <code>TestXetUploadsRecordUploadersAndRevealNothing</code> and <code>TestAcceptShardRejects</code> (<code>internal/xet/service_test.go</code>).</td>
+</tr>
+<tr>
+<td>T</td>
+<td>An upload replaces a verified object, or stores bytes that do not match their SHA-256.</td>
+<td>Uploads go to a staging key and are verified before they move into place (<code>internal/repo/</code>).</td>
+<td><code>TestPresignedPutVerifyRejectsWrongContent</code>, <code>TestPresignedPutCannotReplaceAVerifiedObject</code> (<code>internal/repo/presign_test.go</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>A write Token force-pushes the default branch.</td>
+<td>Allowed only for a Namespace admin, as spec 04 says (<code>gitserver.canForcePush</code>).</td>
+<td><strong>Residual risk:</strong> for that one check the Role decides, not the Token scope, so a Namespace admin's write Token can force-push.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>A pickle stored in git rather than LFS leaves through <code>git clone</code>.</td>
+<td><code>scan.Gate.CheckGit</code> runs before every fetch (<code>internal/gitserver/smart.go</code>).</td>
+<td><code>TestGateChecksGitFetches</code> (<code>internal/scan/bypass_test.go</code>); see <a href="#the-download-gate">The download gate</a>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="4-ollama">4. Ollama<a class="headerlink" href="#4-ollama" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S</td>
+<td>A registry request is forged or replayed.</td>
+<td>Requests are signed with the user's registered Ed25519 key; timestamps outside 5 minutes and nonces seen in the last 10 minutes are refused (<code>internal/auth/ollama.go</code>).</td>
+<td><code>TestOllamaKeysAndRegistryTokens</code> (<code>internal/auth/keys_test.go</code>), <code>FuzzParseOllamaAuthorization</code>.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Private Repos leak through the registry.</td>
+<td>The key's owner must be able to read the Repo; others get 404.</td>
+<td><code>TestPrivateReposUseTheOllamaKeyFlow</code> (<code>internal/ollama/registry_test.go</code>), <code>TestRouteAuthorisationMatrix</code>.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>An unsafe file is pulled as a layer.</td>
+<td>Blob routes and their signed redirects call the download gate.</td>
+<td><code>TestUnsafeDownloadGateCoversEveryRoute</code> (<code>cmd/hangar/unsafe_test.go</code>).</td>
+</tr>
+<tr>
+<td>T</td>
+<td>A browser renders a blob as a page.</td>
+<td>Blobs are <code>application/octet-stream</code>, which browsers do not render.</td>
+<td><strong>Residual risk:</strong> blob responses do not send <code>X-Content-Type-Options: nosniff</code> (<code>internal/ollama/registry.go</code>, <code>serve</code>), unlike every other route that serves file bytes.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="5-upstreams">5. Upstreams<a class="headerlink" href="#5-upstreams" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I, E</td>
+<td>SSRF: an Upstream redirects Hangar to the cloud metadata service or the local network.</td>
+<td>The <a href="#ssrf-policy">network policy</a>, applied in the dialler to the resolved address (<code>internal/upstream/netpolicy.go</code>, <code>internal/httpx/netaddr.go</code>).</td>
+<td><code>TestUpstreamRedirectsCannotReachTheLocalNetwork</code>, <code>TestUpstreamNeverReachesReservedAddresses</code>, <code>TestCheckAddr</code> (<code>internal/upstream/netpolicy_internal_test.go</code>).</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Credentials are sent to another origin on a redirect.</td>
+<td><code>Authorization</code> and <code>Cookie</code> are dropped when the scheme, host or port changes (<code>internal/upstream/client.go</code>).</td>
+<td><code>TestHTTPClientRepoInfoTreeDownload</code> (<code>internal/upstream/client_test.go</code>); <code>TestCheckRedirectDropsTheTokenAcrossOrigins</code> (<code>internal/cli/redact_test.go</code>) for the <code>hangar</code> CLI.</td>
+</tr>
+<tr>
+<td>D, T</td>
+<td>An Upstream sends hostile packs, trees, names or endless ref advertisements.</td>
+<td>Pulls go through the same pack and tree checks as pushes, refuse names a Repo cannot hold, and read at most 100,000 refs (<code>internal/upstream/gitfetch.go</code>).</td>
+<td><code>TestApplyPackRefusesDeltaBombs</code>, <code>TestApplyPackRefusesTreeBombs</code> (Mirror cases), <code>TestFetchPackBoundsAdvertisedRefs</code> (<code>internal/upstream/gitfetch_internal_test.go</code>).</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Pulls in one Namespace starve another's.</td>
+<td>Each Pull queues its own transfer and quotas are per Namespace (<code>internal/upstream/plan.go</code>).</td>
+<td><code>TestPullQuotaOfAnotherNamespaceCannotStarveAPull</code> (<code>internal/upstream/quota_test.go</code>).</td>
+</tr>
+<tr>
+<td>T</td>
+<td>A malicious model is pulled from an Upstream.</td>
+<td>Pulled Commits are scanned like pushed ones, and the download gate applies to Mirrors and Pull-through.</td>
+<td><code>TestPullThroughURLChecksUnsafeDownloads</code> (<code>internal/upstream/pullthrough_gate_test.go</code>), <code>TestGateRefusesPartialMirrorPickleByOID</code> (<code>internal/scan/gate_test.go</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Anonymous callers fill the Blob store through Pull-through.</td>
+<td>Pull-through is off by default, limited by an allow list, and refused to anonymous callers unless <code>pull.pull_through.min_role</code> is <code>anonymous</code> (<code>internal/upstream/pullthrough.go</code>).</td>
+<td><code>TestPullSettingsFollowInstanceSettings</code> (<code>cmd/hangar/instance_test.go</code>). <strong>Residual risk:</strong> no test refuses an anonymous Pull-through at the default role.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Residual risk:</strong> an Upstream whose own DNS an attacker controls can resolve to a private address, because that is how LAN Upstreams work; admins choose every Upstream. A proxy set with <code>HTTP_PROXY</code> or <code>HTTPS_PROXY</code> decides what Upstream requests reach.</p>
+<h3 id="6-webhooks">6. Webhooks<a class="headerlink" href="#6-webhooks" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I, E</td>
+<td>SSRF: a Namespace admin (every user, for their own Namespace) points a webhook at the metadata service or the local host.</td>
+<td>Reserved addresses are always refused, checked on the dialled address; redirects are not followed (<code>internal/webhook/service.go</code>).</td>
+<td><code>TestReservedTargetsAreAlwaysRefused</code>, <code>TestTestDeliveryAndPrivateTargets</code> (<code>internal/webhook/service_test.go</code>). <strong>Residual risk:</strong> <code>webhooks.allow_private_targets</code> is on by default, so users can POST to LAN services. Turn it off on shared Instances.</td>
+</tr>
+<tr>
+<td>S</td>
+<td>A receiver accepts a forged delivery.</td>
+<td>Each delivery is signed with the webhook's secret (<code>internal/webhook/service.go</code>); secrets are stored encrypted.</td>
+<td><code>TestEmitSignsAndDelivers</code> (<code>internal/webhook/service_test.go</code>), <code>TestSignAndVerify</code> (<code>internal/webhook/webhook_test.go</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>A write Token adds a webhook to watch private changes.</td>
+<td>Webhooks need the <code>admin</code> scope.</td>
+<td><code>TestWriteTokenAdministersReposThroughHubAPIOnly</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="7-the-blob-store-and-presigned-urls">7. The Blob store and presigned URLs<a class="headerlink" href="#7-the-blob-store-and-presigned-urls" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I</td>
+<td>A presigned URL outlives the holder's access.</td>
+<td>URLs are short-lived: <code>storage.s3.presign_ttl</code> is 1 hour by default and validation keeps it between 1 minute and 7 days (<code>internal/config/validate.go</code>).</td>
+<td><strong>Residual risk:</strong> a presigned S3 URL is scoped to the object key (its SHA-256), not the Repo, and cannot be revoked before it expires. Keep the TTL short.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>A presigned URL issued before the gate would refuse the file.</td>
+<td>Hangar issues a redirect only after the gate allows the file.</td>
+<td><code>TestResolveHeadIssuesNoPresignedLinkPastTheGate</code> (<code>internal/hfapi/unsafe_test.go</code>). <strong>Residual risk:</strong> in <code>redirect</code> mode the check happens at issue, not at use.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Presigned URLs leak into logs.</td>
+<td>Clients and the Upstream client redact them.</td>
+<td><code>TestHTTPClientRedactsPresignedURLs</code> (<code>internal/upstream/client_test.go</code>), <code>TestPullDoesNotPrintPresignedDownloadURLs</code> (<code>internal/cli/redact_test.go</code>), <code>TestSecretsStayOutOfLogsAndTelemetry</code>.</td>
+</tr>
+<tr>
+<td>T</td>
+<td>An object is changed in the bucket.</td>
+<td>Objects are addressed by SHA-256 and verified on upload.</td>
+<td><strong>Residual risk:</strong> objects are not re-hashed on download; anyone with write access to the bucket can change them. Restrict the bucket to Hangar's credentials.</td>
+</tr>
+</tbody>
+</table>
+<p>Lifetimes of the URLs Hangar signs itself:</p>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>Scope</th>
+<th>Lifetime</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LFS download</td>
+<td>One object in one Repo</td>
+<td><code>storage.s3.presign_ttl</code> (1 hour)</td>
+</tr>
+<tr>
+<td>LFS upload, verify and multipart part</td>
+<td>One object or upload in one Repo</td>
+<td><code>lfs.upload_url_ttl</code> (24 hours)</td>
+</tr>
+<tr>
+<td>Zip export</td>
+<td>One export, gated again when used</td>
+<td>24 hours (<code>repo.ExportTTL</code>)</td>
+</tr>
+<tr>
+<td>Pull-through</td>
+<td>One object of one Mirror</td>
+<td>1 hour</td>
+</tr>
+<tr>
+<td>Ollama blob</td>
+<td>One digest of one Repo</td>
+<td>1 hour</td>
+</tr>
+<tr>
+<td>Dataset Viewer asset</td>
+<td>One asset path</td>
+<td>1 hour</td>
+</tr>
+</tbody>
+</table>
+<p>Hangar-signed links for LFS, Pull-through and zip exports run the download gate again when they are used.</p>
+<h3 id="8-the-database">8. The database<a class="headerlink" href="#8-the-database" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T, I</td>
+<td>SQL injection.</td>
+<td>Queries use bun with bound parameters; where SQL text is assembled, the pieces are constants in the code (for example <code>internal/gc/usage.go</code>, <code>internal/org/db.go</code>) and caller values are bound. The Dataset Viewer's <code>where</code> and <code>orderby</code> are parsed by Hangar's own grammar, not passed to a SQL engine (<code>internal/datasets/query</code>).</td>
+<td><code>gosec</code> in <code>make lint</code> flags SQL built from strings. <code>TestWhere</code>, <code>FuzzWhere</code>, <code>FuzzOrderBy</code> (<code>internal/datasets/query/query_test.go</code>). <strong>Residual risk:</strong> no test feeds hostile names through the database layer itself.</td>
+</tr>
+<tr>
+<td>I</td>
+<td>A database dump exposes credentials.</td>
+<td>Tokens and session IDs are stored as hashes, passwords as argon2id, and stored secrets encrypted under the Instance key, which is not in the database.</td>
+<td><code>TestRotateKeyReencryptsSecrets</code> (<code>internal/cli/admin_test.go</code>), <code>TestSealOpen</code> (<code>internal/secrets/secrets_test.go</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Write access to the database.</td>
+<td>None in Hangar: rows decide every permission.</td>
+<td><strong>Residual risk:</strong> database write access is full control of the Instance. Restrict network access to the database, and use TLS in the DSN when it is on another host.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="9-the-worker">9. The worker<a class="headerlink" href="#9-the-worker" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E</td>
+<td>A crafted file runs code during scanning or indexing.</td>
+<td>The scanner reads pickle opcodes and never unpickles; no stored file is ever executed.</td>
+<td><code>FuzzScan</code> (<code>internal/scan/pickle/pickle_test.go</code>), <code>FuzzScanFile</code> (<code>internal/scan/service_test.go</code>).</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Crafted GGUF, safetensors, Parquet, Arrow, CSV, JSON Lines, archives or cards exhaust the worker.</td>
+<td>Parsers have size limits and are fuzzed nightly (<code>.github/workflows/fuzz.yml</code>, <code>scripts/fuzz.sh</code>); scan strings and frames are capped at 64 MiB; Viewer scans stop at their limits and report partial results.</td>
+<td><code>FuzzRead</code> (<code>internal/index/gguf</code>, <code>internal/index/safetensors</code>), <code>FuzzOpenAndRead</code> (<code>internal/datasets/pq</code>), <code>FuzzCSV</code>, <code>FuzzJSONLines</code> (<code>internal/datasets/convert</code>), <code>FuzzZipEntries</code> (<code>internal/datasets/layout</code>), <code>TestConvertShardsAndLimits</code> (<code>internal/datasets/convert</code>), <code>TestScanLimitsMakeResultsPartial</code> (<code>internal/datasets/viewer</code>).</td>
+</tr>
+<tr>
+<td>E</td>
+<td>A user keeps control of Jobs, or their results such as zip exports, after losing access to the Repo.</td>
+<td>Job routes check the caller's current access to the Job's Repo: a user demoted to <code>read</code> cannot cancel or retry, and a removed user gets 404 for the Job and its export.</td>
+<td><code>TestJobsFollowRevokedRepoAccess</code> (<code>internal/api/jobs_test.go</code>).</td>
+</tr>
+<tr>
+<td>I</td>
+<td>A failed Job hides an unsafe file.</td>
+<td>A read error fails the scan Job, which retries; files with no result are refused when blocking is on.</td>
+<td><code>TestGateAfterAFailedScanJob</code> (<code>internal/scan/failed_scan_test.go</code>), <code>TestGateOverHTTPAfterAFailedScanJob</code> (<code>internal/scan/gate_failed_test.go</code>).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Residual risk:</strong> the worker holds the same credentials as the web process (database, Blob store, Instance key) and decrypts Upstream tokens to use them. It runs <code>git index-pack</code> on Upstream data, bounded by the pack check.</p>
+<h3 id="10-operators">10. Operators<a class="headerlink" href="#10-operators" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Threat</th>
+<th>Mitigation</th>
+<th>Evidence or residual risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I</td>
+<td>Example deployments ship with default secrets.</td>
+<td>Compose files have no default secrets; Helm examples hold no credentials; missing secrets are generated once into <code>secrets.yaml</code>.</td>
+<td><code>TestComposeSecretsHaveNoDefaults</code>, <code>TestHelmExampleValuesHoldNoCredentials</code> (<code>deploy/deploy_test.go</code>), <code>TestEnsureSecretsGeneratesOnceThenReads</code> (<code>internal/config/config_test.go</code>).</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Support services are exposed on every interface.</td>
+<td>Only Hangar listens on every interface in the Compose files.</td>
+<td><code>TestComposeOnlyHangarListensOnEveryInterface</code> (<code>deploy/deploy_test.go</code>).</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Secrets appear in logs, spans or metrics.</td>
+<td>Access logs and spans record route templates, never raw paths or queries; outbound URLs are redacted.</td>
+<td><code>TestSecretsStayOutOfLogsAndTelemetry</code> (<code>cmd/hangar/secrets_telemetry_test.go</code>) runs a full server at debug level with OTLP export and checks that 16 kinds of secret never appear.</td>
+</tr>
+<tr>
+<td>T</td>
+<td>A leaked Instance key.</td>
+<td><code>hangar admin rotate-key</code> re-encrypts every stored secret in one transaction.</td>
+<td><code>TestRotateKeyReencryptsSecrets</code>. Rotation also invalidates signed URLs.</td>
+</tr>
+<tr>
+<td>E</td>
+<td>The container is used to attack the host.</td>
+<td>The image runs as UID 65532 with no shell; the chart drops every capability, uses <code>RuntimeDefault</code> seccomp, a read-only root filesystem and no privilege escalation (<code>Dockerfile</code>, <code>deploy/helm/hangar/values.yaml</code>).</td>
+<td><strong>Residual risk:</strong> no test asserts the chart's security context. The NetworkPolicy is off by default and allows all egress when on, because Hangar talks to Upstreams, OIDC providers and webhook receivers.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-download-gate">The download gate<a class="headerlink" href="#the-download-gate" title="Permanent link">&para;</a></h2>
+<p>Pickle-based files (PyTorch, joblib, NumPy object arrays and raw pickles) can run code when a client loads them. Hangar scans them and, with <code>scan.block_unsafe_downloads</code> on, refuses to serve risky ones. The setting is off by default. <code>scan.block_level</code> sets how strict it is: <code>unsafe</code> (the default) or <code>suspicious</code>. The rules for users are in <a href="../../operate/security/#blocking-unsafe-downloads">Blocking unsafe downloads</a>.</p>
+<h3 id="one-gate-for-every-route">One gate for every route<a class="headerlink" href="#one-gate-for-every-route" title="Permanent link">&para;</a></h3>
+<p>Every route that serves a Repo's file bytes calls <code>scan.Gate</code> (<code>internal/scan/gate.go</code>): <code>CheckFile</code> for paths, <code>CheckTree</code> for zip exports, <code>CheckObjects</code> for objects requested by OID (git-lfs, Pull-through, Ollama) and <code>CheckGit</code> for git fetches. The gate refuses a file that can run code when:</p>
+<ul>
+<li>The scan marked it unsafe (<code>BlockUnsafe</code>).</li>
+<li>The scan marked it suspicious and <code>scan.block_level</code> is <code>suspicious</code> (<code>BlockSuspicious</code>).</li>
+<li>It has no scan result yet, because the scan is running or its Job failed (<code>BlockNotScanned</code>).</li>
+<li>The scan could not follow it to where every loader stops (<code>BlockPartial</code>).</li>
+<li>The history is too long to check (<code>BlockHistory</code>).</li>
+</ul>
+<p>The Hub API and web UI accept <code>accept_risk=1</code>; git-lfs and Ollama answer 403 with the reason.</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>What it keeps true</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TestServingSurfaceIsClassified</code> (<code>cmd/hangar/unsafe_surface_test.go</code>)</td>
+<td>Enumerates the router's protocols, its signed-link routes and every function that reads a Repo file's bytes, and fails on any that is not classified.</td>
+</tr>
+<tr>
+<td><code>TestUnsafeDownloadGateCoversEveryRoute</code> (<code>cmd/hangar/unsafe_test.go</code>)</td>
+<td>Every download route refuses an unsafe file.</td>
+</tr>
+<tr>
+<td><code>TestUnsafeDownloadGateCatchesScannerBypasses</code> (<code>cmd/hangar/unsafe_bypass_test.go</code>)</td>
+<td>Each known bypass is refused through the full server.</td>
+</tr>
+<tr>
+<td><code>TestSuspiciousDownloadsFollowTheBlockLevel</code> (<code>cmd/hangar/unsafe_level_test.go</code>)</td>
+<td>Every download route serves a suspicious pickle at level <code>unsafe</code> and refuses it at level <code>suspicious</code>, where <code>accept_risk=1</code> still works on the Hub API.</td>
+</tr>
+<tr>
+<td><code>TestGateRefusesUnsafeAndUnscannedFilesThatRunCode</code>, <code>TestGateBlockLevel</code>, <code>TestGateRefusesPartialScans</code>, <code>TestGateChecksEveryCommitThatHoldsAnObject</code>, <code>TestGateChecksObjectsOfTags</code>, <code>TestGateChecksGitFetches</code> (<code>internal/scan/</code>)</td>
+<td>The gate's rules, including objects held only by older Commits or tags.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-the-scanner-reads-files">How the scanner reads files<a class="headerlink" href="#how-the-scanner-reads-files" title="Permanent link">&para;</a></h3>
+<p>The scanner (<code>internal/scan/pickle</code>) walks the opcode stream the way CPython's unpickler does and classifies every import against allow and deny lists (<code>internal/scan/pickle/lists.go</code>). Content decides how a file is read: it decompresses, opens zip archives and <code>.npz</code> members, and follows the array data joblib stores inside its pickles. Files that fail at their first opcode are not pickles and are safe.</p>
+<p>Bypasses fixed in phase 3, each with a regression test in <code>internal/scan/bypass_test.go</code>, <code>internal/scan/pickle/bypass_test.go</code>, <code>internal/scan/pickle/pickle_test.go</code> or <code>cmd/hangar/unsafe_bypass_test.go</code>:</p>
+<ul>
+<li>joblib array bytes that hid an <code>os.system</code> call (<code>TestScanJoblibFindsCodeHiddenByArrayData</code>).</li>
+<li>A <code>.bin</code> skipped because an <code>.xml</code> of the same name existed (<code>TestScanFileReadsLoadableFilesByContent</code>).</li>
+<li>Error results that downloaded although Python's unpickler reads further (<code>TestGateRefusesPartialScans</code>, <code>TestScanReadsPastLongLines</code>).</li>
+<li>Compressed and archived names that were never scanned, such as <code>model.joblib.gz</code> and <code>checkpoint.pth.tar</code> (<code>TestKindOfCompressedAndArchivedNames</code>).</li>
+<li>Objects held under a harmless name at a branch tip but as a pickle in an older Commit (<code>TestGateChecksEveryCommitThatHoldsAnObject</code>).</li>
+<li>Pickles stored in git rather than LFS, served by <code>git clone</code> (<code>TestGateChecksGitFetches</code>).</li>
+<li>Protocol 0 escapes, Python 2 module names, dotted names and extension opcodes that hid imports (<code>TestScanDecodesProtocol0StringsAsPython</code>, <code>TestClassifyMapsPython2Names</code>, <code>TestClassifyDottedNames</code>, <code>TestScanTreatsExtensionCodesAsUnnamedImports</code>).</li>
+</ul>
+<h3 id="scanner-limits">Scanner limits<a class="headerlink" href="#scanner-limits" title="Permanent link">&para;</a></h3>
+<p>These are accepted, documented, or waiting for a decision:</p>
+<ul>
+<li><strong>Suspicious imports download at the default level.</strong> At <code>scan.block_level: unsafe</code>, only imports on the deny list block, so a function that runs code and is on neither list is suspicious and downloads; the level is the default because model classes from <code>transformers</code> and <code>sklearn</code> are on neither list. Operators who want what <code>torch.load(weights_only=True)</code> refuses set the level to <code>suspicious</code> (decided by James on 2026-10-18; <code>TestSuspiciousDownloadsFollowTheBlockLevel</code>).</li>
+<li><strong>Files are chosen by name.</strong> A pickle under a name no standard loader uses is neither scanned nor gated. Code loaded with <code>trust_remote_code</code> can load anything, but it already runs the Repo's Python.</li>
+<li><strong>Some formats give partial results</strong> and are refused when blocking is on: xz and lzma compression (Go's standard library has no decoder), old PyTorch tar archives, unusual joblib arrays, and zip archives Go cannot open.</li>
+<li><strong>joblib wrapper aliases.</strong> The scanner recognises <code>NumpyArrayWrapper</code> by name; a module that imports it under another name is not recognised, although its import still shows.</li>
+<li><strong>Long histories.</strong> Objects of Repos with more than 20,000 Commits or 50,000 LFS file changes are decided from the history the gate can walk, and git fetches of such Repos are refused.</li>
+<li><strong><code>redirect</code> mode</strong> presigned URLs are checked when issued, not when used.</li>
+</ul>
+<h2 id="lfs-object-references">LFS object references<a class="headerlink" href="#lfs-object-references" title="Permanent link">&para;</a></h2>
+<p>Decided by James on 2026-10-18 ("check at Commit"); the rules are in <a href="https://github.com/hangar-hub/hangar/blob/main/docs/spec/04-git.md#who-may-reference-an-lfs-object">spec 04, "Who may reference an LFS object"</a>. What remains:</p>
+<ul>
+<li><strong>Pulls into a Mirror are not checked.</strong> A Pull marks an object present when the Upstream's Repo names it and the Instance already stores it, without downloading it again, and Pull-through serves such an object from the store. A user who can start a Pull from an Upstream on which they can commit a pointer without its bytes could reach an object they cannot read. Instance admins choose every Upstream; huggingface.co, and Hangar from this version, refuse such commits.</li>
+<li><strong>Xet proof rests on chunk structure.</strong> A shard proves the upload when its file rebuilds, from xorbs Hangar holds, into the claimed SHA-256. A client that knows the xorb hashes and chunk ranges of someone else's file could name them without sending the bytes. Hangar never serves Xet reconstruction data, file hashes or xorb hashes (it offers no Xet downloads), so they are known only to whoever had the file.</li>
+<li><strong>Uploaders are recorded for good.</strong> A User who once uploaded an object may reference it for as long as it is stored, also after losing access to the Repo it came from; they held the bytes. Garbage collection removes the record with the object.</li>
+<li><strong>Objects stored before the change</strong> have no uploaders, so only readers of the Repos holding them may reference them without an upload.</li>
+<li><strong>Readable means <code>read_files</code> now.</strong> A User who can read a Repo that holds an object may reference it in their own Repos, including a public one, which makes it readable to everyone. That is the same as downloading and uploading it again.</li>
+</ul>
+<h2 id="token-scopes">Token scopes<a class="headerlink" href="#token-scopes" title="Permanent link">&para;</a></h2>
+<p>The scopes follow the decision of 2026-10-17 that a write Token administers Repos through the Hub API only, as on huggingface.co, and nowhere else. A Token has one scope, applied on top of the user's own Role:</p>
+<table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>Allows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read</code></td>
+<td>Read files, metadata and history the user can read.</td>
+</tr>
+<tr>
+<td><code>write</code></td>
+<td>Also push, commit, upload and start Pulls. On Repos where the user's Role is <code>admin</code>, also the <code>hub_admin</code> action: delete a Repo, change its visibility or gating, and rename it within its Namespace, only through the Hub API endpoints <code>huggingface_hub</code> calls (<code>DELETE /api/repos/delete</code>, <code>PUT /api/{type}s/{repo}/settings</code>, and <code>POST /api/repos/move</code> when the Namespace does not change).</td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>Everything else: transfers to another Namespace, webhooks, collaborators, access requests, every native API admin action, Organisation Members and, for Instance admins, the Instance.</td>
+</tr>
+</tbody>
+</table>
+<p>Restrictions to Namespaces or Repos narrow a Token and never widen it. Instance administration needs an unrestricted <code>admin</code> Token (<code>internal/auth/authz.go</code>). Tests: <code>TestPermissionMatrix</code> (with its <code>hub_admin</code> column), <code>TestWriteTokenAdministersReposThroughHubAPIOnly</code>, and the compat test <code>test_write_token_administers_own_repos</code>. See also <a href="../../concepts/permissions/">Permissions</a>.</p>
+<h2 id="csrf-and-csp">CSRF and CSP<a class="headerlink" href="#csrf-and-csp" title="Permanent link">&para;</a></h2>
+<p><strong>Cross-site request forgery.</strong> Three layers protect state-changing requests:</p>
+<ol>
+<li>The session cookie is <code>SameSite=Lax</code> and <code>HttpOnly</code>.</li>
+<li>Every state-changing native API call from the UI carries the session's CSRF token in <code>X-CSRF-Token</code> (double submit).</li>
+<li>A request with a method other than <code>GET</code>, <code>HEAD</code> or <code>OPTIONS</code> that carries the session cookie or HTTP Basic credentials is refused with 403 when <code>Sec-Fetch-Site</code> is present and is not <code>same-origin</code> or <code>none</code>, or, without it, when <code>Origin</code> names neither the request's host nor <code>server.public_url</code>. This uses Go's <code>net/http.CrossOriginProtection</code> (<code>internal/auth/crossorigin.go</code>). Clients that send neither header, such as git, git-lfs, <code>huggingface_hub</code>, the CLI and Ollama, are unaffected.</li>
+</ol>
+<p>Bearer Tokens are exempt, because a browser never adds them by itself. Tests: <code>TestAuthenticateSessionsAndCSRF</code>, <code>TestCrossOriginBrowserCredentials</code>, <code>TestBasicCredentialsOnlyForGit</code>. A browser client on a sibling subdomain is refused (<code>Sec-Fetch-Site: same-site</code>); Hangar serves its UI and APIs from one origin.</p>
+<p><strong>Content Security Policy.</strong> UI pages (<code>internal/web/web.go</code>) send:</p>
+<div class="highlight"><pre><span></span><code>default-src 'self'; script-src 'self'; style-src 'self' 'nonce-&lt;per response&gt;';
+img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self';
+connect-src 'self' &lt;configured&gt;; worker-src 'self' blob:; object-src 'none';
+base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+</code></pre></div>
+<p>with <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code>, <code>Cross-Origin-Opener-Policy: same-origin</code> and a <code>Permissions-Policy</code> that turns off camera, microphone, geolocation, payment, USB, serial, HID and Bluetooth. No inline scripts are allowed. Tests: <code>TestServesIndexForUIRoutesWithCSP</code>, <code>TestCSPWithoutNonce</code>.</p>
+<p>File downloads are attachments with <code>Content-Type: application/octet-stream</code> and <code>nosniff</code> (<code>internal/blob/download.go</code>); Dataset Viewer assets add <code>Content-Security-Policy: default-src 'none'; sandbox</code> (<code>internal/datasets/viewer/assets.go</code>). <code>img-src https:</code> lets cards show external images unless <code>ui.external_images</code> is off.</p>
+<h2 id="ssrf-policy">SSRF policy<a class="headerlink" href="#ssrf-policy" title="Permanent link">&para;</a></h2>
+<p>Hangar makes outbound requests to Upstreams and webhook receivers. Both use <code>httpx.IsReservedAddr</code> and <code>httpx.IsPrivateAddr</code> (<code>internal/httpx/netaddr.go</code>), checked in the dialler on the address actually dialled, after DNS resolution, so DNS rebinding cannot get past them.</p>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>Upstreams</th>
+<th>Webhooks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reserved: link-local (including 169.254.169.254), other metadata services (100.100.100.200, <code>fd00:ec2::254</code>), unspecified (<code>0.0.0.0</code>), "this network", broadcast, multicast, and NAT64 addresses that embed one</td>
+<td>Never</td>
+<td>Never</td>
+</tr>
+<tr>
+<td>Private: loopback, RFC 1918, carrier-grade NAT, unique local</td>
+<td>The Upstream's own host, wherever it resolves; a redirect to another host only when the Upstream's own host is private</td>
+<td>Only when <code>webhooks.allow_private_targets</code> is on (the default)</td>
+</tr>
+<tr>
+<td>Public</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Redirects</td>
+<td>Followed (at most 10), credentials dropped on any change of scheme, host or port</td>
+<td>Not followed</td>
+</tr>
+</tbody>
+</table>
+<p>A refused connection is not retried, and its error names the address and the reason, never the URL. Tests: <code>TestUpstreamRedirectsCannotReachTheLocalNetwork</code>, <code>TestUpstreamNeverReachesReservedAddresses</code>, <code>TestCheckAddr</code>, <code>TestReservedTargetsAreAlwaysRefused</code>, <code>TestTestDeliveryAndPrivateTargets</code>. See also <a href="../../concepts/mirrors/#upstreams">Mirrors and Upstreams</a> and <a href="../../guides/webhooks/">Webhooks</a>.</p>
+<p>Not covered by the policy:</p>
+<ul>
+<li>OIDC discovery and token requests go to the provider URLs an Instance admin configures.</li>
+<li>IPv6 transition addresses such as 6to4 and Teredo are not classed as private, because they route through relays on the internet.</li>
+<li>A proxy from <code>HTTP_PROXY</code> or <code>HTTPS_PROXY</code> decides where Upstream requests go; Hangar checks only the proxy's address.</li>
+</ul>
+<h2 id="supply-chain">Supply chain<a class="headerlink" href="#supply-chain" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Where</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Known vulnerabilities in Go code</td>
+<td><code>govulncheck</code> in <code>ci.yml</code></td>
+<td>At the phase 3 review, no vulnerabilities in called code or imported packages, after <code>kin-openapi</code> was upgraded to v0.144.0. <code>pnpm audit --prod</code> and <code>pip-audit</code> (test and docs dependencies only) found none.</td>
+</tr>
+<tr>
+<td>Static analysis</td>
+<td><code>golangci-lint</code> with <code>gosec</code> in <code>ci.yml</code>; CodeQL for Go and TypeScript in <code>codeql.yml</code></td>
+<td>CodeQL runs on pull requests, on <code>main</code> and weekly.</td>
+</tr>
+<tr>
+<td>Fuzzing</td>
+<td><code>fuzz.yml</code>, nightly, every <code>Fuzz*</code> target through <code>scripts/fuzz.sh</code></td>
+<td>34 targets, including the parsers of untrusted input listed in <a href="#9-the-worker">The worker</a>.</td>
+</tr>
+<tr>
+<td>Dependency updates</td>
+<td><code>.github/dependabot.yml</code></td>
+<td>Go modules, npm, GitHub Actions, Docker, Compose and uv, weekly.</td>
+</tr>
+<tr>
+<td>Signed images</td>
+<td><code>release.yml</code></td>
+<td>cosign keyless signing through GitHub OIDC, with an SPDX SBOM attestation (syft) and SLSA build provenance. The Helm chart is signed too.</td>
+</tr>
+<tr>
+<td>Signed archives and SBOMs</td>
+<td><code>.goreleaser.yaml</code></td>
+<td><code>checksums.txt</code> signed into a Sigstore bundle, and an SPDX SBOM per archive. <code>TestGoReleaserSignsWithACosign3Bundle</code> (<code>deploy/release_test.go</code>).</td>
+</tr>
+<tr>
+<td>Image scanning</td>
+<td>Trivy in <code>release.yml</code></td>
+<td>The release fails on critical CVEs that have a fix.</td>
+</tr>
+<tr>
+<td>Minimal image</td>
+<td><code>Dockerfile</code></td>
+<td><code>scratch</code> with a Wolfi root filesystem, non-root, no shell.</td>
+</tr>
+</tbody>
+</table>
+<p>How to verify signatures is in <a href="../../operate/security/#verify-the-image">Verify the image</a>.</p>
+<p><strong>Residual risks:</strong></p>
+<ul>
+<li>Workflows pin every GitHub Action to a commit SHA, and <code>scripts/check-action-refs.sh</code> (run by <code>make lint-deploy</code>) checks that each SHA is the commit of the release named in its comment, so a moved tag changes nothing. What remains is trust in each pinned release and in the Dependabot pull requests that move the pins, which a maintainer reviews.</li>
+<li>Base images are named by tag (<code>golang:&lt;version&gt;-alpine</code>, <code>node:&lt;version&gt;-alpine</code>, <code>cgr.dev/chainguard/wolfi-base:latest</code>), not by digest.</li>
+<li>Keyless signing, the transparency log and the multi-arch push have only been rehearsed offline with a throwaway key (<code>make release-rehearsal</code>); they run for real at the first release.</li>
+</ul>
+<h2 id="open-decisions">Open decisions<a class="headerlink" href="#open-decisions" title="Permanent link">&para;</a></h2>
+<p>None. James decided the three Phase 3 security questions on 2026-10-18; each decision and its tests are recorded in <code>docs/build/decisions.md</code> and in the rows above.</p>
+<h2 id="report-a-vulnerability">Report a vulnerability<a class="headerlink" href="#report-a-vulnerability" title="Permanent link">&para;</a></h2>
+<p>Report security problems privately through GitHub's private vulnerability reporting, as the <a href="../../project/security/">security policy</a> (<code>SECURITY.md</code>) describes. Do not open a public issue, discussion or pull request. Security fixes go into the latest minor release.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../../operate/security/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Security hardening">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Security hardening
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../operate/troubleshooting/" class="md-footer__link md-footer__link--next" aria-label="Next: Troubleshooting">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Troubleshooting
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Hangar is source-available under the Elastic License 2.0.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
