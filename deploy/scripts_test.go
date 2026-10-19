@@ -254,6 +254,8 @@ func TestDocsRootFiles(t *testing.T) {
 		want = append(want, f.Name())
 	}
 	slices.Sort(want)
+	// The home page in docs-root replaces mike's root redirect.
+	want = slices.Compact(want)
 	git("add", ".")
 	git("commit", "-q", "-m", "main")
 	// What mike leaves: a version directory and the root redirect.
@@ -284,6 +286,9 @@ func TestDocsRootFiles(t *testing.T) {
 	}
 	if got := git("show", "gh-pages:_headers"); !strings.Contains(got, "Content-Security-Policy:") {
 		t.Errorf("gh-pages:_headers is not the one in deploy/cloudflare/docs-root:\n%s", got)
+	}
+	if got := git("show", "gh-pages:index.html"); !strings.Contains(got, "<title>Hangar") {
+		t.Errorf("gh-pages:index.html is not the home page in deploy/cloudflare/docs-root:\n%.200s", got)
 	}
 	if !slices.Contains(files, ".assetsignore") || !slices.Contains(files, "wrangler.jsonc") {
 		t.Errorf("gh-pages is missing the Worker's .assetsignore or wrangler.jsonc: %v", files)

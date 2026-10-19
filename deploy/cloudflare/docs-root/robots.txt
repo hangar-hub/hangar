@@ -1,0 +1,9 @@
+# Crawling rules for https://hangar.page/. scripts/docs-root-files.sh copies
+# this file to the root of gh-pages. The dev documentation is built from main
+# and repeats the released versions, so crawlers skip it. The home page has
+# its own sitemap; the latest docs version has the one MkDocs builds.
+User-agent: *
+Disallow: /dev/
+
+Sitemap: https://hangar.page/sitemap.xml
+Sitemap: https://hangar.page/latest/sitemap.xml

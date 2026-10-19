@@ -1,11 +1,12 @@
 name: Docs
 
 # Publishes the documentation from main as the `dev` version, next to the
-# released versions that release.yml publishes (12-packaging-and-release.md).
+# released versions that release.yml publishes, and the home page and other
+# root files in deploy/cloudflare/docs-root (12-packaging-and-release.md).
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "mkdocs.yml", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "api/openapi.yaml"]
+    paths: ["docs/**", "mkdocs.yml", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "api/openapi.yaml", "deploy/cloudflare/docs-root/**"]
   workflow_dispatch:
 
 permissions:
