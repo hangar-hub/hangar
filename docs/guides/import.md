@@ -38,6 +38,22 @@ hangar import --from-ollama --namespace acme
 
 Each model and tag in Ollama's store (`~/.ollama/models`, or `$OLLAMA_MODELS`) becomes a local Repo, such as `acme/llama3.2` for `llama3.2:latest` and `acme/llama3.2-1b` for `llama3.2:1b`, with the GGUF file and Ollama's `template`, `system`, `params` and `LICENSE` files. Hangar's Ollama endpoint then serves it back with the same template.
 
+## Choose which models
+
+By default, a source imports every model it holds. To import only some, give `--only` once for each model, as the source names it:
+
+```sh
+hangar import --from-hf-cache --only Qwen/Qwen2.5-7B-Instruct --only 'bartowski/*'
+hangar import --from-lmstudio --only lmstudio-community/gemma-3-12b-it-GGUF
+hangar import --from-ollama --only llama3.2:1b --only 'qwen3:*'
+```
+
+- For a Hugging Face cache, give the Repo ID. Datasets start with `datasets/`, such as `datasets/acme/data`.
+- For LM Studio, give the `<publisher>/<repo>` folder, or the Repo ID it becomes.
+- For Ollama, give the model and tag as `ollama list` shows them. A model without a tag means `:latest`, as in Ollama, so use `llama3.2:*` for every tag.
+
+Patterns can use `*` and `?`, which do not match `/`, and ignore case. If a pattern matches nothing, the import stops before it uploads anything and names the pattern, so a typo does not leave a model out. `--only` does not apply to `--from-dir`.
+
 ## Symbolic links
 
 Every source follows symbolic links only to files inside the folder it reads, or to files in a Hugging Face cache. Other links are skipped and named on stderr, as `hangar push` does.

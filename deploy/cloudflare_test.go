@@ -2,10 +2,13 @@ package deploy
 
 import (
 	"encoding/json"
+	"html"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -225,5 +228,134 @@ func TestPreviewName(t *testing.T) {
 	}
 	if _, err := run(nil, "///"); err == nil {
 		t.Error("preview-name.sh accepted a branch with no letters or digits")
+	}
+}
+
+// TestDocsHomePage checks the home page at the root of https://hangar.page/,
+// deploy/cloudflare/docs-root/index.html: the metadata search engines and link
+// previews read, that its JSON-LD parses and its FAQ says what the page says,
+// that every local link names a docs page or a root file, and that robots.txt
+// and the sitemap list it.
+func TestDocsHomePage(t *testing.T) {
+	read := func(name string) string {
+		t.Helper()
+		raw, err := os.ReadFile(filepath.Join("cloudflare", "docs-root", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	page := read("index.html")
+	first := func(pattern string) string {
+		t.Helper()
+		m := regexp.MustCompile(pattern).FindStringSubmatch(page)
+		if m == nil {
+			t.Errorf("the home page has no match for %s", pattern)
+			return ""
+		}
+		return html.UnescapeString(m[1])
+	}
+
+	if title := first(`<title>([^<]+)</title>`); len(title) > 60 || !strings.HasPrefix(title, "Hangar") {
+		t.Errorf("title %q should start with Hangar and fit in 60 characters", title)
+	}
+	if desc := first(`<meta\s+name="description"\s+content="([^"]+)"`); len(desc) < 70 || len(desc) > 160 {
+		t.Errorf("description is %d characters, want 70 to 160: %q", len(desc), desc)
+	}
+	if got := first(`<link rel="canonical" href="([^"]+)"`); got != "https://hangar.page/" {
+		t.Errorf("canonical = %q", got)
+	}
+	if got := first(`<html lang="([^"]+)"`); got != "en-GB" {
+		t.Errorf("lang = %q, want en-GB", got)
+	}
+	if n := strings.Count(page, "<h1"); n != 1 {
+		t.Errorf("the home page has %d h1 elements, want 1", n)
+	}
+	if got := first(`<meta property="og:image" content="([^"]+)"`); got != "https://hangar.page/og.png" {
+		t.Errorf("og:image = %q", got)
+	}
+	og, err := os.Open(filepath.Join("cloudflare", "docs-root", "og.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer og.Close()
+	cfg, err := png.DecodeConfig(og)
+	if err != nil {
+		t.Fatalf("og.png: %v", err)
+	}
+	if cfg.Width != 1200 || cfg.Height != 630 {
+		t.Errorf("og.png is %dx%d, want 1200x630", cfg.Width, cfg.Height)
+	}
+
+	// The FAQ in the JSON-LD must be the one on the page, in order.
+	var ld struct {
+		Graph []struct {
+			Type       string `json:"@type"`
+			MainEntity []struct {
+				Name   string `json:"name"`
+				Answer struct {
+					Text string `json:"text"`
+				} `json:"acceptedAnswer"`
+			} `json:"mainEntity"`
+		} `json:"@graph"`
+	}
+	if err := json.Unmarshal([]byte(first(`(?s)<script type="application/ld\+json">(.*?)</script>`)), &ld); err != nil {
+		t.Fatalf("JSON-LD: %v", err)
+	}
+	var types []string
+	var faq []string
+	for _, node := range ld.Graph {
+		types = append(types, node.Type)
+		for _, q := range node.MainEntity {
+			faq = append(faq, q.Name, q.Answer.Text)
+		}
+	}
+	if !slices.Equal(types, []string{"WebSite", "SoftwareApplication", "FAQPage"}) {
+		t.Errorf("JSON-LD types = %v", types)
+	}
+	var shown []string
+	tags := regexp.MustCompile(`<[^>]+>`)
+	for _, m := range regexp.MustCompile(`(?s)<details>\s*<summary>(.*?)</summary>\s*<p>(.*?)</p>`).FindAllStringSubmatch(page, -1) {
+		shown = append(shown, html.UnescapeString(tags.ReplaceAllString(m[1], "")), html.UnescapeString(m[2]))
+	}
+	if len(shown) == 0 || !slices.Equal(faq, shown) {
+		t.Errorf("the JSON-LD FAQ does not match the page:\nJSON-LD %q\npage    %q", faq, shown)
+	}
+
+	// Local links: /latest/<page>/ names a page in docs/, /latest/assets/...
+	// a file there, and anything else a file beside the home page.
+	for _, m := range regexp.MustCompile(`(?:href|src)="(/[^"]*)"`).FindAllStringSubmatch(page, -1) {
+		link := m[1]
+		var candidates []string
+		switch {
+		case link == "/":
+			continue
+		case strings.HasPrefix(link, "/latest/assets/"):
+			candidates = []string{filepath.Join("..", "docs", strings.TrimPrefix(link, "/latest/"))}
+		case strings.HasPrefix(link, "/latest/"):
+			p := strings.TrimSuffix(strings.TrimPrefix(link, "/latest/"), "/")
+			if p == "" {
+				p = "index"
+			}
+			candidates = []string{filepath.Join("..", "docs", p+".md"), filepath.Join("..", "docs", p, "index.md")}
+		default:
+			candidates = []string{filepath.Join("cloudflare", "docs-root", strings.TrimPrefix(link, "/"))}
+		}
+		found := false
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the home page links to %s, but none of %v exists", link, candidates)
+		}
+	}
+
+	if robots := read("robots.txt"); !strings.Contains(robots, "Sitemap: https://hangar.page/sitemap.xml") {
+		t.Errorf("robots.txt does not list the home page's sitemap:\n%s", robots)
+	}
+	if sitemap := read("sitemap.xml"); !strings.Contains(sitemap, "<loc>https://hangar.page/</loc>") {
+		t.Errorf("sitemap.xml does not list the home page:\n%s", sitemap)
 	}
 }

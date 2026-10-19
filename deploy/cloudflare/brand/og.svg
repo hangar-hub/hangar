@@ -1,0 +1,33 @@
+<!-- The social sharing image for https://hangar.page/, 1200 by 630. Render
+     it to docs-root/og.png with: rsvg-convert -w 1200 -h 630 brand/og.svg -o docs-root/og.png
+     (the text uses Inter and Menlo, which must be installed). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#13171c"/>
+  <g stroke="#232a32" stroke-width="1">
+    <path d="M0 105H1200M0 210H1200M0 315H1200M0 420H1200M0 525H1200"/>
+    <path d="M100 0V630M200 0V630M300 0V630M400 0V630M500 0V630M600 0V630M700 0V630M800 0V630M900 0V630M1000 0V630M1100 0V630"/>
+  </g>
+  <rect width="1200" height="630" fill="url(#fade)"/>
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#13171c" stop-opacity="1"/>
+      <stop offset="0.55" stop-color="#13171c" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#13171c" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(88 92) scale(3.2)">
+    <path d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z" fill="#e8ecf0"/>
+    <rect x="5.5" y="15" width="13" height="2" fill="#2bb3a0"/>
+    <rect x="5.5" y="18.5" width="13" height="2.5" fill="#e8ecf0" opacity="0.35"/>
+  </g>
+  <text x="182" y="153" font-family="Inter" font-weight="650" font-size="44" letter-spacing="-0.5" fill="#e8ecf0">Hangar</text>
+  <text font-family="Inter" font-weight="700" font-size="70" letter-spacing="-2.4" fill="#e8ecf0">
+    <tspan x="88" y="300">A self-hosted home for your</tspan>
+    <tspan x="88" y="384" fill="#5fd4c2">arsenal of models.</tspan>
+  </text>
+  <text x="90" y="458" font-family="Menlo" font-size="25" fill="#a5afbb">Hugging Face Hub-compatible · git · Ollama · LM Studio</text>
+  <g fill="#2bb3a0">
+    <circle cx="94" cy="548" r="4"/><circle cx="134" cy="548" r="4" opacity="0.4"/><circle cx="174" cy="548" r="4"/><circle cx="214" cy="548" r="4" opacity="0.4"/><circle cx="254" cy="548" r="4"/><circle cx="294" cy="548" r="4" opacity="0.4"/><circle cx="334" cy="548" r="4"/><circle cx="374" cy="548" r="4" opacity="0.4"/><circle cx="414" cy="548" r="4"/><circle cx="454" cy="548" r="4" opacity="0.4"/><circle cx="494" cy="548" r="4"/><circle cx="534" cy="548" r="4" opacity="0.4"/><circle cx="574" cy="548" r="4"/><circle cx="614" cy="548" r="4" opacity="0.4"/><circle cx="654" cy="548" r="4"/><circle cx="694" cy="548" r="4" opacity="0.4"/><circle cx="734" cy="548" r="4"/><circle cx="774" cy="548" r="4" opacity="0.4"/><circle cx="814" cy="548" r="4"/>
+  </g>
+  <text x="1112" y="556" text-anchor="end" font-family="Menlo" font-size="24" fill="#e8ecf0">hangar.page</text>
+</svg>

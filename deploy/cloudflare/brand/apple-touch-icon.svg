@@ -1,0 +1,11 @@
+<!-- The home screen icon for https://hangar.page/. Render it to
+     docs-root/apple-touch-icon.png with:
+     rsvg-convert -w 180 -h 180 brand/apple-touch-icon.svg -o docs-root/apple-touch-icon.png -->
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <rect width="180" height="180" fill="#f5f7f9"/>
+  <g transform="translate(30 26) scale(5)">
+    <path d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z" fill="#181c22"/>
+    <rect x="5.5" y="15" width="13" height="2" fill="#0b7a6e"/>
+    <rect x="5.5" y="18.5" width="13" height="2.5" fill="#181c22" opacity="0.35"/>
+  </g>
+</svg>
