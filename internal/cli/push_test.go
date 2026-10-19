@@ -214,5 +214,5 @@ func TestPushToANewBranch(t *testing.T) {
 	r = e.ok("push", dir, "datasets/acme/reviews", "--branch", "march")
 	require.NotContains(t, r.stderr, "Created branch")
 	require.Contains(t, e.inst.Files(id, "march"), "data/test.csv")
-	require.Equal(t, 2, e.inst.Requests["POST /api/datasets/{ns}/{name}/branch/{branch}"])
+	require.Equal(t, 2, e.inst.RequestCount("POST /api/datasets/{ns}/{name}/branch/{branch}"))
 }
