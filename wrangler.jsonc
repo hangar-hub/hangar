@@ -1,0 +1,23 @@
+// The documentation site at https://hangar.page/, a Worker that serves only
+// static assets (docs/spec/12-packaging-and-release.md).
+// scripts/docs-root-files.sh copies this file to the root of the gh-pages
+// branch, and Workers Builds runs `wrangler deploy` there on each push, so the
+// Worker serves the branch as mike left it.
+{
+  "$schema": "https://unpkg.com/wrangler@4.147.0/config-schema.json",
+  "name": "hangar-docs",
+  "compatibility_date": "2026-09-28",
+  "assets": {
+    "directory": ".",
+    // A missing page gets the nearest 404.html: the version's own, or the
+    // root one for paths outside every version.
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "routes": [{ "pattern": "hangar.page", "custom_domain": true }],
+  "observability": { "enabled": false },
+  "workers_dev": false,
+  // Branch Previews (deploy/cloudflare/docs-preview) need the Worker's
+  // workers.dev Preview URLs, and each deploy sets this, so it stays on.
+  "preview_urls": true
+}

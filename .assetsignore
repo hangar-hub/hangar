@@ -1,0 +1,9 @@
+# Files at the root of gh-pages that the docs Worker must not serve: its own
+# configuration, this file, the git checkout Workers Builds deploys from and
+# wrangler's working directory. scripts/docs-root-files.sh copies this file
+# to the root of gh-pages beside wrangler.jsonc.
+.assetsignore
+wrangler.jsonc
+.git
+.wrangler
+.nojekyll
