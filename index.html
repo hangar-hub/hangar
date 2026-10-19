@@ -84,6 +84,14 @@
             "mainEntity": [
               {
                 "@type": "Question",
+                "name": "Is Hangar a cache for Hugging Face models?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. Clients load everything from your own storage."
+                }
+              },
+              {
+                "@type": "Question",
                 "name": "Does Hangar run models?",
                 "acceptedAnswer": {
                   "@type": "Answer",
@@ -631,6 +639,51 @@
         margin-top: 14px;
         font-size: 1.075rem;
         color: var(--muted);
+      }
+
+      /* Why Hangar */
+      .why {
+        display: grid;
+        gap: 32px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      @media (min-width: 680px) {
+        .why {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 40px 32px;
+        }
+      }
+      @media (min-width: 1000px) {
+        .why {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      .why li {
+        position: relative;
+        padding-top: 20px;
+        border-top: 1px solid var(--line-strong);
+      }
+      /* A short teal bar on each item's rule, like the bay line in the logo. */
+      .why li::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: 0;
+        width: 32px;
+        height: 2px;
+        background: var(--accent-fill);
+      }
+      .why h3 {
+        font-size: 1.1rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 10px;
+      }
+      .why p {
+        color: var(--muted);
+        font-size: 15px;
       }
 
       /* Screenshots */
@@ -1312,7 +1365,46 @@
         </div>
       </div>
 
-      <section id="tour" aria-labelledby="tour-title" style="padding-top: 24px">
+      <section id="why" class="section-alt" aria-labelledby="why-title">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="kicker">Why Hangar</p>
+            <h2 id="why-title">Model files are big, and everyone needs them</h2>
+          </div>
+          <ul class="why">
+            <li data-reveal style="--i: 0">
+              <h3>Every machine downloads the same gigabytes</h3>
+              <p>
+                Laptops, CI runners and GPU nodes each fetch the same weights from huggingface.co.
+                With Hangar you pull a model once, and every client loads it from your own network.
+              </p>
+            </li>
+            <li data-reveal style="--i: 1">
+              <h3>Upstream is out of your hands</h3>
+              <p>
+                Repos get deleted, gated or rewritten. A Mirror keeps the Commits you pulled, so
+                pinned Revisions keep working.
+              </p>
+            </li>
+            <li data-reveal style="--i: 2">
+              <h3>Every tool fetches its own copy</h3>
+              <p>
+                Hugging Face libraries, Ollama and LM Studio each download from the internet
+                separately. Hangar gives them one source on your network.
+              </p>
+            </li>
+            <li data-reveal style="--i: 3">
+              <h3>Some networks can't reach the internet at all</h3>
+              <p>
+                An <a class="link" href="/latest/guides/air-gapped/">air-gapped Instance</a> pulls
+                from another Hangar that can.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="tour" aria-labelledby="tour-title">
         <div class="wrap">
           <div class="section-head" data-reveal>
             <p class="kicker">The web UI</p>
@@ -1617,6 +1709,10 @@ docker logs hangar</code></pre>
             <h2 id="faq-title">Frequently asked questions</h2>
           </div>
           <div class="faq" data-reveal>
+            <details>
+              <summary>Is Hangar a cache for Hugging Face models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. Clients load everything from your own storage.</p>
+            </details>
             <details>
               <summary>Does Hangar run models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
               <p>No. Hangar stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope.</p>
