@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -250,9 +251,26 @@ func repoType(plural string) model.RepoType {
 	return model.RepoTypeModel
 }
 
+// searchExpand lists the expand values huggingface.co accepts on each
+// search route; it answers 400 to any other.
+var searchExpand = map[string][]string{
+	"models": {"author", "baseModels", "cardData", "config", "createdAt", "disabled", "downloads", "downloadsAllTime", "evalResults", "gated",
+		"inference", "inferenceProviderMapping", "lastModified", "library_name", "likes", "mask_token", "model-index", "pipeline_tag", "private",
+		"safetensors", "sha", "siblings", "spaces", "tags", "transformersInfo", "trendingScore", "widgetData", "gguf", "resourceGroup", "xetEnabled"},
+	"datasets": {"author", "cardData", "citation", "createdAt", "disabled", "description", "downloads", "downloadsAllTime", "gated", "lastModified",
+		"likes", "mainSize", "paperswithcode_id", "private", "siblings", "sha", "tags", "trendingScore", "resourceGroup", "xetEnabled"},
+}
+
 func (s *Server) serveSearch(w http.ResponseWriter, r *http.Request, plural string) {
 	s.count("search")
 	q := r.URL.Query()
+	for _, e := range q["expand"] {
+		if !slices.Contains(searchExpand[plural], e) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("invalid expand %q", e)})
+			return
+		}
+	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	page, err := s.Fake.Search(r.Context(), upstream.Upstream{}, credOf(r), upstream.SearchQuery{Type: repoType(plural), Search: q.Get("search"),
 		Author: q.Get("author"), Filter: q["filter"], Limit: limit, Cursor: q.Get("cursor")})
