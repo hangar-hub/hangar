@@ -17,5 +17,7 @@
   "routes": [{ "pattern": "hangar.page", "custom_domain": true }],
   "observability": { "enabled": false },
   "workers_dev": false,
-  "preview_urls": false
+  // Branch Previews (deploy/cloudflare/docs-preview) need the Worker's
+  // workers.dev Preview URLs, and each deploy sets this, so it stays on.
+  "preview_urls": true
 }

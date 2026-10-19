@@ -65,44 +65,38 @@ func TestDocsRedirectsCoverEverySection(t *testing.T) {
 	}
 }
 
-// TestDocsWorkerConfig checks deploy/cloudflare/docs-root/wrangler.jsonc, which
-// Workers Builds deploys from the root of gh-pages: the Worker serves that
-// root as static assets on hangar.page, answers missing pages with the nearest
-// 404.html, runs the wrangler version the Makefile pins, and .assetsignore
-// keeps its configuration and the git checkout off the site.
-func TestDocsWorkerConfig(t *testing.T) {
-	raw, err := os.ReadFile("cloudflare/docs-root/wrangler.jsonc")
+// wranglerConfig is the part of a wrangler.jsonc the docs Worker's tests read.
+type wranglerConfig struct {
+	Schema string `json:"$schema"`
+	Name   string `json:"name"`
+	Main   string `json:"main"`
+	Assets struct {
+		Directory        string `json:"directory"`
+		NotFoundHandling string `json:"not_found_handling"`
+	} `json:"assets"`
+	Routes []struct {
+		Pattern      string `json:"pattern"`
+		CustomDomain bool   `json:"custom_domain"`
+	} `json:"routes"`
+	Previews    *struct{} `json:"previews"`
+	WorkersDev  bool      `json:"workers_dev"`
+	PreviewURLs bool      `json:"preview_urls"`
+}
+
+// readWranglerConfig parses a wrangler.jsonc whose comments are whole lines,
+// and checks that it pins the wrangler version the Makefile pins, which the
+// commands that deploy it run.
+func readWranglerConfig(t *testing.T, path string) wranglerConfig {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The file's comments are whole lines.
 	body := regexp.MustCompile(`(?m)^\s*//.*$`).ReplaceAll(raw, nil)
-	var cfg struct {
-		Schema string `json:"$schema"`
-		Name   string `json:"name"`
-		Main   string `json:"main"`
-		Assets struct {
-			Directory        string `json:"directory"`
-			NotFoundHandling string `json:"not_found_handling"`
-		} `json:"assets"`
-		Routes []struct {
-			Pattern      string `json:"pattern"`
-			CustomDomain bool   `json:"custom_domain"`
-		} `json:"routes"`
-		WorkersDev  bool `json:"workers_dev"`
-		PreviewURLs bool `json:"preview_urls"`
-	}
+	var cfg wranglerConfig
 	if err := json.Unmarshal(body, &cfg); err != nil {
-		t.Fatalf("wrangler.jsonc: %v", err)
+		t.Fatalf("%s: %v", path, err)
 	}
-	if cfg.Name != "hangar-docs" || cfg.Main != "" || cfg.Assets.Directory != "." ||
-		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || cfg.PreviewURLs {
-		t.Errorf("wrangler.jsonc is not an assets-only Worker named hangar-docs serving its own directory: %+v", cfg)
-	}
-	if len(cfg.Routes) != 1 || cfg.Routes[0].Pattern != "hangar.page" || !cfg.Routes[0].CustomDomain {
-		t.Errorf("wrangler.jsonc routes = %+v, want the custom domain hangar.page", cfg.Routes)
-	}
-
 	makefile, err := os.ReadFile("../Makefile")
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +106,24 @@ func TestDocsWorkerConfig(t *testing.T) {
 		t.Fatal("the Makefile pins no wrangler version")
 	}
 	if want := "https://unpkg.com/wrangler@" + string(pin[1]) + "/config-schema.json"; cfg.Schema != want {
-		t.Errorf("wrangler.jsonc $schema = %q, want %q", cfg.Schema, want)
+		t.Errorf("%s: $schema = %q, want %q", path, cfg.Schema, want)
+	}
+	return cfg
+}
+
+// TestDocsWorkerConfig checks deploy/cloudflare/docs-root/wrangler.jsonc, which
+// Workers Builds deploys from the root of gh-pages: the Worker serves that
+// root as static assets on hangar.page, answers missing pages with the nearest
+// 404.html and keeps the Preview URLs that branch Previews need, and
+// .assetsignore keeps its configuration and the git checkout off the site.
+func TestDocsWorkerConfig(t *testing.T) {
+	cfg := readWranglerConfig(t, "cloudflare/docs-root/wrangler.jsonc")
+	if cfg.Name != "hangar-docs" || cfg.Main != "" || cfg.Assets.Directory != "." ||
+		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || !cfg.PreviewURLs {
+		t.Errorf("wrangler.jsonc is not an assets-only Worker named hangar-docs serving its own directory with Preview URLs: %+v", cfg)
+	}
+	if len(cfg.Routes) != 1 || cfg.Routes[0].Pattern != "hangar.page" || !cfg.Routes[0].CustomDomain {
+		t.Errorf("wrangler.jsonc routes = %+v, want the custom domain hangar.page", cfg.Routes)
 	}
 
 	ignore, err := os.ReadFile("cloudflare/docs-root/.assetsignore")
@@ -127,5 +138,29 @@ func TestDocsWorkerConfig(t *testing.T) {
 		if !patterns[want] {
 			t.Errorf(".assetsignore does not list %s", want)
 		}
+	}
+}
+
+// TestDocsPreviewConfig checks deploy/cloudflare/docs-preview/wrangler.jsonc,
+// which scripts/docs-preview.sh publishes branch Previews with: the same
+// Worker as production, the site/ that the script builds at the root of the
+// checkout, a previews block, which `wrangler preview` requires, and no route,
+// so a Preview never takes hangar.page.
+func TestDocsPreviewConfig(t *testing.T) {
+	cfg := readWranglerConfig(t, "cloudflare/docs-preview/wrangler.jsonc")
+	if cfg.Name != "hangar-docs" || cfg.Main != "" || cfg.Previews == nil || len(cfg.Routes) != 0 ||
+		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || !cfg.PreviewURLs {
+		t.Errorf("the preview config is not an assets-only hangar-docs with a previews block, Preview URLs and no routes: %+v", cfg)
+	}
+	dir, err := filepath.Abs(filepath.Join("cloudflare", "docs-preview", cfg.Assets.Directory))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.Abs(filepath.Join("..", "site"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir != want {
+		t.Errorf("the preview config serves %s, want %s, where scripts/docs-preview.sh builds", dir, want)
 	}
 }
