@@ -476,6 +476,13 @@ Namespaces involved. A file that fails to upload does not stop the other
 files or Repos: files that went up into a Mirror are added to it, and the
 results name what failed, so running the command again sends only that.
 Use --dry-run to see what would be imported.
+
+To import some models and not the rest, give --only once for each, as it
+appears in the source: a Repo ID such as bartowski/Qwen2.5-7B-Instruct-GGUF
+for a Hugging Face cache, a <publisher>/<repo> folder for LM Studio, or a
+model and tag such as llama3.2:1b for Ollama (llama3.2 means llama3.2:latest).
+Patterns can use * and ?, which do not match /, and ignore case. A pattern
+that matches nothing stops the import before anything is uploaded.
 ```
 
 Usage:
@@ -489,6 +496,7 @@ Examples:
 ```sh
 hangar import --from-hf-cache
 hangar import --from-hf-cache /mnt/models/hf --offline --namespace acme
+hangar import --from-hf-cache --only 'bartowski/*' --only Qwen/Qwen2.5-7B-Instruct --dry-run
 hangar import --from-dir ./weights --repo acme/my-model
 hangar import --from-lmstudio
 hangar import --from-ollama --namespace acme
@@ -507,6 +515,7 @@ Flags:
 | `--namespace` | Namespace for local Repos (default: the Repo's own, or yours for Ollama models) |  |
 | `--offline` | never ask the Upstream; create local Repos |  |
 | `--ollama-models` | Ollama's models folder (default: $OLLAMA_MODELS or ~/.ollama/models) |  |
+| `--only` | only import models matching this pattern, such as 'bartowski/*' or llama3.2:1b (repeatable) |  |
 | `--private` | make new local Repos private |  |
 | `--repo` | with --from-dir, the Repo to import into, such as acme/model or datasets/acme/data |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
