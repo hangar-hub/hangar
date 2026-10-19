@@ -678,6 +678,9 @@ func (s *Store) PutPart(ctx context.Context, key, uploadID string, part int, r i
 	var etag string
 	err = s.upload(ctx, body, func(ctx context.Context, br io.Reader) error {
 		op, err := s.core.PutObjectPart(ctx, s.bucket, k, uploadID, part, br, size, minio.PutObjectPartOptions{})
+		if err == nil && strings.Trim(op.ETag, `"`) == "" {
+			err = errNoETag
+		}
 		etag = op.ETag
 		return err
 	})

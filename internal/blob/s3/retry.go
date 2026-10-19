@@ -149,6 +149,11 @@ func retryable(ctx context.Context, err error) bool {
 	return true
 }
 
+// errNoETag is a part upload that S3 answered with success but no ETag. S3
+// always sends one, and the part cannot be completed without it, so the
+// answer is treated as a failed attempt and retried.
+var errNoETag = errors.New("s3 blob store: the part upload's response has no ETag")
+
 // errAttemptOver is returned to a transport that reads an attempt's body
 // after the attempt has ended. net/http can go on reading a request body
 // after RoundTrip returns, for example when the server answers early, and
@@ -159,6 +164,9 @@ var errAttemptOver = errors.New("s3 blob store: the upload attempt is over")
 func retryReason(err error) string {
 	if errors.Is(err, errStalled) {
 		return "stalled"
+	}
+	if errors.Is(err, errNoETag) {
+		return "no-etag"
 	}
 	var resp minio.ErrorResponse
 	if errors.As(err, &resp) {

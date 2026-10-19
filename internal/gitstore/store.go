@@ -181,6 +181,11 @@ func (o *Objects) Release() {
 // keeps the Repo's cache directory from eviction until Release. Concurrent
 // callers for the same Repo share one download.
 func (s *Store) Acquire(ctx context.Context, repoID uuid.UUID) (*Objects, error) {
+	// A caller that has already given up gets an error, not whichever of
+	// the finished sync and its cancellation the select below picks.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	e := s.entries[repoID]
 	if e == nil {
