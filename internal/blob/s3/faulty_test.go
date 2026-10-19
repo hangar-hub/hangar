@@ -43,6 +43,9 @@ const (
 	faultSlowDown
 	// faultDenied answers 403 AccessDenied, which is final.
 	faultDenied
+	// faultNoETag reads the body and answers 200 with no ETag, which S3
+	// never does and a part cannot be completed without.
+	faultNoETag
 )
 
 // faultyS3 is a minimal S3 server over HTTPS (so minio-go sends bodies
@@ -239,11 +242,15 @@ func (f *faultyS3) put(w http.ResponseWriter, r *http.Request, key string, q map
 		_, _ = io.Copy(io.Discard, r.Body)
 		s3Error(w, http.StatusForbidden, "AccessDenied")
 		return
+	case faultNoETag:
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusOK)
+		return
 	case faultNone:
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return
+		panic(http.ErrAbortHandler)
 	}
 	if int64(len(body)) != r.ContentLength {
 		s3Error(w, http.StatusBadRequest, "IncompleteBody")
@@ -266,13 +273,18 @@ func (f *faultyS3) put(w http.ResponseWriter, r *http.Request, key string, q map
 	w.WriteHeader(http.StatusOK)
 }
 
-// hang holds the request until the client gives up on it.
+// hang holds the request until the client gives up on it, then drops the
+// connection without answering. Returning would send an empty 200: the
+// client's TLS close_notify ends the request here a moment before its socket
+// closes, and net/http's client takes a response that races its own close,
+// so that 200 could reach it as a part with no ETag.
 func (f *faultyS3) hang(r *http.Request) {
 	select {
 	case <-r.Context().Done():
 	case <-time.After(30 * time.Second):
 		f.t.Error("the client never gave up on a stalled request")
 	}
+	panic(http.ErrAbortHandler)
 }
 
 func (f *faultyS3) complete(w http.ResponseWriter, r *http.Request, key, id string) {
@@ -350,6 +362,7 @@ func TestPartUploadRetriesFaults(t *testing.T) {
 		"StallMidBody":    faultStall,
 		"NoResponse":      faultSlowResponse,
 		"SlowDown":        faultSlowDown,
+		"NoETag":          faultNoETag,
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFaultyS3(t)
