@@ -4334,6 +4334,11 @@ hangar<span class="w"> </span>env<span class="w"> </span>--shell<span class="w">
 <h2 id="hangar-healthcheck">hangar healthcheck<a class="headerlink" href="#hangar-healthcheck" title="Permanent link">&para;</a></h2>
 <p>Call /readyz on this host and exit 0 when ready.</p>
 <div class="highlight"><pre><span></span><code>Calls /readyz on the local listen address. The container image uses it as its HEALTHCHECK.
+
+With --retry-for, it tries again while the connection fails, for up to that long. A check
+through a Kubernetes Service needs this: the Service starts routing to a new Pod a moment
+after the Pod is ready, and until then it refuses connections. An answer from /readyz,
+ready or not, is never retried.
 </code></pre></div>
 <p>Usage:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>healthcheck<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
@@ -4367,6 +4372,11 @@ hangar<span class="w"> </span>env<span class="w"> </span>--shell<span class="w">
 <td><code>--public-url</code></td>
 <td>shortcut for --set server.public_url=...</td>
 <td></td>
+</tr>
+<tr>
+<td><code>--retry-for</code></td>
+<td>keep trying for this long while the connection fails, such as 30s (0 tries once)</td>
+<td><code>0s</code></td>
 </tr>
 <tr>
 <td><code>--role</code></td>
