@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -30,6 +31,7 @@ type importOptions struct {
 	DryRun       bool
 	Private      bool
 	OllamaModels string
+	Only         []string
 }
 
 // importResult reports one imported Repo.
@@ -70,9 +72,17 @@ Uploads go through the Instance's API, so you need write access to the
 Namespaces involved. A file that fails to upload does not stop the other
 files or Repos: files that went up into a Mirror are added to it, and the
 results name what failed, so running the command again sends only that.
-Use --dry-run to see what would be imported.`,
+Use --dry-run to see what would be imported.
+
+To import some models and not the rest, give --only once for each, as it
+appears in the source: a Repo ID such as bartowski/Qwen2.5-7B-Instruct-GGUF
+for a Hugging Face cache, a <publisher>/<repo> folder for LM Studio, or a
+model and tag such as llama3.2:1b for Ollama (llama3.2 means llama3.2:latest).
+Patterns can use * and ?, which do not match /, and ignore case. A pattern
+that matches nothing stops the import before anything is uploaded.`,
 		Example: `  hangar import --from-hf-cache
   hangar import --from-hf-cache /mnt/models/hf --offline --namespace acme
+  hangar import --from-hf-cache --only 'bartowski/*' --only Qwen/Qwen2.5-7B-Instruct --dry-run
   hangar import --from-dir ./weights --repo acme/my-model
   hangar import --from-lmstudio
   hangar import --from-ollama --namespace acme`,
@@ -100,6 +110,14 @@ Use --dry-run to see what would be imported.`,
 			}
 			if sources != 1 {
 				return usagef("choose one of --from-hf-cache, --from-dir, --from-lmstudio and --from-ollama")
+			}
+			if f.Changed("from-dir") && len(o.Only) > 0 {
+				return usagef("--only does not apply to --from-dir, which imports one folder")
+			}
+			for _, p := range o.Only {
+				if _, err := path.Match(p, ""); err != nil {
+					return usagef("--only %q is not a valid pattern", p)
+				}
 			}
 			var results []importResult
 			var err error
@@ -134,7 +152,51 @@ Use --dry-run to see what would be imported.`,
 	f.BoolVar(&o.DryRun, "dry-run", false, "only list what would be imported")
 	f.BoolVar(&o.Private, "private", false, "make new local Repos private")
 	f.StringVar(&o.OllamaModels, "ollama-models", "", "Ollama's models folder (default: $OLLAMA_MODELS or ~/.ollama/models)")
+	f.StringArrayVar(&o.Only, "only", nil, "only import models matching this pattern, such as 'bartowski/*' or llama3.2:1b (repeatable)")
 	return cmd
+}
+
+// importFilter selects the models a bulk import takes, from --only.
+type importFilter struct {
+	patterns []string
+	matched  []bool
+}
+
+func newImportFilter(patterns []string) *importFilter {
+	return &importFilter{patterns: patterns, matched: make([]bool, len(patterns))}
+}
+
+// match reports whether a model passes the filter, given the names it is
+// known by in its source. With no patterns, every model passes.
+func (f *importFilter) match(names ...string) bool {
+	if len(f.patterns) == 0 {
+		return true
+	}
+	ok := false
+	for i, p := range f.patterns {
+		for _, n := range names {
+			if m, _ := path.Match(strings.ToLower(p), strings.ToLower(n)); m {
+				f.matched[i] = true
+				ok = true
+			}
+		}
+	}
+	return ok
+}
+
+// unmatched returns an error naming the patterns no model matched, so a
+// typo stops the import instead of leaving a model out.
+func (f *importFilter) unmatched(source string) error {
+	var missed []string
+	for i, p := range f.patterns {
+		if !f.matched[i] {
+			missed = append(missed, fmt.Sprintf("%q", p))
+		}
+	}
+	if len(missed) == 0 {
+		return nil
+	}
+	return notFoundf("nothing in %s matches --only %s", source, strings.Join(missed, ", "))
 }
 
 func (a *app) reportImport(results []importResult, dryRun bool) error {
@@ -232,13 +294,20 @@ func (a *app) importHFCache(ctx context.Context, o importOptions) ([]importResul
 	if err != nil {
 		return nil, err
 	}
+	only := newImportFilter(o.Only)
 	best := map[string]cachedSnapshot{}
 	for _, s := range snaps {
+		if !only.match(display(s.ID)) {
+			continue
+		}
 		k := s.ID.Path()
 		cur, ok := best[k]
 		if !ok || containsString(s.Refs, "main") && !containsString(cur.Refs, "main") {
 			best[k] = s
 		}
+	}
+	if err := only.unmatched(root); err != nil {
+		return nil, err
 	}
 	keys := make([]string, 0, len(best))
 	for k := range best {
@@ -489,13 +558,9 @@ func (a *app) importLMStudio(ctx context.Context, o importOptions) ([]importResu
 	if err != nil {
 		return nil, fmt.Errorf("read LM Studio's models folder: %w", err)
 	}
-	var c *client
-	if !o.DryRun {
-		if c, err = a.client(); err != nil {
-			return nil, err
-		}
-	}
-	var out []importResult
+	only := newImportFilter(o.Only)
+	type folder struct{ name, dir string }
+	var found []folder
 	for _, p := range pubs {
 		if !p.IsDir() || strings.HasPrefix(p.Name(), ".") {
 			continue
@@ -508,22 +573,39 @@ func (a *app) importLMStudio(ctx context.Context, o importOptions) ([]importResu
 			if !r.IsDir() || strings.HasPrefix(r.Name(), ".") {
 				continue
 			}
-			dir := filepath.Join(root, p.Name(), r.Name())
-			id, err := model.ParseRepoID(model.RepoTypeModel, sanitiseName(p.Name())+"/"+sanitiseName(r.Name()))
-			if err != nil {
-				out = append(out, importResult{Repo: p.Name() + "/" + r.Name(), Source: dir, Error: err.Error()})
+			name := p.Name() + "/" + r.Name()
+			if !only.match(name, sanitiseName(p.Name())+"/"+sanitiseName(r.Name())) {
 				continue
 			}
-			files, outside, err := walkFolder(dir, nil, nil)
-			if err != nil {
-				return nil, err
-			}
-			a.warnOutside(dir, outside)
-			if len(files) == 0 {
-				continue
-			}
-			out = append(out, a.importSnapshot(ctx, c, id, "", files, dir, o))
+			found = append(found, folder{name: name, dir: filepath.Join(root, p.Name(), r.Name())})
 		}
+	}
+	if err := only.unmatched(root); err != nil {
+		return nil, err
+	}
+	var c *client
+	if !o.DryRun {
+		if c, err = a.client(); err != nil {
+			return nil, err
+		}
+	}
+	var out []importResult
+	for _, m := range found {
+		pub, repo, _ := strings.Cut(m.name, "/")
+		id, err := model.ParseRepoID(model.RepoTypeModel, sanitiseName(pub)+"/"+sanitiseName(repo))
+		if err != nil {
+			out = append(out, importResult{Repo: m.name, Source: m.dir, Error: err.Error()})
+			continue
+		}
+		files, outside, err := walkFolder(m.dir, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		a.warnOutside(m.dir, outside)
+		if len(files) == 0 {
+			continue
+		}
+		out = append(out, a.importSnapshot(ctx, c, id, "", files, m.dir, o))
 	}
 	return out, nil
 }
@@ -552,6 +634,7 @@ func ollamaModelsDir(flag string) string {
 func (a *app) importOllama(ctx context.Context, o importOptions) ([]importResult, error) {
 	root := ollamaModelsDir(o.OllamaModels)
 	manifests := filepath.Join(root, "manifests")
+	only := newImportFilter(o.Only)
 	type entry struct{ name, tag, path string }
 	var found []entry
 	err := filepath.WalkDir(manifests, func(p string, d os.DirEntry, err error) error {
@@ -566,17 +649,29 @@ func (a *app) importOllama(ctx context.Context, o importOptions) ([]importResult
 		if len(parts) < 3 { // host/[namespace/]model/tag
 			return nil
 		}
-		model := parts[len(parts)-2]
+		model, tag := parts[len(parts)-2], parts[len(parts)-1]
+		ref := model // the name Ollama shows, such as llama3.2 or someone/thing
 		if ns := parts[len(parts)-3]; ns != "library" && len(parts) >= 4 {
 			model = ns + "-" + model
+			ref = ns + "/" + ref
 		}
-		found = append(found, entry{name: model, tag: parts[len(parts)-1], path: p})
+		names := []string{ref + ":" + tag}
+		if tag == "latest" {
+			names = append(names, ref)
+		}
+		if !only.match(names...) {
+			return nil
+		}
+		found = append(found, entry{name: model, tag: tag, path: p})
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, notFoundf("no Ollama models at %s", root)
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := only.unmatched(root); err != nil {
 		return nil, err
 	}
 	var c *client

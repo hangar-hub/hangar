@@ -30,8 +30,11 @@ type LimiterOptions struct {
 	// Budget gives each budget's Instance-wide rate.
 	Budget Budget
 	// Refresh is how often a busy process renews its slice of a budget.
-	// Zero means 2 seconds. Slices expire after three refresh periods, so
-	// a stopped process's slice returns to the others.
+	// Zero means 2 seconds. A process that asks for no bytes for half a
+	// refresh period gives its slice back, and slices expire after three
+	// refresh periods, so the slice of a process that stopped returns to
+	// the others. A process with less than the whole budget looks for
+	// more every quarter of a refresh period.
 	Refresh time.Duration
 	// Now is the clock. Nil means time.Now.
 	Now func() time.Time
@@ -47,6 +50,14 @@ type LimiterOptions struct {
 // than what the other processes' current slices leave, so the slices never
 // add up to more than the budget. A process that joins gets what is free
 // at once and its fair share after the others' next refresh.
+//
+// A process that stops transferring, such as a worker whose last pull.file
+// Job finished, deletes its lease once it has asked for no bytes for half a
+// refresh period, rather than holding it until it expires. A process with
+// less than the whole budget reads the others' slices every quarter of a
+// refresh period and renews its own as soon as it can have more, so a
+// slice given back or shrunk to make room is not left unused for a whole
+// refresh period.
 type DBLimiter struct {
 	db   *db.DB
 	opts LimiterOptions
@@ -65,6 +76,17 @@ type bucket struct {
 	last      time.Time
 	refreshed time.Time
 	refreshMu sync.Mutex
+	// inFlight counts the WaitN calls under way, and calls counts every
+	// WaitN call. idle gives the slice back when the bucket has been
+	// unused for idleAfter; idleCalls is calls when it was last set.
+	inFlight  int
+	calls     uint64
+	idleCalls uint64
+	idle      *time.Timer
+	// total is the budget at the last refresh, and looked is when this
+	// process last renewed its slice or read the others'.
+	total  int64
+	looked time.Time
 }
 
 // NewLimiter returns a limiter on d.
@@ -117,6 +139,8 @@ func (l *DBLimiter) WaitN(ctx context.Context, name string, n int64) error {
 		return fmt.Errorf("negative byte count %d", n)
 	}
 	b := l.bucket(name)
+	l.enter(b)
+	defer l.leave(name, b)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -132,7 +156,7 @@ func (l *DBLimiter) WaitN(ctx context.Context, name string, n int64) error {
 		}
 		if b.rate <= 0 {
 			// No slice yet: wait for the others to shrink theirs.
-			wait := l.opts.Refresh - now.Sub(b.refreshed)
+			wait := l.lookEvery() - now.Sub(b.looked)
 			b.mu.Unlock()
 			if err := l.opts.Sleep(ctx, max(wait, 10*time.Millisecond)); err != nil {
 				return err
@@ -160,6 +184,53 @@ func (l *DBLimiter) WaitN(ctx context.Context, name string, n int64) error {
 	}
 }
 
+// idleAfter is how long a process may ask for no bytes before it gives
+// its slice back.
+func (l *DBLimiter) idleAfter() time.Duration { return l.opts.Refresh / 2 }
+
+// enter records a WaitN call starting.
+func (l *DBLimiter) enter(b *bucket) {
+	b.mu.Lock()
+	b.inFlight++
+	b.calls++
+	b.mu.Unlock()
+}
+
+// leave records a WaitN call ending. When it was the last one under way
+// and this process holds a slice, it sets the idle timer.
+func (l *DBLimiter) leave(name string, b *bucket) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.inFlight--
+	if b.inFlight > 0 || b.unlimited || b.refreshed.IsZero() {
+		return
+	}
+	b.idleCalls = b.calls
+	if b.idle == nil {
+		b.idle = time.AfterFunc(l.idleAfter(), func() { l.releaseIdle(name, b) })
+		return
+	}
+	b.idle.Reset(l.idleAfter())
+}
+
+// releaseIdle gives the slice back if no WaitN call has started since the
+// idle timer was set. The bucket forgets its slice first, so the next
+// WaitN call joins again through refresh, which waits for the delete.
+func (l *DBLimiter) releaseIdle(name string, b *bucket) {
+	b.refreshMu.Lock()
+	defer b.refreshMu.Unlock()
+	b.mu.Lock()
+	if b.inFlight > 0 || b.calls != b.idleCalls || b.unlimited || b.refreshed.IsZero() {
+		b.mu.Unlock()
+		return
+	}
+	b.rate, b.tokens, b.last, b.refreshed = 0, 0, time.Time{}, time.Time{}
+	b.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*l.opts.Refresh)
+	defer cancel()
+	l.release(ctx, name)
+}
+
 // advance adds the tokens earned since the last call, up to the burst.
 // b.mu must be held.
 func (b *bucket) advance(now time.Time) {
@@ -170,22 +241,77 @@ func (b *bucket) advance(now time.Time) {
 	b.tokens = min(b.tokens, b.rate*burst)
 }
 
+// lookEvery is how often a process with less than the whole budget reads
+// the others' slices.
+func (l *DBLimiter) lookEvery() time.Duration { return l.opts.Refresh / 4 }
+
+// due reports whether b's slice must be renewed, or else whether it is
+// time to look for a bigger one. b.mu must be held.
+func (l *DBLimiter) due(b *bucket) (refresh, look bool) {
+	if b.refreshed.IsZero() {
+		return true, false
+	}
+	now := l.opts.Now()
+	if now.Sub(b.refreshed) >= l.opts.Refresh {
+		return true, false
+	}
+	return false, !b.unlimited && b.rate < float64(b.total) && now.Sub(b.looked) >= l.lookEvery()
+}
+
 func (l *DBLimiter) maybeRefresh(ctx context.Context, name string, b *bucket) error {
 	b.mu.Lock()
-	due := b.refreshed.IsZero() || l.opts.Now().Sub(b.refreshed) >= l.opts.Refresh
+	due, look := l.due(b)
 	b.mu.Unlock()
-	if !due {
+	if !due && !look {
 		return nil
 	}
 	b.refreshMu.Lock()
 	defer b.refreshMu.Unlock()
 	b.mu.Lock()
-	due = b.refreshed.IsZero() || l.opts.Now().Sub(b.refreshed) >= l.opts.Refresh
+	due, look = l.due(b)
 	b.mu.Unlock()
+	if !due && look {
+		due = l.peek(ctx, name, b)
+	}
 	if !due {
 		return nil
 	}
 	return l.refresh(ctx, name, b)
+}
+
+// peek reads the other processes' slices and reports whether a refresh now
+// would give this process a bigger slice, as when another process has
+// given its slice back or shrunk it to make room. It writes nothing; on an
+// error it reports false and the next refresh renews the slice as usual.
+func (l *DBLimiter) peek(ctx context.Context, name string, b *bucket) bool {
+	now := l.opts.Now()
+	b.mu.Lock()
+	b.looked = now
+	total, rate := b.total, b.rate
+	b.mu.Unlock()
+	var others leaseSum
+	err := l.db.NewSelect().Model((*db.RateLimitLease)(nil)).
+		ColumnExpr("COUNT(*) AS n, COALESCE(SUM(bytes_per_second), 0) AS total").
+		Where("name = ? AND owner <> ? AND expires_at >= ?", name, l.opts.Owner, now.UTC().Truncate(time.Microsecond)).
+		Scan(ctx, &others)
+	if err != nil {
+		return false
+	}
+	return float64(allotment(total, others)) > rate
+}
+
+// leaseSum is how many other processes hold a slice of a budget, and the
+// slices' sum.
+type leaseSum struct {
+	N   int64 `bun:"n"`
+	Sum int64 `bun:"total"`
+}
+
+// allotment is a process's slice of total: the fair share, but never more
+// than the others' slices leave.
+func allotment(total int64, others leaseSum) int64 {
+	fair := total / (others.N + 1)
+	return max(0, min(fair, total-others.Sum))
 }
 
 // refresh renews this process's slice of the budget.
@@ -210,17 +336,13 @@ func (l *DBLimiter) refresh(ctx context.Context, name string, b *bucket) error {
 		if _, err := tx.NewDelete().Model((*db.RateLimitLease)(nil)).Where("name = ? AND expires_at < ?", name, now).Exec(ctx); err != nil {
 			return err
 		}
-		var others struct {
-			N   int64 `bun:"n"`
-			Sum int64 `bun:"total"`
-		}
+		var others leaseSum
 		if err := tx.NewSelect().Model((*db.RateLimitLease)(nil)).
 			ColumnExpr("COUNT(*) AS n, COALESCE(SUM(bytes_per_second), 0) AS total").
 			Where("name = ? AND owner <> ?", name, l.opts.Owner).Scan(ctx, &others); err != nil {
 			return err
 		}
-		fair := total / (others.N + 1)
-		allot = max(0, min(fair, total-others.Sum))
+		allot = allotment(total, others)
 		row := &db.RateLimitLease{Name: name, Owner: l.opts.Owner, BytesPerSecond: allot, ExpiresAt: now.Add(3 * l.opts.Refresh)}
 		_, err := tx.NewInsert().Model(row).On("CONFLICT (name, owner) DO UPDATE").
 			Set("bytes_per_second = EXCLUDED.bytes_per_second").Set("expires_at = EXCLUDED.expires_at").
@@ -242,7 +364,7 @@ func (l *DBLimiter) refresh(ctx context.Context, name string, b *bucket) error {
 	b.unlimited = false
 	b.rate = float64(allot)
 	b.tokens = min(b.tokens, b.rate*burst)
-	b.refreshed = now
+	b.refreshed, b.looked, b.total = now, now, total
 	return nil
 }
 
@@ -270,6 +392,12 @@ func (l *DBLimiter) Close(ctx context.Context) error {
 	l.mu.Unlock()
 	var errs []error
 	for _, n := range names {
+		b := l.bucket(n)
+		b.mu.Lock()
+		if b.idle != nil {
+			b.idle.Stop()
+		}
+		b.mu.Unlock()
 		if _, err := l.db.NewDelete().Model((*db.RateLimitLease)(nil)).Where("name = ? AND owner = ?", n, l.opts.Owner).Exec(ctx); err != nil {
 			errs = append(errs, err)
 		}

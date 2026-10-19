@@ -515,7 +515,7 @@ func (c *HTTPClient) Search(ctx context.Context, u Upstream, cred Credentials, q
 	if q.Cursor != "" {
 		v.Set("cursor", q.Cursor)
 	}
-	for _, e := range []string{"sha", "private", "gated", "tags", "pipeline_tag", "library_name", "downloads", "likes", "lastModified"} {
+	for _, e := range searchExpand(q.Type) {
 		v.Add("expand", e)
 	}
 	var list []hubRepo
@@ -542,6 +542,17 @@ func (c *HTTPClient) Search(ctx context.Context, u Upstream, cred Credentials, q
 		page.Repos = append(page.Repos, sum)
 	}
 	return page, nil
+}
+
+// searchExpand returns the search fields to expand for t. The Hub answers
+// 400 to an expand it does not know for the type, and datasets have no
+// pipeline_tag or library_name.
+func searchExpand(t model.RepoType) []string {
+	e := []string{"sha", "private", "gated", "tags", "downloads", "likes", "lastModified"}
+	if t != model.RepoTypeDataset {
+		e = append(e, "pipeline_tag", "library_name")
+	}
+	return e
 }
 
 // linkNext returns the rel="next" target of a Link header.

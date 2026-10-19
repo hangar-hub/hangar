@@ -4,10 +4,10 @@
 # (docs/spec/12-packaging-and-release.md).
 #
 # The Content Security Policy follows the Go server's (internal/web), with
-# what MkDocs Material and the native API page need: Material's inline
-# scripts, whose text changes with each page's depth, Google Fonts, the GitHub
-# API for the repository's stars and latest release, and Redoc from
-# cdn.jsdelivr.net. The site has no user content and no forms.
+# what MkDocs Material, the home page and the native API page need: inline
+# styles and scripts (Material's change with each page's depth), Google
+# Fonts, the GitHub API for the repository's stars and latest release, and
+# Redoc from cdn.jsdelivr.net. The site has no user content and no forms.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.github.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff

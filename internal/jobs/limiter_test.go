@@ -139,3 +139,128 @@ func TestLimiterNewcomerWaitsForAShare(t *testing.T) {
 	shareB, _ = b.Share("pull")
 	require.Equal(t, int64(500), shareB)
 }
+
+// TestLimiterIdleProcessGivesItsSliceBack checks that a process that stops
+// transferring gives its slice back straight away, rather than holding it
+// until its lease expires three refresh periods later, so a process still
+// transferring gets the whole budget at its next refresh.
+func TestLimiterIdleProcessGivesItsSliceBack(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		const (
+			budget  = 1 << 20 // bytes per second
+			chunk   = 1 << 10
+			refresh = time.Second
+		)
+		ctx := context.Background()
+		budgets := jobs.StaticBudget(map[string]int64{"pull": budget})
+		a := jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "worker-a", Budget: budgets, Refresh: refresh})
+		b := jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "worker-b", Budget: budgets, Refresh: refresh})
+		leaseOf := func(owner string) int64 {
+			n, err := d.NewSelect().Model((*db.RateLimitLease)(nil)).Where("name = ? AND owner = ?", "pull", owner).Count(ctx)
+			require.NoError(t, err)
+			return n
+		}
+		spend := func(l *jobs.DBLimiter, stop <-chan struct{}) <-chan struct{} {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				for {
+					select {
+					case <-stop:
+						return
+					default:
+					}
+					if err := l.WaitN(ctx, "pull", chunk); err != nil {
+						t.Error(err)
+						return
+					}
+				}
+			}()
+			return done
+		}
+		stopA, stopB := make(chan struct{}), make(chan struct{})
+		doneA, doneB := spend(a, stopA), spend(b, stopB)
+		t.Cleanup(func() {
+			close(stopA)
+			<-doneA
+			_ = a.Close(ctx)
+			_ = b.Close(ctx)
+		})
+		halves := func() bool {
+			shareA, _ := a.Share("pull")
+			shareB, _ := b.Share("pull")
+			return shareA == budget/2 && shareB == budget/2
+		}
+		require.Eventually(t, halves, 10*refresh, 10*time.Millisecond, "two busy processes share the budget")
+
+		// B finishes its transfers but keeps running. Its lease would last
+		// until three refresh periods after its last refresh, so at least
+		// two after it stopped; it must go well before that.
+		close(stopB)
+		<-doneB
+		require.Eventually(t, func() bool { return leaseOf("worker-b") == 0 }, refresh, 10*time.Millisecond,
+			"an idle process gives its slice back")
+		shareB, _ := b.Share("pull")
+		require.Zero(t, shareB, "an idle process forgets its slice")
+		require.Eventually(t, func() bool {
+			shareA, _ := a.Share("pull")
+			return shareA == budget
+		}, 2*refresh, 10*time.Millisecond, "the busy process gets the whole budget at its next refresh")
+
+		// B starts again and gets its share back.
+		stopB = make(chan struct{})
+		doneB = spend(b, stopB)
+		require.Eventually(t, halves, 10*refresh, 10*time.Millisecond, "a process that starts again gets a share")
+		close(stopB)
+		<-doneB
+	})
+}
+
+// TestLimiterLooksForMoreEveryQuarterRefresh checks that a process with
+// less than the whole budget looks for more every quarter of a refresh
+// period: a newcomer with nothing looks again a quarter of a period later,
+// not a whole one, and a process takes up a slice another gives back
+// within a quarter of a period, not at its next refresh.
+func TestLimiterLooksForMoreEveryQuarterRefresh(t *testing.T) {
+	d := dbtest.SQLite(t)
+	ctx := context.Background()
+	clk := newClock()
+	advance := func(_ context.Context, dur time.Duration) error { clk.Add(dur); return nil }
+	parked := make(chan time.Duration)
+	resume := make(chan struct{})
+	var first atomic.Bool
+	// B's first wait parks until the test lets it go; later waits pass.
+	sleepB := func(ctx context.Context, dur time.Duration) error {
+		if first.CompareAndSwap(false, true) {
+			parked <- dur
+			<-resume
+			return nil
+		}
+		return advance(ctx, dur)
+	}
+	budgets := jobs.StaticBudget(map[string]int64{"pull": 1000})
+	a := jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "a", Budget: budgets, Refresh: time.Second, Now: clk.Now, Sleep: advance})
+	b := jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "b", Budget: budgets, Refresh: time.Second, Now: clk.Now, Sleep: sleepB})
+	t.Cleanup(func() { _ = a.Close(ctx) })
+	require.NoError(t, a.WaitN(ctx, "pull", 1))
+
+	// B joins while A holds everything.
+	done := make(chan error)
+	go func() { done <- b.WaitN(ctx, "pull", 1) }()
+	require.Equal(t, 250*time.Millisecond, <-parked, "a process with nothing looks again a quarter of a refresh period later")
+	clk.Add(time.Second)
+	require.NoError(t, a.WaitN(ctx, "pull", 1)) // A refreshes and halves its slice.
+	close(resume)
+	require.NoError(t, <-done)
+	shareA, _ := a.Share("pull")
+	shareB, _ := b.Share("pull")
+	require.Equal(t, []int64{500, 500}, []int64{shareA, shareB})
+
+	// B stops. A's slice is not due for renewal for most of a second, but
+	// A takes up B's half a quarter of a second later.
+	require.NoError(t, b.Close(ctx))
+	clk.Add(250 * time.Millisecond)
+	require.NoError(t, a.WaitN(ctx, "pull", 1))
+	shareA, _ = a.Share("pull")
+	require.Equal(t, int64(1000), shareA, "a slice given back is taken up within a quarter of a refresh period")
+}

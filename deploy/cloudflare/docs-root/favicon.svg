@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <style>.d{fill:#181c22}@media (prefers-color-scheme:dark){.d{fill:#e8ecf0}}</style>
+  <path class="d" d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z"/>
+  <rect x="5.5" y="15" width="13" height="2" fill="#2bb3a0"/>
+  <rect class="d" x="5.5" y="18.5" width="13" height="2.5" opacity="0.35"/>
+</svg>

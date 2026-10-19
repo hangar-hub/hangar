@@ -107,6 +107,8 @@ Rules:
 - `--from-lmstudio [path]`: walks LM Studio's models folder (`<publisher>/<repo>/<file>`), matches each folder to the huggingface.co Repo of the same name when it exists (by file SHA-256), and imports as a Partial mirror; otherwise as a local Repo.
 - `--from-ollama`: imports Ollama models' GGUF blobs as local Repos with `template`, `system` and `params` files from the Ollama manifest.
 
+`--only <pattern>` (repeatable) limits the cache, LM Studio and Ollama sources to the models it names: a Repo ID for a Hugging Face cache, a `<publisher>/<repo>` folder or its Repo ID for LM Studio, and `model:tag` for Ollama, where a bare `model` means `model:latest`. Patterns use `path.Match` syntax and ignore case. A pattern that matches nothing fails the command with exit code 3 before anything is uploaded.
+
 Uploads go through the normal Hub API, so the CLI works against any Hangar the user can write to.
 
 Symbolic links in a folder that `hangar push` or `hangar import` uploads are followed only into that folder, into the Repo's cache folder for a Hugging Face cache snapshot, or to a blob of a Hugging Face cache (as `hangar lmstudio` links). Any other link, such as `config.json` pointing at `~/.ssh/id_ed25519` in a cloned folder, is skipped and named on stderr, so an upload never sends a file from elsewhere on the machine. Decided in Phase 3 (see [decisions](../build/decisions.md), "Symbolic links in uploaded folders").
