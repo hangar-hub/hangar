@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserPlus } from "lucide-react";
+import { KeyRound, Plus, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/api/client";
 import type { AdminUser, Role } from "@/api/types";
@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm";
 import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, Field, Input, Select } from "@/components/ui/form";
-import { ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
+import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { type Column, DataTable } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { formatDateTime, relativeTime } from "@/lib/format";
@@ -260,6 +260,13 @@ function AdminTokens() {
   });
   if (tokens.isPending) return <LoadingRows rows={2} label="Loading Tokens" />;
   if (tokens.isError) return <ErrorState error={tokens.error} onRetry={() => tokens.refetch()} />;
+  if (tokens.data.items.length === 0) {
+    return (
+      <EmptyState size="sm" icon={<KeyRound />} title="No Tokens yet">
+        Tokens that people create in their settings show here, so you can revoke them.
+      </EmptyState>
+    );
+  }
   return (
     <ul className="hg-enter divide-y divide-line rounded-lg border border-line bg-surface">
       {tokens.data.items.map((t) => (
