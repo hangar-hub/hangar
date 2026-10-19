@@ -1,7 +1,8 @@
 // The mock demo at https://demo.hangar.page/ (docs/spec/12-packaging-and-release.md).
 // Build it with `make demo` (demo/gen and demo/dist), run it with
 // `make demo-serve`. Workers Builds deploys it from the `demo` branch, which
-// release.yml moves to each release tag.
+// release.yml moves to each release tag, and runs `make demo-preview` for every
+// other branch, which serves a Preview at <name>.demo.hangar.page.
 {
   "$schema": "https://unpkg.com/wrangler@4.147.0/config-schema.json",
   "name": "hangar-demo",
@@ -16,7 +17,9 @@
     // so pages get a fresh CSP nonce and the API answers from the mock.
     "run_worker_first": ["/*", "!/assets/*"]
   },
-  "routes": [{ "pattern": "demo.hangar.page", "custom_domain": true }],
+  "routes": [{ "pattern": "demo.hangar.page", "custom_domain": true, "previews_enabled": true }],
+  // Previews take every setting above.
+  "previews": {},
   "vars": { "DEMO_SIGNED_IN": "1" },
   "observability": { "enabled": false },
   "workers_dev": false,

@@ -218,6 +218,12 @@ test-demo: demo ## Run the Playwright suite and the demo's own checks against th
 demo-deploy:
 	cd ui/demo && $(WRANGLER) deploy
 
+# Workers Builds runs this after make demo for every branch but demo: a Preview
+# at <name>.demo.hangar.page, named by scripts/preview-name.sh.
+.PHONY: demo-preview
+demo-preview:
+	cd ui/demo && $(WRANGLER) preview --name "$$(../../scripts/preview-name.sh)" --message "$$(git log -1 --format=%s)"
+
 ## Packaging ---------------------------------------------------------------------------
 
 DOCS_REQS := docs/requirements.txt

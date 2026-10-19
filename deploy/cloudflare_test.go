@@ -3,6 +3,7 @@ package deploy
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -74,14 +75,22 @@ type wranglerConfig struct {
 		Directory        string `json:"directory"`
 		NotFoundHandling string `json:"not_found_handling"`
 	} `json:"assets"`
-	Routes []struct {
-		Pattern      string `json:"pattern"`
-		CustomDomain bool   `json:"custom_domain"`
-	} `json:"routes"`
-	Previews    *struct{} `json:"previews"`
-	WorkersDev  bool      `json:"workers_dev"`
-	PreviewURLs bool      `json:"preview_urls"`
+	Routes      []wranglerRoute `json:"routes"`
+	Previews    *struct{}       `json:"previews"`
+	WorkersDev  bool            `json:"workers_dev"`
+	PreviewURLs bool            `json:"preview_urls"`
 }
+
+// wranglerRoute is a route in a wrangler.jsonc. Enabled is nil when the file
+// leaves it out, which serves production traffic.
+type wranglerRoute struct {
+	Pattern         string `json:"pattern"`
+	CustomDomain    bool   `json:"custom_domain"`
+	PreviewsEnabled bool   `json:"previews_enabled"`
+	Enabled         *bool  `json:"enabled"`
+}
+
+func (r wranglerRoute) servesProduction() bool { return r.Enabled == nil || *r.Enabled }
 
 // readWranglerConfig parses a wrangler.jsonc whose comments are whole lines,
 // and checks that it pins the wrangler version the Makefile pins, which the
@@ -114,16 +123,23 @@ func readWranglerConfig(t *testing.T, path string) wranglerConfig {
 // TestDocsWorkerConfig checks deploy/cloudflare/docs-root/wrangler.jsonc, which
 // Workers Builds deploys from the root of gh-pages: the Worker serves that
 // root as static assets on hangar.page, answers missing pages with the nearest
-// 404.html and keeps the Preview URLs that branch Previews need, and
-// .assetsignore keeps its configuration and the git checkout off the site.
+// 404.html, serves branch Previews only under docs.hangar.page and nothing on
+// workers.dev, and .assetsignore keeps its configuration and the git checkout
+// off the site.
 func TestDocsWorkerConfig(t *testing.T) {
 	cfg := readWranglerConfig(t, "cloudflare/docs-root/wrangler.jsonc")
 	if cfg.Name != "hangar-docs" || cfg.Main != "" || cfg.Assets.Directory != "." ||
-		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || !cfg.PreviewURLs {
-		t.Errorf("wrangler.jsonc is not an assets-only Worker named hangar-docs serving its own directory with Preview URLs: %+v", cfg)
+		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || cfg.PreviewURLs {
+		t.Errorf("wrangler.jsonc is not an assets-only Worker named hangar-docs serving its own directory, off workers.dev: %+v", cfg)
 	}
-	if len(cfg.Routes) != 1 || cfg.Routes[0].Pattern != "hangar.page" || !cfg.Routes[0].CustomDomain {
-		t.Errorf("wrangler.jsonc routes = %+v, want the custom domain hangar.page", cfg.Routes)
+	if len(cfg.Routes) != 2 {
+		t.Fatalf("wrangler.jsonc routes = %+v, want hangar.page and docs.hangar.page", cfg.Routes)
+	}
+	if r := cfg.Routes[0]; r.Pattern != "hangar.page" || !r.CustomDomain || !r.servesProduction() || r.PreviewsEnabled {
+		t.Errorf("route %+v, want the custom domain hangar.page for production only", r)
+	}
+	if r := cfg.Routes[1]; r.Pattern != "docs.hangar.page" || !r.CustomDomain || r.servesProduction() || !r.PreviewsEnabled {
+		t.Errorf("route %+v, want the custom domain docs.hangar.page for Previews only", r)
 	}
 
 	ignore, err := os.ReadFile("cloudflare/docs-root/.assetsignore")
@@ -149,8 +165,8 @@ func TestDocsWorkerConfig(t *testing.T) {
 func TestDocsPreviewConfig(t *testing.T) {
 	cfg := readWranglerConfig(t, "cloudflare/docs-preview/wrangler.jsonc")
 	if cfg.Name != "hangar-docs" || cfg.Main != "" || cfg.Previews == nil || len(cfg.Routes) != 0 ||
-		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || !cfg.PreviewURLs {
-		t.Errorf("the preview config is not an assets-only hangar-docs with a previews block, Preview URLs and no routes: %+v", cfg)
+		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || cfg.PreviewURLs {
+		t.Errorf("the preview config is not an assets-only hangar-docs with a previews block, no routes and nothing on workers.dev: %+v", cfg)
 	}
 	dir, err := filepath.Abs(filepath.Join("cloudflare", "docs-preview", cfg.Assets.Directory))
 	if err != nil {
@@ -162,5 +178,52 @@ func TestDocsPreviewConfig(t *testing.T) {
 	}
 	if dir != want {
 		t.Errorf("the preview config serves %s, want %s, where scripts/docs-preview.sh builds", dir, want)
+	}
+}
+
+// TestDemoWorkerConfig checks ui/demo/wrangler.jsonc: production and branch
+// Previews on demo.hangar.page (a Preview at <name>.demo.hangar.page), a
+// previews block, which `make demo-preview` needs, and nothing on workers.dev.
+func TestDemoWorkerConfig(t *testing.T) {
+	cfg := readWranglerConfig(t, "../ui/demo/wrangler.jsonc")
+	if cfg.Name != "hangar-demo" || cfg.Previews == nil || cfg.WorkersDev || cfg.PreviewURLs {
+		t.Errorf("ui/demo/wrangler.jsonc is not hangar-demo with a previews block, off workers.dev: %+v", cfg)
+	}
+	if len(cfg.Routes) != 1 {
+		t.Fatalf("ui/demo/wrangler.jsonc routes = %+v, want demo.hangar.page", cfg.Routes)
+	}
+	if r := cfg.Routes[0]; r.Pattern != "demo.hangar.page" || !r.CustomDomain || !r.servesProduction() || !r.PreviewsEnabled {
+		t.Errorf("route %+v, want the custom domain demo.hangar.page for production and Previews", r)
+	}
+}
+
+// TestPreviewName checks scripts/preview-name.sh, which names a branch's
+// Preview and so the first label of its address: a DNS label of at most 50
+// characters, from WORKERS_CI_BRANCH in Workers Builds.
+func TestPreviewName(t *testing.T) {
+	run := func(env []string, args ...string) (string, error) {
+		cmd := exec.Command("../scripts/preview-name.sh", args...)
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	for branch, want := range map[string]string{
+		"main":                 "main",
+		"feat/docs-on-workers": "feat-docs-on-workers",
+		"Fix/UPPER__case-":     "fix-upper-case",
+		"dependabot/npm_and_yarn/ui/types/node-26.0.0":       "dependabot-npm-and-yarn-ui-types-node-26-0-0",
+		"release-please--branches--main--components--hangar": "release-please-branches-main-components-hangar",
+		strings.Repeat("a", 49) + "-b":                       strings.Repeat("a", 49),
+	} {
+		got, err := run(nil, branch)
+		if err != nil || got != want {
+			t.Errorf("preview-name.sh %q = %q, %v; want %q", branch, got, err, want)
+		}
+	}
+	if got, err := run([]string{"WORKERS_CI_BRANCH=feat/x"}); err != nil || got != "feat-x" {
+		t.Errorf("with WORKERS_CI_BRANCH=feat/x: %q, %v; want feat-x", got, err)
+	}
+	if _, err := run(nil, "///"); err == nil {
+		t.Error("preview-name.sh accepted a branch with no letters or digits")
 	}
 }
