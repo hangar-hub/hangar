@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/hangar-hub/hangar/compare/v1.0.0...v1.1.0) (2026-10-19)
+
+
+### Features
+
+* **cli:** choose which models hangar import takes with --only ([#12](https://github.com/hangar-hub/hangar/issues/12)) ([ed4d21d](https://github.com/hangar-hub/hangar/commit/ed4d21d40f21dd97a2acdb5a469bfb3fac15bf9b))
+* **docs:** add a home page at hangar.page ([#13](https://github.com/hangar-hub/hangar/issues/13)) ([2e1934f](https://github.com/hangar-hub/hangar/commit/2e1934f2d785e3495674cd0e943b1e1c805843a0))
+* **docs:** animate the terminal on the home page ([#16](https://github.com/hangar-hub/hangar/issues/16)) ([a1ecd0e](https://github.com/hangar-hub/hangar/commit/a1ecd0edc590c5483fdff2c62e40029605ea4eb6))
+* **docs:** say why Hangar exists on the home page ([#15](https://github.com/hangar-hub/hangar/issues/15)) ([51d20db](https://github.com/hangar-hub/hangar/commit/51d20dbf03686d5d79c8a94c9ae183ea55c8741b))
+* **docs:** serve the docs from a Cloudflare Worker, with branch Previews ([#7](https://github.com/hangar-hub/hangar/issues/7)) ([6719480](https://github.com/hangar-hub/hangar/commit/671948011f0e7a7fa9fd9dc1b82b8ab07949288a))
+
+
+### Bug fixes
+
+* **jobs:** give an idle bandwidth slice back and take up freed budget sooner ([#19](https://github.com/hangar-hub/hangar/issues/19)) ([b70eaf3](https://github.com/hangar-hub/hangar/commit/b70eaf3d66c2400919a0c74d3bae0808d289fb77))
+* **ui:** say when the admin's Every Token list is empty ([#10](https://github.com/hangar-hub/hangar/issues/10)) ([c8f0124](https://github.com/hangar-hub/hangar/commit/c8f01246b5691039bea8e983bba24d822814b7e0))
+* **upstream:** stop asking the Hub for model-only fields on dataset search ([#17](https://github.com/hangar-hub/hangar/issues/17)) ([f8efceb](https://github.com/hangar-hub/hangar/commit/f8efceb88efb4f7e9acc7cdb6400942f2625ac9f))
+
 ## 1.0.0 (2026-10-18)
 
 
