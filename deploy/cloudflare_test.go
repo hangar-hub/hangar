@@ -1,8 +1,10 @@
 package deploy
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -10,7 +12,7 @@ import (
 // TestDocsRedirectsCoverEverySection checks that deploy/cloudflare/docs-root/
 // _redirects sends every top-level section of the documentation site to the
 // latest version. MkDocs builds each version's 404.html with links from the
-// site root, such as /get-started/, and Cloudflare Pages serves that page for
+// site root, such as /get-started/, and the docs Worker serves that page for
 // missing pages under the version, so a section with no rule breaks its links.
 func TestDocsRedirectsCoverEverySection(t *testing.T) {
 	raw, err := os.ReadFile("cloudflare/docs-root/_redirects")
@@ -60,5 +62,70 @@ func TestDocsRedirectsCoverEverySection(t *testing.T) {
 	}
 	if len(rules) != len(sections) {
 		t.Errorf("_redirects has %d rules for %d sections: %v", len(rules), len(sections), rules)
+	}
+}
+
+// TestDocsWorkerConfig checks deploy/cloudflare/docs-root/wrangler.jsonc, which
+// Workers Builds deploys from the root of gh-pages: the Worker serves that
+// root as static assets on hangar.page, answers missing pages with the nearest
+// 404.html, runs the wrangler version the Makefile pins, and .assetsignore
+// keeps its configuration and the git checkout off the site.
+func TestDocsWorkerConfig(t *testing.T) {
+	raw, err := os.ReadFile("cloudflare/docs-root/wrangler.jsonc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The file's comments are whole lines.
+	body := regexp.MustCompile(`(?m)^\s*//.*$`).ReplaceAll(raw, nil)
+	var cfg struct {
+		Schema string `json:"$schema"`
+		Name   string `json:"name"`
+		Main   string `json:"main"`
+		Assets struct {
+			Directory        string `json:"directory"`
+			NotFoundHandling string `json:"not_found_handling"`
+		} `json:"assets"`
+		Routes []struct {
+			Pattern      string `json:"pattern"`
+			CustomDomain bool   `json:"custom_domain"`
+		} `json:"routes"`
+		WorkersDev  bool `json:"workers_dev"`
+		PreviewURLs bool `json:"preview_urls"`
+	}
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		t.Fatalf("wrangler.jsonc: %v", err)
+	}
+	if cfg.Name != "hangar-docs" || cfg.Main != "" || cfg.Assets.Directory != "." ||
+		cfg.Assets.NotFoundHandling != "404-page" || cfg.WorkersDev || cfg.PreviewURLs {
+		t.Errorf("wrangler.jsonc is not an assets-only Worker named hangar-docs serving its own directory: %+v", cfg)
+	}
+	if len(cfg.Routes) != 1 || cfg.Routes[0].Pattern != "hangar.page" || !cfg.Routes[0].CustomDomain {
+		t.Errorf("wrangler.jsonc routes = %+v, want the custom domain hangar.page", cfg.Routes)
+	}
+
+	makefile, err := os.ReadFile("../Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := regexp.MustCompile(`wrangler@(\d+\.\d+\.\d+)`).FindSubmatch(makefile)
+	if pin == nil {
+		t.Fatal("the Makefile pins no wrangler version")
+	}
+	if want := "https://unpkg.com/wrangler@" + string(pin[1]) + "/config-schema.json"; cfg.Schema != want {
+		t.Errorf("wrangler.jsonc $schema = %q, want %q", cfg.Schema, want)
+	}
+
+	ignore, err := os.ReadFile("cloudflare/docs-root/.assetsignore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	patterns := map[string]bool{}
+	for _, line := range strings.Split(string(ignore), "\n") {
+		patterns[strings.TrimSpace(line)] = true
+	}
+	for _, want := range []string{"wrangler.jsonc", ".assetsignore", ".git", ".wrangler"} {
+		if !patterns[want] {
+			t.Errorf(".assetsignore does not list %s", want)
+		}
 	}
 }

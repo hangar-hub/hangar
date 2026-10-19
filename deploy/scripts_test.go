@@ -204,8 +204,8 @@ func TestPercentSpacingCheck(t *testing.T) {
 }
 
 // TestDocsRootFiles checks that scripts/docs-root-files.sh puts the files in
-// deploy/cloudflare/docs-root at the root of gh-pages, which Cloudflare Pages
-// serves, without touching mike's version directories, the checked-out branch
+// deploy/cloudflare/docs-root, dotfiles included, at the root of gh-pages,
+// which the docs Worker serves, without touching mike's version directories, the checked-out branch
 // or the working tree, and commits nothing when they are already there.
 func TestDocsRootFiles(t *testing.T) {
 	repo := t.TempDir()
@@ -284,6 +284,9 @@ func TestDocsRootFiles(t *testing.T) {
 	}
 	if got := git("show", "gh-pages:_headers"); !strings.Contains(got, "Content-Security-Policy:") {
 		t.Errorf("gh-pages:_headers is not the one in deploy/cloudflare/docs-root:\n%s", got)
+	}
+	if !slices.Contains(files, ".assetsignore") || !slices.Contains(files, "wrangler.jsonc") {
+		t.Errorf("gh-pages is missing the Worker's .assetsignore or wrangler.jsonc: %v", files)
 	}
 	if branch := git("branch", "--show-current"); branch != "main" {
 		t.Errorf("the script left %s checked out", branch)

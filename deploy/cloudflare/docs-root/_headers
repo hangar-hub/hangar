@@ -1,6 +1,7 @@
-# Response headers for https://hangar.page/, served by Cloudflare Pages from
+# Response headers for https://hangar.page/, served by the docs Worker from
 # the gh-pages branch. scripts/docs-root-files.sh copies this file to the root
-# of gh-pages, where Pages reads it (docs/spec/12-packaging-and-release.md).
+# of gh-pages, where the Worker's static assets read it
+# (docs/spec/12-packaging-and-release.md).
 #
 # The Content Security Policy follows the Go server's (internal/web), with
 # what MkDocs Material and the native API page need: Material's inline
