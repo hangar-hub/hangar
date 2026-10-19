@@ -429,6 +429,11 @@ Call /readyz on this host and exit 0 when ready.
 
 ```text
 Calls /readyz on the local listen address. The container image uses it as its HEALTHCHECK.
+
+With --retry-for, it tries again while the connection fails, for up to that long. A check
+through a Kubernetes Service needs this: the Service starts routing to a new Pod a moment
+after the Pod is ready, and until then it refuses connections. An answer from /readyz,
+ready or not, is never retried.
 ```
 
 Usage:
@@ -445,6 +450,7 @@ Flags:
 | `--json` | print JSON instead of text |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
+| `--retry-for` | keep trying for this long while the connection fails, such as 30s (0 tries once) | `0s` |
 | `--role` | shortcut for --set server.role=... |  |
 | `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
 

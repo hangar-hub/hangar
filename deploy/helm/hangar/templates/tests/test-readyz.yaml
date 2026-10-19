@@ -21,6 +21,11 @@ spec:
       # same healthcheck command the container HEALTHCHECK uses.
       image: {{ include "hangar.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
-      args: ["healthcheck", "--set", "server.listen={{ include "hangar.fullname" . }}:{{ .Values.service.port }}"]
+      # helm install --wait returns as soon as the Pod is ready, but the
+      # Service routes to it only once the cluster's Service proxy
+      # (kube-proxy, Cilium) has caught up, and refuses connections until
+      # then. --retry-for rides that out; a /readyz answer other than 200
+      # still fails at once.
+      args: ["healthcheck", "--retry-for", "30s", "--set", "server.listen={{ include "hangar.fullname" . }}:{{ .Values.service.port }}"]
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
