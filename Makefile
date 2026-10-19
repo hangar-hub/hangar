@@ -284,5 +284,5 @@ smoke: ## Run the smoke test against HANGAR_URL
 
 .PHONY: clean
 clean: ## Remove build output
-	rm -rf bin coverage.out tmp site dist ui/demo/dist ui/demo/gen ui/demo/.wrangler
+	rm -rf bin coverage.out tmp site .docs-venv dist ui/demo/dist ui/demo/gen ui/demo/.wrangler
 	find internal/web/dist -mindepth 1 ! -name .gitkeep -delete

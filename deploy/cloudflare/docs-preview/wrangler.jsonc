@@ -1,0 +1,23 @@
+// Previews of the documentation site for branches other than gh-pages
+// (docs/spec/12-packaging-and-release.md). Workers Builds runs
+// scripts/docs-preview.sh on each push to such a branch, which builds the
+// branch's docs into site/ and runs `wrangler preview` with this file. The
+// Worker is the production one, hangar-docs, whose configuration lives on
+// gh-pages (deploy/cloudflare/docs-root/wrangler.jsonc); a Preview has no
+// route, only its Preview URL on workers.dev, which sends
+// X-Robots-Tag: noindex.
+{
+  "$schema": "https://unpkg.com/wrangler@4.147.0/config-schema.json",
+  "name": "hangar-docs",
+  "compatibility_date": "2026-09-28",
+  "assets": {
+    // Relative to this file: site/ at the root of the checkout.
+    "directory": "../../../site",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "previews": {},
+  "observability": { "enabled": false },
+  "workers_dev": false,
+  "preview_urls": true
+}

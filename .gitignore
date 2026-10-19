@@ -42,3 +42,5 @@ __pycache__/
 .vscode/*
 !.vscode/extensions.json
 /site/
+/.docs-venv/
+.wrangler/
