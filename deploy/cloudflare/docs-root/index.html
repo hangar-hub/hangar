@@ -11,10 +11,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hangar: self-hosted Hugging Face Hub for models and datasets</title>
+    <title>Hangar: self-hosted model registry and Hugging Face Hub</title>
     <meta
       name="description"
-      content="Keep ML models and datasets on your own storage. Hangar is a self-hosted, Hugging Face Hub-compatible server with git, Ollama and LM Studio support."
+      content="Hangar is a self-hosted model registry for ML models and datasets, compatible with the Hugging Face Hub, with git, Ollama and LM Studio support."
     />
     <link rel="canonical" href="https://hangar.page/" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -65,9 +65,9 @@
             "@id": "https://hangar.page/#software",
             "name": "Hangar",
             "url": "https://hangar.page/",
-            "description": "A self-hosted model and dataset hub, compatible with the Hugging Face Hub API, with git, Ollama, LM Studio and Dataset Viewer support.",
+            "description": "A self-hosted model registry and dataset hub, compatible with the Hugging Face Hub API, with git, Ollama, LM Studio and Dataset Viewer support.",
             "applicationCategory": "DeveloperApplication",
-            "applicationSubCategory": "Model and dataset hub",
+            "applicationSubCategory": "Model registry",
             "operatingSystem": "Linux, macOS, Windows",
             "image": "https://hangar.page/og.png",
             "screenshot": "https://hangar.page/latest/assets/screenshots/models-desktop.webp",
@@ -82,6 +82,14 @@
             "@type": "FAQPage",
             "@id": "https://hangar.page/#faq",
             "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is Hangar a model registry?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio."
+                }
+              },
               {
                 "@type": "Question",
                 "name": "Is Hangar a cache for Hugging Face models?",
@@ -1431,8 +1439,8 @@
                 A self-hosted home for your <em>arsenal of models</em>.
               </h1>
               <p class="lead" data-stagger style="--i: 2">
-                Hangar is a Hugging Face Hub-compatible server for your machine learning models and
-                datasets. Pull from huggingface.co once, keep full version history on your own
+                Hangar is a self-hosted model registry for your machine learning models and datasets,
+                compatible with the Hugging Face Hub. Pull from huggingface.co once, keep full version history on your own
                 storage, and serve it to the tools you already use.
               </p>
               <div class="actions" data-stagger style="--i: 3">
@@ -1835,6 +1843,10 @@ docker logs hangar</code></pre>
             <h2 id="faq-title">Frequently asked questions</h2>
           </div>
           <div class="faq" data-reveal>
+            <details>
+              <summary>Is Hangar a model registry?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.</p>
+            </details>
             <details>
               <summary>Is Hangar a cache for Hugging Face models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
               <p>It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. Clients load everything from your own storage.</p>

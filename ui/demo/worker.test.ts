@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { compileValidators, loadSpec } from "../mock/openapi.ts";
-import { createDemoWorker, type Env, maxBodyBytes } from "./worker.ts";
+import { createDemoWorker, type Env, indexedHead, maxBodyBytes } from "./worker.ts";
 
 // The demo Worker with a stand-in for the static assets binding. The
 // Playwright suite runs the real one under wrangler dev
@@ -87,6 +87,43 @@ describe("demo Worker", () => {
     expect((await worker().fetch(post(), env())).status).toBe(413);
     // Past the cap, the mock reads the body and answers it.
     expect((await worker().fetch(post(), env({ DEMO_TEST_LIMIT_MIB: "64" }))).status).not.toBe(413);
+  });
+
+  it("lets search engines index only the home page on demo.hangar.page", async () => {
+    const home = await worker().fetch(page("/?utm_source=x"), env());
+    expect(home.headers.get("x-robots-tag")).toBeNull();
+    const html = await home.text();
+    expect(html).toContain(indexedHead);
+    expect(html).not.toContain("<title>Hangar</title>");
+
+    const preview = await worker().fetch(
+      new Request("https://main.demo.hangar.page/", { headers: { Accept: "text/html" } }),
+      env(),
+    );
+    expect(preview.headers.get("x-robots-tag")).toBe("noindex");
+    expect(await preview.text()).toContain("<title>Hangar</title>");
+
+    const repo = await worker().fetch(page("/ada/bert-tiny-finetune"), env());
+    expect(await repo.text()).not.toContain(indexedHead);
+    const me = await worker().fetch(
+      new Request("https://demo.hangar.page/api/hangar/v1/me"),
+      env(),
+    );
+    expect(me.headers.get("x-robots-tag")).toBe("noindex");
+  });
+
+  it("serves the search engines' verification files at the root", async () => {
+    const files = { "/BingSiteAuth.xml": "<users />", "/google1.html": "google-site-verification" };
+    const demo = createDemoWorker(doc, compileValidators(doc), files);
+    for (const [path, body] of Object.entries(files)) {
+      const res = await demo.fetch(page(path), env());
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(body);
+    }
+    const xml = await demo.fetch(new Request("https://demo.hangar.page/BingSiteAuth.xml"), env());
+    expect(xml.headers.get("content-type")).toBe("application/xml");
+    const other = await demo.fetch(page("/google2.html"), env());
+    expect(await other.text()).toContain("<title>");
   });
 
   it("passes assets through with the common headers and refuses other methods", async () => {
