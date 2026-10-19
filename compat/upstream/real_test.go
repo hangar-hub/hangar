@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -169,17 +170,27 @@ func (s *secondInstance) seed(t *testing.T, id model.RepoID, files map[string][]
 
 // countingLimiter wraps a limiter and records what it granted, and when.
 type countingLimiter struct {
-	inner       jobs.Limiter
+	inner jobs.Limiter
+	// owner is the worker the grants are for.
+	owner       string
 	spent       *atomic.Int64
 	mu          *sync.Mutex
 	first, last *time.Time
+	grants      *[]grant
+}
+
+// grant is one byte count a countingLimiter granted.
+type grant struct {
+	at    time.Time
+	owner string
+	n     int64
 }
 
 func newCounting(inner jobs.Limiter, shared *countingLimiter) *countingLimiter {
 	if shared != nil {
-		return &countingLimiter{inner: inner, spent: shared.spent, mu: shared.mu, first: shared.first, last: shared.last}
+		return &countingLimiter{inner: inner, spent: shared.spent, mu: shared.mu, first: shared.first, last: shared.last, grants: shared.grants}
 	}
-	return &countingLimiter{inner: inner, spent: &atomic.Int64{}, mu: &sync.Mutex{}, first: &time.Time{}, last: &time.Time{}}
+	return &countingLimiter{inner: inner, spent: &atomic.Int64{}, mu: &sync.Mutex{}, first: &time.Time{}, last: &time.Time{}, grants: &[]grant{}}
 }
 
 func (c *countingLimiter) WaitN(ctx context.Context, name string, n int64) error {
@@ -187,13 +198,67 @@ func (c *countingLimiter) WaitN(ctx context.Context, name string, n int64) error
 		return err
 	}
 	c.spent.Add(n)
+	now := time.Now()
 	c.mu.Lock()
 	if c.first.IsZero() {
-		*c.first = time.Now()
+		*c.first = now
 	}
-	*c.last = time.Now()
+	*c.last = now
+	*c.grants = append(*c.grants, grant{at: now, owner: c.owner, n: n})
 	c.mu.Unlock()
 	return nil
+}
+
+// logTimeline logs the bytes granted to each worker in each second from
+// the first grant, then every Job of kinds with its attempts, and the
+// outcome of every run that did not snooze, so a failed check of the cap
+// shows where the time went.
+func (c *countingLimiter) logTimeline(t *testing.T, l *localInstance, outcomes *jobOutcomes, kinds ...jobs.Kind) {
+	t.Helper()
+	c.mu.Lock()
+	first := *c.first
+	grants := append([]grant(nil), *c.grants...)
+	c.mu.Unlock()
+	perSecond := map[int]map[string]int64{}
+	var owners []string
+	last := 0
+	for _, g := range grants {
+		sec := int(g.at.Sub(first).Seconds())
+		if perSecond[sec] == nil {
+			perSecond[sec] = map[string]int64{}
+		}
+		if !slices.Contains(owners, g.owner) {
+			owners = append(owners, g.owner)
+		}
+		perSecond[sec][g.owner] += g.n
+		last = max(last, sec)
+	}
+	slices.Sort(owners)
+	for sec := 0; sec <= last; sec++ {
+		var row []string
+		for _, o := range owners {
+			row = append(row, fmt.Sprintf("%s %7d B", o, perSecond[sec][o]))
+		}
+		t.Logf("%3d s: %s", sec, strings.Join(row, ", "))
+	}
+	since := func(ts *time.Time) string {
+		if ts == nil {
+			return "never"
+		}
+		return fmt.Sprintf("%+.1f s", ts.Sub(first).Seconds())
+	}
+	list, _, err := l.queue.List(l.ctx, jobs.Filter{Kinds: kinds})
+	require.NoError(t, err)
+	for _, j := range list {
+		t.Logf("%s %s: %s after %d attempts, started %s, finished %s %s", j.Kind, j.ID, j.Status, j.Attempts, since(j.StartedAt), since(j.FinishedAt), j.Error)
+	}
+	outcomes.mu.Lock()
+	defer outcomes.mu.Unlock()
+	for _, o := range outcomes.seen {
+		if !strings.HasSuffix(o, " snoozed") {
+			t.Logf("run of %s", o)
+		}
+	}
 }
 
 // localInstance is the Instance under test: the real Upstream service on
@@ -268,7 +333,9 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 	l.limiter = jobs.NewLimiter(d, jobs.LimiterOptions{Owner: owner, Budget: jobs.StaticBudget(map[string]int64{upstream.BandwidthBudget: rate})})
 	var lim jobs.Limiter = l.limiter
 	if o.shared != nil {
-		lim = newCounting(l.limiter, o.shared)
+		counting := newCounting(l.limiter, o.shared)
+		counting.owner = owner
+		lim = counting
 	}
 	l.settings.Store(&upstream.Settings{AllowOverrideWindows: true, PullThroughAllow: []string{"*"}, PullThroughMinRole: "user"})
 	signer, err := httpx.NewSigner(instanceKey)
@@ -471,8 +538,9 @@ func TestRealBandwidthCapAcrossTwoWorkers(t *testing.T) {
 	d := dbtest.SQLite(t)
 	shared := newCounting(nil, nil)
 	blobDir := t.TempDir()
-	a := newLocal(t, d, up.URL, localOptions{owner: "worker-a", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20})
-	b := newLocal(t, d, up.URL, localOptions{owner: "worker-b", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, existing: a})
+	outcomes := &jobOutcomes{}
+	a := newLocal(t, d, up.URL, localOptions{owner: "worker-a", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, logger: slog.New(outcomes)})
+	b := newLocal(t, d, up.URL, localOptions{owner: "worker-b", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, existing: a, logger: slog.New(outcomes)})
 	size := rate * seconds / 2
 	var ids []jobs.JobID
 	for i, l := range []*localInstance{a, b} {
@@ -489,6 +557,7 @@ func TestRealBandwidthCapAcrossTwoWorkers(t *testing.T) {
 	got := float64(shared.spent.Load())
 	want := rate * elapsed
 	t.Logf("two workers moved %.0f bytes in %.1f s under a %d B/s cap: %.1f %% of the cap", got, elapsed, rate, 100*got/want)
+	shared.logTimeline(t, a, outcomes, jobs.KindPull, jobs.KindPullFile)
 	require.GreaterOrEqual(t, elapsed, 0.9*float64(seconds))
 	require.Less(t, math.Abs(got-want)/want, 0.10)
 	// Both workers transferred.
