@@ -1,5 +1,5 @@
 site_name: Hangar
-site_description: A self-hosted home for your arsenal of models. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.
+site_description: Hangar is a self-hosted model registry for your arsenal of models and datasets. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.
 site_url: https://hangar.page/
 repo_url: https://github.com/hangar-hub/hangar
 repo_name: hangar-hub/hangar
@@ -18,6 +18,14 @@ exclude_docs: |
 
 hooks:
   - docs/hooks.py
+
+# mike builds each version under its own path. Canonical URLs and the sitemap
+# name /latest/ instead, so search results keep their address across releases
+# and older versions do not compete with the current one.
+plugins:
+  - search
+  - mike:
+      canonical_version: latest
 
 theme:
   name: material

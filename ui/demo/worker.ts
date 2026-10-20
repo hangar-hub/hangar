@@ -57,15 +57,30 @@ export const limits: SessionLimits = {
 const common: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  // Sample data is no use in search results.
-  "X-Robots-Tag": "noindex",
 };
 
-function secured(res: Response): Response {
+/**
+ * The one demo page search engines may index: the home page on the production
+ * host, so a search for Hangar can lead to the demo. Every other page is
+ * sample data, which is no use in search results, and Previews repeat
+ * production, so they get `X-Robots-Tag: noindex`.
+ */
+export const indexedPage = "https://demo.hangar.page/";
+
+/** The title, description and canonical URL the indexed page gets in place of the UI's title. */
+export const indexedHead =
+  "<title>Hangar live demo: the self-hosted model registry</title>" +
+  '<meta name="description" content="Try Hangar in your browser with sample data: browse models and datasets, read model cards and preview dataset rows in the self-hosted model registry." />' +
+  `<link rel="canonical" href="${indexedPage}" />`;
+
+const isIndexed = (url: URL) => url.origin + url.pathname === indexedPage;
+
+function secured(res: Response, indexable = false): Response {
   const out = new Response(res.body, res);
   for (const [k, v] of Object.entries(common)) {
     if (!out.headers.has(k)) out.headers.set(k, v);
   }
+  if (!indexable && !out.headers.has("X-Robots-Tag")) out.headers.set("X-Robots-Tag", "noindex");
   return out;
 }
 
@@ -73,7 +88,9 @@ async function page(env: Env, url: URL): Promise<Response> {
   const index = await env.ASSETS.fetch(new Request(new URL("/", url)));
   if (!index.ok) return index;
   const nonce = newNonce();
-  return new Response(withNonce(await index.text(), nonce), { headers: pageHeaders(nonce) });
+  let html = withNonce(await index.text(), nonce);
+  if (isIndexed(url)) html = html.replace(/<title>[^<]*<\/title>/, indexedHead);
+  return new Response(html, { headers: pageHeaders(nonce) });
 }
 
 /** The validators in a module that standaloneValidators wrote. */
@@ -84,12 +101,36 @@ export function compiledValidators(compiled: CompiledValidators): Validators {
   });
 }
 
-export function createDemoWorker(doc: Schema, validators: Validators) {
+/**
+ * The files Google Search Console and Bing Webmaster Tools fetch from the site
+ * root to check who owns demo.hangar.page, keyed by path. demo/generate.ts
+ * reads them from deploy/cloudflare/docs-root, where hangar.page serves the
+ * same files.
+ */
+export type VerificationFiles = Record<string, string>;
+
+function verificationFile(path: string, body: string, method: string): Response {
+  const type = path.endsWith(".xml") ? "application/xml" : "text/html; charset=utf-8";
+  return new Response(method === "HEAD" ? null : body, { headers: { "Content-Type": type } });
+}
+
+export function createDemoWorker(
+  doc: Schema,
+  validators: Validators,
+  verification: VerificationFiles = {},
+) {
   const routes = routesOf(doc);
   let mock: ReturnType<typeof createFetchMock> | undefined;
 
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
+      const url = new URL(request.url);
+      const file = Object.hasOwn(verification, url.pathname)
+        ? verification[url.pathname]
+        : undefined;
+      if (file !== undefined && (request.method === "GET" || request.method === "HEAD")) {
+        return secured(verificationFile(url.pathname, file, request.method));
+      }
       if (!mock) {
         const test = Number(env.DEMO_TEST_LIMIT_MIB ?? 0) * MiB;
         mock = createFetchMock(
@@ -103,11 +144,10 @@ export function createDemoWorker(doc: Schema, validators: Validators) {
           { maxBodyBytes: test || maxBodyBytes },
         );
       }
-      const url = new URL(request.url);
       const answer = await mock(request);
       if (answer) return secured(answer);
       if (isUiPage(request.method, url.pathname, request.headers.get("accept") ?? "")) {
-        return secured(await page(env, url));
+        return secured(await page(env, url), isIndexed(url));
       }
       if (request.method !== "GET" && request.method !== "HEAD") {
         const p = problem(405, "Method not allowed.");
