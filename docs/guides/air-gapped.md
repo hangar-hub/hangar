@@ -23,6 +23,27 @@ An Instance with no internet access can be fed from another Hangar that has it.
 
 Mirrors keep the Repo IDs and Commit SHAs from the outer Instance, which kept them from huggingface.co, so `HF_ENDPOINT` swaps still work inside.
 
+## Keep the web UI on the inside
+
+The web UI links to the documentation at https://hangar.page/, for example from the explanation that opens when you hover over or click a badge such as **Unsafe imports**. On a network without internet access, point those links at a copy of the documentation, or turn them off, with `ui.docs_url` (`HANGAR_UI_DOCS_URL`).
+
+To use a copy, build the documentation from the Hangar source at your release tag and serve the `site` folder on the inside. The copy must serve the same paths as https://hangar.page/, such as `concepts/mirrors/`.
+
+```sh
+git checkout v1.1.0
+uv run --no-project --with-requirements docs/requirements.txt mkdocs build
+```
+
+Then set the URL of the copy:
+
+```sh
+HANGAR_UI_DOCS_URL=https://docs.internal.example.com/hangar/
+```
+
+To remove the links, set `HANGAR_UI_DOCS_URL=` (empty), or `docs_url: ""` under `ui` in the configuration file. The explanations still show, without the link.
+
+Also turn off **Load external images in cards** under **Admin**, **Settings**, so Model cards do not try to load images from the internet.
+
 ## Fully disconnected networks
 
 If no connection is allowed at all, move data with a backup instead: back up the outer Instance (`hangar admin backup`), carry the folder across, and restore it into the inner one (`hangar admin restore`). See [Backup and restore](../operate/backup.md). Or carry a Hugging Face cache across and run `hangar import --from-hf-cache --offline` on the inside.

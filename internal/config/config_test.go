@@ -35,6 +35,7 @@ func TestDefaultsValidateWithRequiredKeys(t *testing.T) {
 	require.Equal(t, "http://localhost:8080/xet-cas", cfg.CASURL())
 	require.Equal(t, config.UploadDirect, cfg.Storage.S3.UploadMode, "clients upload straight to the store by default")
 	require.Equal(t, config.ByteSize(300_000_000), cfg.Viewer.MaxRequestBytes, "the Hub's 300 MB Viewer budget")
+	require.Equal(t, "https://hangar.page/", cfg.UI.DocsURL)
 	key, err := cfg.InstanceKeyBytes()
 	require.NoError(t, err)
 	require.Len(t, key, 32)
@@ -369,4 +370,20 @@ func TestLoadStoredSecretsReadsWithoutWriting(t *testing.T) {
 	set.Security.InstanceKey = "explicit"
 	require.NoError(t, config.LoadStoredSecrets(&set))
 	require.Equal(t, "explicit", set.Security.InstanceKey, "a configured key wins")
+}
+
+func TestUIDocsURL(t *testing.T) {
+	cfg, err := config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_UI_DOCS_URL=https://docs.internal/hangar/")})
+	require.NoError(t, err)
+	require.NoError(t, cfg.Validate())
+	require.Equal(t, "https://docs.internal/hangar/", cfg.UI.DocsURL)
+
+	cfg, err = config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_UI_DOCS_URL=")})
+	require.NoError(t, err)
+	require.NoError(t, cfg.Validate())
+	require.Empty(t, cfg.UI.DocsURL, "an empty value turns the links off")
+
+	cfg, err = config.Load(config.LoadOptions{Env: append(validEnv(), "HANGAR_UI_DOCS_URL=docs.internal")})
+	require.NoError(t, err)
+	require.ErrorContains(t, cfg.Validate(), `ui.docs_url "docs.internal" must be an absolute http or https URL`)
 }

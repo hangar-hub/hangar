@@ -27,8 +27,17 @@ type Config struct {
 	GC        GCConfig                  `koanf:"gc" desc:"Garbage collection of unreferenced LFS objects and git data."`
 	Repos     ReposConfig               `koanf:"repos" desc:"Repo lifecycle."`
 	Viewer    ViewerConfig              `koanf:"viewer" desc:"Dataset Viewer and Parquet export."`
+	UI        UIConfig                  `koanf:"ui" desc:"Web UI."`
 	Telemetry TelemetryConfig           `koanf:"telemetry" desc:"OpenTelemetry traces, metrics and logs. Standard OTEL_* variables also apply and win."`
 }
+
+// UIConfig configures the web UI.
+type UIConfig struct {
+	DocsURL string `koanf:"docs_url" desc:"Where the web UI's links to the documentation go, such as a docs mirror on an air-gapped network. The mirror must serve the same paths as https://hangar.page/. Empty removes the links."`
+}
+
+// DefaultDocsURL is the public documentation site.
+const DefaultDocsURL = "https://hangar.page/"
 
 // Process roles.
 const (
@@ -340,6 +349,7 @@ func Default() Config {
 			MaxRequestBytes:    300_000_000,
 			ConvertConcurrency: 1,
 		},
+		UI: UIConfig{DocsURL: DefaultDocsURL},
 		Telemetry: TelemetryConfig{
 			ServiceName:      "hangar",
 			Traces:           "otlp",

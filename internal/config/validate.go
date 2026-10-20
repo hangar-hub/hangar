@@ -316,6 +316,9 @@ func (c *Config) validate(requireInstanceKey bool) error {
 		e.addf("viewer.convert_concurrency must be at least 1")
 	}
 
+	// ui
+	checkURL(&e, "ui.docs_url", c.UI.DocsURL, false)
+
 	// telemetry
 	if c.Telemetry.ServiceName == "" {
 		e.addf("telemetry.service_name is required")
