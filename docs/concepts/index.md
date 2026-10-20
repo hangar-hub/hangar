@@ -1,3 +1,7 @@
+---
+description: "The words Hangar uses in its UI, API and docs, such as Instance, Arsenal, Repo, Revision, Mirror, Upstream, Pull and Job."
+---
+
 # Concepts
 
 The words Hangar uses, in its UI, API and these docs.

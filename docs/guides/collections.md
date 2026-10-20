@@ -1,3 +1,7 @@
+---
+description: "Curate Collections in Hangar: named, ordered lists of models and datasets, with a note on each, for a User or an Organisation."
+---
+
 # Collections
 
 A Collection is a named, ordered list of Repos that a User or Organisation curates, such as "Embedding models we support" or "Datasets for the March evaluation". Each item can have a note.

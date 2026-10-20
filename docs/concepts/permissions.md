@@ -1,3 +1,7 @@
+---
+description: "How Hangar controls access: Users, Organisations and Roles, Tokens, private and gated Repos, Ollama keys and the audit log."
+---
+
 # Permissions
 
 ## Users, Organisations and Roles

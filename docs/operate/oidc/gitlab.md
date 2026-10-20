@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with GitLab.com or self-managed GitLab as the OpenID Connect provider."
+---
+
 # OIDC with GitLab
 
 GitLab.com and self-managed GitLab are OpenID Connect providers.

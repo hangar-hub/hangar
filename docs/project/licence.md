@@ -1,3 +1,7 @@
+---
+description: "Hangar is source-available under the Elastic License 2.0: what you can do with it, including self-hosting at work, and what you can't."
+---
+
 # Licence
 
 Hangar is **source-available** under the Elastic License 2.0 (ELv2). It is not an OSI-approved open source licence.

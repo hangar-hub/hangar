@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with Microsoft Entra ID as the OpenID Connect provider: register an app, create a client secret and configure Hangar."
+---
+
 # OIDC with Microsoft Entra ID
 
 1. In the Entra admin centre, open **App registrations**, **New registration**:

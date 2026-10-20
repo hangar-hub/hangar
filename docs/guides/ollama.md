@@ -1,3 +1,7 @@
+---
+description: "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."
+---
+
 # Use Ollama
 
 Hangar serves GGUF Repos to Ollama the way huggingface.co does. Ollama signs its requests with the key pair in `~/.ollama`, and Hangar needs that key for every Repo unless the Repo is public and the Instance allows anonymous reads (`security.anonymous_read`, off by default). Register the key once:

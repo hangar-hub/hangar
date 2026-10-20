@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with Okta as the OpenID Connect provider: create an OIDC web app integration and configure Hangar."
+---
+
 # OIDC with Okta
 
 1. In the Okta admin console, open **Applications**, **Create App Integration**, **OIDC - OpenID Connect**, **Web Application**:

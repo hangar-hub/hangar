@@ -1,3 +1,7 @@
+---
+description: "Use the hangar CLI to sign in, find and inspect Repos, pull and download, upload and import, follow Jobs and script Hangar."
+---
+
 # The hangar CLI
 
 `hangar` is one binary for the server and the client. Install it as [Binary](../get-started/binary.md) describes. Every command is in the [CLI reference](../reference/cli.md).

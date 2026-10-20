@@ -1,3 +1,7 @@
+---
+description: "Install Hangar in a few minutes with Docker, Docker Compose, Helm or the binary, then sign in and pull your first model from Hugging Face."
+---
+
 # Get started
 
 Pick the way you want to run Hangar. Each takes a few minutes on a clean machine.

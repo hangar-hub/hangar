@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with Authentik as the OpenID Connect provider: create an OAuth2/OpenID provider and application, then configure Hangar."
+---
+
 # OIDC with Authentik
 
 1. In Authentik, open **Applications**, **Providers**, **Create**, **OAuth2/OpenID Provider**:

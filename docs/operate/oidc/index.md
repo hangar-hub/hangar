@@ -1,3 +1,7 @@
+---
+description: "Sign in to Hangar with any OpenID Connect provider, with PKCE, groups mapped to admins and Organisations, alongside local accounts."
+---
+
 # Sign in with OIDC
 
 Hangar signs people in through any OpenID Connect provider, with PKCE, alongside or instead of local accounts. You can configure more than one provider.

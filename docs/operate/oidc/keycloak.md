@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with Keycloak as the OpenID Connect provider, and try it locally with the Compose example's ready realm."
+---
+
 # OIDC with Keycloak
 
 Try it locally first with the [Keycloak Compose example](../../get-started/compose.md#oidc-with-keycloak), which imports a ready realm.

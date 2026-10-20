@@ -1,3 +1,8 @@
+---
+title: Documentation
+description: "Documentation for Hangar, the self-hosted model registry: install it, pull models from Hugging Face, and serve them to Python, git, Ollama and LM Studio."
+---
+
 # Hangar
 
 **A self-hosted home for your arsenal of models.**

@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with UniFi Identity Enterprise as the OpenID Connect provider."
+---
+
 # OIDC with UniFi Identity
 
 UniFi Identity Enterprise can act as an OpenID Connect provider for internal applications.

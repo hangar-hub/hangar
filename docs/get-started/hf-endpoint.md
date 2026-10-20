@@ -1,3 +1,7 @@
+---
+description: "Set HF_ENDPOINT and HF_TOKEN so huggingface_hub, transformers, datasets and the hf CLI load models and datasets from Hangar."
+---
+
 # Point HF_ENDPOINT at Hangar
 
 Hugging Face libraries read the Hub's address from `HF_ENDPOINT`, and a Token from `HF_TOKEN`. Set both and they use Hangar:

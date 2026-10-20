@@ -1,3 +1,7 @@
+---
+description: "Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos."
+---
+
 # Use the hf CLI
 
 The `hf` CLI that comes with `huggingface_hub` works against Hangar with `HF_ENDPOINT`:

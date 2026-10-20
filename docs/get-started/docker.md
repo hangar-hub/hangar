@@ -1,3 +1,7 @@
+---
+description: "Run Hangar as one Docker container, with SQLite and the filesystem Blob store in a volume, and configure it with environment variables."
+---
+
 # Run Hangar with Docker
 
 One container, with SQLite and the filesystem Blob store in a volume.

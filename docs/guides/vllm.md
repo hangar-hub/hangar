@@ -1,3 +1,7 @@
+---
+description: "Serve models with vLLM from weights stored in Hangar, by pointing its huggingface_hub downloads at your Instance with HF_ENDPOINT."
+---
+
 # Use vLLM
 
 vLLM downloads models with `huggingface_hub`, so `HF_ENDPOINT` points it at Hangar:

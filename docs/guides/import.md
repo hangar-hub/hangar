@@ -1,3 +1,7 @@
+---
+description: "Import models you already have into Hangar without downloading them again: from a Hugging Face cache, a folder, LM Studio or Ollama."
+---
+
 # Import an existing cache
 
 `hangar import` adds models you already have on disk to the Arsenal without downloading them again. Uploads go through the Instance's API, so it works against any Hangar you can write to. A file that fails to upload does not stop the import: the other files of the same Repo still go up and are added to its Mirror, the other Repos are imported, and the results name what failed. Run the same command again to send only what failed.

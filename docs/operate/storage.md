@@ -1,3 +1,7 @@
+---
+description: "Choose where Hangar stores model files: the filesystem or any S3-compatible store, with multipart upload clean-up, garbage collection and quotas."
+---
+
 # Storage backends
 
 The Blob store holds LFS objects, git packs and upload staging. Choose the filesystem or any S3-compatible store with `storage.backend`. Keys are the same on both, so you can move between them with [backup and restore](backup.md).

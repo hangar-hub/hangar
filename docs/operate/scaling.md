@@ -1,3 +1,7 @@
+---
+description: "Scale Hangar from one process to many: run web and worker roles behind a load balancer with Postgres and S3, and the targets it meets."
+---
+
 # Scaling
 
 One binary runs in one of three roles (`server.role`, or `hangar server --role`):

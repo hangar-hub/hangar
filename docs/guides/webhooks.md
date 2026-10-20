@@ -1,3 +1,7 @@
+---
+description: "Get an HTTP POST from Hangar when Repos change, Pulls finish or scans complete, and verify each delivery's signature."
+---
+
 # Webhooks
 
 Webhooks send an HTTP `POST` to your URL when something happens in a Namespace or Repo: pushes and Commits, Pulls, Mirror syncs, indexing and scans, discussions and pull requests. The event list and payloads are in [Webhook events](../reference/webhooks.md).

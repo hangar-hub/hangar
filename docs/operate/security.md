@@ -1,3 +1,7 @@
+---
+description: "A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities."
+---
+
 # Security hardening
 
 This page lists what to do to run Hangar securely. For what Hangar protects, its trust boundaries and the threats it mitigates or leaves to you, see the [threat model](../security/threat-model.md).

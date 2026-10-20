@@ -1,3 +1,7 @@
+---
+description: "Use Hangar from Python: point huggingface_hub, transformers, sentence-transformers and diffusers at your Instance with HF_ENDPOINT."
+---
+
 # Use Hangar from Python
 
 Every library built on `huggingface_hub` works against Hangar once `HF_ENDPOINT` points at it:

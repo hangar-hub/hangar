@@ -1,3 +1,7 @@
+---
+description: "Pull your first model from huggingface.co into Hangar from the web UI or the CLI, including gated and private Repos."
+---
+
 # Pull your first model
 
 A Pull fetches a Repo, or some of its files, from an Upstream such as huggingface.co into the Arsenal. It keeps the upstream ID and Commit SHAs, so code that names `org/model` works against Hangar unchanged.

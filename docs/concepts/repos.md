@@ -1,3 +1,7 @@
+---
+description: "How Hangar stores models and datasets as Repos: real git repositories with branches, tags and Commits, large files, visibility, renames and transfers."
+---
+
 # Repos and Revisions
 
 A Repo is a real git repository with a type, `model` or `dataset`, and an ID of the form `namespace/name`, such as `acme/sentiment-small` or, for a dataset, `datasets/acme/reviews` in URLs. A model and a dataset can share the same `namespace/name`.

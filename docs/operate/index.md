@@ -1,3 +1,7 @@
+---
+description: "Run Hangar for yourself or many people: storage, databases, scaling, OIDC sign-in, TLS, observability, backups, upgrades and security."
+---
+
 # Operate
 
 Running Hangar for yourself or for many people.

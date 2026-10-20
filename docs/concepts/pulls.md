@@ -1,3 +1,7 @@
+---
+description: "How a Pull fetches a Repo or some of its files from an Upstream, its lifecycle and network controls, and the remote code and base models it pulls too."
+---
+
 # Pulls and Dependencies
 
 ## A Pull's lifecycle

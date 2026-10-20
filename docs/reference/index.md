@@ -1,3 +1,7 @@
+---
+description: "Reference for Hangar: Hub API compatibility, the native API, every CLI command, configuration keys, webhook events and metrics."
+---
+
 # Reference
 
 - [Hub API compatibility](hub-api-compatibility.md): every Hugging Face Hub endpoint and whether Hangar supports it, generated from the compatibility suite.

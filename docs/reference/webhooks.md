@@ -1,3 +1,7 @@
+---
+description: "Every webhook event Hangar sends, with the JSON body of each delivery and what its fields mean."
+---
+
 # Webhook events
 
 Every delivery is an HTTP `POST` with a JSON body:
