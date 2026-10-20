@@ -5,12 +5,12 @@ import { api } from "@/api/client";
 import type { Scope, Token, TokenCreated } from "@/api/types";
 import { PageShell } from "@/components/PageShell";
 import { ScrollRegion } from "@/components/ScrollRegion";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/form";
+import { InfoBadge } from "@/components/ui/info-badge";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { type Column, DataTable } from "@/components/ui/table";
 import { formatDate, relativeTime } from "@/lib/format";
@@ -225,7 +225,22 @@ export function TokensPage() {
         </span>
       ),
     },
-    { key: "scope", header: "Scope", cell: (t) => <Badge mono>{t.scope}</Badge> },
+    {
+      key: "scope",
+      header: "Scope",
+      cell: (t) => (
+        <InfoBadge
+          mono
+          explanation={{
+            title: `The ${t.scope} scope`,
+            body: <p>{scopeHelp[t.scope]}</p>,
+            docs: "concepts/permissions/",
+          }}
+        >
+          {t.scope}
+        </InfoBadge>
+      ),
+    },
     {
       key: "limits",
       header: "Limited to",

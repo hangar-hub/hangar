@@ -201,7 +201,7 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 		Ollama: in.ollama,
 		Xet:    cas,
 		Auth:   in.auth.Handler(),
-		UI:     web.Handler(web.Options{ConnectSrc: in.presignOrigins(ctx)}),
+		UI:     web.Handler(web.Options{ConnectSrc: in.presignOrigins(ctx), DocsURL: cfg.UI.DocsURL}),
 	}
 	if in.viewer != nil {
 		protocols.Viewer = in.viewer.Handler()

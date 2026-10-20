@@ -4,7 +4,6 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { Repo, TreeEntry } from "@/api/types";
 import { AppLink, useGo } from "@/components/AppLink";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/form";
@@ -14,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatBytes, formatDateTime, relativeTime } from "@/lib/format";
 import { errorMessage, unwrap } from "@/lib/problem";
 import { baseName, blobPath, joinPath, type RepoKind, repoPath, treePath } from "@/lib/repo";
-import { NotPresentBadge, ScanBadge } from "../repos/badges";
+import { LfsBadge, NotPresentBadge, ScanBadge } from "../repos/badges";
 import { type RepoRef, repoKey, repoPathParams, useRepo } from "../repos/hooks";
 import { UploadPanel } from "../upload/UploadPanel";
 import { Breadcrumbs, RefPicker, ZipButton } from "./common";
@@ -219,12 +218,12 @@ export function TreePage({
             <AppLink href={href} className="break-all font-mono text-[13px] hover:underline">
               {n}
             </AppLink>
-            {e.lfs ? <Badge mono>LFS</Badge> : null}
+            {e.lfs ? <LfsBadge /> : null}
             {!e.present ? <NotPresentBadge /> : null}
             {!e.present && canPull && e.type === "file" ? (
               <PullFileButton repo={r} path={e.path} />
             ) : null}
-            <ScanBadge status={e.scan_status} hideSafe />
+            <ScanBadge status={e.scan_status} scope="file" hideSafe />
           </span>
         );
       },

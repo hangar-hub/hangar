@@ -206,6 +206,14 @@ Dataset Viewer and Parquet export.
 | `viewer.max_request_bytes`<br>`HANGAR_VIEWER_MAX_REQUEST_BYTES` | size | `300000000` | Decoded Parquet data one Dataset Viewer request may hold; requests that need more answer with an error, as the Hub's do. |
 | `viewer.convert_concurrency`<br>`HANGAR_VIEWER_CONVERT_CONCURRENCY` | int | `1` | dataset.convert Jobs per worker. |
 
+## `ui`
+
+Web UI.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `ui.docs_url`<br>`HANGAR_UI_DOCS_URL` | string | `https://hangar.page/` | Where the web UI's links to the documentation go, such as a docs mirror on an air-gapped network. The mirror must serve the same paths as https://hangar.page/. Empty removes the links. |
+
 ## `telemetry`
 
 OpenTelemetry traces, metrics and logs. Standard OTEL_* variables also apply and win.

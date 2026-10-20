@@ -9,6 +9,7 @@ import { ScrollRegion } from "@/components/ScrollRegion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/form";
+import { InfoBadge } from "@/components/ui/info-badge";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
@@ -17,7 +18,7 @@ import { splitFrontMatter } from "@/lib/frontmatter";
 import { unwrap } from "@/lib/problem";
 import { filesForQuants, selectionBytes } from "@/lib/pull";
 import { parseRepoId, repoPath } from "@/lib/repo";
-import { ArsenalBadge } from "../repos/badges";
+import { ArsenalBadge, DependencyPullBadge } from "../repos/badges";
 
 function PreviewTable({ preview }: { preview: Record<string, unknown> }) {
   const features = (preview.features ?? []) as { name: string }[];
@@ -138,7 +139,24 @@ export function DiscoverDetailPanel({
           state={d.arsenal}
           updateAvailable={Boolean(d.local_sha && d.sha && d.local_sha !== d.sha)}
         />
-        {d.gated ? <Badge tone="warn">Gated upstream</Badge> : null}
+        {d.gated ? (
+          <InfoBadge
+            tone="warn"
+            explanation={{
+              title: "Gated upstream",
+              body: (
+                <p>
+                  The Upstream asks people to request access to this Repo. Accept its conditions
+                  there, then save a token from that account under Settings, Upstream tokens, so
+                  your Pulls can fetch its files.
+                </p>
+              ),
+              docs: "guides/gated/",
+            }}
+          >
+            Gated upstream
+          </InfoBadge>
+        ) : null}
         {d.pipeline_tag ? <Badge>{d.pipeline_tag}</Badge> : null}
         {d.library_name ? <Badge>{d.library_name}</Badge> : null}
         {local && d.arsenal !== "none" ? (
@@ -234,11 +252,10 @@ export function DiscoverDetailPanel({
             {d.dependencies.map((dep) => (
               <li key={dep.repo} className="flex flex-wrap items-center gap-1.5">
                 <span className="break-all font-mono">{dep.repo}</span>
-                {dep.required ? (
-                  <Badge tone="info">Pulled with it</Badge>
-                ) : (
-                  <Badge>Suggested</Badge>
-                )}
+                <DependencyPullBadge
+                  required={dep.required}
+                  label={dep.required ? "Pulled with it" : "Suggested"}
+                />
                 <ArsenalBadge state={dep.arsenal} />
               </li>
             ))}

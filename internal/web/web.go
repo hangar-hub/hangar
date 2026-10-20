@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
+	"html"
 	"io/fs"
 	"net/http"
 	"path"
@@ -26,6 +27,9 @@ type Options struct {
 	// ConnectSrc adds origins the UI may call, such as the S3 presign host
 	// for direct uploads.
 	ConnectSrc []string
+	// DocsURL is where the UI's links to the documentation go. Empty
+	// removes them.
+	DocsURL string
 	// FS replaces the embedded build, for tests.
 	FS fs.FS
 }
@@ -36,6 +40,10 @@ var hashedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$`)
 // style nonce to the UI, which hands it to the libraries that add style
 // elements at run time (modal windows lock page scrolling that way).
 const NonceMeta = "csp-nonce"
+
+// DocsMeta is the name of the meta element that tells the UI where the
+// documentation is (ui.docs_url). An empty content removes the UI's links.
+const DocsMeta = "docs-url"
 
 // CSP returns the Content Security Policy for UI pages: no inline scripts,
 // stylesheets from the same origin plus style elements carrying nonce, and
@@ -73,9 +81,10 @@ func newNonce() string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-// withNonce adds the nonce meta element at the start of the head.
-func withNonce(index []byte, nonce string) []byte {
-	meta := []byte(`<meta name="` + NonceMeta + `" content="` + nonce + `" />`)
+// withMeta adds the nonce and docs meta elements at the start of the head.
+func withMeta(index []byte, nonce, docsURL string) []byte {
+	meta := []byte(`<meta name="` + NonceMeta + `" content="` + nonce + `" />` +
+		`<meta name="` + DocsMeta + `" content="` + html.EscapeString(docsURL) + `" />`)
 	i := bytes.Index(index, []byte("<head>"))
 	if i < 0 {
 		return append(meta, index...)
@@ -144,7 +153,7 @@ func Handler(opts Options) http.Handler {
 		h.Set("Permissions-Policy", PermissionsPolicy)
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			_, _ = w.Write(withNonce(index, nonce))
+			_, _ = w.Write(withMeta(index, nonce, opts.DocsURL))
 		}
 	})
 }

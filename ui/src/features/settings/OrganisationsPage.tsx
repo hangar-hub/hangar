@@ -3,12 +3,12 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import { AppLink, useGo } from "@/components/AppLink";
 import { PageShell } from "@/components/PageShell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { EmptyState, InlineError } from "@/components/ui/states";
 import { fieldErrors, unwrap } from "@/lib/problem";
 import { meKey, useMe } from "@/lib/session";
+import { RoleBadge } from "../repos/badges";
 
 /** Organisations you belong to, and a form to create one (AUTH-5). */
 export function OrganisationsPage() {
@@ -46,7 +46,7 @@ export function OrganisationsPage() {
                 {o.display_name || o.name}
               </AppLink>
               <span className="font-mono text-xs text-muted">{o.name}</span>
-              <Badge className="ml-auto">{o.role}</Badge>
+              <RoleBadge role={o.role} className="ml-auto" />
             </li>
           ))}
         </ul>

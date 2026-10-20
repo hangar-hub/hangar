@@ -78,7 +78,19 @@ func TestServesIndexForUIRoutesWithCSP(t *testing.T) {
 func TestNonceWithoutHead(t *testing.T) {
 	h := web.Handler(web.Options{FS: fstest.MapFS{"index.html": {Data: []byte("<div id=root></div>")}}})
 	rec := serve(h, http.MethodGet, "/")
-	require.Regexp(t, `^<meta name="csp-nonce" content="[^"]+" /><div id=root></div>$`, rec.Body.String())
+	require.Regexp(t, `^<meta name="csp-nonce" content="[^"]+" /><meta name="docs-url" content="" /><div id=root></div>$`, rec.Body.String())
+}
+
+func TestDocsURLMeta(t *testing.T) {
+	index := fstest.MapFS{"index.html": {Data: []byte("<head></head>")}}
+	rec := serve(web.Handler(web.Options{FS: index, DocsURL: "https://docs.internal/hangar/"}), http.MethodGet, "/")
+	require.Contains(t, rec.Body.String(), `<meta name="docs-url" content="https://docs.internal/hangar/" />`)
+
+	rec = serve(web.Handler(web.Options{FS: index, DocsURL: `https://docs.internal/?a="b"&c`}), http.MethodGet, "/")
+	require.Contains(t, rec.Body.String(), `content="https://docs.internal/?a=&#34;b&#34;&amp;c"`, "the URL cannot break out of the attribute")
+
+	rec = serve(web.Handler(web.Options{FS: index}), http.MethodGet, "/")
+	require.Contains(t, rec.Body.String(), `<meta name="docs-url" content="" />`, "empty removes the UI's docs links")
 }
 
 func TestCSPWithoutNonce(t *testing.T) {

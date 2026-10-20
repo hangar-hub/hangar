@@ -18,7 +18,13 @@ import { errorMessage, errorStatus, unwrap } from "@/lib/problem";
 import { type RepoKind, repoPath } from "@/lib/repo";
 import { useMe } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { MirrorBadge, ScanBadge, VisibilityBadge } from "./badges";
+import {
+  GatedBadge,
+  MirrorBadge,
+  ScanBadge,
+  UpdateAvailableBadge,
+  VisibilityBadge,
+} from "./badges";
 import { type RepoRef, repoKey, repoPathParams, useRepo } from "./hooks";
 import { UsePanel } from "./UsePanel";
 
@@ -90,7 +96,7 @@ function MirrorStatus({ repo }: { repo: Repo }) {
         <span className="text-xs text-muted">
           {m?.last_synced_at ? `Last synced ${relativeTime(m.last_synced_at)}` : "Not synced yet"}
         </span>
-        {m?.update_available ? <Badge tone="accent">Update available</Badge> : null}
+        {m?.update_available ? <UpdateAvailableBadge /> : null}
         {canAdmin || repo.permissions?.pull_mirror ? (
           <span className="ml-auto flex gap-1">
             <Button size="sm" onClick={() => sync.mutate()} disabled={sync.isPending}>
@@ -263,7 +269,7 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
             </h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <VisibilityBadge visibility={r.visibility} />
-              {r.gated ? <Badge tone="warn">Gated</Badge> : null}
+              {r.gated ? <GatedBadge /> : null}
               <ScanBadge status={r.summary?.scan_status} />
               {r.licence ? <Badge>{r.licence}</Badge> : null}
               {r.summary?.pipeline_tag ? <Badge>{r.summary.pipeline_tag}</Badge> : null}
