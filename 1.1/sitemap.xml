@@ -1,255 +1,255 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://hangar.page/1.1/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/benchmarks/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/benchmarks/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/concepts/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/concepts/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/concepts/jobs/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/concepts/jobs/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/concepts/mirrors/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/concepts/mirrors/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/concepts/permissions/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/concepts/permissions/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/concepts/pulls/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/concepts/pulls/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/concepts/repos/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/concepts/repos/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/binary/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/binary/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/compose/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/compose/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/docker/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/docker/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/first-login/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/first-login/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/first-pull/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/first-pull/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/helm/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/helm/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/get-started/hf-endpoint/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/get-started/hf-endpoint/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/air-gapped/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/air-gapped/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/collections/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/collections/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/datasets/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/datasets/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/gated/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/gated/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/git/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/git/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/hangar-cli/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/hangar-cli/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/hf-cli/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/hf-cli/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/import/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/import/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/lm-studio/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/lm-studio/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/ollama/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/ollama/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/pull-windows/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/pull-windows/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/python/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/python/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/uploading/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/uploading/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/vllm/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/vllm/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/guides/webhooks/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/guides/webhooks/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/backup/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/backup/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/databases/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/databases/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/observability/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/observability/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/proxies/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/proxies/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/scaling/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/scaling/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/security/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/security/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/storage/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/storage/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/troubleshooting/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/troubleshooting/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/upgrades/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/upgrades/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/authentik/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/authentik/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/entra-id/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/entra-id/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/gitlab/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/gitlab/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/google/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/google/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/keycloak/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/keycloak/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/okta/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/okta/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/operate/oidc/unifi/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/operate/oidc/unifi/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/project/architecture/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/project/architecture/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/project/changelog/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/project/changelog/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/project/contributing/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/project/contributing/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/project/licence/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/project/licence/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/project/security/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/project/security/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/cli/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/cli/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/configuration/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/configuration/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/hub-api-compatibility/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/hub-api-compatibility/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/metrics/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/metrics/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/native-api/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/native-api/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/reference/webhooks/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/reference/webhooks/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
     <url>
-         <loc>https://hangar.page/1.1/security/threat-model/</loc>
-         <lastmod>2026-10-19</lastmod>
+         <loc>https://hangar.page/latest/security/threat-model/</loc>
+         <lastmod>2026-10-20</lastmod>
     </url>
 </urlset>
