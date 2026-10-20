@@ -1,4 +1,5 @@
 ---
+title: Mirror Hugging Face Repos with full git history
 description: "How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with partial mirrors, tracking and pull-through."
 ---
 

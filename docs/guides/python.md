@@ -1,4 +1,5 @@
 ---
+title: transformers and huggingface_hub on a private hub
 description: "Use Hangar from Python: point huggingface_hub, transformers, sentence-transformers and diffusers at your Instance with HF_ENDPOINT."
 ---
 

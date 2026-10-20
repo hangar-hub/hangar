@@ -1,4 +1,5 @@
 ---
+title: git clone Hugging Face models from your own hub
 description: "Clone, fetch and push Hangar Repos with git and git-lfs over HTTPS, with a Token as the password, including partial and shallow clones."
 ---
 
