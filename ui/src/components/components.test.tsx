@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DiffView, diffLines } from "@/features/files/DiffView";
 import { ApiError } from "@/lib/problem";
-import { DemoBanner, docsUrl, isDemo } from "./DemoBanner";
+import { DemoBanner, docsUrl, installUrl, isDemo } from "./DemoBanner";
 import { PageShell } from "./PageShell";
 import { isSearchShortcut } from "./SearchPalette";
 import { Dialog } from "./ui/dialog";
@@ -127,12 +127,17 @@ describe("search shortcut", () => {
 });
 
 describe("DemoBanner", () => {
-  it("says the data is sample data and links to the docs", () => {
+  it("says the data is sample data and links to the docs and the install guide", () => {
     render(<DemoBanner />);
     const banner = screen.getByRole("region", { name: "Demo" });
     expect(banner).toHaveTextContent(
-      "This is a demo with sample data. Nothing you do here is saved. Read the documentation",
+      "This is a demo with sample data. Nothing you do here is saved. Read the documentation or install Hangar.",
     );
+    expect(screen.getByRole("link", { name: "install Hangar" })).toHaveAttribute(
+      "href",
+      installUrl,
+    );
+    expect(installUrl).toBe("https://hangar.page/latest/get-started/");
     expect(screen.getByRole("link", { name: "Read the documentation" })).toHaveAttribute(
       "href",
       "https://hangar.page/",

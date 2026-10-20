@@ -53,10 +53,15 @@ export const limits: SessionLimits = {
   idleMs: 60 * 60 * 1000,
 };
 
-/** Headers every demo response gets, as internal/web and internal/httpx set them. */
+/**
+ * Headers every demo response gets, as internal/web and internal/httpx set
+ * them, and HSTS, which the demo can always send because Cloudflare serves it
+ * over HTTPS only.
+ */
 const common: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000",
 };
 
 /**
@@ -70,7 +75,8 @@ export const indexedPage = "https://demo.hangar.page/";
 /**
  * The title, description, canonical URL and site name the indexed page gets
  * in place of the UI's title. Google names each host in its results with the
- * site name from WebSite structured data, and the demo is its own host.
+ * site name from WebSite structured data, and the demo is its own host. The
+ * WebSite names hangar.page's as its parent and the same publisher.
  */
 export const indexedHead =
   "<title>Hangar live demo: the self-hosted model registry</title>" +
@@ -83,6 +89,18 @@ export const indexedHead =
     name: "Hangar demo",
     alternateName: "Hangar live demo",
     url: indexedPage,
+    isPartOf: {
+      "@type": "WebSite",
+      "@id": "https://hangar.page/#website",
+      name: "Hangar",
+      url: "https://hangar.page/",
+    },
+    publisher: {
+      "@type": "Organization",
+      "@id": "https://hangar.page/#organization",
+      name: "Hangar",
+      url: "https://hangar.page/",
+    },
   })}</script>`;
 
 const isIndexed = (url: URL) => url.origin + url.pathname === indexedPage;

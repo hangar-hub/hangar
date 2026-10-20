@@ -1,12 +1,17 @@
 # Headers for the static assets Workers serves without running the Worker
 # (wrangler.jsonc, run_worker_first). The Worker sets the same ones, and the
 # page headers, on everything else. make demo copies this file into dist.
+# Vite names the files in assets/ after their content, so browsers can keep
+# them for a year.
 /assets/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000
+  Cache-Control: public, max-age=31536000, immutable
   X-Robots-Tag: noindex
 
 # The UI's favicon: search engines show it next to the demo's home page, so
-# they may index it.
+# they may index it. Its name stays the same when it changes.
 /assets/hangar.svg
   ! X-Robots-Tag
+  ! Cache-Control

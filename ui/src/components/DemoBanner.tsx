@@ -3,6 +3,9 @@ import { Info } from "lucide-react";
 /** The documentation site the demo links to. */
 export const docsUrl = "https://hangar.page/";
 
+/** The installation guide, for visitors who want their own Instance. */
+export const installUrl = "https://hangar.page/latest/get-started/";
+
 /**
  * True in the demo build at demo.hangar.page (VITE_HANGAR_DEMO=1). Vite
  * replaces the flag at build time, so the embedded build leaves the banner
@@ -21,7 +24,12 @@ export function DemoBanner() {
       This is a demo with sample data. Nothing you do here is saved.{" "}
       <a href={docsUrl} className="font-medium underline underline-offset-2">
         Read the documentation
+      </a>{" "}
+      or{" "}
+      <a href={installUrl} className="font-medium underline underline-offset-2">
+        install Hangar
       </a>
+      .
     </section>
   );
 }
