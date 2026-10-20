@@ -1,3 +1,7 @@
+---
+description: "Queue Pulls into time windows and cap their bandwidth, so large model downloads into Hangar never saturate your connection."
+---
+
 # Pull windows and bandwidth
 
 Pulls are queued, resumable and rate-limited, so a large Pull never saturates a home connection. Set these in the configuration (or `HANGAR_PULL_*` variables):

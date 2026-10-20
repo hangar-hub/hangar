@@ -1,3 +1,7 @@
+---
+description: "Set up sign-in to Hangar with Google as the OpenID Connect provider: create an OAuth client ID in the Google Cloud console and configure Hangar."
+---
+
 # OIDC with Google
 
 1. In the Google Cloud console, open **APIs & Services**, **Credentials**, **Create credentials**, **OAuth client ID**:

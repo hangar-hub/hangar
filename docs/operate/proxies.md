@@ -1,3 +1,7 @@
+---
+description: "Put Hangar behind a reverse proxy for TLS: the settings every proxy needs, Helm values, and large file uploads through nginx."
+---
+
 # TLS and reverse proxies
 
 Hangar serves plain HTTP; put a reverse proxy in front of it for TLS. Whatever proxy you use:

@@ -1,3 +1,7 @@
+---
+description: "Sign in to Hangar for the first time as hangar-admin, create a Token for your clients, and add people to your Instance."
+---
+
 # Sign in for the first time
 
 1. Open Hangar's public URL, such as <http://localhost:8080>.

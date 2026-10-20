@@ -1,3 +1,7 @@
+---
+description: "Back up and restore a Hangar Instance with hangar admin backup, for each database and storage combination and in a container."
+---
+
 # Back up and restore
 
 What to back up:

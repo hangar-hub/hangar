@@ -1,3 +1,7 @@
+---
+description: "Guides for using Hangar with Python, the hf CLI, git, Ollama, LM Studio and vLLM, and for uploads, datasets, imports and air-gapped networks."
+---
+
 # Guides
 
 Task-focused guides for using Hangar with the tools you already have.

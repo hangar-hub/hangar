@@ -1,3 +1,7 @@
+---
+description: "How Hangar is built: one Go binary with an embedded React UI, git as the one source of truth, every protocol on one host, and background Jobs."
+---
+
 # Architecture
 
 Hangar is one Go binary with an embedded React UI. The full design is in the [specification](https://github.com/hangar-hub/hangar/tree/main/docs/spec); this is the short version.

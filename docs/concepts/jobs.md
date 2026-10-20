@@ -1,3 +1,7 @@
+---
+description: "How Hangar runs background work as Jobs in a database-backed queue: Pulls, Mirror syncs, indexing, scans, garbage collection and webhook deliveries."
+---
+
 # Jobs
 
 Background work runs as Jobs in the database-backed queue: Pulls (`pull`, `pull.file`), Mirror syncs, indexing and scanning, garbage collection, git compaction, dataset conversion and statistics, webhook deliveries, zip exports and purges.

@@ -1,3 +1,7 @@
+---
+description: "Run Hangar's metadata on SQLite or Postgres, with migrations, and move an Instance from SQLite to Postgres."
+---
+
 # Databases
 
 Hangar keeps metadata, refs, Jobs and sessions in SQLite or Postgres. The schema is the same on both.

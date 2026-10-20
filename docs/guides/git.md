@@ -1,3 +1,7 @@
+---
+description: "Clone, fetch and push Hangar Repos with git and git-lfs over HTTPS, with a Token as the password, including partial and shallow clones."
+---
+
 # Use git and git-lfs
 
 Every Repo is a git repository over HTTPS, at the same URL as on the Hub plus `.git`:

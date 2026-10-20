@@ -1,3 +1,7 @@
+---
+description: "Install models from Hangar into LM Studio with hangar lmstudio install, which downloads them and links them into LM Studio's models folder."
+---
+
 # Use LM Studio
 
 LM Studio reads models from a folder laid out as `<publisher>/<repo>/<files>`. `hangar lmstudio install` downloads a model into your local Hugging Face cache and links it into that folder:

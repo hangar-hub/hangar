@@ -1,3 +1,7 @@
+---
+description: "Work with datasets in Hangar: load them with the datasets library, link them to models, export Parquet and preview rows in the Dataset Viewer."
+---
+
 # Work with datasets
 
 Datasets are Repos of type `dataset`. In URLs and the CLI they carry a `datasets/` prefix: `datasets/acme/reviews`.

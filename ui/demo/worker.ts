@@ -67,11 +67,23 @@ const common: Record<string, string> = {
  */
 export const indexedPage = "https://demo.hangar.page/";
 
-/** The title, description and canonical URL the indexed page gets in place of the UI's title. */
+/**
+ * The title, description, canonical URL and site name the indexed page gets
+ * in place of the UI's title. Google names each host in its results with the
+ * site name from WebSite structured data, and the demo is its own host.
+ */
 export const indexedHead =
   "<title>Hangar live demo: the self-hosted model registry</title>" +
   '<meta name="description" content="Try Hangar in your browser with sample data: browse models and datasets, read model cards and preview dataset rows in the self-hosted model registry." />' +
-  `<link rel="canonical" href="${indexedPage}" />`;
+  `<link rel="canonical" href="${indexedPage}" />` +
+  '<meta property="og:site_name" content="Hangar demo" />' +
+  `<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Hangar demo",
+    alternateName: "Hangar live demo",
+    url: indexedPage,
+  })}</script>`;
 
 const isIndexed = (url: URL) => url.origin + url.pathname === indexedPage;
 

@@ -1,3 +1,7 @@
+---
+description: "Load test results for Hangar's scale targets, such as download latency, large Repo listings, clones and memory use, with the setup and commands."
+---
+
 # Benchmarks
 
 These are the load test results for Hangar's scale targets: the targets in the specification's architecture chapter ("Scale targets") and the scenarios in `loadtest/`, run as `loadtest/README.md` describes. They were measured on 17 October 2026, before the v1.0 release.

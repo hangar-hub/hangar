@@ -1,3 +1,7 @@
+---
+description: "Monitor Hangar with OpenTelemetry traces, metrics and logs over OTLP, health checks, and setups for Elastic, Grafana and any OTLP backend."
+---
+
 # Observability
 
 Hangar exports traces, metrics and logs with OpenTelemetry, over OTLP, and needs no vendor agent. With nothing configured it makes no connections and writes JSON logs to standard output.

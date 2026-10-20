@@ -1,3 +1,7 @@
+---
+description: "Fix common Hangar problems: check the configuration end to end with hangar admin doctor, and find what you need in the logs."
+---
+
 # Troubleshooting
 
 ## Run the doctor

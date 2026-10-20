@@ -1,3 +1,7 @@
+---
+description: "Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD."
+---
+
 # Run Hangar on Kubernetes with Helm
 
 The chart is published as an OCI artefact at `oci://ghcr.io/hangar-hub/charts/hangar`.

@@ -1,3 +1,7 @@
+---
+description: "Hangar's threat model: the assets it protects, its trust boundaries, the threats at each and how they are mitigated, for operators and contributors."
+---
+
 # Threat model
 
 This page describes what Hangar protects, where its trust boundaries are, the threats at each boundary, and how each threat is mitigated or why it remains. It is written for operators who decide how to deploy Hangar, and for contributors who change code near a boundary.

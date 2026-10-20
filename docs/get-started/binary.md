@@ -1,3 +1,7 @@
+---
+description: "Install the hangar binary, both server and client, from a release archive or Homebrew on Linux, macOS or Windows, then run a server or use the CLI."
+---
+
 # Run the hangar binary
 
 One binary is both the server and the client. Install it with any of these:

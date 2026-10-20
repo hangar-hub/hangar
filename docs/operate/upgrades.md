@@ -1,3 +1,7 @@
+---
+description: "Upgrade Hangar in one container or across several processes, with database migrations, and what to do if you need to downgrade."
+---
+
 # Upgrade Hangar
 
 Hangar follows semantic versioning. Read the [changelog](../project/changelog.md) before you upgrade, and back up first ([Backup and restore](backup.md)).

@@ -1,3 +1,7 @@
+---
+description: "Run Hangar with Docker Compose: a quickstart, Postgres with MinIO, a scaled-out Instance, and OIDC sign-in with Keycloak."
+---
+
 # Run Hangar with Docker Compose
 
 The repository has four Compose examples in [`deploy/compose`](https://github.com/hangar-hub/hangar/tree/main/deploy/compose). CI starts each of them and runs the smoke test against it.

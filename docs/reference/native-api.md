@@ -1,3 +1,7 @@
+---
+description: "The native API behind Hangar's web UI and CLI, at /api/hangar/v1: conventions, authentication, pagination and the OpenAPI description."
+---
+
 # Native API
 
 The native API serves Hangar's web UI, the `hangar` CLI and automation, at `/api/hangar/v1`. It is separate from the Hugging Face Hub API that Hangar also serves.

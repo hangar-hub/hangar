@@ -1,3 +1,7 @@
+---
+description: "Upload models and datasets to Hangar with huggingface_hub, the hf CLI, hangar push, git or the web UI. Every upload is a real Commit."
+---
+
 # Upload models and datasets
 
 You can upload in five ways. All of them create real Commits, and a large file that already exists anywhere in the Instance is not stored twice.
