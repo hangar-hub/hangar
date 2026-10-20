@@ -96,6 +96,16 @@ describe("demo Worker", () => {
     expect(html).toContain(indexedHead);
     expect(html).not.toContain("<title>Hangar</title>");
 
+    // Googlebot asks with Accept: */* and must get the same page.
+    for (const accept of ["*/*", ""]) {
+      const crawl = await worker().fetch(
+        new Request("https://demo.hangar.page/", { headers: accept ? { Accept: accept } : {} }),
+        env(),
+      );
+      expect(crawl.headers.get("x-robots-tag")).toBeNull();
+      expect(await crawl.text()).toContain(indexedHead);
+    }
+
     const preview = await worker().fetch(
       new Request("https://main.demo.hangar.page/", { headers: { Accept: "text/html" } }),
       env(),

@@ -146,8 +146,13 @@ export function createDemoWorker(
       }
       const answer = await mock(request);
       if (answer) return secured(answer);
+      // Crawlers such as Googlebot send Accept: */*, so the indexed page does
+      // not wait for text/html, or they would get the bare index.html.
+      if (isIndexed(url) && (request.method === "GET" || request.method === "HEAD")) {
+        return secured(await page(env, url), true);
+      }
       if (isUiPage(request.method, url.pathname, request.headers.get("accept") ?? "")) {
-        return secured(await page(env, url), isIndexed(url));
+        return secured(await page(env, url));
       }
       if (request.method !== "GET" && request.method !== "HEAD") {
         const p = problem(405, "Method not allowed.");
