@@ -24,7 +24,7 @@ linters:
     misspell:
       locale: UK
       # Wire-format and upstream names that use US spelling.
-      ignore-rules: [unauthorized, modeling, authorization, normalize, serialize, color, initialize]
+      ignore-rules: [unauthorized, modeling, authorization, normalize, serialize, color, initialize, organization]
     gosec:
       excludes:
         # Subprocesses take arguments built by Hangar, never shell strings.
