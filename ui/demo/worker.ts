@@ -84,12 +84,22 @@ function secured(res: Response, indexable = false): Response {
   return out;
 }
 
-async function page(env: Env, url: URL): Promise<Response> {
+/**
+ * The raster favicons every demo page links to, ahead of the UI's SVG, for
+ * search results and crawlers that do not read SVG. The Worker serves them
+ * from its root files.
+ */
+export const faviconLinks =
+  '<link rel="icon" href="/favicon.ico" sizes="48x48" />' +
+  '<link rel="icon" href="/favicon-96.png" sizes="96x96" type="image/png" />';
+
+async function page(env: Env, url: URL, favicons: boolean): Promise<Response> {
   const index = await env.ASSETS.fetch(new Request(new URL("/", url)));
   if (!index.ok) return index;
   const nonce = newNonce();
   let html = withNonce(await index.text(), nonce);
   if (isIndexed(url)) html = html.replace(/<title>[^<]*<\/title>/, indexedHead);
+  if (favicons) html = html.replace("</head>", `${faviconLinks}</head>`);
   return new Response(html, { headers: pageHeaders(nonce) });
 }
 
@@ -102,34 +112,31 @@ export function compiledValidators(compiled: CompiledValidators): Validators {
 }
 
 /**
- * The files Google Search Console and Bing Webmaster Tools fetch from the site
- * root to check who owns demo.hangar.page, keyed by path. demo/generate.ts
- * reads them from deploy/cloudflare/docs-root, where hangar.page serves the
- * same files.
+ * Files the demo serves at its root, keyed by path, with their content type
+ * and base64 body: the files Google Search Console and Bing Webmaster Tools
+ * check ownership with, and the raster favicons. demo/generate.ts reads them
+ * from deploy/cloudflare/docs-root, where hangar.page serves the same files.
+ * They are not static assets, because the Worker answers every request for
+ * HTML with the UI, and search engines may index them.
  */
-export type VerificationFiles = Record<string, string>;
+export type RootFiles = Record<string, { type: string; body: string }>;
 
-function verificationFile(path: string, body: string, method: string): Response {
-  const type = path.endsWith(".xml") ? "application/xml" : "text/html; charset=utf-8";
-  return new Response(method === "HEAD" ? null : body, { headers: { "Content-Type": type } });
+function rootFile(file: RootFiles[string], method: string): Response {
+  const body = method === "HEAD" ? null : Uint8Array.from(atob(file.body), (c) => c.charCodeAt(0));
+  return new Response(body, { headers: { "Content-Type": file.type } });
 }
 
-export function createDemoWorker(
-  doc: Schema,
-  validators: Validators,
-  verification: VerificationFiles = {},
-) {
+export function createDemoWorker(doc: Schema, validators: Validators, rootFiles: RootFiles = {}) {
   const routes = routesOf(doc);
+  const favicons = Object.hasOwn(rootFiles, "/favicon-96.png");
   let mock: ReturnType<typeof createFetchMock> | undefined;
 
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
-      const file = Object.hasOwn(verification, url.pathname)
-        ? verification[url.pathname]
-        : undefined;
+      const file = Object.hasOwn(rootFiles, url.pathname) ? rootFiles[url.pathname] : undefined;
       if (file !== undefined && (request.method === "GET" || request.method === "HEAD")) {
-        return secured(verificationFile(url.pathname, file, request.method));
+        return secured(rootFile(file, request.method), true);
       }
       if (!mock) {
         const test = Number(env.DEMO_TEST_LIMIT_MIB ?? 0) * MiB;
@@ -149,10 +156,10 @@ export function createDemoWorker(
       // Crawlers such as Googlebot send Accept: */*, so the indexed page does
       // not wait for text/html, or they would get the bare index.html.
       if (isIndexed(url) && (request.method === "GET" || request.method === "HEAD")) {
-        return secured(await page(env, url), true);
+        return secured(await page(env, url, favicons), true);
       }
       if (isUiPage(request.method, url.pathname, request.headers.get("accept") ?? "")) {
-        return secured(await page(env, url));
+        return secured(await page(env, url, favicons));
       }
       if (request.method !== "GET" && request.method !== "HEAD") {
         const p = problem(405, "Method not allowed.");

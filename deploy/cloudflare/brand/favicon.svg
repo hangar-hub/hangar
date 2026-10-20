@@ -1,0 +1,14 @@
+<!-- The raster favicon for https://hangar.page/ and https://demo.hangar.page/,
+     for search results and crawlers that do not read SVG: the hangar on a
+     light square, like apple-touch-icon.svg, filling more of the square so it
+     reads at 16 px. Render it to docs-root/favicon-96.png and favicon.ico with:
+     rsvg-convert -w 96 -h 96 brand/favicon.svg -o docs-root/favicon-96.png
+     and an ICO of the 16, 32 and 48 px renders (Pillow: Image.save with sizes). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24">
+  <rect width="24" height="24" fill="#f5f7f9"/>
+  <g transform="translate(12 12) scale(0.9) translate(-12 -12.5)">
+    <path d="M2 21V10.5L12 4l10 6.5V21h-3.5v-7.5h-13V21z" fill="#181c22"/>
+    <rect x="5.5" y="15" width="13" height="2" fill="#0b7a6e"/>
+    <rect x="5.5" y="18.5" width="13" height="2.5" fill="#181c22" opacity="0.35"/>
+  </g>
+</svg>

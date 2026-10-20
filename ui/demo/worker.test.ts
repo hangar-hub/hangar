@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { compileValidators, loadSpec } from "../mock/openapi.ts";
-import { createDemoWorker, type Env, indexedHead, maxBodyBytes } from "./worker.ts";
+import { createDemoWorker, type Env, faviconLinks, indexedHead, maxBodyBytes } from "./worker.ts";
 
 // The demo Worker with a stand-in for the static assets binding. The
 // Playwright suite runs the real one under wrangler dev
@@ -122,18 +122,28 @@ describe("demo Worker", () => {
     expect(me.headers.get("x-robots-tag")).toBe("noindex");
   });
 
-  it("serves the search engines' verification files at the root", async () => {
-    const files = { "/BingSiteAuth.xml": "<users />", "/google1.html": "google-site-verification" };
+  it("serves its root files, indexable, and links every page to the favicons", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
+    const files = {
+      "/BingSiteAuth.xml": { type: "application/xml", body: btoa("<users />") },
+      "/favicon-96.png": { type: "image/png", body: btoa(String.fromCharCode(...png)) },
+    };
     const demo = createDemoWorker(doc, compileValidators(doc), files);
-    for (const [path, body] of Object.entries(files)) {
-      const res = await demo.fetch(page(path), env());
-      expect(res.status).toBe(200);
-      expect(await res.text()).toBe(body);
-    }
-    const xml = await demo.fetch(new Request("https://demo.hangar.page/BingSiteAuth.xml"), env());
+    const xml = await demo.fetch(page("/BingSiteAuth.xml"), env());
+    expect(xml.status).toBe(200);
     expect(xml.headers.get("content-type")).toBe("application/xml");
+    expect(await xml.text()).toBe("<users />");
+    const icon = await demo.fetch(new Request("https://demo.hangar.page/favicon-96.png"), env());
+    expect(icon.headers.get("content-type")).toBe("image/png");
+    expect(icon.headers.get("x-robots-tag")).toBeNull();
+    expect(new Uint8Array(await icon.arrayBuffer())).toEqual(png);
+
+    const repo = await demo.fetch(page("/ada/bert-tiny-finetune"), env());
+    expect(await repo.text()).toContain(`${faviconLinks}</head>`);
     const other = await demo.fetch(page("/google2.html"), env());
-    expect(await other.text()).toContain("<title>");
+    expect(await other.text()).toContain("<title>Hangar</title>");
+    // Without the files, as under vite preview, pages do not link to them.
+    expect(await (await worker().fetch(page("/"), env())).text()).not.toContain(faviconLinks);
   });
 
   it("passes assets through with the common headers and refuses other methods", async () => {
