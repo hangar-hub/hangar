@@ -5,3 +5,8 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Robots-Tag: noindex
+
+# The UI's favicon: search engines show it next to the demo's home page, so
+# they may index it.
+/assets/hangar.svg
+  ! X-Robots-Tag
