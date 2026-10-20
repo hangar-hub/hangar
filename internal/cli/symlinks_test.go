@@ -91,6 +91,49 @@ func TestSymlinksToCacheBlobsAreFollowed(t *testing.T) {
 	require.Equal(t, weights, e.inst.Files(mustID(t, model.RepoTypeModel, "acme/from-lm"), "main")["m-Q4_K_M.gguf"])
 }
 
+// TestSymlinksIntoTheSharedBlobStoreAreFollowed checks that a cache
+// written by huggingface_hub 2.x imports. It keeps Xet files once per
+// cache, in <cache>/blobs/<first two hex digits>/<Xet hash>, marked by
+// blobs/.huggingface-shared-blobs, and each Repo's blobs/<etag> is a link
+// to its entry. Before, those files were skipped as links out of the
+// Repo's folder. A hash-named file without the marker is still skipped.
+func TestSymlinksIntoTheSharedBlobStoreAreFollowed(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	cache := filepath.Join(e.home, "hf-cache")
+	id := mustID(t, model.RepoTypeModel, "acme/shared")
+	commit := strings.Repeat("ab", 20)
+	weights := blobOf("xet", 3000)
+	cacheSnapshot(t, cache, id, commit, map[string][]byte{"config.json": []byte("{}"), "model.safetensors": weights})
+
+	// Move the weights into the shared store, as huggingface_hub 2.x does.
+	shareBlob := func(cache, xetHash string) {
+		repoBlob := filepath.Join(cache, repoFolderName(id), "blobs", sha(weights))
+		entry := filepath.Join(cache, "blobs", xetHash[:2], xetHash)
+		require.NoError(t, os.MkdirAll(filepath.Dir(entry), 0o755))
+		require.NoError(t, os.Rename(repoBlob, entry))
+		rel, err := filepath.Rel(filepath.Dir(repoBlob), entry)
+		require.NoError(t, err)
+		require.NoError(t, os.Symlink(rel, repoBlob))
+	}
+	xetHash := strings.Repeat("d7", 32)
+	shareBlob(cache, xetHash)
+	require.NoError(t, os.WriteFile(filepath.Join(cache, "blobs", ".huggingface-shared-blobs"), []byte("1"), 0o644))
+
+	r := e.ok("import", "--from-hf-cache", cache, "--offline")
+	require.NotContains(t, r.stderr, "Skipped")
+	got := e.inst.Files(id, "main")
+	require.Equal(t, weights, got["model.safetensors"])
+	require.Equal(t, []byte("{}"), got["config.json"])
+
+	// The same layout without the marker is not a shared store.
+	unmarked := filepath.Join(e.home, "unmarked-cache")
+	cacheSnapshot(t, unmarked, id, commit, map[string][]byte{"config.json": []byte("{}"), "model.safetensors": weights})
+	shareBlob(unmarked, xetHash)
+	r = e.ok("push", filepath.Join(unmarked, repoFolderName(id), "snapshots", commit), "acme/unmarked", "--create")
+	require.Contains(t, r.stderr, "Skipped model.safetensors")
+}
+
 func TestWithin(t *testing.T) {
 	for _, c := range []struct {
 		path, dir string
