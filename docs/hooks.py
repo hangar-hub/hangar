@@ -1,6 +1,9 @@
-"""MkDocs hooks: publish api/openapi.yaml next to the native API page, and give
-every page a description for search results."""
+"""MkDocs hooks: publish api/openapi.yaml next to the native API page, give
+every page a description for search results, and give every page the
+metadata search engines and link previews read."""
 
+import html
+import json
 import pathlib
 
 from mkdocs.exceptions import PluginError
@@ -22,6 +25,19 @@ GENERATED_DESCRIPTIONS = {
 # Google shows about 160 characters; shorter than 70 says too little.
 DESCRIPTION_LENGTH = range(70, 161)
 
+# Google shows about 60 characters of a title. A title in a page's front
+# matter replaces the nav label in the page's <title> only, so it can name
+# what people search for while the nav stays short. Material appends the
+# site name.
+TITLE_SUFFIX = " - Hangar"
+TITLE_LENGTH = 60
+
+# The home page's image, and the entity its JSON-LD describes, which every
+# docs page names as its publisher (deploy/cloudflare/docs-root/index.html).
+OG_IMAGE = "https://hangar.page/og.png"
+HOME = "https://hangar.page/"
+PUBLISHER = {"@type": "Organization", "@id": HOME + "#organization", "name": "Hangar", "url": HOME}
+
 
 def on_files(files, config, **kwargs):
     files.append(File.generated(config, "reference/openapi.yaml", abs_src_path=str(ROOT / "api" / "openapi.yaml")))
@@ -36,4 +52,70 @@ def on_page_markdown(markdown, page, **kwargs):
     if len(description) not in DESCRIPTION_LENGTH:
         raise PluginError(f"{path}: the description is {len(description)} characters, want 70 to 160")
     page.meta["description"] = description
+    title = page.meta.get("title")
+    if title and len(title + TITLE_SUFFIX) > TITLE_LENGTH:
+        raise PluginError(f'{path}: the title "{title}{TITLE_SUFFIX}" is over {TITLE_LENGTH} characters')
     return markdown
+
+
+def on_post_page(output, page, config, **kwargs):
+    """Adds Open Graph and Twitter tags for link previews, and JSON-LD with the
+    page's breadcrumb trail. Canonical URLs come from site_url, which mike sets
+    to the canonical version (mkdocs.yml), as Material's canonical link does."""
+    title = (page.meta.get("title") or page.title or config["site_name"]) + TITLE_SUFFIX
+    if page.is_homepage and not page.meta.get("title"):
+        title = config["site_name"]
+    url = page.canonical_url
+    tags = [
+        ("property", "og:type", "website" if page.is_homepage else "article"),
+        ("property", "og:site_name", config["site_name"]),
+        ("property", "og:locale", "en_GB"),
+        ("property", "og:url", url),
+        ("property", "og:title", title),
+        ("property", "og:description", page.meta["description"]),
+        ("property", "og:image", OG_IMAGE),
+        ("property", "og:image:width", "1200"),
+        ("property", "og:image:height", "630"),
+        ("name", "twitter:card", "summary_large_image"),
+    ]
+    head = "".join(f'<meta {attr}="{key}" content="{html.escape(value)}">' for attr, key, value in tags)
+    head += '<script type="application/ld+json">' + json.dumps(structured_data(page, url), ensure_ascii=False).replace("</", "<\\/") + "</script>"
+    return output.replace("</head>", head + "</head>", 1)
+
+
+def structured_data(page, url):
+    """A TechArticle for the page and, below the docs home, a BreadcrumbList
+    from the home page through each section that has an index page."""
+    article = {
+        "@type": "TechArticle",
+        "headline": page.meta.get("title") or page.title,
+        "description": page.meta["description"],
+        "url": url,
+        "mainEntityOfPage": url,
+        "inLanguage": "en-GB",
+        "isPartOf": {"@type": "WebSite", "@id": HOME + "#website", "name": "Hangar", "url": HOME},
+        "publisher": PUBLISHER,
+    }
+    graph = [article]
+    if not page.is_homepage:
+        trail = [("Hangar", HOME)]
+        if homepage_url(page) != HOME:
+            trail.append(("Documentation", homepage_url(page)))
+        for section in reversed(page.ancestors):
+            index = section.children[0] if section.children else None
+            if getattr(index, "is_index", False) and index is not page:
+                trail.append((section.title, index.canonical_url))
+        trail.append((page.title, url))
+        graph.append({
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {"@type": "ListItem", "position": i, "name": name, "item": item}
+                for i, (name, item) in enumerate(trail, 1)
+            ],
+        })
+    return {"@context": "https://schema.org", "@graph": graph}
+
+
+def homepage_url(page):
+    """The docs home page's canonical URL: the page's own, less its path."""
+    return page.canonical_url[: len(page.canonical_url) - len(page.url)] if page.url else page.canonical_url

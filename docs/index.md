@@ -1,11 +1,13 @@
 ---
-title: Documentation
+title: Docs for the self-hosted model registry
 description: "Documentation for Hangar, the self-hosted model registry: install it, pull models from Hugging Face, and serve them to Python, git, Ollama and LM Studio."
 ---
 
 # Hangar
 
 **A self-hosted home for your arsenal of models.**
+
+[Get started](get-started/index.md){ .md-button .md-button--primary } [Try the demo](https://demo.hangar.page/){ .md-button }
 
 Hangar keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:
 
@@ -17,7 +19,7 @@ Hangar keeps your machine learning models and datasets on your own storage, with
 
 Pull models and datasets from huggingface.co once, including only the quantisation, Config or Split you want and any code they depend on, then load them from fast local storage as often as you like. Upload models that exist nowhere else. Browse everything you have, and everything you could pull, in one place.
 
-![Hangar in 30 seconds in a terminal: check the sign-in, pull a model from huggingface.co, download it with the hf CLI and show its details](assets/demo.gif)
+![Hangar in 30 seconds in a terminal: check the sign-in, pull a model from huggingface.co, download it with the hf CLI and show its details](assets/demo.gif){ width="979" height="650" }
 
 To try the web UI without installing anything, open the [demo](https://demo.hangar.page/). It runs on sample data, and nothing you do there is saved.
 
