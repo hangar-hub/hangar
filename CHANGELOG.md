@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.2.0](https://github.com/hangar-hub/hangar/compare/v1.1.0...v1.2.0) (2026-10-20)
+
+
+### Features
+
+* **ui:** explain badges on hover and click, with ui.docs_url for their docs links ([#24](https://github.com/hangar-hub/hangar/issues/24)) ([2e3bfba](https://github.com/hangar-hub/hangar/commit/2e3bfbaa241305d48409e60eef9a04ba7691aabd))
+* verify with Bing and improve search ranking for all three sites ([#23](https://github.com/hangar-hub/hangar/issues/23)) ([c588b7d](https://github.com/hangar-hub/hangar/commit/c588b7d04853899a1bded21089d1dab63ce1a0f9))
+
+
+### Bug fixes
+
+* **cli:** import files from huggingface_hub 2.x's shared blob store ([#27](https://github.com/hangar-hub/hangar/issues/27)) ([ebcabed](https://github.com/hangar-hub/hangar/commit/ebcabed95fef4a2b9bf632b8287c4423df9b1130))
+* **demo:** index the demo home page for crawlers, and add raster favicons ([#25](https://github.com/hangar-hub/hangar/issues/25)) ([c6589c8](https://github.com/hangar-hub/hangar/commit/c6589c83e15dfa09e14af8eb2a8001f483226eac))
+* **docs:** link the docs logo to the home page ([#26](https://github.com/hangar-hub/hangar/issues/26)) ([2d98f0a](https://github.com/hangar-hub/hangar/commit/2d98f0ad1d77ed6d8bef5e94feaa94e6b9f550f0))
+* **helm:** retry the helm test while the Service starts routing ([#21](https://github.com/hangar-hub/hangar/issues/21)) ([a57fffd](https://github.com/hangar-hub/hangar/commit/a57fffd7ea45496c63864687c86fe6f34d9da9b8))
+* two races found by CI (S3 part ETag, gitstore Acquire) ([#14](https://github.com/hangar-hub/hangar/issues/14)) ([311e225](https://github.com/hangar-hub/hangar/commit/311e225f76f9d7e2edb3196337c3450bffa6fb07))
+
+
+### Documentation
+
+* **build:** record the v1.0.0 and v1.1.0 releases and the CI fixes after them ([#22](https://github.com/hangar-hub/hangar/issues/22)) ([144b290](https://github.com/hangar-hub/hangar/commit/144b29071a5f149d2229353b6ebb1c5342951982))
+
+
+### Dependencies
+
+* bump the go-minor-and-patch group across 1 directory with 2 updates ([#1](https://github.com/hangar-hub/hangar/issues/1)) ([4c84ac8](https://github.com/hangar-hub/hangar/commit/4c84ac8e1159000b71ecb5baef10c1510f428ac0))
+* bump the ui-minor-and-patch group across 1 directory with 2 updates ([#2](https://github.com/hangar-hub/hangar/issues/2)) ([9b3d361](https://github.com/hangar-hub/hangar/commit/9b3d36124f81768afeb8643759eb250fa8ce7b4c))
+
 ## [1.1.0](https://github.com/hangar-hub/hangar/compare/v1.0.0...v1.1.0) (2026-10-19)
 
 
