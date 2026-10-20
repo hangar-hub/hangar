@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/hangar-hub/hangar/compare/v1.2.0...v1.2.1) (2026-10-20)
+
+
+### Bug fixes
+
+* **docs:** give every docs page its own search description, and name the sites for Google ([#30](https://github.com/hangar-hub/hangar/issues/30)) ([938f091](https://github.com/hangar-hub/hangar/commit/938f09163f8bef6ca4227c2d2ea6776bc285fef0))
+
 ## [1.2.0](https://github.com/hangar-hub/hangar/compare/v1.1.0...v1.2.0) (2026-10-20)
 
 
