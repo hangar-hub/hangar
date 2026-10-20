@@ -55,6 +55,9 @@ theme:
       toggle: {icon: material/weather-sunny, name: Switch to light mode}
 
 extra:
+  # The logo on every docs page links to the home page, not the version's
+  # index, so search engines see https://hangar.page/ as the site's home.
+  homepage: https://hangar.page/
   version:
     provider: mike
     default: latest
