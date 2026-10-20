@@ -115,6 +115,7 @@ nav:
       - Pulls and Dependencies: concepts/pulls.md
       - Jobs: concepts/jobs.md
       - Permissions: concepts/permissions.md
+      - How Hangar compares: concepts/comparison.md
   - Guides:
       - guides/index.md
       - Python libraries: guides/python.md
