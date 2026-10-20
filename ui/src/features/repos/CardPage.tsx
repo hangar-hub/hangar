@@ -5,8 +5,8 @@ import { api } from "@/api/client";
 import type { Dependency, Repo } from "@/api/types";
 import { AppLink } from "@/components/AppLink";
 import { LazyMarkdown } from "@/components/content/LazyMarkdown";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InfoBadge } from "@/components/ui/info-badge";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { formatBytes, formatCompact, formatContext, formatCount, formatParams } from "@/lib/format";
@@ -14,7 +14,13 @@ import { parseCardData, splitFrontMatter } from "@/lib/frontmatter";
 import { errorMessage, errorStatus, unwrap } from "@/lib/problem";
 import { blobPath, parseRepoId, type RepoKind, repoPath, resolveUrl, treePath } from "@/lib/repo";
 import { CardEditor } from "../datasets/CardEditor";
-import { ArsenalBadge, formatName, QuantChips } from "./badges";
+import {
+  ArsenalBadge,
+  DependencyKindBadge,
+  DependencyPullBadge,
+  formatName,
+  QuantChips,
+} from "./badges";
 import {
   type RepoRef,
   repoKey,
@@ -88,8 +94,8 @@ function DependencyItem({ dep, mirrorUpstream }: { dep: Dependency; mirrorUpstre
         ) : (
           <span className="break-all font-mono text-sm">{dep.repo}</span>
         )}
-        <Badge>{kindLabels[dep.kind]}</Badge>
-        {dep.required ? <Badge tone="info">Required</Badge> : null}
+        <DependencyKindBadge kind={dep.kind} label={kindLabels[dep.kind]} />
+        {dep.required ? <DependencyPullBadge required label="Required" /> : null}
         <ArsenalBadge state={dep.arsenal} />
       </div>
       {dep.arsenal !== "full" && dep.kind !== "dataset" ? (
@@ -128,7 +134,20 @@ function Sidebar({ repo, cardData }: { repo: Repo; cardData: Record<string, unkn
         </h2>
         {meta.data?.status === "pending" ? (
           <p className="mb-2">
-            <Badge tone="info">Indexing</Badge>
+            <InfoBadge
+              tone="info"
+              explanation={{
+                title: "Indexing",
+                body: (
+                  <p>
+                    Hangar is reading this Commit's files for their format, architecture, parameter
+                    count, quantisation and licence. The details below fill in when it finishes.
+                  </p>
+                ),
+              }}
+            >
+              Indexing
+            </InfoBadge>
           </p>
         ) : null}
         <dl className="divide-y divide-line">

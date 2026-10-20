@@ -7,7 +7,6 @@ import type { ScanFinding } from "@/api/types";
 import { AppLink, useGo } from "@/components/AppLink";
 import { CodeView } from "@/components/content/CodeView";
 import { LazyMarkdown } from "@/components/content/LazyMarkdown";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Field, Input, Textarea } from "@/components/ui/form";
@@ -27,7 +26,7 @@ import {
   repoPath,
   resolveUrl,
 } from "@/lib/repo";
-import { NotPresentBadge, ScanBadge, type ScanStatus } from "../repos/badges";
+import { LfsBadge, NotPresentBadge, ScanBadge, type ScanStatus } from "../repos/badges";
 import { fetchText, type RepoRef, repoKey, repoPathParams, useRefs, useRepo } from "../repos/hooks";
 import { useExternalImages } from "../repos/useInstance";
 import { Breadcrumbs, RefPicker } from "./common";
@@ -103,7 +102,7 @@ function ScanPanel({
       <ShieldAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
       <div className="min-w-0 space-y-1 text-sm">
         <h2 id="scan-title" className="flex items-center gap-2 font-semibold">
-          Pickle scan <ScanBadge status={status} />
+          Pickle scan <ScanBadge status={status} plain />
         </h2>
         <p>{scanExplanations[status]}</p>
         {findings.length ? (
@@ -390,13 +389,9 @@ export function BlobPage({
         <span className="flex flex-wrap items-center gap-1.5">
           <FileCode className="size-4 shrink-0 text-muted" aria-hidden="true" />
           <span className="tabular font-mono text-xs">{formatBytes(e.size)}</span>
-          {e.lfs ? (
-            <Badge mono title={`SHA-256 ${e.lfs.oid}`}>
-              LFS
-            </Badge>
-          ) : null}
+          {e.lfs ? <LfsBadge oid={e.lfs.oid} /> : null}
           {!e.present ? <NotPresentBadge /> : null}
-          <ScanBadge status={e.scan_status} />
+          <ScanBadge status={e.scan_status} scope="file" />
         </span>
         {e.last_commit ? (
           <AppLink

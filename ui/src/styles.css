@@ -329,6 +329,10 @@ body {
 .hg-popover[data-state="closed"] {
   animation: hg-fade-out 100ms var(--ease-out);
 }
+/* The same for explanations opened while another was just open. */
+.hg-popover[data-instant][data-state="open"] {
+  animation: none;
+}
 /* Content that replaces a skeleton or a previous state settles in. */
 .hg-enter {
   animation: hg-rise-in 200ms var(--ease-out);
