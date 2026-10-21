@@ -317,6 +317,9 @@ func (s *Service) ChangePassword(ctx context.Context, p model.Principal, c Passw
 	}
 	if !ok {
 		failed("wrong_password")
+		if err := s.Login.confirm(ctx, att); err != nil {
+			return err
+		}
 		return ErrWrongPassword
 	}
 	if err := s.Login.release(ctx, att); err != nil {

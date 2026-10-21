@@ -144,6 +144,38 @@ func TestPasswordLoginAndThrottling(t *testing.T) {
 	})
 }
 
+// TestLoginThrottleLockStartsAfterTheHash checks that the lock a failure
+// sets runs from when the password was found wrong, not from when the
+// attempt was counted before the hash. A hash slower than the first
+// one-second lock used to leave no lock at all by the next request.
+func TestLoginThrottleLockStartsAfterTheHash(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		_, err := s.Users.Create(ctx, auth.NewUser{Username: "alice", Password: goodPassword}, model.System())
+		require.NoError(t, err)
+		for i := range 4 {
+			_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: fmt.Sprintf("10.3.0.%d", i)})
+			require.ErrorIs(t, err, auth.ErrLoginFailed)
+		}
+		// The fifth failure locks the username for a second. Each read of
+		// the clock now moves it on two seconds, so the check takes longer
+		// than the lock.
+		clock.SetTick(2 * time.Second)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "10.3.0.9"})
+		clock.SetTick(0)
+		require.ErrorIs(t, err, auth.ErrLoginFailed)
+		var row db.LoginAttempt
+		require.NoError(t, d.NewSelect().Model(&row).Where("key = ?", "user:alice").Scan(ctx))
+		require.Equal(t, 5, row.Failures)
+		require.NotNil(t, row.LastFailureAt)
+		require.NotNil(t, row.LockedUntil)
+		require.Greater(t, row.LockedUntil.Sub(*row.LastFailureAt), time.Second,
+			"the lock runs from the end of the check, after the attempt was counted")
+	})
+}
+
 // TestLoginThrottleHoldsUnderParallelAttempts covers security review
 // finding 3: the throttle was checked before the password hash and the
 // failure written after it, so a burst of parallel guesses all passed the

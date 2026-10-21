@@ -193,6 +193,38 @@ func (l *LoginService) reserve(ctx context.Context, keys []string) (*attempt, er
 	return a, nil
 }
 
+// confirm records that a reserved attempt failed, after its password was
+// checked. reserve set any lock from when the attempt was counted, before
+// the hash, which takes long enough on a slow machine to use up the first
+// one-second lock, so the lock now runs from the failure instead, as long
+// as each key's count calls for. It never shortens a lock.
+func (l *LoginService) confirm(ctx context.Context, a *attempt) error {
+	now := l.s.nowUTC()
+	return l.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		rows, err := l.lockAttemptRows(ctx, tx, a.keys)
+		if err != nil {
+			return err
+		}
+		for _, k := range a.keys {
+			row := rows[k]
+			d := backoff(row.Failures)
+			if d == 0 {
+				continue
+			}
+			until := now.Add(d)
+			if row.LockedUntil != nil && !row.LockedUntil.Before(until) {
+				continue
+			}
+			row.LockedUntil = &until
+			row.UpdatedAt = now
+			if err := saveAttemptRow(ctx, tx, &row); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // release takes back the failure reserve counted, after a right password.
 // The lock and decay times go back to what they were, unless another
 // attempt has changed them since.
@@ -304,6 +336,9 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 		return nil, err
 	}
 	if !ok {
+		if err := l.confirm(ctx, att); err != nil {
+			return nil, err
+		}
 		return nil, ErrLoginFailed
 	}
 	if err := l.release(ctx, att); err != nil {
