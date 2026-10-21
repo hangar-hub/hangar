@@ -175,6 +175,7 @@ type PullConfig struct {
 	BandwidthLimit ByteSize          `koanf:"bandwidth_limit" desc:"Bytes per second across the Instance. 0 means unlimited."`
 	Concurrency    int               `koanf:"concurrency" desc:"Files transferred at once across the Instance."`
 	Windows        []string          `koanf:"windows" desc:"Times when Pull transfers may run, such as 01:00-07:00, in server.timezone. Empty means any time."`
+	StallTimeout   time.Duration     `koanf:"stall_timeout" desc:"How long an Upstream may take to answer a request, or go without sending data during a download, before Hangar cuts the connection and retries. Raise it on slow or congested links."`
 	PullThrough    PullThroughConfig `koanf:"pull_through" desc:"Start Pulls automatically when clients ask for Repos that are not in the Arsenal."`
 	Dependencies   DependencyConfig  `koanf:"dependencies" desc:"Dependency resolution."`
 }
@@ -313,9 +314,10 @@ func Default() Config {
 			"huggingface": {BaseURL: "https://huggingface.co", Enabled: true},
 		},
 		Pull: PullConfig{
-			Concurrency: 4,
-			Windows:     []string{},
-			PullThrough: PullThroughConfig{Allow: []string{"*"}, MinRole: "user"},
+			Concurrency:  4,
+			Windows:      []string{},
+			StallTimeout: 2 * time.Minute,
+			PullThrough:  PullThroughConfig{Allow: []string{"*"}, MinRole: "user"},
 			Dependencies: DependencyConfig{
 				AutoPullCode: true,
 				MaxDepth:     5,

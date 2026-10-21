@@ -305,6 +305,7 @@ pull:
   bandwidth_limit: 0                        # bytes/s across the Instance; 0 = unlimited
   concurrency: 4                            # files at once across the Instance
   windows: []                               # e.g. ["01:00-07:00"] in server.timezone
+  stall_timeout: 2m                         # cut and retry an upstream request that answers or sends nothing
   pull_through:
     enabled: false
     allow: ["*"]                            # globs of upstream repo IDs
