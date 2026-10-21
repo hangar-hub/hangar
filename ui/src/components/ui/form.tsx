@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const control =
-  "w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink transition-[border-color] duration-150 hover:border-steel-400 placeholder:text-muted/80 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-60 aria-[invalid=true]:border-danger";
+  "w-full rounded-md border border-control bg-surface px-3 text-sm text-ink transition-[border-color] duration-150 hover:border-muted placeholder:text-muted/80 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-60 aria-[invalid=true]:border-danger";
 
 /** Compact controls sit in toolbars beside `sm` buttons. */
 type Compact = { compact?: boolean };
@@ -187,7 +187,7 @@ export function Switch({
         disabled={disabled}
         onCheckedChange={onCheckedChange}
         aria-describedby={hint ? `${id}-hint` : undefined}
-        className="relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-line-strong bg-raised transition-[background-color,border-color] duration-150 ease-out data-[state=checked]:border-accent data-[state=checked]:bg-accent-fill disabled:opacity-50"
+        className="relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-control bg-raised transition-[background-color,border-color] duration-150 ease-out data-[state=checked]:border-accent data-[state=checked]:bg-accent-fill disabled:opacity-50"
       >
         <RadixSwitch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-surface shadow transition-[translate] duration-200 ease-out data-[state=checked]:translate-x-[18px] data-[state=checked]:bg-accent-ink" />
       </RadixSwitch.Root>

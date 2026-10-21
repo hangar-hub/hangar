@@ -39,6 +39,7 @@
   --color-muted: var(--hg-muted);
   --color-line: var(--hg-line);
   --color-line-strong: var(--hg-line-strong);
+  --color-control: var(--hg-control);
   --color-accent: var(--hg-accent);
   --color-accent-ink: var(--hg-accent-ink);
   --color-accent-fill: var(--hg-accent-fill);
@@ -74,6 +75,10 @@
   --hg-muted: #4d5662;
   --hg-line: #dde2e8;
   --hg-line-strong: #c3cad3;
+  /* Borders of inputs, selects and switches, which must stand out 3:1
+     (WCAG 1.4.11): 3.6:1 on the surface, 3.4:1 on the page and 3.2:1 on
+     raised and accent-soft fills. */
+  --hg-control: #7d8794;
   /* Text-weight accent: 6.1:1 on white, 5.3:1 on accent-soft. */
   --hg-accent: #0b6e64;
   /* Filled accent with white text on it: 5.2:1. Hover uses --hg-accent. */
@@ -99,6 +104,9 @@
   --hg-muted: #a5afbb;
   --hg-line: #2e3640;
   --hg-line-strong: #46505c;
+  /* 3.9:1 on the surface, 4.2:1 on the page, 3.4:1 on raised and 3.2:1 on
+     accent-soft. */
+  --hg-control: #717c89;
   /* 9.2:1 on the surface, 7.6:1 on accent-soft. */
   --hg-accent: #5fd4c2;
   /* Filled accent with dark text on it: 6.9:1. Hover uses --hg-accent. */
