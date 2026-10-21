@@ -211,7 +211,8 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 }
 
 // waitForSchema waits until the database schema is current, so a web or
-// worker process can start while hangar admin migrate runs.
+// worker process can start while hangar admin migrate runs. It fails at
+// once when a newer version of Hangar has migrated the database.
 func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 	logged := false
 	for {
@@ -222,8 +223,13 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 		if err == nil {
 			st, err = d.Schema(ctx)
 		}
-		if err == nil && st.UpToDate() {
-			return nil
+		if err == nil {
+			if err := st.CheckNotNewer(); err != nil {
+				return err
+			}
+			if st.UpToDate() {
+				return nil
+			}
 		}
 		if !logged {
 			if err != nil {

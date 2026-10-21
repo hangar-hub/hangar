@@ -51,6 +51,9 @@ func newHealthFor(d *db.DB, blobs func() blob.Store, extra ...httpx.Check) *http
 			if err != nil {
 				return err
 			}
+			if err := st.CheckNotNewer(); err != nil {
+				return err
+			}
 			if !st.UpToDate() {
 				return fmt.Errorf("database schema is at %q; this binary expects %q (run hangar admin migrate)", st.Current, st.Expected)
 			}

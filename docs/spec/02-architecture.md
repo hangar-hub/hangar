@@ -7,7 +7,7 @@
 | Language | Go, current stable release | Pin the exact version in `go.mod` (`toolchain`) and the Dockerfile. |
 | HTTP | `net/http` with `github.com/go-chi/chi/v5` | chi handles the Hub's mixed path shapes; see "Routing". |
 | Database access | `github.com/uptrace/bun` with `pgdriver` and `sqliteshim` over `modernc.org/sqlite` | Pure Go, so `CGO_ENABLED=0` static builds for every platform. |
-| Migrations | `bun/migrate`, SQL files per dialect | `internal/db/migrations/{postgres,sqlite}/NNNN_name.up.sql`. |
+| Migrations | `bun/migrate`, SQL files per dialect | `internal/db/migrations/{postgres,sqlite}/NNNN_name.tx.up.sql`: each migration runs, and is recorded, in one transaction. |
 | Object storage | `github.com/minio/minio-go/v7` | Works with every S3-compatible store and supports presigning and multipart. |
 | Git | `git` binary (2.39 or later) for fetch; `github.com/go-git/go-git/v6` (pinned pre-release) for push, server-side Commits and Mirror fetches | See [04](04-git.md). |
 | OIDC | `github.com/coreos/go-oidc/v3` and `golang.org/x/oauth2` | |

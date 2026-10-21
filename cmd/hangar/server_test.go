@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/hangar-hub/hangar/internal/db"
 	"github.com/hangar-hub/hangar/internal/httpx"
 )
 
@@ -136,6 +137,32 @@ func TestWaitForSchemaWaitsForMigrate(t *testing.T) {
 	defer cancel2()
 	require.Error(t, waitForSchema(ctx, d, log))
 	require.Contains(t, logs.String(), "waiting for the database")
+}
+
+// TestNewerSchemaStopsStartup checks that a web or worker process refuses
+// a database migrated by a newer version of Hangar, at once and with the
+// reason, and that /readyz reports it.
+func TestNewerSchemaStopsStartup(t *testing.T) {
+	cfg := testConfig(t)
+	ctx := context.Background()
+	d, err := openDatabase(ctx, cfg, false)
+	require.NoError(t, err)
+	defer d.Close()
+	require.NoError(t, d.Migrate(ctx))
+	_, err = d.ExecContext(ctx, "INSERT INTO bun_migrations (name, group_id) VALUES ('9999', 99)")
+	require.NoError(t, err)
+
+	wait, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err = waitForSchema(wait, d, slog.New(slog.DiscardHandler))
+	require.ErrorIs(t, err, db.ErrSchemaNewer)
+
+	blobs := newEmptyBlobs()
+	require.NoError(t, ensureSentinel(ctx, blobs))
+	failures := newHealth(d, blobs).Failures(ctx)
+	require.Len(t, failures, 1)
+	require.Equal(t, "database", failures[0].Name)
+	require.Contains(t, failures[0].Error, "newer than this version of Hangar")
 }
 
 func TestServerCommandRefusesInvalidConfig(t *testing.T) {
