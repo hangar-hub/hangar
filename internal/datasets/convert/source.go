@@ -204,9 +204,18 @@ func innerName(name string) string {
 	return name
 }
 
+// maxValueBytes caps one value read whole: a line, a text document, a
+// paragraph or a JSON value. It keeps a worker's memory bounded whatever
+// the file, where `datasets` would read the value however long.
+const maxValueBytes = 64 << 20
+
+// errLineTooLong fails a file with a line longer than maxValueBytes.
+var errLineTooLong = fmt.Errorf("%w: a line longer than %d bytes", ErrUnsupported, maxValueBytes)
+
 // chunkReader yields chunks of about size bytes that end at a line break,
 // as the `datasets` JSON and text builders read files (f.read(chunksize)
-// followed by f.readline()).
+// followed by f.readline()). The rest of the line after size bytes is
+// capped at maxValueBytes.
 type chunkReader struct {
 	r    *bufio.Reader
 	size int
@@ -231,10 +240,18 @@ func (c *chunkReader) next() ([]byte, error) {
 		return nil, err
 	}
 	if n == c.size {
-		line, rerr := c.r.ReadBytes('\n')
-		buf = append(buf, line...)
-		if rerr != nil && !errors.Is(rerr, io.EOF) {
-			return nil, rerr
+		for {
+			frag, rerr := c.r.ReadSlice('\n')
+			if len(buf)-c.size+len(frag) > maxValueBytes {
+				return nil, errLineTooLong
+			}
+			buf = append(buf, frag...)
+			if rerr == nil || errors.Is(rerr, io.EOF) {
+				break
+			}
+			if !errors.Is(rerr, bufio.ErrBufferFull) {
+				return nil, rerr
+			}
 		}
 	}
 	return buf, nil

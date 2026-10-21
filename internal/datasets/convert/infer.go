@@ -191,85 +191,134 @@ func merge(a, b *itype) *itype {
 	return &itype{json: true}
 }
 
-// mixedStructPaths is datasets.utils.json.find_mixed_struct_types_field_paths:
-// paths below the root where objects have different keys, or are empty,
-// or where objects or lists are mixed with other values. Path elements are
-// field names, or "" for list items.
-func mixedStructPaths(examples []any) [][]string {
-	var out [][]string
-	type work struct {
-		path    []string
-		content []any
-	}
-	var nonNil []any
-	for _, e := range examples {
-		if e != nil {
-			nonNil = append(nonNil, e)
+// maxShapeNodes caps the paths a shape tracks, so that objects with
+// ever-new keys cannot grow it without bound.
+const maxShapeNodes = 100_000
+
+// shapeNode summarises the non-null values seen at one path, enough to
+// tell whether find_mixed_struct_types_field_paths would report it,
+// without keeping the values. Values are added one at a time, so a list
+// read in batches gives the same result as the whole list.
+type shapeNode struct {
+	count             *int // nodes in the tree, shared
+	seen              bool
+	allObj, allList   bool
+	anyNested, differ bool
+	firstKeys         *orderedObject
+	children          []*shapeNode
+	names             []string // children's path elements; "" for list items
+}
+
+func newShape() *shapeNode {
+	n := 1
+	return &shapeNode{count: &n, allObj: true, allList: true}
+}
+
+// final reports whether nothing added later can change what mixedPaths
+// reports at or below this node, so its children need not be kept.
+func (s *shapeNode) final(root bool) bool {
+	return s.allObj && s.differ && !root || !s.allObj && !s.allList && s.anyNested
+}
+
+func (s *shapeNode) child(name string) *shapeNode {
+	for i, n := range s.names {
+		if n == name {
+			return s.children[i]
 		}
 	}
-	if len(nonNil) == 0 {
+	if *s.count >= maxShapeNodes {
 		return nil
 	}
-	queue := []work{{path: nil, content: nonNil}}
-	for steps := 0; len(queue) > 0 && steps < 100_000; steps++ {
+	*s.count++
+	c := &shapeNode{count: s.count, allObj: true, allList: true}
+	s.children = append(s.children, c)
+	s.names = append(s.names, name)
+	return c
+}
+
+// add records one example.
+func (s *shapeNode) add(v any) { s.addAt(v, true) }
+
+func (s *shapeNode) addAt(v any, root bool) {
+	if v == nil || s.final(root) {
+		return
+	}
+	obj, isObj := v.(*orderedObject)
+	list, isList := v.([]any)
+	s.allObj = s.allObj && isObj
+	s.allList = s.allList && isList
+	s.anyNested = s.anyNested || isObj || isList
+	if s.allObj {
+		if !s.seen {
+			s.firstKeys = &orderedObject{keys: obj.keys}
+			s.differ = len(obj.keys) == 0
+		} else if !s.differ && !sameKeys(s.firstKeys, obj) {
+			s.differ = true
+		}
+	}
+	s.seen = true
+	if s.final(root) {
+		s.children, s.names, s.firstKeys = nil, nil, nil
+		return
+	}
+	switch {
+	case isObj:
+		// Make a child for a null value too, unseen, so that children
+		// keep the order in which keys first appear.
+		for i, k := range obj.keys {
+			if c := s.child(k); c != nil {
+				c.addAt(obj.vals[i], false)
+			}
+		}
+	case isList:
+		for _, e := range list {
+			if e == nil {
+				continue
+			}
+			if c := s.child(""); c != nil {
+				c.addAt(e, false)
+			}
+		}
+	}
+}
+
+// mixedPaths is datasets.utils.json.find_mixed_struct_types_field_paths:
+// paths below the root where objects have different keys, or are empty,
+// or where objects or lists are mixed with other values. Path elements are
+// field names, or "" for list items. It walks the tree breadth first, as
+// the Python function walks the values.
+func (s *shapeNode) mixedPaths() [][]string {
+	var out [][]string
+	type work struct {
+		path []string
+		node *shapeNode
+	}
+	if !s.seen {
+		return nil
+	}
+	queue := []work{{node: s}}
+	for steps := 0; len(queue) > 0 && steps < maxShapeNodes; steps++ {
 		w := queue[0]
 		queue = queue[1:]
-		allObj, allList, anyNested := true, true, false
-		for _, x := range w.content {
-			_, isObj := x.(*orderedObject)
-			_, isList := x.([]any)
-			allObj = allObj && isObj
-			allList = allList && isList
-			anyNested = anyNested || isObj || isList
-		}
+		n := w.node
 		switch {
-		case allObj:
-			first := w.content[0].(*orderedObject)
-			differ := len(first.keys) == 0
-			for _, x := range w.content[1:] {
-				if !sameKeys(first, x.(*orderedObject)) {
-					differ = true
-					break
-				}
-			}
-			if len(w.path) > 0 && differ {
+		case n.allObj:
+			if len(w.path) > 0 && n.differ {
 				out = append(out, w.path)
 				continue
 			}
-			var names []string
-			seen := map[string]bool{}
-			for _, x := range w.content {
-				for _, k := range x.(*orderedObject).keys {
-					if !seen[k] {
-						seen[k] = true
-						names = append(names, k)
-					}
+			for i, c := range n.children {
+				if c.seen {
+					queue = append(queue, work{path: append(append([]string{}, w.path...), n.names[i]), node: c})
 				}
 			}
-			for _, k := range names {
-				var sub []any
-				for _, x := range w.content {
-					if v, ok := x.(*orderedObject).get(k); ok && v != nil {
-						sub = append(sub, v)
-					}
-				}
-				if len(sub) > 0 {
-					queue = append(queue, work{path: append(append([]string{}, w.path...), k), content: sub})
+		case n.allList:
+			for i, c := range n.children {
+				if c.seen {
+					queue = append(queue, work{path: append(append([]string{}, w.path...), n.names[i]), node: c})
 				}
 			}
-		case allList:
-			var sub []any
-			for _, x := range w.content {
-				for _, e := range x.([]any) {
-					if e != nil {
-						sub = append(sub, e)
-					}
-				}
-			}
-			if len(sub) > 0 {
-				queue = append(queue, work{path: append(append([]string{}, w.path...), ""), content: sub})
-			}
-		case anyNested:
+		case n.anyNested:
 			out = append(out, w.path)
 		}
 	}

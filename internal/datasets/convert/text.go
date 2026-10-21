@@ -72,7 +72,7 @@ func (b textBuilder) readMember(m member, sampleBy string, keep bool, st *featur
 		return emit(rows)
 	}
 	if sampleBy == "document" {
-		raw, err := readAllLimit(rc, maxJSONDocument)
+		raw, err := readAllLimit(rc, maxValueBytes)
 		if err != nil {
 			return err
 		}
@@ -92,6 +92,9 @@ func (b textBuilder) readMember(m member, sampleBy string, keep bool, st *featur
 		if sampleBy == "paragraph" {
 			parts := strings.Split(carry+text, "\n\n")
 			carry = parts[len(parts)-1]
+			if len(carry) > maxValueBytes {
+				return fmt.Errorf("%w: a paragraph longer than %d bytes", ErrUnsupported, maxValueBytes)
+			}
 			var samples []string
 			for _, p := range parts[:len(parts)-1] {
 				if p != "" {
