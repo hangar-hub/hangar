@@ -7,9 +7,9 @@
 # what MkDocs Material, the home page and the native API page need: inline
 # styles and scripts (Material's change with each page's depth), the GitHub
 # API for the repository's stars and latest release, and Redoc from
-# cdn.jsdelivr.net. Google Fonts is only for docs versions built before
-# Material's privacy plugin self-hosted the fonts (mkdocs.yml). The site has
-# no user content and no forms.
+# cdn.jsdelivr.net. Google Fonts and cdn.jsdelivr.net are only for docs
+# versions built before Material's privacy plugin self-hosted the fonts and
+# Redoc (mkdocs.yml). The site has no user content and no forms.
 /*
   Strict-Transport-Security: max-age=31536000
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.github.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'

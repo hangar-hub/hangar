@@ -26,14 +26,17 @@ plugins:
   - search
   - mike:
       canonical_version: latest
-  # Serves the theme's Google Fonts from the site itself, downloaded at build
-  # time, so pages render without waiting on another host. The cache is in
-  # .cache/, which git ignores.
+  # Serves the theme's Google Fonts, and the Redoc script the native API page
+  # loads, from the site itself, downloaded at build time, so pages render
+  # without waiting on another host and a copy of the site works with no
+  # internet access (docs/guides/air-gapped.md). The cache is in .cache/,
+  # which git ignores.
   - privacy:
       links: false
       assets_include:
         - fonts.googleapis.com/*
         - fonts.gstatic.com/*
+        - cdn.jsdelivr.net/*
 
 theme:
   name: material

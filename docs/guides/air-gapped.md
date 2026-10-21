@@ -40,6 +40,8 @@ cd hangar
 uv run --no-project --with-requirements docs/requirements.txt mkdocs build
 ```
 
+The build downloads the fonts, and the script that draws the native API reference, into `site`, so the copy loads nothing from the internet. Copies built from 1.2.3 and earlier releases load that script from `cdn.jsdelivr.net`, so their [Native API](../reference/native-api.md) page stays blank without internet access; the other pages work.
+
 Then set the URL of the copy:
 
 ```sh
