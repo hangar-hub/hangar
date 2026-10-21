@@ -463,6 +463,12 @@ func (w *Worker) start(ctx context.Context, row *db.Job) {
 	w.running[job.Kind]++
 	w.total++
 	w.mu.Unlock()
+	// The lease runs out by the local clock when the claim says, less the
+	// time that has passed since the claim.
+	leaseUntil := time.Now().Add(w.opts.Lease)
+	if row.LeaseExpiresAt != nil {
+		leaseUntil = time.Now().Add(row.LeaseExpiresAt.Sub(w.now()))
+	}
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
@@ -473,11 +479,11 @@ func (w *Worker) start(ctx context.Context, row *db.Job) {
 			w.mu.Unlock()
 			w.Wake()
 		}()
-		w.run(ctx, job, reg, row.TraceContext)
+		w.run(ctx, job, reg, row.TraceContext, leaseUntil)
 	}()
 }
 
-func (w *Worker) run(ctx context.Context, job *Job, reg Registration, traceCtx map[string]string) {
+func (w *Worker) run(ctx context.Context, job *Job, reg Registration, traceCtx map[string]string, leaseUntil time.Time) {
 	started := time.Now()
 	parent := propagation.TraceContext{}.Extract(context.Background(), propagation.MapCarrier(traceCtx))
 	var links []trace.Link
@@ -497,7 +503,7 @@ func (w *Worker) run(ctx context.Context, job *Job, reg Registration, traceCtx m
 		jobCtx, cancelTimeout = context.WithTimeout(jobCtx, reg.Options.Timeout)
 		defer cancelTimeout()
 	}
-	p := &progress{w: w, id: job.ID, attempt: job.Attempts, cancel: cancel}
+	p := &progress{w: w, id: job.ID, attempt: job.Attempts, cancel: cancel, leaseUntil: leaseUntil}
 	stopRenew := w.renewLease(jobCtx, p)
 
 	err := safeRun(jobCtx, reg.Handler, job, p)
@@ -552,6 +558,12 @@ func safeRun(ctx context.Context, h Handler, j *Job, p Progress) (err error) {
 
 // renewLease extends the lease every third of its length until stopped. If
 // the Job was cancelled or taken over, it cancels the handler.
+//
+// If renewals fail, for example because the database is busy or cannot be
+// reached, the lease runs out and RecoverExpired hands the Job to another
+// run. So that two runs never overlap, a watchdog cancels the handler with
+// ErrLeaseLost when the lease is about to run out without a write having
+// extended it (leaseMargin before).
 func (w *Worker) renewLease(ctx context.Context, p *progress) (stop func()) {
 	done := make(chan struct{})
 	var once sync.Once
@@ -571,8 +583,36 @@ func (w *Worker) renewLease(ctx context.Context, p *progress) (stop func()) {
 			}
 		}
 	}()
+	// The watchdog has its own goroutine: a renewal can block for as long
+	// as the database takes to answer.
+	go func() {
+		margin := w.leaseMargin()
+		timer := time.NewTimer(time.Until(p.leaseEnd()) - margin)
+		defer timer.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				if left := time.Until(p.leaseEnd()) - margin; left > 0 {
+					timer.Reset(left)
+					continue
+				}
+				w.log.WarnContext(ctx, "job lease is running out and could not be renewed; stopping the handler", "job_id", p.id)
+				p.cancel(ErrLeaseLost)
+				return
+			}
+		}
+	}()
 	return func() { once.Do(func() { close(done) }) }
 }
+
+// leaseMargin is how long before its lease runs out a run whose renewals
+// failed is stopped: a sixth of the lease, so the handler has time to stop
+// before RecoverExpired can hand the Job to another run.
+func (w *Worker) leaseMargin() time.Duration { return w.opts.Lease / 6 }
 
 // fenceRun limits an update of a Job row to the run that claimed it as
 // attempt: the row must still be running under this worker's lease with the
@@ -682,6 +722,16 @@ type progress struct {
 	written time.Time
 	pending json.RawMessage
 	latest  *ProgressUpdate
+	// leaseUntil is when the lease runs out by the local clock: a lease
+	// length after the last write that extended it.
+	leaseUntil time.Time
+}
+
+// leaseEnd returns when the run's lease runs out by the local clock.
+func (p *progress) leaseEnd() time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.leaseUntil
 }
 
 func (p *progress) last() *ProgressUpdate {
@@ -749,6 +799,7 @@ func (p *progress) renew(ctx context.Context) error {
 // it (see fenceRun). Otherwise it cancels the handler and returns
 // ErrLeaseLost, or ErrCancelled if a user cancelled the Job.
 func (p *progress) write(ctx context.Context, set func(*bun.UpdateQuery)) error {
+	issued := time.Now()
 	now := p.w.now()
 	q := p.w.fenceRun(p.w.db.NewUpdate().Model((*db.Job)(nil)).
 		Set("lease_expires_at = ?", now.Add(p.w.opts.Lease)).Set("updated_at = ?", now), p.id, p.attempt)
@@ -758,6 +809,9 @@ func (p *progress) write(ctx context.Context, set func(*bun.UpdateQuery)) error 
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 1 {
+		p.mu.Lock()
+		p.leaseUntil = issued.Add(p.w.opts.Lease)
+		p.mu.Unlock()
 		return nil
 	}
 	var row db.Job
