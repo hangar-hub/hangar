@@ -1,5 +1,5 @@
 ---
-description: "Hangar is source-available under the Elastic License 2.0: what you can do with it, including self-hosting at work, and what you can't."
+description: "Is Hangar open source? It is source-available under the Elastic License 2.0: what you can do with it, including self-hosting at work, and what you can't."
 ---
 
 # Licence

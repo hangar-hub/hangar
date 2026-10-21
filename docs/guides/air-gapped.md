@@ -1,6 +1,6 @@
 ---
 title: Hugging Face models on an air-gapped network
-description: "Run Hangar with no internet access: feed an air-gapped Instance from another Hangar Instance, or carry a backup or Hugging Face cache across."
+description: "Run Hangar as an air-gapped model and dataset store: feed an Instance with no internet access from another Instance, or carry a backup or cache across."
 ---
 
 # Air-gapped Instances
