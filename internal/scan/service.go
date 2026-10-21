@@ -63,7 +63,10 @@ type Service struct {
 	o Options
 }
 
-var _ Scanner = (*Service)(nil)
+var (
+	_ Scanner      = (*Service)(nil)
+	_ StatusReader = (*Service)(nil)
+)
 
 // New returns a Service.
 func New(o Options) *Service {
@@ -279,6 +282,45 @@ func (s *Service) Results(ctx context.Context, repoUUID uuid.UUID, commit model.
 			Partial: storedPartial(sf, row.ScannerVersion)})
 	}
 	return res, nil
+}
+
+// statusBatch is how many Commits one Statuses query reads.
+const statusBatch = 500
+
+// Statuses implements StatusReader from the Commit rows alone, with one
+// query per 500 Commits, so it does not decode any file's findings.
+func (s *Service) Statuses(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID]Status, error) {
+	out := make(map[uuid.UUID]Status, len(commits))
+	ids := make([]uuid.UUID, 0, len(commits))
+	for id := range commits {
+		ids = append(ids, id)
+	}
+	for start := 0; start < len(ids); start += statusBatch {
+		part := ids[start:min(start+statusBatch, len(ids))]
+		shas := make([]string, 0, len(part))
+		for _, id := range part {
+			shas = append(shas, string(commits[id]))
+		}
+		var rows []db.ScanResult
+		if err := s.o.DB.NewSelect().Model(&rows).Column("repo_id", "commit_sha", "scanner_version", "status").
+			Where("path = ?", commitRow).Where("repo_id IN (?)", bun.List(part)).Where("commit_sha IN (?)", bun.List(shas)).
+			Scan(ctx); err != nil {
+			return nil, err
+		}
+		// The newest scanner version of each Repo's own Commit, as
+		// Results picks it.
+		version := map[uuid.UUID]int{}
+		for _, r := range rows {
+			if string(commits[r.RepoID]) != r.Commit {
+				continue
+			}
+			if v, ok := version[r.RepoID]; !ok || r.ScannerVersion > v {
+				version[r.RepoID] = r.ScannerVersion
+				out[r.RepoID] = Status(r.Status)
+			}
+		}
+	}
+	return out, nil
 }
 
 // storedPartial reads Partial from a stored row. Rows of scanner versions

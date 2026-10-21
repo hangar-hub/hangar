@@ -139,6 +139,17 @@ type Service interface {
 	Downloads(ctx context.Context, repoUUID uuid.UUID, since time.Time) ([]DayCount, error)
 }
 
+// Counter is implemented by services that count the likes and downloads
+// of many Repos at once, for pages of Repos.
+type Counter interface {
+	// LikesOf returns what Likes returns for each Repo.
+	LikesOf(ctx context.Context, repoUUIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+	// DownloadsOf returns each Repo's downloads on the days from since's
+	// day (UTC) on, the total of what Downloads returns. A zero since
+	// counts every day.
+	DownloadsOf(ctx context.Context, repoUUIDs []uuid.UUID, since time.Time) (map[uuid.UUID]int64, error)
+}
+
 // DayCount is a day's download count.
 type DayCount struct {
 	Day   time.Time

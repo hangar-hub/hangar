@@ -57,8 +57,9 @@ func (a *SearchAPI) Search(w http.ResponseWriter, r *http.Request, params gen.Se
 			a.d.problem(w, r, err)
 			return
 		}
+		ctx, pg := a.d.loadPage(r.Context(), p, res.Repos)
 		for _, rp := range res.Repos {
-			out.Repos = append(out.Repos, a.d.toRepo(r.Context(), p, rp))
+			out.Repos = append(out.Repos, a.d.toPageRepo(ctx, p, rp, pg))
 		}
 	}
 	if want["namespaces"] {

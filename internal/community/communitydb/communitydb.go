@@ -51,7 +51,10 @@ type DB struct {
 	o Options
 }
 
-var _ community.Service = (*DB)(nil)
+var (
+	_ community.Service = (*DB)(nil)
+	_ community.Counter = (*DB)(nil)
+)
 
 // New returns a DB service.
 func New(o Options) *DB {
@@ -553,6 +556,48 @@ func (s *DB) Downloads(ctx context.Context, repoUUID uuid.UUID, since time.Time)
 	out := make([]community.DayCount, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, community.DayCount{Day: dayOf(r.Day), Count: r.Count})
+	}
+	return out, nil
+}
+
+// countBatch is how many Repos one LikesOf or DownloadsOf query counts.
+const countBatch = 500
+
+// LikesOf implements community.Counter with one query per 500 Repos.
+func (s *DB) LikesOf(ctx context.Context, repoUUIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	return s.countOf(ctx, repoUUIDs, func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.Model((*db.Like)(nil)).ColumnExpr("repo_id, COUNT(*) AS n")
+	})
+}
+
+// DownloadsOf implements community.Counter with one query per 500 Repos.
+func (s *DB) DownloadsOf(ctx context.Context, repoUUIDs []uuid.UUID, since time.Time) (map[uuid.UUID]int64, error) {
+	return s.countOf(ctx, repoUUIDs, func(q *bun.SelectQuery) *bun.SelectQuery {
+		q = q.Model((*db.DownloadCount)(nil)).ColumnExpr("repo_id, CAST(SUM(count) AS BIGINT) AS n")
+		if !since.IsZero() {
+			q = q.Where("day >= ?", dayOf(since))
+		}
+		return q
+	})
+}
+
+// countOf runs a per-Repo count for every Repo, with no row for Repos
+// counted zero.
+func (s *DB) countOf(ctx context.Context, repoUUIDs []uuid.UUID, count func(*bun.SelectQuery) *bun.SelectQuery) (map[uuid.UUID]int64, error) {
+	out := make(map[uuid.UUID]int64, len(repoUUIDs))
+	for start := 0; start < len(repoUUIDs); start += countBatch {
+		var rows []struct {
+			RepoID uuid.UUID `bun:"repo_id"`
+			N      int64     `bun:"n"`
+		}
+		q := count(s.o.DB.NewSelect()).Where("repo_id IN (?)", bun.List(repoUUIDs[start:min(start+countBatch, len(repoUUIDs))])).
+			GroupExpr("repo_id")
+		if err := q.Scan(ctx, &rows); err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			out[r.RepoID] = r.N
+		}
 	}
 	return out, nil
 }
