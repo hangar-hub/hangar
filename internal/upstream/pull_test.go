@@ -127,7 +127,7 @@ func TestPartialMirrorOfOneQuant(t *testing.T) {
 		fetches, cdn := e.Server.Requests("git"), e.Server.Requests("cdn")
 		r, err := e.Repos.Get(e.Ctx, gguf)
 		require.NoError(t, err)
-		id2, err := e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Quants: []string{"Q8_0"}}, false)
+		id2, err := e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Quants: []string{"Q8_0"}}, "", false)
 		require.NoError(t, err)
 		e.Run(10)
 		require.Equal(t, jobs.StatusSucceeded, e.Job(id2).Status, e.Job(id2).Error)
@@ -140,6 +140,36 @@ func TestPartialMirrorOfOneQuant(t *testing.T) {
 		m, _, err := e.Service.Mirror(e.Ctx, r)
 		require.NoError(t, err)
 		require.Equal(t, []string{"Q4_K_M", "Q8_0"}, m.Selection.Quants, "the Mirror keeps the union of its selections by quant name")
+	})
+}
+
+// TestPullMoreAtACommit is a regression test for issue #28: PullMore always
+// pulled the Mirror's tracked branch, so hangar import, which matches local
+// files against an older Commit, fetched files that had changed since from
+// the Upstream again.
+func TestPullMoreAtACommit(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{})
+		alice := e.User("alice")
+		v1, v2 := []byte("old weights"), []byte("new weights")
+		old := e.Seed(tiny, nil, map[string][]byte{"model.bin": v1})
+		head := e.Seed(tiny, nil, map[string][]byte{"model.bin": v2})
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Selection: upstream.Selection{None: true}, Actor: alice})
+		require.NoError(t, err)
+		e.Run(10)
+		require.Equal(t, jobs.StatusSucceeded, e.Job(id).Status, e.Job(id).Error)
+		r, err := e.Repos.Get(e.Ctx, tiny)
+		require.NoError(t, err)
+
+		id, err = e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Paths: []string{"model.bin"}}, string(old), false)
+		require.NoError(t, err)
+		e.Run(10)
+		j := e.Job(id)
+		require.Equal(t, jobs.StatusSucceeded, j.Status, j.Error)
+		require.Equal(t, string(old), pullState(t, j)["source_commit"])
+		require.Equal(t, v1, readFile(t, e.Repos, tiny, old, "model.bin"))
+		_, _, err = e.Repos.OpenFile(e.Ctx, tiny, head, "model.bin", nil)
+		require.ErrorIs(t, err, repo.ErrNotPresent, "the tracked branch's newer file is not pulled")
 	})
 }
 
@@ -492,7 +522,7 @@ func TestDatasetConfigSplitAndParquetOnlyPulls(t *testing.T) {
 		require.Equal(t, map[string]bool{"data/train-00000.parquet": true, "data/test-00000.parquet": false, "other/train.parquet": false}, lfsIDs(entries))
 
 		r, _ := e.Repos.Get(e.Ctx, ds)
-		id, err = e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Configs: []string{"default"}, Splits: []string{"train"}, ParquetOnly: true}, false)
+		id, err = e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Configs: []string{"default"}, Splits: []string{"train"}, ParquetOnly: true}, "", false)
 		require.NoError(t, err)
 		e.Run(10)
 		require.Equal(t, jobs.StatusSucceeded, e.Job(id).Status, e.Job(id).Error)
@@ -500,7 +530,7 @@ func TestDatasetConfigSplitAndParquetOnlyPulls(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []byte("exported train"), readFile(t, e.Repos, ds, conv, "default/train/0000.parquet"))
 
-		_, err = e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Configs: []string{"nope"}}, false)
+		_, err = e.Service.PullMore(e.Ctx, alice, r, upstream.Selection{Configs: []string{"nope"}}, "", false)
 		require.NoError(t, err, "the Config is checked when the Pull plans")
 		e.Run(5)
 		failed, _, err := e.Queue.List(e.Ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPull}, Statuses: []jobs.Status{jobs.StatusFailed}})

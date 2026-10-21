@@ -197,7 +197,7 @@ func (a *app) pull(ctx context.Context, ref repoRef, o pullOptions) (*pullResult
 		} else {
 			a.logf("%d of the selected files are not in the Arsenal. Pulling them.\n", missing)
 		}
-		job, err := c.pullIntoMirror(ctx, ref.ID, o.selection(ref))
+		job, err := c.pullIntoMirror(ctx, ref.ID, o.Revision, o.selection(ref))
 		if err != nil {
 			return nil, err
 		}

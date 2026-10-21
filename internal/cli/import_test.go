@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/hangar-hub/hangar/internal/cli/clitest"
 	"github.com/hangar-hub/hangar/internal/model"
 )
 
@@ -270,4 +271,67 @@ func TestSanitiseName(t *testing.T) {
 	require.Equal(t, "custom-model", sanitiseName("custom model"))
 	require.Equal(t, "a-b", sanitiseName("..a/b.."))
 	require.Len(t, sanitiseName(strings.Repeat("x", 200)), 96)
+}
+
+// TestImportFillsAMirrorThatLacksTheCachedCommit is a regression test for
+// issue #28 (Systran/faster-whisper-base): when the cached snapshot was
+// newer than the Mirror's last sync, the tree at its Commit answered 404,
+// the import fell back to a local Repo and the Commit failed with "repo is
+// a mirror and is read-only". The import now pulls the Commit's history
+// into the Mirror and fills its files.
+func TestImportFillsAMirrorThatLacksTheCachedCommit(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	id := mustID(t, model.RepoTypeModel, "acme/whisper")
+	v1 := blobOf("v1", 100<<10)
+	e.inst.AddUpstream(id, clitest.File{Path: "model.bin", Content: v1}, clitest.File{Path: "config.json", Content: []byte("{}")})
+	cache := filepath.Join(e.home, "hf-cache")
+	cacheSnapshot(t, cache, id, strings.Repeat("ab", 20), map[string][]byte{"model.bin": v1})
+	e.ok("import", "--from-hf-cache")
+	require.True(t, e.inst.Repo(id).Mirror)
+
+	// The upstream Repo moves on, and the newer Commit is cached later.
+	newer := strings.Repeat("cd", 20)
+	v2 := blobOf("v2", 100<<10)
+	e.inst.AddUpstreamRevision(id, newer, clitest.File{Path: "model.bin", Content: v2}, clitest.File{Path: "config.json", Content: []byte("{}")})
+	cacheSnapshot(t, cache, id, newer, map[string][]byte{"model.bin": v2})
+
+	r := e.ok("import", "--from-hf-cache", "--json")
+	var res []importResult
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	require.Len(t, res, 1)
+	require.Equal(t, "mirror", res[0].Mode, "an existing Mirror never becomes a local Repo")
+	require.Empty(t, res[0].Error)
+	require.Equal(t, newer, res[0].Commit)
+	require.Equal(t, []string{"model.bin"}, res[0].Uploaded)
+	require.True(t, e.inst.Present(id, newer, "model.bin"))
+	require.True(t, e.inst.Repo(id).Mirror)
+}
+
+// TestImportPullsTheMatchedCommit is a regression test for issue #28:
+// after uploading the files of a snapshot older than upstream main, the
+// import pulled them into the Mirror at its tracked branch, so files that
+// had changed since were fetched again from the Upstream, and a file that
+// had been removed since failed the Pull. The Pull now uses the Commit the
+// files were matched against.
+func TestImportPullsTheMatchedCommit(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	id := mustID(t, model.RepoTypeModel, "acme/moved-on")
+	old := strings.Repeat("ef", 20)
+	v1, v2, extra := blobOf("old weights", 100<<10), blobOf("new weights", 100<<10), blobOf("extra", 100<<10)
+	e.inst.AddUpstream(id, clitest.File{Path: "model.safetensors", Content: v2})
+	e.inst.AddUpstreamRevision(id, old, clitest.File{Path: "model.safetensors", Content: v1}, clitest.File{Path: "extra.safetensors", Content: extra})
+	cacheSnapshot(t, filepath.Join(e.home, "hf-cache"), id, old, map[string][]byte{"model.safetensors": v1, "extra.safetensors": extra})
+
+	r := e.ok("import", "--from-hf-cache", "--json")
+	var res []importResult
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	require.Len(t, res, 1)
+	require.Empty(t, res[0].Error, "a file removed upstream since does not fail the Pull")
+	require.Equal(t, old, res[0].Commit)
+	require.Equal(t, []string{"extra.safetensors", "model.safetensors"}, res[0].Uploaded)
+	require.True(t, e.inst.Present(id, old, "model.safetensors"))
+	require.True(t, e.inst.Present(id, old, "extra.safetensors"))
+	require.False(t, e.inst.HasObject(sha(v2)), "the newer upstream file is not fetched")
 }

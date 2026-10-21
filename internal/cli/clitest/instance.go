@@ -318,7 +318,7 @@ func (i *Instance) AddUpstream(id model.RepoID, files ...File) *UpstreamRepo {
 }
 
 // AddUpstreamRevision adds files at another Revision of an upstream Repo,
-// such as refs/convert/parquet.
+// such as refs/convert/parquet, or an older Commit named by its SHA.
 func (i *Instance) AddUpstreamRevision(id model.RepoID, rev string, files ...File) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -378,6 +378,16 @@ func (i *Instance) commitFiles(r *Repo, rev string, files []File) string {
 	return sha
 }
 
+// commitAt records a Commit of exactly files under a given SHA, with no
+// ref, as a Mirror holds an upstream Commit it fetched.
+func (i *Instance) commitAt(r *Repo, sha string, files []File) {
+	m := map[string]File{}
+	for _, f := range files {
+		m[f.Path] = f
+	}
+	r.commits[sha] = &commit{sha: sha, files: m}
+}
+
 // Repo returns a Repo in the Arsenal, or nil.
 func (i *Instance) Repo(id model.RepoID) *Repo {
 	i.mu.Lock()
@@ -403,7 +413,7 @@ func (i *Instance) Files(id model.RepoID, rev string) map[string][]byte {
 	if r == nil {
 		return nil
 	}
-	c := r.commits[r.refs[rev]]
+	c := r.resolveRev(rev)
 	if c == nil {
 		return nil
 	}
@@ -422,15 +432,15 @@ func (i *Instance) HasObject(sha string) bool {
 	return ok
 }
 
-// Present reports whether a file of a Repo is in the Arsenal.
+// Present reports whether a file of a Repo at a Revision is in the Arsenal.
 func (i *Instance) Present(id model.RepoID, rev, p string) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	r := i.repos[repoKey(id)]
-	if r == nil || r.commits[r.refs[rev]] == nil {
+	if r == nil || r.resolveRev(rev) == nil {
 		return false
 	}
-	f, ok := r.commits[r.refs[rev]].files[p]
+	f, ok := r.resolveRev(rev).files[p]
 	return ok && i.present(f)
 }
 

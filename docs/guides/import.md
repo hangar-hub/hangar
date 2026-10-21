@@ -16,7 +16,9 @@ hangar import --from-hf-cache /mnt/models/hub
 
 For each Repo in the cache, Hangar creates a Mirror of the huggingface.co Repo with the same ID at the cached Commit: the Instance fetches the history, which is small, and the CLI uploads only the cached large files whose SHA-256 matches. Files you have not cached show as **Not in arsenal**, and you can pull them later.
 
-With `--offline`, or for a Repo huggingface.co does not have, each Repo becomes a local Repo with one Commit of the cached files instead. Add `--namespace` to put those in a Namespace of your choice.
+If the Repo is already a Mirror, the import fills in the files it is missing. When the cached Commit is newer than the Mirror's last sync, Hangar fetches its history first. The uploaded files are added to the Mirror at the cached Commit, so files that have changed on huggingface.co since are not downloaded again.
+
+With `--offline`, or for a Repo huggingface.co does not have, each Repo becomes a local Repo with one Commit of the cached files instead. Add `--namespace` to put those in a Namespace of your choice. An import never commits to a Mirror, because Mirrors are read-only.
 
 ## A folder
 

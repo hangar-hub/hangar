@@ -365,20 +365,17 @@ func (a *app) importSnapshot(ctx context.Context, c *client, id model.RepoID, co
 	}
 	if !o.Offline {
 		r, err := a.importAsMirror(ctx, c, id, commit, files, o.Upstream)
-		var failed *uploadFailures
-		if err == nil || errors.As(err, &failed) {
+		if !errors.Is(err, errNotOnUpstream) {
 			// Some files may have failed to upload while the rest were
-			// added to the Mirror: report both, and never fall back to a
-			// local Repo because a failed file's error was a 404.
+			// added to the Mirror: report both. Only an Upstream without
+			// the Repo makes a local Repo: any other error, such as a 404
+			// for a Commit or an upload, is reported, because a Mirror
+			// is read-only (issue #28).
 			r.Source = src
 			if err != nil {
 				r.Error = err.Error()
 			}
 			return r
-		}
-		if !IsNotFound(err) {
-			res.Error = err.Error()
-			return res
 		}
 		a.logf("%s is not on %s; importing it as a local Repo.\n", display(id), o.Upstream)
 	}
@@ -402,12 +399,17 @@ func (a *app) importSnapshot(ctx context.Context, c *client, id model.RepoID, co
 	return res
 }
 
+// errNotOnUpstream means the Upstream does not have a Repo, so the import
+// makes a local Repo instead of a Mirror.
+var errNotOnUpstream = errors.New("not on the Upstream")
+
 // importAsMirror plans a Mirror of the upstream Repo with history only,
 // then uploads the local files whose SHA-256 matches an LFS object the
-// Mirror references but does not hold. It returns a not-found error if
-// the Upstream does not have the Repo.
+// Mirror references but does not hold. It returns an error wrapping
+// errNotOnUpstream if the Upstream does not have the Repo.
 func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, commit string, files []localFile, upstream string) (importResult, error) {
 	res := importResult{Repo: display(id), Mode: "mirror"}
+	pulled := false // whether this import has pulled the Mirror's history
 	repo, err := c.getRepo(ctx, id)
 	switch {
 	case IsNotFound(err):
@@ -417,6 +419,9 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		stop := a.waitStatus(fmt.Sprintf("Looking up %s on %s", display(id), upstream))
 		_, err := c.discoverDetail(ctx, id, upstream, commit)
 		stop()
+		if IsNotFound(err) {
+			return res, fmt.Errorf("%w: %w", errNotOnUpstream, err)
+		}
 		if err != nil {
 			return res, err
 		}
@@ -432,6 +437,7 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		if _, err := a.watchJob(ctx, c, job.Id, "Creating a Mirror of "+display(id)); err != nil {
 			return res, err
 		}
+		pulled = true
 	case err != nil:
 		return res, err
 	case !repo.Mirror:
@@ -447,6 +453,14 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		rev = repo.DefaultBranch
 	}
 	gotCommit, entries, err := c.tree(ctx, id, rev)
+	if IsNotFound(err) && commit != "" && !pulled {
+		// The Mirror has not fetched this Commit yet, such as a snapshot
+		// cached after its last sync: pull its history, then look again.
+		if err := a.pullHistory(ctx, c, id, commit); err != nil {
+			return res, err
+		}
+		gotCommit, entries, err = c.tree(ctx, id, rev)
+	}
 	if err != nil {
 		return res, err
 	}
@@ -520,11 +534,14 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	}
 	res.Uploaded = paths(upload)
 	if len(upload) > 0 {
-		// Pull the uploaded files into the Mirror: the Instance holds their
-		// objects now, so the Pull marks them present without a transfer,
-		// within the Namespace's quota.
+		// Pull the uploaded files into the Mirror at the Commit they were
+		// matched against: the Instance holds their objects now, so the
+		// Pull marks them present without a transfer, within the
+		// Namespace's quota. At another Commit, such as the tracked
+		// branch's newest, a file that changed since would be fetched from
+		// the Upstream, and one removed since would fail the Pull.
 		sel := res.Uploaded
-		job, err := c.pullIntoMirror(ctx, id, gen.Selection{Paths: &sel})
+		job, err := c.pullIntoMirror(ctx, id, gotCommit, gen.Selection{Paths: &sel})
 		if err != nil {
 			return res, err
 		}
@@ -536,6 +553,17 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		return res, failed
 	}
 	return res, nil
+}
+
+// pullHistory pulls a Commit's history into an existing Mirror, with no
+// files, and waits for it.
+func (a *app) pullHistory(ctx context.Context, c *client, id model.RepoID, commit string) error {
+	job, err := c.pullIntoMirror(ctx, id, commit, gen.Selection{Paths: &[]string{}})
+	if err != nil {
+		return err
+	}
+	_, err = a.watchJob(ctx, c, job.Id, fmt.Sprintf("Fetching Commit %s of %s", shortSHA(commit), display(id)))
+	return err
 }
 
 // countFiles describes a number of files and their size, such as

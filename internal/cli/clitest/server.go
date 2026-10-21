@@ -918,24 +918,30 @@ func (s *server) newJob(user string, payload map[string]any, total int64, finish
 }
 
 // pullFn returns the work a Pull does when its Job finishes: commit the
-// upstream history at each Revision into the Mirror and store the selected
-// LFS objects. Lock held when called.
+// upstream history at each Revision into the Mirror and, as Hangar does,
+// store the selected LFS objects of the Revision pulled only. A Commit SHA
+// names a Revision added with AddUpstreamRevision under that SHA, or else
+// the Commit of main. Like Hangar, a Pull of paths that do not exist at its
+// Revision fails. Lock held when called.
 func (s *server) pullFn(u *UpstreamRepo, rev string, sel *gen.Selection) (func() error, int64) {
+	target := "main"
 	revs := []string{"main"}
-	if rev != "" && rev != "main" && !model.IsFullSHA(rev) {
+	if _, known := u.Revisions[rev]; rev != "" && rev != "main" && (known || !model.IsFullSHA(rev)) {
+		target = rev
 		revs = append(revs, rev)
 	}
-	if sel != nil && deref(sel.ParquetOnly) {
+	parquet := sel != nil && deref(sel.ParquetOnly)
+	if parquet {
 		revs = append(revs, "refs/convert/parquet")
 	}
 	take := func(rv string, f File) bool {
 		if !f.LFS {
 			return false
 		}
-		if sel != nil && deref(sel.ParquetOnly) {
+		if parquet {
 			return rv == "refs/convert/parquet" && parquetSelected(sel, f)
 		}
-		return selected(sel, f)
+		return rv == target && selected(sel, f)
 	}
 	var total int64
 	for _, rv := range revs {
@@ -948,6 +954,17 @@ func (s *server) pullFn(u *UpstreamRepo, rev string, sel *gen.Selection) (func()
 	return func() error {
 		if s.i.FailPulls != "" {
 			return fmt.Errorf("%s", s.i.FailPulls)
+		}
+		if !parquet && sel != nil && sel.Paths != nil {
+			have := map[string]bool{}
+			for _, f := range u.Revisions[target] {
+				have[f.Path] = true
+			}
+			for _, p := range *sel.Paths {
+				if !have[p] {
+					return fmt.Errorf("invalid selection: %s does not exist at %s", p, target)
+				}
+			}
 		}
 		repo := s.i.repos[repoKey(u.ID)]
 		if repo == nil {
@@ -963,8 +980,12 @@ func (s *server) pullFn(u *UpstreamRepo, rev string, sel *gen.Selection) (func()
 					s.i.objects[f.sha256()] = f.Content
 				}
 			}
+			if model.IsFullSHA(rv) {
+				s.i.commitAt(repo, rv, files)
+				continue
+			}
 			sha := s.i.commitFiles(repo, rv, files)
-			if rv == "main" && model.IsFullSHA(rev) {
+			if rv == "main" && target == "main" && model.IsFullSHA(rev) {
 				repo.refs[rev] = sha
 			}
 		}
@@ -1014,7 +1035,7 @@ func (s *server) StartPull(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, s.newJob(s.i.Users[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")], map[string]any{"repo": id.String()}, total, fn))
 }
 
-func (s *server) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, t gen.RepoType, ns, name string) {
+func (s *server) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, t gen.RepoType, ns, name string, params gen.PullMoreIntoMirrorParams) {
 	if !s.authed(w, r) {
 		return
 	}
@@ -1035,7 +1056,7 @@ func (s *server) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, t ge
 		return
 	}
 	u := s.i.upstream[repoKey(id)]
-	fn, total := s.pullFn(u, "", &sel)
+	fn, total := s.pullFn(u, deref(params.Revision), &sel)
 	writeJSON(w, http.StatusAccepted, s.newJob("alice", map[string]any{"repo": id.String()}, total, fn))
 }
 
