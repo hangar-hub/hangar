@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
@@ -166,13 +168,42 @@ func (o *OIDCService) provider(ctx context.Context, id string) (*oidcProvider, e
 }
 
 // SafeRedirect keeps only local paths, so a sign-in cannot redirect to
-// another site.
+// another site. Browsers remove tabs and newlines from a URL and read a
+// backslash as a slash, so "/\t/evil.example" and "/\\evil.example" would
+// become the scheme-relative "//evil.example". SafeRedirect refuses
+// control characters, whitespace and backslashes anywhere, a path that
+// does not parse as a local reference, and a path whose percent-decoded
+// form is unsafe in the same way, in case something decodes it again.
 func SafeRedirect(to string) string {
-	if to == "" || !strings.HasPrefix(to, "/") || strings.HasPrefix(to, "//") || strings.HasPrefix(to, "/\\") ||
-		strings.ContainsAny(to, "\r\n") || len(to) > 2000 {
+	if len(to) > 2000 || !localRedirect(to, true) {
+		return "/"
+	}
+	dec, err := url.PathUnescape(to)
+	if err != nil || !localRedirect(dec, false) {
+		return "/"
+	}
+	if u, err := url.Parse(to); err != nil || u.Scheme != "" || u.Host != "" || u.Opaque != "" || u.User != nil {
 		return "/"
 	}
 	return to
+}
+
+// localRedirect reports whether to is a path on this site that no browser
+// reads as another site. Raw input may not hold whitespace at all; decoded
+// input may hold spaces, which "%20" legitimately decodes to.
+func localRedirect(to string, raw bool) bool {
+	if !strings.HasPrefix(to, "/") || strings.HasPrefix(to, "//") {
+		return false
+	}
+	for _, r := range to {
+		switch {
+		case r < 0x20, r == 0x7f, r == '\\':
+			return false
+		case raw && (unicode.IsSpace(r) || unicode.IsControl(r)):
+			return false
+		}
+	}
+	return true
 }
 
 // Start begins a sign-in and returns the provider's authorisation URL.
