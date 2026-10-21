@@ -193,7 +193,7 @@ func SafeRedirect(to string) string {
 // reads as another site. Raw input may not hold whitespace at all; decoded
 // input may hold spaces, which "%20" legitimately decodes to.
 func localRedirect(to string, raw bool) bool {
-	if !strings.HasPrefix(to, "/") || strings.HasPrefix(to, "//") {
+	if len(to) == 0 || to[0] != '/' || (len(to) > 1 && (to[1] == '/' || to[1] == '\\')) {
 		return false
 	}
 	for _, r := range to {
