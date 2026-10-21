@@ -13,3 +13,4 @@ Running Hangar for yourself or for many people.
 - [TLS and reverse proxies](proxies.md).
 - [Observability](observability.md): traces, metrics, logs and dashboards.
 - [Backup and restore](backup.md), [upgrades](upgrades.md), [security hardening](security.md) and [troubleshooting](troubleshooting.md).
+- [Uninstall](uninstall.md), and [where Hangar keeps data](../concepts/data.md).

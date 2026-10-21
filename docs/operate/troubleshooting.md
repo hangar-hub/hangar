@@ -32,6 +32,16 @@ It exits with 1 if any check fails, so you can use it in scripts.
 
 **The server will not start and lists configuration errors.** Hangar checks the whole configuration and lists every problem at once. `hangar config validate` does the same without starting.
 
+**"unknown environment variable HANGAR_PORT", or another `HANGAR_` name.** Hangar reads every environment variable that starts with `HANGAR_` as configuration, and refuses to start if one is not a configuration key, so a misspelt key cannot go unnoticed. Only `HANGAR_CONFIG` and names that start with `HANGAR_CLI_` or `HANGAR_TEST_` are left alone. The check applies to `hangar server`, `hangar worker`, `hangar healthcheck`, `hangar config` and the `hangar admin` commands; client commands such as `hangar pull` are not affected.
+
+```text
+Error: invalid configuration (2 problems):
+  - unknown environment variable HANGAR_PORT
+  - unknown environment variable HANGAR_ADMIN_PASSWORD
+```
+
+The usual cause is a name meant for another tool. The Docker Compose examples read `HANGAR_IMAGE`, `HANGAR_PORT`, `HANGAR_PUBLIC_URL`, `HANGAR_ADMIN_PASSWORD`, `HANGAR_INSTANCE_KEY` and `HANGAR_OIDC_CLIENT_SECRET` from `.env` and pass the values to Hangar under its own names, and the load tests read `HANGAR_URL` and `HANGAR_TOKEN`. If such a name reaches Hangar, for example because you loaded `.env` into your shell with `set -a; . ./.env` or passed it to `docker run -e`, unset it there, or use the configuration key's own variable from the [configuration reference](../reference/configuration.md), such as `HANGAR_SERVER_PUBLIC_URL` or `HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD`.
+
 **"database is in use by another Hangar process".** SQLite allows one process. Stop the other one, or move to Postgres to run several.
 
 **Every admin is locked out.** On the server host, set a new password with `hangar admin reset-password <username>`, which prints a generated password once (or reads one with `--password-stdin`), signs the user out everywhere and clears sign-in throttling. `hangar admin create-user <username> --admin` creates another Instance admin. With SQLite, stop the server first.
@@ -57,3 +67,7 @@ It exits with 1 if any check fails, so you can use it in scripts.
 ## Logs
 
 Set `telemetry.log_level: debug` for more detail, and `telemetry.log_format: text` to read logs in a terminal. Every log line inside a request has `trace_id` and `span_id`, which match the trace in your tracing backend, and `request_id`. A server error names its request ID, in the message and the `X-Request-Id` response header, and the `hangar` CLI prints it: search the logs for that `request_id` to find the cause.
+
+## Still stuck
+
+Open a GitHub issue with the output of `hangar version` and `hangar admin doctor`, and the log lines around the error, with secrets removed. [Get help](../project/support.md) says which form to use and what to include.

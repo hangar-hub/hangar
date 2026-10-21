@@ -12,6 +12,7 @@
 /search/*        /latest/search/:splat        200
 /benchmarks/*    /latest/benchmarks/:splat    301
 /concepts/*      /latest/concepts/:splat      301
+/faq/*           /latest/faq/:splat           301
 /get-started/*   /latest/get-started/:splat   301
 /guides/*        /latest/guides/:splat        301
 /operate/*       /latest/operate/:splat       301

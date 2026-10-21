@@ -44,6 +44,8 @@ EOF
 | `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD` | `postgres-minio.yaml` and `scale.yaml`. |
 | `KEYCLOAK_ADMIN_PASSWORD`, `HANGAR_OIDC_CLIENT_SECRET` | `oidc-keycloak.yaml`. |
 
+Docker Compose reads these names, not Hangar: the examples pass each value to Hangar under its own configuration variable, such as `HANGAR_SECURITY_INSTANCE_KEY` for `HANGAR_INSTANCE_KEY`. Do not load `.env` into a shell that runs `hangar` commands, or pass these names to `docker run -e`: Hangar refuses to start when it sees a `HANGAR_` variable that is not one of its configuration keys. See [Troubleshooting](../operate/troubleshooting.md#common-problems).
+
 Only Hangar's port is published on every network interface. The MinIO console, the Traefik dashboard and Keycloak are published on `127.0.0.1`, so you can open them on this machine and nobody else on your network can. Postgres and the MinIO API are not published at all.
 
 ## Quickstart

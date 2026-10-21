@@ -84,6 +84,8 @@ docker run --rm -i --cpus 2 --network container:hangar-bench-traefik-1 \
   -e HANGAR_NAMESPACE=loadtest -e HANGAR_USERNAME=loadtest -e REPLICAS=2 resolve.js
 ```
 
+`HANGAR_IMAGE` and `HANGAR_PUBLIC_URL` are read by Docker Compose, and `HANGAR_URL`, `HANGAR_TOKEN`, `HANGAR_USERNAME` and `HANGAR_NAMESPACE` by the load test scripts. They are not Hangar configuration keys, so do not set them where `hangar` runs: it refuses to start when it sees a `HANGAR_` variable it does not know.
+
 The same command ran `model_info.js`, `tree.js`, `git_clone.js`, `upload.js` (`VUS=4`, 1 GiB each), `download.js` (`VUS=4`, `DURATION=2m`, after `upload.js`) and `viewer_rows.js` (50 requests per second). Memory came from each replica's cgroup (`memory.current`, `memory.peak` and `memory.stat`), sampled every few seconds, and `docker stats`. CPU per request came from each container's cgroup `cpu.stat` before and after a run, divided by the requests k6 sent.
 
 ## Results

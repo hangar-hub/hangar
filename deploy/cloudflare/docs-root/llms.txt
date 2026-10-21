@@ -16,6 +16,13 @@ Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their g
 - [LM Studio](https://hangar.page/latest/guides/lm-studio/): install models into LM Studio from Hangar
 - [Air-gapped Instances](https://hangar.page/latest/guides/air-gapped/): run Hangar with no internet access
 - [Hub API compatibility](https://hangar.page/latest/reference/hub-api-compatibility/): every Hub API endpoint and whether Hangar serves it
+- [Tested versions and platforms](https://hangar.page/latest/reference/compatibility/): the client, database and platform versions CI tests against
+- [FAQ](https://hangar.page/latest/faq/): model registry or hub, running models, air-gapped use, licence and cost
+- [System requirements](https://hangar.page/latest/get-started/requirements/): CPU, memory, disk and network
+- [Where Hangar keeps data](https://hangar.page/latest/concepts/data/): the database, the Blob store layout and files on your machine
+- [Upgrades](https://hangar.page/latest/operate/upgrades/) and [Uninstall](https://hangar.page/latest/operate/uninstall/)
+- [Versioning and support](https://hangar.page/latest/project/versioning/): version numbers, supported versions and release artefacts
+- [Get help](https://hangar.page/latest/project/support/): where to ask and what to include
 - [Benchmarks](https://hangar.page/latest/benchmarks/): load test results for download latency and other scale targets
 
 ## Optional

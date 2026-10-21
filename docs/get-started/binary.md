@@ -19,15 +19,17 @@ One binary is both the server and the client. Install it with any of these:
     hangar version
     ```
 
-    On macOS, check the archive with `shasum -a 256 --ignore-missing -c checksums.txt`. To check that `checksums.txt` itself came from Hangar's release workflow, verify its signature as [Verify the image](../operate/security.md#verify-the-image) describes.
+    On macOS, download `hangar_${VERSION}_darwin_arm64.tar.gz` (or `darwin_amd64` on an Intel Mac) and check it with `shasum -a 256 --ignore-missing -c checksums.txt`. To check that `checksums.txt` itself came from Hangar's release workflow, verify its signature as [Verify the image](../operate/security.md#verify-the-image) describes.
 
-    Archives are built for Linux, macOS and Windows on amd64 and arm64, named `hangar_<version>_<os>_<arch>`: `.tar.gz` for Linux and macOS, and `.zip` for Windows.
+    Archives are built for Linux, macOS and Windows on amd64 and arm64, named `hangar_<version>_<os>_<arch>`: `.tar.gz` for Linux and macOS, and `.zip` for Windows. CI tests the server on Linux only; see [Tested versions and platforms](../reference/compatibility.md#platforms).
 
 === "Homebrew"
 
     ```sh
     brew install --cask hangar-hub/tap/hangar
     ```
+
+    The cask removes macOS's quarantine attribute from the binary when it installs it, because the binary is not notarised, so Gatekeeper does not check it. `brew upgrade --cask hangar-hub/tap/hangar` installs new releases.
 
 === "go install"
 
