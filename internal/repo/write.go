@@ -160,10 +160,14 @@ func upsertLFS(ctx context.Context, tx bun.IDB, repoID uuid.UUID, refs []LFSRef,
 	}
 	now := db.Now()
 	rows := make([]db.RepoLFS, 0, len(byOID))
-	oids := make([]string, 0, len(byOID))
+	var present, absent []string
 	for _, r := range byOID {
 		rows = append(rows, db.RepoLFS{RepoID: repoID, OID: r.OID, Size: r.Size, Present: r.Present, Timestamps: db.Timestamps{CreatedAt: now, UpdatedAt: now}})
-		oids = append(oids, r.OID)
+		if r.Present {
+			present = append(present, r.OID)
+		} else {
+			absent = append(absent, r.OID)
+		}
 	}
 	presentExpr := "present = repo_lfs.present OR EXCLUDED.present"
 	if overwrite {
@@ -176,7 +180,10 @@ func upsertLFS(ctx context.Context, tx bun.IDB, repoID uuid.UUID, refs []LFSRef,
 			return fmt.Errorf("repo: record lfs references: %w", err)
 		}
 	}
-	return Touch(ctx, tx, oids, now)
+	if err := touchReferenced(ctx, tx, present, now); err != nil {
+		return err
+	}
+	return Touch(ctx, tx, absent, now)
 }
 
 // touchRepo updates last_modified_at and the size columns.
