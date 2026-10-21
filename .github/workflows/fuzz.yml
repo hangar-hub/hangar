@@ -22,7 +22,16 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Run every fuzz target
-        run: ./scripts/fuzz.sh "${{ inputs.fuzztime || '10m' }}"
+        # The input reaches the script through the environment, never the
+        # script text, and must be a Go duration or an iteration count.
+        env:
+          FUZZTIME: ${{ inputs.fuzztime || '10m' }}
+        run: |
+          if [[ ! "$FUZZTIME" =~ ^([0-9]+(ms|s|m|h))+$ && ! "$FUZZTIME" =~ ^[0-9]+x$ ]]; then
+            echo "::error::fuzztime must be a duration such as 10m or 1h30m, or a count such as 1000x"
+            exit 1
+          fi
+          ./scripts/fuzz.sh "$FUZZTIME"
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
