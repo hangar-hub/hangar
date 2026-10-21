@@ -11,7 +11,7 @@ if [ "$#" -eq 0 ]; then
   files=()
   while IFS= read -r f; do files+=("$f"); done < <(
     find docs -name '*.md' -not -path 'docs/spec/*' -not -path 'docs/build/*' | sort)
-  for f in README.md CONTRIBUTING.md SECURITY.md CONTEXT.md; do
+  for f in README.md CONTRIBUTING.md SECURITY.md SUPPORT.md CODE_OF_CONDUCT.md CONTEXT.md; do
     if [ -f "$f" ]; then files+=("$f"); fi
   done
   set -- "${files[@]}"

@@ -2,21 +2,32 @@
 
 **A self-hosted home for your arsenal of models.**
 
+[![Latest release](https://img.shields.io/github/v/release/hangar-hub/hangar)](https://github.com/hangar-hub/hangar/releases/latest)
+[![CI](https://github.com/hangar-hub/hangar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hangar-hub/hangar/actions/workflows/ci.yml)
+[![Licence: Elastic 2.0](https://img.shields.io/badge/licence-Elastic%202.0-blue)](LICENSE)
+
+Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Use it as a private Hugging Face Hub alternative, a model registry for your own models, or a Hugging Face mirror that also works on an air-gapped network.
+
 ![The Models list in Hangar's web UI, with filters for format, task, quantisation and size](docs/assets/screenshots/models-desktop.webp)
 
 Hangar keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:
 
-- **Hugging Face clients**: set `HF_ENDPOINT` and `huggingface_hub`, the `hf` CLI, `transformers`, `diffusers`, `sentence-transformers`, `datasets` and vLLM work unchanged.
+- **Hugging Face clients**: set `HF_ENDPOINT`, and `huggingface_hub`, the `hf` CLI, `transformers`, `diffusers`, `sentence-transformers`, `datasets` and vLLM work unchanged.
 - **git**: `git clone` and `git push`, with git-lfs.
-- **Ollama**: `ollama pull hangar.example.com/org/model:Q4_K_M` for any GGUF repo.
+- **Ollama**: `ollama pull hangar.example.com/org/model:Q4_K_M` for any GGUF Repo.
 - **LM Studio**: `hangar lmstudio install org/model:Q4_K_M`.
 - **Datasets**: `load_dataset`, pandas and Polars over `hf://`, DuckDB over HTTPS, plus a Dataset Viewer in the browser to preview, search, filter and profile rows.
 
-Pull models and datasets from huggingface.co once, including only the quantisation, Config or Split you want and any code they depend on, then load them from fast local storage as often as you like. Upload models that exist nowhere else. Browse everything you have, and everything you could pull, in one place.
+## Why Hangar
 
-Hangar runs as one container on a laptop or homelab, and scales out to stateless replicas over Postgres and S3-compatible storage. It exports traces, metrics and logs with OpenTelemetry, and supports local accounts and OIDC sign-in.
+- Pull a model or dataset from huggingface.co once, including only the quantisation, Config or Split you want and any code it depends on, then load it from local storage as often as you like.
+- Mirrors keep the upstream Repo IDs and Commit SHAs, so code that names `org/model` or pins a Commit works against Hangar unchanged.
+- Upload models that exist nowhere else, with `huggingface_hub` or `git push`.
+- Feed an air-gapped Instance from another Instance that has internet access.
+- Browse everything you have, and everything you could pull, in a web UI with a GGUF viewer and a Dataset Viewer.
+- Run one container on a laptop or homelab, or stateless replicas over Postgres and S3-compatible storage, with OIDC sign-in and OpenTelemetry traces, metrics and logs.
 
-> **Status:** in development. There is no release yet. The plan is in [`docs/spec/`](docs/spec/README.md).
+Hangar stores and serves files; it doesn't run models. To see how it compares with olah, JFrog Artifactory, Sonatype Nexus, CSGHub, MLflow Model Registry and Hugging Face Enterprise, read [How Hangar compares](https://hangar.page/latest/concepts/comparison/).
 
 | Model card | GGUF viewer | Dataset Viewer |
 |---|---|---|
@@ -33,12 +44,14 @@ docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
 docker logs hangar   # prints the generated admin password and Instance key once
 ```
 
-Open <http://localhost:8080>, sign in as `hangar-admin`, pull a model from **Discover**, then:
+Open <http://localhost:8080>, sign in as `hangar-admin`, and pull `hf-internal-testing/tiny-random-bert` from **Discover**. Create a Token under **Settings**, **Tokens**. Then, with `transformers` and `torch` installed:
 
 ```sh
 export HF_ENDPOINT=http://localhost:8080 HF_TOKEN=hgr_...
 python -c "from transformers import AutoModel; AutoModel.from_pretrained('hf-internal-testing/tiny-random-bert')"
 ```
+
+If Hangar is useful to you, a star on GitHub helps other people find it.
 
 ## Install
 
@@ -47,15 +60,20 @@ python -c "from transformers import AutoModel; AutoModel.from_pretrained('hf-int
 | Container image | `ghcr.io/hangar-hub/hangar` for linux/amd64 and linux/arm64, signed with cosign |
 | Docker Compose | Examples for SQLite, Postgres and MinIO, a scaled-out setup and Keycloak in [`deploy/compose`](deploy/compose) |
 | Kubernetes | `helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --set publicURL=https://hangar.example.com`, with `publicURL` set to the address clients use; see the [Helm guide](https://hangar.page/latest/get-started/helm/) and [`deploy/helm/hangar`](deploy/helm/hangar) |
-| Binary | [Release archives](https://github.com/hangar-hub/hangar/releases) for Linux, macOS and Windows, `brew install --cask hangar-hub/tap/hangar`, or `go install github.com/hangar-hub/hangar/cmd/hangar@latest` |
+| Binary | [Release archives](https://github.com/hangar-hub/hangar/releases) for Linux, macOS and Windows, or `brew install --cask hangar-hub/tap/hangar` |
+| From source | `go install github.com/hangar-hub/hangar/cmd/hangar@latest` builds the CLI and server without the web UI |
 
 ## Documentation
 
 <https://hangar.page/>: getting started, concepts, guides for every client, operating Hangar, and the API, CLI, configuration and metrics references.
 
+## Get help
+
+See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bugs. Report security problems privately, as [SECURITY.md](SECURITY.md) describes.
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md). Report security problems privately, as [SECURITY.md](SECURITY.md) describes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Licence
 

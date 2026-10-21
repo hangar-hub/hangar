@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: If you use Hangar in your research, cite it as below.
+title: Hangar
+abstract: Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
+type: software
+authors:
+  - family-names: Garside
+    given-names: James
+repository-code: https://github.com/hangar-hub/hangar
+url: https://hangar.page/
+# The Elastic License 2.0. CFF 1.2.0 checks "license" against an SPDX list
+# that predates Elastic-2.0, so the licence is given by URL.
+license-url: https://github.com/hangar-hub/hangar/blob/main/LICENSE
+# release-please updates the version in each release pull request
+# (extra-files in release-please-config.json).
+version: 1.2.3 # x-release-please-version
+keywords:
+  - hugging face hub
+  - model registry
+  - datasets
+  - self-hosted
+  - air-gapped
+  - gguf
