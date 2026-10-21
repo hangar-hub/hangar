@@ -1,4 +1,5 @@
 ---
+title: Self-hosted datasets with a Dataset Viewer
 description: "Work with datasets in Hangar: load them with the datasets library, link them to models, export Parquet and preview rows in the Dataset Viewer."
 ---
 

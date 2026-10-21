@@ -1,4 +1,5 @@
 ---
+title: Import a Hugging Face cache, Ollama or LM Studio
 description: "Import models you already have into Hangar without downloading them again: from a Hugging Face cache, a folder, LM Studio or Ollama."
 ---
 

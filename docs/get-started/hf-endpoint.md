@@ -1,4 +1,5 @@
 ---
+title: Set HF_ENDPOINT to a self-hosted Hugging Face Hub
 description: "Set HF_ENDPOINT and HF_TOKEN so huggingface_hub, transformers, datasets and the hf CLI load models and datasets from Hangar."
 ---
 

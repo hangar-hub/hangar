@@ -1,4 +1,5 @@
 ---
+title: Self-hosted Hugging Face Hub in Docker
 description: "Run Hangar as one Docker container, with SQLite and the filesystem Blob store in a volume, and configure it with environment variables."
 ---
 

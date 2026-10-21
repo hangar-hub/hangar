@@ -1,4 +1,5 @@
 ---
+title: Serve vLLM models from a private model hub
 description: "Serve models with vLLM from weights stored in Hangar, by pointing its huggingface_hub downloads at your Instance with HF_ENDPOINT."
 ---
 

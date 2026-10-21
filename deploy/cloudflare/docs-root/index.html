@@ -11,10 +11,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hangar: self-hosted model registry and Hugging Face Hub</title>
+    <title>Hangar: a private, self-hosted Hugging Face Hub alternative</title>
     <meta
       name="description"
-      content="Hangar is a self-hosted model registry for ML models and datasets, compatible with the Hugging Face Hub, with git, Ollama and LM Studio support."
+      content="Hangar is a private, self-hosted model registry for ML models and datasets, compatible with the Hugging Face Hub, with git, Ollama and LM Studio support."
     />
     <link rel="canonical" href="https://hangar.page/" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -106,6 +106,14 @@
                 "acceptedAnswer": {
                   "@type": "Answer",
                   "text": "Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is Hangar a private Hugging Face Hub?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set HF_ENDPOINT to your Instance and huggingface_hub, transformers and datasets use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access."
                 }
               },
               {
@@ -1457,13 +1465,13 @@
                   <span class="dot" aria-hidden="true"></span>
                   <span id="release-label">Latest release</span>
                 </a>
-                <span>Self-hosted model and dataset hub</span>
+                <span>Private, Hugging Face Hub-compatible model and dataset hub</span>
               </p>
               <h1 data-stagger style="--i: 1">
                 A self-hosted home for your <em>arsenal of models</em>.
               </h1>
               <p class="lead" data-stagger style="--i: 2">
-                Hangar is a self-hosted model registry for your machine learning models and datasets,
+                Hangar is a private, self-hosted model registry for your machine learning models and datasets,
                 compatible with the Hugging Face Hub. Pull from huggingface.co once, keep full version history on your own
                 storage, and serve it to the tools you already use.
               </p>
@@ -1873,6 +1881,10 @@ docker logs hangar</code></pre>
               <p>Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.</p>
             </details>
             <details>
+              <summary>Is Hangar a private Hugging Face Hub?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set HF_ENDPOINT to your Instance and huggingface_hub, transformers and datasets use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access.</p>
+            </details>
+            <details>
               <summary>Is Hangar a cache for Hugging Face models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
               <p>It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. Clients load everything from your own storage.</p>
             </details>
@@ -1929,6 +1941,7 @@ docker logs hangar</code></pre>
             <li><a href="https://demo.hangar.page/">Demo</a></li>
             <li><a href="https://github.com/hangar-hub/hangar">GitHub</a></li>
             <li><a href="https://github.com/hangar-hub/hangar/releases">Releases</a></li>
+            <li><a href="/latest/concepts/comparison/">How Hangar compares</a></li>
             <li><a href="/latest/benchmarks/">Benchmarks</a></li>
             <li><a href="/latest/project/changelog/">Changelog</a></li>
             <li><a href="/latest/project/security/">Security</a></li>

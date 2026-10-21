@@ -1,4 +1,5 @@
 ---
+title: Ollama pull from a private GGUF model registry
 description: "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."
 ---
 

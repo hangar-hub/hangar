@@ -1,4 +1,5 @@
 ---
+title: Pull gated Hugging Face models into a private hub
 description: "Pull gated and private models from huggingface.co into Hangar with an access token, and gate your own Repos."
 ---
 

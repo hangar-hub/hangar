@@ -1,4 +1,5 @@
 ---
+title: Install models into LM Studio from your own hub
 description: "Install models from Hangar into LM Studio with hangar lmstudio install, which downloads them and links them into LM Studio's models folder."
 ---
 
