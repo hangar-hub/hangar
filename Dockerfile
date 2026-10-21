@@ -9,7 +9,7 @@
 # so multi-arch builds need no emulation except for the small root
 # filesystem stage.
 
-ARG GO_VERSION=1.27.2
+ARG GO_VERSION=1.27.3
 ARG NODE_VERSION=24.19.0
 
 # 1. The web UI, built into internal/web/dist.

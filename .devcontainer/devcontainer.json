@@ -2,7 +2,7 @@
   "name": "Hangar",
   "image": "mcr.microsoft.com/devcontainers/base:bookworm",
   "features": {
-    "ghcr.io/devcontainers/features/go:1": {"version": "1.27.2", "golangciLintVersion": "2.14.0"},
+    "ghcr.io/devcontainers/features/go:1": {"version": "1.27.3", "golangciLintVersion": "2.14.0"},
     "ghcr.io/devcontainers/features/node:1": {"version": "24"},
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/git-lfs:1": {},
