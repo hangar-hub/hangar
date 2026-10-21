@@ -471,6 +471,24 @@ test.describe("browse files", () => {
     await panel.getByRole("tab", { name: "git" }).click();
     await expect(panel.getByRole("tabpanel")).toContainText("GIT_LFS_SKIP_SMUDGE=1 git clone");
   });
+
+  test("fills the snippets in for the Instance and the Revision on screen", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/tree/v1.0");
+    await page.getByRole("button", { name: "Use this model" }).click();
+    const panel = page.getByRole("dialog", { name: "Use this model" });
+    await expect(panel).toContainText("Snippets for ada/bert-tiny-finetune at v1.0");
+    const origin = new URL(page.url()).origin;
+    const code = panel.getByRole("tabpanel").getByRole("region", { name: "Code" });
+    await expect(code).toContainText(`os.environ["HF_ENDPOINT"] = "${origin}"`);
+    await expect(code).toContainText(
+      'AutoModel.from_pretrained("ada/bert-tiny-finetune", revision="v1.0")',
+    );
+    await panel.getByRole("tab", { name: "huggingface_hub" }).click();
+    await expect(code).toContainText(
+      `snapshot_download("ada/bert-tiny-finetune", revision="v1.0", endpoint="${origin}")`,
+    );
+  });
 });
 
 test("creates a Token that is shown once, then revokes it", async ({ page }) => {

@@ -262,6 +262,8 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
     return <ErrorState error={repo.error} onRetry={() => repo.refetch()} />;
   }
   const r = repo.data;
+  // The Revision a Files, Commits or Commit page shows, for the snippets.
+  const viewed = params?.rev ?? params?.sha;
   const tabs: Tab[] = [
     {
       to: base,
@@ -330,7 +332,10 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
           </div>
           <div className="flex flex-wrap gap-2">
             {me.data ? <LikeButton repo={r} /> : null}
-            <UsePanel repo={r} />
+            <UsePanel
+              repo={r}
+              revision={viewed && viewed !== r.default_branch ? viewed : undefined}
+            />
           </div>
         </div>
         {r.mirror ? <MirrorStatus repo={r} /> : null}
