@@ -214,6 +214,14 @@ Web UI.
 |---|---|---|---|
 | `ui.docs_url`<br>`HANGAR_UI_DOCS_URL` | string | `https://hangar.page/` | Where the web UI's links to the documentation go, such as a docs mirror on an air-gapped network. The mirror must serve the same paths as https://hangar.page/. Empty removes the links. |
 
+## `webhooks`
+
+Webhook deliveries.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `webhooks.allow_private_targets`<br>`HANGAR_WEBHOOKS_ALLOW_PRIVATE_TARGETS` | bool | `false` | Let webhooks reach private addresses: loopback, RFC 1918, carrier-grade NAT and unique local. Off by default, so users cannot make Hangar send requests into your network. Link-local and cloud metadata addresses are refused whatever this says. This is the default for the Instance setting of the same name, which an Instance admin can change under Admin, Settings. |
+
 ## `telemetry`
 
 OpenTelemetry traces, metrics and logs. Standard OTEL_* variables also apply and win.

@@ -28,12 +28,18 @@ type Config struct {
 	Repos     ReposConfig               `koanf:"repos" desc:"Repo lifecycle."`
 	Viewer    ViewerConfig              `koanf:"viewer" desc:"Dataset Viewer and Parquet export."`
 	UI        UIConfig                  `koanf:"ui" desc:"Web UI."`
+	Webhooks  WebhooksConfig            `koanf:"webhooks" desc:"Webhook deliveries."`
 	Telemetry TelemetryConfig           `koanf:"telemetry" desc:"OpenTelemetry traces, metrics and logs. Standard OTEL_* variables also apply and win."`
 }
 
 // UIConfig configures the web UI.
 type UIConfig struct {
 	DocsURL string `koanf:"docs_url" desc:"Where the web UI's links to the documentation go, such as a docs mirror on an air-gapped network. The mirror must serve the same paths as https://hangar.page/. Empty removes the links."`
+}
+
+// WebhooksConfig configures webhook deliveries.
+type WebhooksConfig struct {
+	AllowPrivateTargets bool `koanf:"allow_private_targets" desc:"Let webhooks reach private addresses: loopback, RFC 1918, carrier-grade NAT and unique local. Off by default, so users cannot make Hangar send requests into your network. Link-local and cloud metadata addresses are refused whatever this says. This is the default for the Instance setting of the same name, which an Instance admin can change under Admin, Settings."`
 }
 
 // DefaultDocsURL is the public documentation site.

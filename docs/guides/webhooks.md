@@ -28,6 +28,8 @@ A delivery that does not answer 2xx within 10 seconds is retried after 1 minute,
 
 ## Private addresses
 
-Webhooks may target private addresses (for example a service on your LAN) while the Instance setting `webhooks.allow_private_targets` is on, which is the default for self-hosting. Turn it off on Instances shared by people who should not reach your internal network through Hangar.
+By default, webhooks cannot target private addresses: loopback, RFC 1918, carrier-grade NAT and unique local addresses. A delivery to one fails with "webhook targets a private address, which this Instance does not allow". To deliver to a service on your LAN, an Instance admin turns on **Allow webhooks to private addresses** under **Admin**, **Settings**, or sets `webhooks.allow_private_targets: true` in the [configuration](../reference/configuration.md#webhooks). Only do this when everyone who can add a webhook may reach your internal network through Hangar: every user administers their own Namespace, so every user can add one.
+
+Earlier releases allowed private targets by default. If your webhooks deliver to private addresses, an admin must now turn the setting on.
 
 Whatever the setting, Hangar never delivers to link-local addresses (which include the cloud metadata service at 169.254.169.254), other cloud metadata addresses, `0.0.0.0` or multicast addresses. Hangar checks the address it connects to after resolving the host name, and does not follow redirects.

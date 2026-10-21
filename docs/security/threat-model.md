@@ -177,7 +177,7 @@ Two checks apply to every boundary that accepts requests:
 
 | | Threat | Mitigation | Evidence or residual risk |
 |---|---|---|---|
-| I, E | SSRF: a Namespace admin (every user, for their own Namespace) points a webhook at the metadata service or the local host. | Reserved addresses are always refused, checked on the dialled address; redirects are not followed (`internal/webhook/service.go`). | `TestReservedTargetsAreAlwaysRefused`, `TestTestDeliveryAndPrivateTargets` (`internal/webhook/service_test.go`). **Residual risk:** `webhooks.allow_private_targets` is on by default, so users can POST to LAN services. Turn it off on shared Instances. |
+| I, E | SSRF: a Namespace admin (every user, for their own Namespace) points a webhook at the metadata service, the local host or the LAN. | Reserved addresses are always refused, checked on the dialled address; redirects are not followed (`internal/webhook/service.go`). Private addresses, loopback included, are refused unless an admin turns on `webhooks.allow_private_targets`, which is off by default (`internal/auth/settings.go`). | `TestReservedTargetsAreAlwaysRefused`, `TestTestDeliveryAndPrivateTargets` (`internal/webhook/service_test.go`); `TestSettings` (`internal/auth/users_test.go`) checks the default. **Residual risk:** with the setting on, users can POST to LAN services and read the status code. |
 | S | A receiver accepts a forged delivery. | Each delivery is signed with the webhook's secret (`internal/webhook/service.go`); secrets are stored encrypted. | `TestEmitSignsAndDelivers` (`internal/webhook/service_test.go`), `TestSignAndVerify` (`internal/webhook/webhook_test.go`). |
 | E | A write Token adds a webhook to watch private changes. | Webhooks need the `admin` scope. | `TestWriteTokenAdministersReposThroughHubAPIOnly`. |
 
@@ -333,7 +333,7 @@ Hangar makes outbound requests to Upstreams and webhook receivers. Both use `htt
 | Destination | Upstreams | Webhooks |
 |---|---|---|
 | Reserved: link-local (including 169.254.169.254), other metadata services (100.100.100.200, `fd00:ec2::254`), unspecified (`0.0.0.0`), "this network", broadcast, multicast, and NAT64 addresses that embed one | Never | Never |
-| Private: loopback, RFC 1918, carrier-grade NAT, unique local | The Upstream's own host, wherever it resolves; a redirect to another host only when the Upstream's own host is private | Only when `webhooks.allow_private_targets` is on (the default) |
+| Private: loopback, RFC 1918, carrier-grade NAT, unique local | The Upstream's own host, wherever it resolves; a redirect to another host only when the Upstream's own host is private | Only when `webhooks.allow_private_targets` is on (off by default) |
 | Public | Yes | Yes |
 | Redirects | Followed (at most 10), credentials dropped on any change of scheme, host or port | Not followed |
 

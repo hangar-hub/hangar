@@ -106,7 +106,9 @@ func newMetaEnvWith(t *testing.T, with func(*api.MetaDeps)) *metaEnv {
 	require.NoError(t, err)
 	reg := jobs.NewRegistry()
 	e.queue = jobstest.NewFake(reg)
-	hooks := webhook.New(webhook.Options{DB: d, Queue: e.queue, Sealer: sealer})
+	// The test receiver listens on loopback, a private address.
+	hooks := webhook.New(webhook.Options{DB: d, Queue: e.queue, Sealer: sealer,
+		AllowPrivateTargets: func(context.Context) (bool, error) { return true, nil }})
 	require.NoError(t, hooks.Register(reg))
 	e.index = indexdb.New(indexdb.Options{DB: d, Repos: e.repos})
 	deps := api.MetaDeps{
