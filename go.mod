@@ -2,7 +2,7 @@ module github.com/hangar-hub/hangar
 
 go 1.27.0
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
