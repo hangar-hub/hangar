@@ -150,6 +150,31 @@ func cloneOps(p repo.CommitParams) repo.CommitParams {
 	return p
 }
 
+// TestTreeRecursiveNonASCII lists below directories whose names take more
+// bytes than characters, and checks that siblings sharing a prefix stay out.
+func TestTreeRecursiveNonASCII(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "unicode"}
+		e.create(repo.CreateParams{ID: id, Actor: alice})
+		c := e.commit(id, alice,
+			add("données/train.csv", "a"), add("données/sub/test.csv", "b"),
+			add("データ/訓練.csv", "c"), add("données0.txt", "d"), add("donnéesx/e.txt", "e"))
+
+		rec, err := e.svc.Tree(e.ctx, id, c.SHA, "données", repo.TreeOpts{Recursive: true})
+		require.NoError(t, err)
+		require.Equal(t, []string{"données/sub", "données/sub/test.csv", "données/train.csv"}, paths(rec))
+
+		rec, err = e.svc.Tree(e.ctx, id, c.SHA, "データ", repo.TreeOpts{Recursive: true})
+		require.NoError(t, err)
+		require.Equal(t, []string{"データ/訓練.csv"}, paths(rec))
+
+		rec, err = e.svc.Tree(e.ctx, id, c.SHA, "données/sub", repo.TreeOpts{Recursive: true})
+		require.NoError(t, err)
+		require.Equal(t, []string{"données/sub/test.csv"}, paths(rec))
+	})
+}
+
 func TestCommitReadsAndCaches(t *testing.T) {
 	forEach(t, func(t *testing.T, e *env) {
 		alice := e.addUser("alice")
