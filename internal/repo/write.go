@@ -97,10 +97,15 @@ type applyParams struct {
 
 // apply stores the pack, then in one transaction moves every ref with
 // compare-and-swap, marks the pack live and records LFS references. On a
-// conflict the pack is marked orphaned and ErrRefConflict is returned.
+// conflict the pack is marked orphaned and ErrRefConflict is returned. A
+// pack that a failed attempt orphaned, or that a sweep is deleting, gives
+// ErrRetryable: storing it again recovers it.
 func (s *Store) apply(ctx context.Context, p applyParams) error {
 	if p.pack != "" {
 		if _, err := p.st.StorePack(ctx, p.pack); err != nil {
+			if errors.Is(err, gitstore.ErrPackDeleting) {
+				return fmt.Errorf("%w: %w", ErrRetryable, err)
+			}
 			return err
 		}
 	}
@@ -130,6 +135,9 @@ func (s *Store) apply(ctx context.Context, p applyParams) error {
 		}
 		if errors.Is(err, gitstore.ErrInvalidUpdate) {
 			return fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+		if errors.Is(err, gitstore.ErrPackNotPending) {
+			return fmt.Errorf("%w: %w", ErrRetryable, err)
 		}
 		return err
 	}

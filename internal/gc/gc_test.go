@@ -268,6 +268,10 @@ func TestGCPacksAndGitData(t *testing.T) {
 		f.pack(repo, sha('d'), "orphaned", f.now.Add(-3*time.Hour))
 		f.pack(repo, sha('e'), "pending", f.now.Add(-5*time.Hour))
 		f.pack(repo, sha('f'), "pending", f.now.Add(-5*time.Minute))
+		// A pack an earlier run claimed and did not finish deleting, and one
+		// a run is deleting now.
+		f.pack(repo, sha('g'), "deleting", f.now.Add(-3*time.Hour))
+		f.pack(repo, sha('h'), "deleting", f.now.Add(-5*time.Minute))
 		// A pack file with no row (the push died before inserting it), and
 		// the git data of a purged Repo.
 		f.blob(gc.PackPrefix(repo, sha('9'))+"pack", old)
@@ -277,16 +281,16 @@ func TestGCPacksAndGitData(t *testing.T) {
 
 		r, err := f.collector().Run(ctx, gc.ScopeGit, nil)
 		require.NoError(t, err)
-		require.Equal(t, 3, r.PacksDeleted, "retired after the grace period, orphaned, and dead pending")
-		require.Equal(t, int64(300), r.PackBytesFreed)
+		require.Equal(t, 4, r.PacksDeleted, "retired after the grace period, orphaned, dead pending, and left deleting")
+		require.Equal(t, int64(400), r.PackBytesFreed)
 		require.Equal(t, 2, r.OrphanGitBlobsDeleted)
 		var left []string
 		require.NoError(t, d.NewSelect().Model((*db.Pack)(nil)).Column("pack_sha1").OrderExpr("pack_sha1").Scan(ctx, &left))
-		require.Equal(t, []string{sha('a'), sha('c'), sha('f')}, left)
-		for _, c := range []byte{'a', 'c', 'f'} {
+		require.Equal(t, []string{sha('a'), sha('c'), sha('f'), sha('h')}, left)
+		for _, c := range []byte{'a', 'c', 'f', 'h'} {
 			require.True(t, f.exists(gc.PackPrefix(repo, sha(c))+"idx"))
 		}
-		for _, c := range []byte{'b', 'd', 'e', '9'} {
+		for _, c := range []byte{'b', 'd', 'e', 'g', '9'} {
 			require.False(t, f.exists(gc.PackPrefix(repo, sha(c))+"pack"))
 		}
 		require.False(t, f.exists("git/"+purged.String()+"/pack/pack-"+sha('8')+".pack"))

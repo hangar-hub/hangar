@@ -21,7 +21,7 @@ The research behind this page, with tests against real `git`, git-lfs and huggin
 These replace or extend the tables in [02](02-architecture.md):
 
 - `refs(repo_id, name, target, updated_at)`, primary key `(repo_id, name)`. Compare-and-swap is on `target` (see "Ref updates"), so there is no `version` column.
-- `packs(repo_id, pack_sha1, size, object_count, state, created_at, retired_at)`, where `state` is `pending`, `live`, `retired` or `orphaned`.
+- `packs(repo_id, pack_sha1, size, object_count, state, created_at, retired_at)`, where `state` is `pending`, `live`, `retired`, `orphaned` or `deleting`.
 - `repos.head_ref` (default `refs/heads/main`).
 
 ## Reading a Repo on a replica
@@ -58,8 +58,8 @@ For every git request, and for any `repo.Service` read that needs git objects:
      - the pack is under `git.max_pack_size` (default 2 GiB) and within the [pack and tree limits](#pack-and-tree-limits)
      - the push fits the Namespace quota
      - every LFS pointer in the new Commits refers to an LFS object that exists and is verified
-  2. Upload `.pack`, `.idx` and `.rev` to the Blob store, then insert `packs(state = 'pending')`.
-  3. In one transaction, run a compare-and-swap for every ref command (sorted by name, to avoid deadlocks), set the pack `live`, update `repo_lfs` reachability, and enqueue cache fills, `index`, `scan` and webhook Jobs.
+  2. Insert `packs(state = 'pending')`, then upload `.pack`, `.idx` and `.rev` to the Blob store. A pack already recorded with the same SHA-1, such as one a failed earlier attempt of the same push left `orphaned`, becomes `pending` again; if a sweep is deleting it, wait until the sweep has finished.
+  3. In one transaction, run a compare-and-swap for every ref command (sorted by name, to avoid deadlocks), set the pack `live` (failing if it is no longer `pending` or `live`), update `repo_lfs` reachability, and enqueue cache fills, `index`, `scan` and webhook Jobs.
   4. On any compare-and-swap failure, roll back, mark the pack `orphaned`, and reject every ref with `reference has changed concurrently, fetch first`. The push is all or nothing.
 - go-git does not advertise `atomic`, so `git push --atomic` fails on the client even though every push is atomic. Document it, and contribute the capability upstream if time allows.
 
@@ -153,7 +153,7 @@ HTTP Basic: any username, token as password, the same as git. Unauthenticated ba
 ## Compaction and garbage collection
 
 - `git.compact` Job, one leader at a time (Job lease): when a Repo has more than `git.compact_threshold` live packs (default 20), materialise a view, run `git repack -a -d --write-bitmap-index`, upload the new pack, and in one transaction mark it `live` and the old ones `retired`.
-- Delete `retired` and `orphaned` packs after `git.pack_grace_period` (default 1 hour, longer than the longest request).
+- Delete `retired` and `orphaned` packs after `git.pack_grace_period` (default 1 hour, longer than the longest request). A sweep first claims a pack by moving it to `deleting` with a conditional update that checks it is still eligible, then deletes its files, then its row. A sweep that stops part of the way through leaves the pack `deleting`, and a later sweep finishes it.
 - Prune only objects unreachable from every ref, including `refs/pr/*` and `refs/hangar/*`. Never prune Mirrors.
 - `hangar admin gc --git` runs it on demand.
 

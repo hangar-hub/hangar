@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -146,6 +147,48 @@ func TestApplyPackPushPolicy(t *testing.T) {
 		require.Equal(t, int64(1), orphaned)
 
 		gitCmd(t, e.export(id), "fsck", "--strict", "--no-dangling")
+	})
+}
+
+// TestPushRetriedAfterAFailedAttemptKeepsItsPack sends the same push twice:
+// the first attempt fails after storing its pack, which is marked
+// orphaned, and the retry sends the same pack, byte for byte. The pack
+// must go live, so the sweep keeps it and a replica with a cold cache has
+// every object the branch points at.
+func TestPushRetriedAfterAFailedAttemptKeepsItsPack(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "retried"}
+		r := e.create(repo.CreateParams{ID: id, Actor: alice})
+		base, err := e.svc.Resolve(e.ctx, id, "main")
+		require.NoError(t, err)
+		w := e.clone(id)
+		w.write("weights.txt", "retried\n")
+		tip := w.commit("retried")
+		pack := w.pack(tip, base)
+		push := func(old model.CommitSHA) error {
+			return e.svc.ApplyPack(e.ctx, repo.ApplyPackParams{Repo: id, Source: repo.SourcePush, Actor: alice,
+				Updates: []repo.RefUpdate{{Name: "refs/heads/main", Old: old, New: tip}}, Pack: bytes.NewReader(pack)})
+		}
+
+		// The first attempt fails in its transaction, after storing the pack.
+		require.ErrorIs(t, push(tip), repo.ErrRefConflict)
+		require.NoError(t, push(base))
+		require.Equal(t, "retried\n", e.read(id, "main", "weights.txt"))
+		var states []string
+		require.NoError(t, e.d.NewSelect().Model((*db.Pack)(nil)).Column("state").Where("repo_id = ?", r.UUID).Scan(e.ctx, &states))
+		require.NotContains(t, states, gitstore.PackOrphaned)
+
+		time.Sleep(5 * time.Millisecond)
+		_, err = e.git.Sweep(e.ctx, 0)
+		require.NoError(t, err)
+		cold, err := gitstore.New(gitstore.Options{DB: e.d, Blobs: e.blobs, CacheDir: t.TempDir()})
+		require.NoError(t, err)
+		v, err := cold.OpenView(e.ctx, r.UUID, "refs/heads/main")
+		require.NoError(t, err)
+		defer v.Close()
+		_, err = cold.Git().Output(e.ctx, v.Dir, "fsck", "--strict", "--no-dangling")
+		require.NoError(t, err)
 	})
 }
 

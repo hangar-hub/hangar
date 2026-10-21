@@ -150,7 +150,7 @@ All tables have `created_at` and `updated_at` (UTC). IDs are UUIDv7 unless state
 | `repo_redirects` | Renames and transfers | `old_namespace`, `old_name`, `type`, `repo_id` |
 | `collaborators` | Per-repo access | `repo_id`, `user_id`, `role` |
 | `refs` | Branches, tags, PR refs | `repo_id`, `name` (full, for example `refs/heads/main`), `target` (SHA-1); compare-and-swap on `target` ([04](04-git.md)) |
-| `packs` | git packfiles per Repo | `repo_id`, `pack_sha1`, `size`, `object_count`, `state` (`pending`, `live`, `retired`, `orphaned`), `retired_at` |
+| `packs` | git packfiles per Repo | `repo_id`, `pack_sha1`, `size`, `object_count`, `state` (`pending`, `live`, `retired`, `orphaned`, `deleting`), `retired_at` |
 | `commits` | Commit metadata cache for fast listing | `repo_id`, `sha`, `parents`, `author`, `committer`, `title`, `message`, `authored_at` |
 | `tree_entries` | Flattened file list per indexed Commit, for fast Hub API listing | `repo_id`, `commit`, `path`, `type`, `size`, `git_oid`, `lfs_oid`, `lfs_size`, `last_commit` |
 | `lfs_objects` | One row per stored LFS object | `oid` (SHA-256, primary key), `size`, `storage_key`, `verified_at`, `last_referenced_at` |
