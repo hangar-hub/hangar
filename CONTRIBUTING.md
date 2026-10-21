@@ -58,8 +58,9 @@ Never skip, disable or weaken a test to get a change through. No stubs, placehol
 
 release-please keeps a release pull request open on `main`. It proposes the next version from the Conventional Commits merged since the last release and writes the changelog entry. Merging it tags the release, and the release workflow publishes the binaries, the container image, the Helm chart and the documentation.
 
-- The first release is v1.0.0. `.release-please-manifest.json` starts at `0.0.0`, which release-please reads as "never released", and `initial-version` in `release-please-config.json` sets the version of that first release. It has no effect on later releases, so it can stay.
-- Before the first release, or after changing `.goreleaser.yaml` or `release.yml`, run `make release-rehearsal`. It runs the release's SBOM and cosign steps on this machine with a throwaway key and a local registry, and verifies what they produce. Only the GitHub OIDC identity of keyless signing needs a real release run.
+- release-please reads the current version from `.release-please-manifest.json`. `initial-version` in `release-please-config.json` set the version of the first release, 1.0.0, and has no effect on later releases.
+- release-please creates the GitHub release with the changelog entry as its notes. GoReleaser then uploads the binaries and appends the install and verification notes from `release.footer` in `.goreleaser.yaml`.
+- After changing `.goreleaser.yaml` or `release.yml`, run `make release-rehearsal`. It runs the release's SBOM and cosign steps on this machine with a throwaway key and a local registry, and verifies what they produce. Only the GitHub OIDC identity of keyless signing needs a real release run.
 - To release a version other than the one release-please proposes, add a `Release-As: x.y.z` footer to a commit on `main`, for example with `git commit --allow-empty -m "chore: release 1.2.0" -m "Release-As: 1.2.0"`.
 
 ## Contributor licence agreement

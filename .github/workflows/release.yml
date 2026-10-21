@@ -91,17 +91,38 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          # GHCR reads a multi-arch image's description from the index's
+          # annotations, not from the labels in each image's config.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
           images: ${{ env.IMAGE }}
           tags: |
             type=semver,pattern={{version}},value=${{ env.TAG }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
             type=raw,value=latest
-          # metadata-action takes the licence label from the licence GitHub
-          # detects, and GitHub does not detect the Elastic License 2.0, so
-          # the label would read NOASSERTION and replace the Dockerfile's.
+          # metadata-action generates its labels and annotations from the
+          # repository: its name as the title, its description, its URL, and
+          # the licence GitHub detects, which reads NOASSERTION because GitHub
+          # does not detect the Elastic License 2.0. These lists replace
+          # them with the Dockerfile's labels, which the generated ones would
+          # otherwise override. TestImageMetadataMatchesDockerfile
+          # (deploy/release_test.go) keeps all three the same.
           labels: |
             org.opencontainers.image.title=Hangar
+            org.opencontainers.image.description=Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
+            org.opencontainers.image.url=https://hangar.page/
+            org.opencontainers.image.documentation=https://hangar.page/
+            org.opencontainers.image.source=https://github.com/hangar-hub/hangar
+            org.opencontainers.image.vendor=Hangar
+            org.opencontainers.image.licenses=Elastic-2.0
+          annotations: |
+            org.opencontainers.image.title=Hangar
+            org.opencontainers.image.description=Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
+            org.opencontainers.image.url=https://hangar.page/
+            org.opencontainers.image.documentation=https://hangar.page/
+            org.opencontainers.image.source=https://github.com/hangar-hub/hangar
+            org.opencontainers.image.vendor=Hangar
             org.opencontainers.image.licenses=Elastic-2.0
       - name: Build metadata
         id: vars
@@ -119,6 +140,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           build-args: |
             VERSION=${{ steps.vars.outputs.version }}
             COMMIT=${{ steps.vars.outputs.commit }}
