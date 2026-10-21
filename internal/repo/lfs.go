@@ -403,6 +403,11 @@ func (l *LFS) GetUpload(ctx context.Context, id uuid.UUID) (*Upload, error) {
 			u.Done = assembledParts(row, nil)
 			return u, nil
 		}
+		// The Blob store no longer has the multipart upload, such as when
+		// an S3 lifecycle rule aborted it, so it cannot be resumed. The
+		// upload is gone as far as callers are concerned: they start again.
+		_ = l.discard(context.WithoutCancel(ctx), row)
+		return nil, fmt.Errorf("%w: upload %s lost its parts; upload the file again", ErrNotFound, id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("repo: list upload parts: %w", err)

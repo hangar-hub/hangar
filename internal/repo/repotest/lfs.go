@@ -231,6 +231,14 @@ func (f *FakeLFS) GetUpload(ctx context.Context, id uuid.UUID) (*repo.Upload, er
 	out := u.Upload
 	if u.uploadID != "" {
 		parts, err := f.Store.ListParts(ctx, u.key, u.uploadID)
+		if errors.Is(err, blob.ErrNotFound) {
+			// The Blob store expired the multipart upload; like repo.LFS,
+			// the upload is gone.
+			f.mu.Lock()
+			delete(f.uploads, id)
+			f.mu.Unlock()
+			return nil, fmt.Errorf("%w: upload %s lost its parts; upload the file again", repo.ErrNotFound, id)
+		}
 		if err != nil {
 			return nil, err
 		}

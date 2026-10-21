@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/blob/blobtest"
 	"github.com/hangar-hub/hangar/internal/datasets"
 	"github.com/hangar-hub/hangar/internal/db"
 	"github.com/hangar-hub/hangar/internal/jobs"
@@ -186,6 +187,34 @@ func TestPullResumesFromUploadedParts(t *testing.T) {
 		require.Equal(t, big, readFile(t, e.Repos, tiny, commit, "model.safetensors"))
 		ranges := e.Server.Ranges()
 		require.Equal(t, []string{"bytes=3072-"}, ranges, "the retry resumes after the three parts already uploaded")
+	})
+}
+
+// TestPullStartsAgainWhenTheBlobStoreExpiredItsUpload covers a Pull that
+// outlives the bucket's rule for aborting incomplete multipart uploads: the
+// upload ID in the Job's result no longer exists, so the retry starts a new
+// upload instead of failing on every attempt.
+func TestPullStartsAgainWhenTheBlobStoreExpiredItsUpload(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{PartSize: 1 << 10})
+		alice := e.User("alice")
+		big := bytes.Repeat([]byte("expire"), 1000) // 6,000 bytes, 6 parts
+		commit := e.Seed(tiny, nil, map[string][]byte{"model.safetensors": big})
+		e.Server.BreakAfter(3584)
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		e.Queue.RunPending(e.Ctx)
+		files, _, err := e.Queue.List(e.Ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPullFile}})
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		require.Equal(t, jobs.StatusPending, files[0].Status, "the transfer failed and will retry")
+
+		require.Equal(t, 1, e.LFS.Store.(*blobtest.Fake).ExpireUploads())
+		e.Server.BreakAfter(0)
+		e.Run(10)
+		require.Equal(t, jobs.StatusSucceeded, e.Job(id).Status, e.Job(id).Error)
+		require.Equal(t, big, readFile(t, e.Repos, tiny, commit, "model.safetensors"))
+		require.Empty(t, e.Server.Ranges(), "the retry downloads the file from the start")
 	})
 }
 

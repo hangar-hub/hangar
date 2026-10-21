@@ -224,6 +224,44 @@ func TestLFSRules(t *testing.T) {
 	require.False(t, nilRules.IsLFS("x.bin"))
 }
 
+// TestLFSUploadExpiredByTheBlobStore checks a multipart upload whose parts
+// the Blob store dropped, as an S3 lifecycle rule that aborts incomplete
+// multipart uploads does. The upload reads as not found, which tells a
+// Pull or a client to start again, and the next plan starts a new upload.
+func TestLFSUploadExpiredByTheBlobStore(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		alice := e.addUser("alice")
+		r := e.create(repo.CreateParams{ID: model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "expired"}, Actor: alice})
+		content := bytes.Repeat([]byte("0123456789"), 25)
+		params := repo.UploadParams{OID: sha256Hex(content), Size: int64(len(content)), RepoUUID: r.UUID, UserID: alice.UserID,
+			Multipart: true, PartSize: 100, TTL: 7 * 24 * time.Hour, Resume: true}
+		u, err := e.lfs.CreateUpload(e.ctx, params)
+		require.NoError(t, err)
+		_, err = e.lfs.PutPart(e.ctx, u.ID, 1, bytes.NewReader(content[:100]), 100)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, e.blobs.ExpireUploads())
+		_, err = e.lfs.GetUpload(e.ctx, u.ID)
+		require.ErrorIs(t, err, repo.ErrNotFound)
+		_, err = e.lfs.GetUpload(e.ctx, u.ID)
+		require.ErrorIs(t, err, repo.ErrNotFound, "the upload stays gone")
+
+		next, err := e.lfs.CreateUpload(e.ctx, params)
+		require.NoError(t, err)
+		require.NotEqual(t, u.ID, next.ID, "the next plan starts a new upload")
+		var parts []blob.Part
+		for i := 0; i*100 < len(content); i++ {
+			chunk := content[i*100 : min((i+1)*100, len(content))]
+			etag, err := e.lfs.PutPart(e.ctx, next.ID, i+1, bytes.NewReader(chunk), int64(len(chunk)))
+			require.NoError(t, err)
+			parts = append(parts, blob.Part{Number: i + 1, ETag: etag})
+		}
+		obj, err := e.lfs.CompleteUpload(e.ctx, next.ID, parts)
+		require.NoError(t, err)
+		require.Equal(t, params.OID, obj.OID)
+	})
+}
+
 // TestLFSResumeUpload checks UploadParams.Resume: planning the same object
 // again continues the user's upload in the Repo, with its parts, while
 // other users, Repos, part sizes and callers that do not ask get a new one.
