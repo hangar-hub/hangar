@@ -221,7 +221,7 @@ func (s *Store) licenceExpr() string {
 // first listing after an upgrade does not build every row.
 //
 // Triggers on repos, refs, metadata and dataset_splits record each Repo
-// whose row is out of date in repo_facts_changes (migration 0004). This
+// whose row is out of date in repo_facts_changes (migration 0007). This
 // reads those records, rebuilds the Repos' rows from what is current, and
 // deletes exactly the records it read: a change that lands meanwhile
 // leaves its own record for the next refresh. Rows built by another

@@ -345,7 +345,7 @@ func TestListFactsMatchReadingEveryRepo(t *testing.T) {
 }
 
 // repo_facts rows are rebuilt when what they were built from changes,
-// whichever way it changes, as the triggers of migration 0004 record it:
+// whichever way it changes, as the triggers of migration 0007 record it:
 // the default branch head, the licence setting, the index results (a
 // re-index or a new indexer version), a dataset's Split sizes and the
 // default branch. A deleted Repo leaves listings and facet counts.
