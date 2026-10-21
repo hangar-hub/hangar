@@ -181,6 +181,11 @@ type uploader struct {
 func (u *uploader) upload(ctx context.Context, files []localFile) ([]gen.CommitOperation, error) {
 	ops := make([]gen.CommitOperation, 0, len(files))
 	failed := &uploadFailures{}
+	// sent holds the outcome of each object uploaded so far, by SHA-256.
+	// Files with the same content share one upload on the Instance, which
+	// its first completion removes (issue #28), so the object goes up once
+	// and the other files reuse the outcome.
+	sent := map[string]error{}
 	for start := 0; start < len(files); start += planBatch {
 		batch := files[start:min(start+planBatch, len(files))]
 		req := gen.UploadPlanRequest{Files: make([]gen.UploadFile, len(batch))}
@@ -213,7 +218,18 @@ func (u *uploader) upload(ctx context.Context, files []localFile) ([]gen.CommitO
 				u.prog.add(f.Size)
 				ops = append(ops, gen.CommitOperation{Op: gen.AddLfs, Path: f.Path, Sha256: ptr(f.SHA256), Size: ptr(f.Size)})
 			case gen.Upload:
-				if err := u.uploadFile(ctx, f, item); err != nil {
+				err, done := sent[f.SHA256]
+				if done {
+					if err == nil {
+						u.prog.add(f.Size)
+					}
+				} else {
+					err = u.uploadOrRecover(ctx, f, item)
+					if ctx.Err() == nil {
+						sent[f.SHA256] = err
+					}
+				}
+				if err != nil {
 					if ctx.Err() != nil {
 						return nil, fmt.Errorf("%s: %w", f.Path, err)
 					}
@@ -271,6 +287,45 @@ func (e *uploadFailures) paths() []string {
 		out[i] = f.path
 	}
 	return out
+}
+
+// uploadOrRecover uploads one file. If the Instance no longer has the
+// upload (404), because another upload of the same object finished it or
+// it expired, the file is planned again: it counts as uploaded when the
+// Instance now holds the object, and goes up once more through the new
+// upload otherwise.
+func (u *uploader) uploadOrRecover(ctx context.Context, f localFile, item gen.UploadPlanItem) error {
+	err := u.uploadFile(ctx, f, item)
+	if err == nil || !IsNotFound(err) || ctx.Err() != nil {
+		return err
+	}
+	again, perr := u.planOne(ctx, f)
+	if perr != nil {
+		return err
+	}
+	switch {
+	case again.Action == gen.Exists:
+		return nil
+	case again.Action == gen.Upload && again.UploadId != nil && (item.UploadId == nil || *again.UploadId != *item.UploadId):
+		return u.uploadFile(ctx, f, *again)
+	}
+	return err
+}
+
+// planOne plans one file on its own.
+func (u *uploader) planOne(ctx context.Context, f localFile) (*gen.UploadPlanItem, error) {
+	req := gen.UploadPlanRequest{Files: []gen.UploadFile{{Path: f.Path, Size: f.Size, Sha256: f.SHA256}}}
+	if u.revision != "" {
+		req.Revision = &u.revision
+	}
+	plan, err := u.c.planUploads(ctx, u.id, req)
+	if err != nil {
+		return nil, err
+	}
+	if len(plan.Files) != 1 {
+		return nil, fmt.Errorf("the upload plan has %d files for 1", len(plan.Files))
+	}
+	return &plan.Files[0], nil
 }
 
 // uploadFile sends the parts of one file that are not stored yet, then
@@ -375,19 +430,15 @@ func (u *uploader) refresh(ctx context.Context, f localFile, urls *partURLs, see
 	if urls.gen != seen {
 		return nil
 	}
-	req := gen.UploadPlanRequest{Files: []gen.UploadFile{{Path: f.Path, Size: f.Size, Sha256: f.SHA256}}}
-	if u.revision != "" {
-		req.Revision = &u.revision
-	}
-	plan, err := u.c.planUploads(ctx, u.id, req)
+	item, err := u.planOne(ctx, f)
 	if err != nil {
 		return err
 	}
-	if len(plan.Files) != 1 || plan.Files[0].Action != gen.Upload || plan.Files[0].UploadId == nil || *plan.Files[0].UploadId != urls.upload ||
-		plan.Files[0].PartUrls == nil || len(*plan.Files[0].PartUrls) != len(urls.list) {
+	if item.Action != gen.Upload || item.UploadId == nil || *item.UploadId != urls.upload ||
+		item.PartUrls == nil || len(*item.PartUrls) != len(urls.list) {
 		return fmt.Errorf("the Instance no longer has this upload")
 	}
-	urls.list = *plan.Files[0].PartUrls
+	urls.list = *item.PartUrls
 	urls.gen++
 	return nil
 }
@@ -523,15 +574,11 @@ func completionCutOff(ctx context.Context, err error) bool {
 
 // stored reports whether the Instance holds f's object, by planning it.
 func (u *uploader) stored(ctx context.Context, f localFile) (bool, error) {
-	req := gen.UploadPlanRequest{Files: []gen.UploadFile{{Path: f.Path, Size: f.Size, Sha256: f.SHA256}}}
-	if u.revision != "" {
-		req.Revision = &u.revision
-	}
-	plan, err := u.c.planUploads(ctx, u.id, req)
+	item, err := u.planOne(ctx, f)
 	if err != nil {
 		return false, err
 	}
-	return len(plan.Files) == 1 && plan.Files[0].Action == gen.Exists, nil
+	return item.Action == gen.Exists, nil
 }
 
 // putPart uploads one part and returns its ETag. The part's bytes count

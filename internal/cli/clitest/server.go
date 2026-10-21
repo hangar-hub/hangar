@@ -506,8 +506,17 @@ func (s *server) GetUpload(w http.ResponseWriter, r *http.Request, _ gen.RepoTyp
 	s.i.mu.Lock()
 	defer s.i.mu.Unlock()
 	up := s.i.uploads[id]
+	if up != nil {
+		if content, ok := s.i.landing[up.sha]; ok {
+			// Another upload of the same object completed first.
+			delete(s.i.landing, up.sha)
+			s.i.objects[up.sha] = content
+			delete(s.i.uploads, up.id)
+			up = nil
+		}
+	}
 	if up == nil {
-		problem(w, http.StatusNotFound, "Upload not found.")
+		problem(w, http.StatusNotFound, "The upload does not exist or has expired. Plan the upload again.")
 		return
 	}
 	writeJSON(w, http.StatusOK, s.status(up))
@@ -742,10 +751,11 @@ func (s *server) CompleteUpload(w http.ResponseWriter, r *http.Request, _ gen.Re
 	}
 	s.i.objects[up.sha] = all.Bytes()
 	up.done = true
+	// Like Hangar, the completed upload is removed, so a later request for
+	// it answers 404.
+	delete(s.i.uploads, up.id)
 	if n := s.i.droppedCompletes[up.sha]; n > 0 {
 		s.i.droppedCompletes[up.sha] = n - 1
-		// Like Hangar, the completed upload is removed.
-		delete(s.i.uploads, up.id)
 		hangUp(w)
 		return
 	}

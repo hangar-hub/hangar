@@ -159,6 +159,9 @@ type Instance struct {
 	downloads       map[string]int
 	// stalePlans counts upload plans to hand expired part URLs.
 	stalePlans int
+	// landing holds objects that another upload stores, by SHA-256
+	// (LandDuringUpload).
+	landing map[string][]byte
 	// partStored is closed, and replaced, each time a part is stored.
 	partStored chan struct{}
 	// Requests counts requests by "METHOD path-template"; read it with
@@ -197,6 +200,7 @@ func New(t testing.TB) *Instance {
 		slowCompletes:    map[string]slowCompletion{},
 		failedDownloads:  map[string]downloadFailure{},
 		downloads:        map[string]int{},
+		landing:          map[string][]byte{},
 		partStored:       make(chan struct{}),
 		Requests:         map[string]int{},
 	}
@@ -519,6 +523,16 @@ func (i *Instance) DropCompletion(sha string, times int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.droppedCompletes[sha] = times
+}
+
+// LandDuringUpload makes the next status request for an upload of content
+// find that another upload of the same object completed first: the object
+// is stored and the upload is gone, so the request answers 404, as Hangar
+// does once a completion has removed an upload.
+func (i *Instance) LandDuringUpload(content []byte) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.landing[File{Content: content}.sha256()] = content
 }
 
 // slowCompletion is an injected delay before a completion's answer.
