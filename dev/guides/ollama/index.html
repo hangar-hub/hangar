@@ -47,8 +47,8 @@
       
         
         
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        
+        <link rel="stylesheet" href="../../assets/external/fonts.googleapis.com/css.49ea35f2.css">
         <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
@@ -59,7 +59,7 @@
 
     
     
-  </head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/ollama/"><meta property="og:title" content="Ollama - Hangar"><meta property="og:description" content="Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Ollama", "description": "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer.", "url": "https://hangar.page/latest/guides/ollama/", "mainEntityOfPage": "https://hangar.page/latest/guides/ollama/", "inLanguage": "en-GB", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "Ollama", "item": "https://hangar.page/latest/guides/ollama/"}]}]}</script></head>
   
   
     
@@ -2862,7 +2862,7 @@ ollama<span class="w"> </span>run<span class="w"> </span>hangar.example.com/bart
 <li>The tag after <code>:</code> picks a quant, case-insensitively, or a full GGUF file name. Without a tag (Ollama's <code>latest</code>), Hangar picks <code>Q4_K_M</code> if the Repo has it, otherwise the closest quant.</li>
 <li>The chat template comes from the Repo's <code>template</code> file, or is matched from the GGUF's own chat template. <code>system</code>, <code>params</code> and <code>LICENSE</code> files in the Repo become the system prompt, parameters and licence.</li>
 <li>A matching <code>mmproj-*.gguf</code> projector is included for vision models.</li>
-<li>The quant must be in the Arsenal. For a Partial mirror without it, <code>ollama pull</code> fails with <code>file does not exist</code>: Ollama does not show the message Hangar sends with it, which names the Pull to run. Pull the quant first with <code>hangar pull &lt;repo&gt;:&lt;quant&gt; --server-only</code>, or use <code>hangar ollama install</code>, which checks for you. If an admin turned on Pull-through, the request starts the Pull and <code>ollama pull</code> asks you to try again when it finishes.</li>
+<li>The quant must be in the Arsenal. For a <a href="../../concepts/mirrors/#partial-mirrors">Partial mirror</a> without it, <code>ollama pull</code> fails with <code>file does not exist</code>: Ollama does not show the message Hangar sends with it, which names the Pull to run. Pull the quant first with <code>hangar pull &lt;repo&gt;:&lt;quant&gt; --server-only</code>, or use <code>hangar ollama install</code>, which checks for you. If an admin turned on <a href="../../concepts/mirrors/#pull-through">Pull-through</a>, the request starts the Pull and <code>ollama pull</code> asks you to try again when it finishes.</li>
 </ul>
 <h2 id="install-with-the-hangar-cli">Install with the hangar CLI<a class="headerlink" href="#install-with-the-hangar-cli" title="Permanent link">&para;</a></h2>
 <p><code>hangar ollama install</code> runs <code>ollama pull</code> for you, after two checks:</p>
