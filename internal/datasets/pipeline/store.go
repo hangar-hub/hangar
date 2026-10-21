@@ -147,6 +147,47 @@ func (s *Store) Splits(ctx context.Context, repoID uuid.UUID, commit model.Commi
 		Scan(ctx); err != nil {
 		return nil, err
 	}
+	return splitRows(rows), nil
+}
+
+// splitsOfBatch is how many Commits one SplitsOf query reads.
+const splitsOfBatch = 500
+
+// SplitsOf returns what Splits returns for many Repos' Commits, with one
+// query per 500 Commits. Commits with no rows are left out.
+func (s *Store) SplitsOf(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID][]SplitRow, error) {
+	out := make(map[uuid.UUID][]SplitRow, len(commits))
+	ids := make([]uuid.UUID, 0, len(commits))
+	for id := range commits {
+		ids = append(ids, id)
+	}
+	for start := 0; start < len(ids); start += splitsOfBatch {
+		part := ids[start:min(start+splitsOfBatch, len(ids))]
+		shas := make([]string, 0, len(part))
+		for _, id := range part {
+			shas = append(shas, string(commits[id]))
+		}
+		var rows []db.DatasetSplit
+		if err := s.DB.NewSelect().Model(&rows).Where("repo_id IN (?)", bun.List(part)).Where("commit_sha IN (?)", bun.List(shas)).
+			Scan(ctx); err != nil {
+			return nil, err
+		}
+		byRepo := map[uuid.UUID][]db.DatasetSplit{}
+		for _, r := range rows {
+			if string(commits[r.RepoID]) == r.Commit {
+				byRepo[r.RepoID] = append(byRepo[r.RepoID], r)
+			}
+		}
+		for id, rs := range byRepo {
+			out[id] = splitRows(rs)
+		}
+	}
+	return out, nil
+}
+
+// splitRows converts a Commit's rows, in insertion order of Configs and
+// Splits as the conversion listed them.
+func splitRows(rows []db.DatasetSplit) []SplitRow {
 	sort.SliceStable(rows, func(i, j int) bool {
 		if !rows[i].CreatedAt.Equal(rows[j].CreatedAt) {
 			return rows[i].CreatedAt.Before(rows[j].CreatedAt)
@@ -179,7 +220,7 @@ func (s *Store) Splits(ctx context.Context, repoID uuid.UUID, commit model.Commi
 		}
 		out = append(out, sr)
 	}
-	return out, nil
+	return out
 }
 
 // Upsert writes rows for a Commit.

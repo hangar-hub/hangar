@@ -251,7 +251,7 @@ func TestBackupAndRestoreRoundTrip(t *testing.T) {
 			var m backupManifest
 			require.NoError(t, json.Unmarshal([]byte(r.stdout), &m))
 			require.Equal(t, int64(2), m.Blobs, "staging objects are left out")
-			require.Len(t, m.Tables, len(db.AllModels()))
+			require.Len(t, m.Tables, len(db.BackupModels()), "derived tables are left out")
 			for table, n := range m.Tables {
 				require.Equal(t, int64(1), n, table)
 			}
@@ -270,7 +270,7 @@ func TestBackupAndRestoreRoundTrip(t *testing.T) {
 			require.False(t, ok)
 
 			d2 := openForTest(t, dsns[1])
-			for _, model := range db.AllModels() {
+			for _, model := range db.BackupModels() {
 				require.JSONEq(t, want[tableName(d2, model)], rowsJSON(t, d2, model), tableName(d2, model))
 			}
 			require.NoError(t, d2.Close())
@@ -282,7 +282,7 @@ func TestBackupAndRestoreRoundTrip(t *testing.T) {
 			e.ok(append(restore, "--force", "--skip-blobs")...)
 			d3 := openForTest(t, dsns[1])
 			defer d3.Close()
-			for _, model := range db.AllModels() {
+			for _, model := range db.BackupModels() {
 				require.JSONEq(t, want[tableName(d3, model)], rowsJSON(t, d3, model))
 			}
 		})

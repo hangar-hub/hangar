@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,6 +59,16 @@ type Options struct {
 	// facets and the downloads, likes and parameters sorts.
 	Index     index.Indexer
 	Community community.Service
+	// SQLFacets lets List filter, sort and count facets in SQL, over the
+	// repo_facts and repo_facet_values tables it keeps from Index, instead
+	// of reading every candidate's index results and community counts
+	// (RefreshListFacts). It needs Index to store results in the metadata
+	// table and take dataset sizes from dataset_splits, as indexdb does,
+	// because the triggers that mark rows out of date watch those tables,
+	// and Community to keep likes and downloads in the likes and
+	// download_counts tables, as communitydb does, because List sorts by
+	// them in SQL.
+	SQLFacets bool
 	// AnonymousRead reports whether anonymous users may list public Repos
 	// (security.anonymous_read). It is asked on every anonymous List, so
 	// the Instance setting an admin changes at run time takes effect
@@ -117,6 +128,9 @@ type Store struct {
 	// retryWait waits between attempts of a Commit without a parent
 	// Commit (commitBackoff). Tests count the waits.
 	retryWait func(context.Context, time.Duration) error
+	// factsMu lets one RefreshListFacts at a time rebuild rows, so
+	// concurrent listings do not all rebuild the same rows.
+	factsMu sync.Mutex
 }
 
 var _ Service = (*Store)(nil)

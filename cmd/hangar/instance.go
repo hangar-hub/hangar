@@ -193,7 +193,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	idx, comm := &boundIndexer{}, &boundCommunity{}
 	in.repos, err = repo.NewStore(repo.Options{DB: d, Git: in.git, LFS: in.lfs, Namespaces: in.orgs, Jobs: in.queue,
 		Webhooks: in.webhooks, Audit: in.audit, Quota: repoQuota{in.accounting}, Index: idx, Community: comm,
-		AnonymousRead: anonymousRead(in.auth), RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
+		SQLFacets: true, AnonymousRead: anonymousRead(in.auth), RestoreWindow: cfg.Repos.RestoreWindow, MaxBlobSize: cfg.Git.MaxBlobSize.Int64(),
 		MaxPackSize: cfg.Git.MaxPackSize.Int64(), AllowForcePush: cfg.Git.AllowForcePush, CompactThreshold: cfg.Git.CompactThreshold,
 		VerifyWait: cfg.LFS.VerifyWait, CanReadFiles: canReadFiles(in.auth.Authz()), Log: in.log})
 	if err != nil {
@@ -246,7 +246,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 
 	// Metadata, community and Collections (W7).
 	in.indexer = indexdb.New(indexdb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Instruments: inst, Log: in.log,
-		Layout: datasetLayout(in.layout), DatasetSplits: datasetSplits(in.datasets), AfterIndex: in.afterIndex})
+		Layout: datasetLayout(in.layout), DatasetSplits: datasetSplits(in.datasets), DatasetSplitsOf: datasetSplitsOf(in.datasets), AfterIndex: in.afterIndex})
 	in.community = communitydb.New(communitydb.Options{DB: d, Repos: in.repos, Webhooks: in.webhooks, Log: in.log})
 	in.collections = collections.New(collections.Options{DB: d, Orgs: in.orgs, Repos: in.repos, Authz: in.auth.Authz()})
 	idx.Indexer, comm.Service = in.indexer, in.community
@@ -402,8 +402,15 @@ func (in *instance) newWorker() *jobs.Worker {
 }
 
 // refreshStale queues index and scan Jobs for branch heads whose results
-// come from an older indexer or scanner version. Workers run it on start.
+// come from an older indexer or scanner version, and rebuilds the Repo
+// listing facts that are out of date, which after an upgrade is every
+// Repo's. Workers run it on start.
 func (in *instance) refreshStale(ctx context.Context) {
+	if n, err := in.repos.RefreshListFacts(ctx); err != nil {
+		in.log.WarnContext(ctx, "rebuild repo listing facts", "error", err.Error())
+	} else if n > 0 {
+		in.log.InfoContext(ctx, "rebuilt repo listing facts", "count", n)
+	}
 	if n, err := in.indexer.ReindexStale(ctx, in.queue); err != nil {
 		in.log.WarnContext(ctx, "reindex stale results", "error", err.Error())
 	} else if n > 0 {
@@ -456,6 +463,11 @@ func processOwner() string {
 // community services, which are built after it because they read Repos
 // through it. Both are set before the process serves or runs Jobs.
 type boundIndexer struct{ index.Indexer }
+
+// GetMany implements index.BatchGetter with the bound Indexer.
+func (b *boundIndexer) GetMany(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID]*index.Summary, error) {
+	return index.GetMany(ctx, b.Indexer, commits)
+}
 
 type boundCommunity struct{ community.Service }
 
@@ -585,24 +597,46 @@ func datasetSplits(st *pipeline.Store) func(ctx context.Context, repoUUID uuid.U
 		if err != nil {
 			return nil, err
 		}
-		out := make([]indexdb.DatasetSplit, 0, len(rows))
-		for _, r := range rows {
-			if r.Config == pipeline.DatasetLevel && r.Split == pipeline.DatasetLevel {
-				continue
+		return indexSplits(rows)
+	}
+}
+
+// datasetSplitsOf is datasetSplits for many Commits at once.
+func datasetSplitsOf(st *pipeline.Store) func(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID][]indexdb.DatasetSplit, error) {
+	return func(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID][]indexdb.DatasetSplit, error) {
+		rows, err := st.SplitsOf(ctx, commits)
+		if err != nil {
+			return nil, err
+		}
+		out := make(map[uuid.UUID][]indexdb.DatasetSplit, len(rows))
+		for id, rs := range rows {
+			if out[id], err = indexSplits(rs); err != nil {
+				return nil, err
 			}
-			sp := indexdb.DatasetSplit{Config: r.Config, Split: r.Split, Converted: r.Ready(), Partial: r.Status == pipeline.StatusPartial,
-				Rows: r.NumRows, Bytes: r.NumBytesSource, ParquetBytes: r.NumBytesParquet}
-			for _, f := range r.Features {
-				typ, err := json.Marshal(f.Feature)
-				if err != nil {
-					return nil, err
-				}
-				sp.Features = append(sp.Features, index.FeatureColumn{Name: f.Name, Type: typ})
-			}
-			out = append(out, sp)
 		}
 		return out, nil
 	}
+}
+
+// indexSplits converts a Commit's Split rows for the index.
+func indexSplits(rows []pipeline.SplitRow) ([]indexdb.DatasetSplit, error) {
+	out := make([]indexdb.DatasetSplit, 0, len(rows))
+	for _, r := range rows {
+		if r.Config == pipeline.DatasetLevel && r.Split == pipeline.DatasetLevel {
+			continue
+		}
+		sp := indexdb.DatasetSplit{Config: r.Config, Split: r.Split, Converted: r.Ready(), Partial: r.Status == pipeline.StatusPartial,
+			Rows: r.NumRows, Bytes: r.NumBytesSource, ParquetBytes: r.NumBytesParquet}
+		for _, f := range r.Features {
+			typ, err := json.Marshal(f.Feature)
+			if err != nil {
+				return nil, err
+			}
+			sp.Features = append(sp.Features, index.FeatureColumn{Name: f.Name, Type: typ})
+		}
+		out = append(out, sp)
+	}
+	return out, nil
 }
 
 // datasetModels lists the models whose cards name a dataset, at their

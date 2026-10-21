@@ -167,15 +167,15 @@ func tableName(d *db.DB, model any) string {
 	return d.Table(reflect.TypeOf(model)).Name
 }
 
-// dumpTables writes every table to <dir>/<table>.jsonl in one read
-// transaction.
+// dumpTables writes every table but the derived ones to <dir>/<table>.jsonl
+// in one read transaction.
 func dumpTables(ctx context.Context, d *db.DB, dir string, counts map[string]int64) error {
 	opts := &sql.TxOptions{ReadOnly: true}
 	if !d.IsSQLite() {
 		opts.Isolation = sql.LevelRepeatableRead
 	}
 	return d.RunInTx(ctx, opts, func(ctx context.Context, tx bun.Tx) error {
-		for _, model := range db.AllModels() {
+		for _, model := range db.BackupModels() {
 			typ := reflect.TypeOf(model).Elem()
 			name := tableName(d, model)
 			n, err := dumpTable(ctx, d, tx, typ, filepath.Join(dir, name+".jsonl"))
