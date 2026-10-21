@@ -195,7 +195,9 @@ test("loads no external images in cards when the Instance turns them off", async
   await page.goto("/discover?repo=ada/bert-tiny-finetune");
   const panel = page.getByRole("dialog");
   await panel.getByRole("tab", { name: "Model card" }).click();
-  await expect(panel.getByRole("heading", { name: "bert-tiny-finetune" })).toBeVisible();
+  await expect(
+    panel.getByRole("heading", { name: "bert-tiny-finetune", exact: true }),
+  ).toBeVisible();
   await expect(panel.getByText("Image from example.com not loaded")).toBeVisible();
   expect(external).toEqual([]);
 });
