@@ -172,6 +172,62 @@ func TestImageMetadataMatchesDockerfile(t *testing.T) {
 	}
 }
 
+// TestChartPackageMetadata checks what the published chart tells Helm and
+// artifacthub.io: a README in the package (helm show readme), the licence
+// under the annotation key artifacthub.io reads, and an image entry whose
+// 0.0.0 tag the release workflow replaces with the release version.
+func TestChartPackageMetadata(t *testing.T) {
+	if _, err := os.Stat("helm/hangar/README.md"); err != nil {
+		t.Fatalf("the chart has no README.md: %v", err)
+	}
+	ignore, err := os.ReadFile("helm/hangar/.helmignore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.Lines(string(ignore)) {
+		if p := strings.TrimSpace(line); p == "README.md" || p == "*.md" {
+			t.Errorf(".helmignore leaves %s out of the package", p)
+		}
+	}
+
+	b, err := os.ReadFile("helm/hangar/Chart.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var chart struct {
+		Annotations map[string]string `yaml:"annotations"`
+	}
+	if err := yaml.Unmarshal(b, &chart); err != nil {
+		t.Fatal(err)
+	}
+	if got := chart.Annotations["artifacthub.io/license"]; got != "Elastic-2.0" {
+		t.Errorf("artifacthub.io/license is %q; want Elastic-2.0", got)
+	}
+	var images []struct {
+		Name  string `yaml:"name"`
+		Image string `yaml:"image"`
+	}
+	if err := yaml.Unmarshal([]byte(chart.Annotations["artifacthub.io/images"]), &images); err != nil {
+		t.Fatalf("artifacthub.io/images: %v", err)
+	}
+	if len(images) != 1 || images[0].Image != "ghcr.io/hangar-hub/hangar:0.0.0" {
+		t.Errorf("artifacthub.io/images is %+v; want one entry, ghcr.io/hangar-hub/hangar:0.0.0, for the release workflow to set", images)
+	}
+	for _, key := range []string{"artifacthub.io/links", "artifacthub.io/category"} {
+		if chart.Annotations[key] == "" {
+			t.Errorf("Chart.yaml has no %s annotation", key)
+		}
+	}
+
+	wf, err := os.ReadFile("../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(wf), `sed -i "s|image: $IMAGE:0.0.0|image: $IMAGE:$version|" deploy/helm/hangar/Chart.yaml`) {
+		t.Error("release.yml no longer sets the image tag in Chart.yaml's artifacthub.io/images before helm package")
+	}
+}
+
 // TestReleaseWorkflowPinsCosign3 checks that every cosign-installer step in
 // the release workflow pins a cosign 3 release, the version the signs block
 // and make release-rehearsal are written for.

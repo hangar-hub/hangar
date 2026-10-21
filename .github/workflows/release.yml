@@ -228,7 +228,21 @@ jobs:
         run: |
           version="${TAG#v}"
           echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          # helm package sets version and appVersion but not annotations, so
+          # point Artifact Hub's image list at this release's image.
+          sed -i "s|image: $IMAGE:0.0.0|image: $IMAGE:$version|" deploy/helm/hangar/Chart.yaml
+          if ! grep -q "image: $IMAGE:$version\$" deploy/helm/hangar/Chart.yaml; then
+            echo "Chart.yaml has no artifacthub.io/images entry for $IMAGE:0.0.0 to set" >&2
+            exit 1
+          fi
           helm package deploy/helm/hangar --version "$version" --app-version "$version" --destination dist
+          # The package must carry the chart's README, for helm show readme
+          # and Artifact Hub. (grep without -q reads all of tar's output, so
+          # pipefail never sees tar killed by SIGPIPE.)
+          if ! tar -tzf "dist/hangar-$version.tgz" | grep -x 'hangar/README.md' >/dev/null; then
+            echo "the chart package has no README.md" >&2
+            exit 1
+          fi
           helm push "dist/hangar-$version.tgz" "$CHARTS" 2>&1 | tee push.log
           digest="$(grep -o 'sha256:[0-9a-f]\{64\}' push.log | head -1)"
           if [ -z "$digest" ]; then
