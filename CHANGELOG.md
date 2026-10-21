@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.2](https://github.com/hangar-hub/hangar/compare/v1.2.1...v1.2.2) (2026-10-21)
+
+
+### Bug fixes
+
+* build with Go 1.27.3 for the crypto/x509 fix in GO-2026-6809 ([#35](https://github.com/hangar-hub/hangar/issues/35)) ([fda6848](https://github.com/hangar-hub/hangar/commit/fda68485e10daea6bb8f0417d4502e0994b86b69))
+* technical SEO fixes for hangar.page, the docs and the demo ([#32](https://github.com/hangar-hub/hangar/issues/32)) ([e479319](https://github.com/hangar-hub/hangar/commit/e47931980b7f623c639f24c99fec94106df88515))
+
+
+### Documentation
+
+* target private Hugging Face Hub searches, and compare Hangar with alternatives ([#33](https://github.com/hangar-hub/hangar/issues/33)) ([8c62f15](https://github.com/hangar-hub/hangar/commit/8c62f152b333e1d773b375871bc2886e4e41ddd5))
+
 ## [1.2.1](https://github.com/hangar-hub/hangar/compare/v1.2.0...v1.2.1) (2026-10-20)
 
 
