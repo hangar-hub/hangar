@@ -5,7 +5,7 @@ description: "The client, library, database and platform versions Hangar's CI te
 
 # Tested versions and platforms
 
-Hangar's CI runs the client compatibility suites in [`compat/`](https://github.com/hangar-hub/hangar/tree/main/compat) on every pull request and every night, against a real `hangar` binary as well as the Go test server ([`compat.yml`](https://github.com/hangar-hub/hangar/blob/main/.github/workflows/compat.yml)). This page lists the versions they use, as of Hangar 1.2.3. Each release's docs show the versions that release was tested with.
+Hangar's CI runs the client compatibility suites in [`compat/`](https://github.com/hangar-hub/hangar/tree/main/compat) on every pull request and every night, against a real `hangar` binary as well as the Go test server ([`compat.yml`](https://github.com/hangar-hub/hangar/blob/main/.github/workflows/compat.yml)). This page lists the versions they use, as of Hangar 1.2.3.
 
 For each Hugging Face Hub endpoint and whether Hangar serves it, see [Hub API compatibility](hub-api-compatibility.md).
 

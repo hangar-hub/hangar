@@ -11,7 +11,7 @@ Hangar is one binary that runs as a container or on a host. Most of what it need
 
 | Install | Needs |
 |---|---|
-| Container image | Docker, Podman or Kubernetes, on `linux/amd64` or `linux/arm64`. The image includes git. |
+| Container image | Docker or Kubernetes, on `linux/amd64` or `linux/arm64`. The image includes git. |
 | Binary | git 2.39 or later on the `PATH` for the server. The client commands do not need git. |
 | Helm chart | Kubernetes 1.29 or later. |
 | Scaled out | Postgres (CI tests 18) and an S3-compatible bucket or a shared filesystem. |
