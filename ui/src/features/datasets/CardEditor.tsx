@@ -7,7 +7,7 @@ import type { Repo } from "@/api/types";
 import { CodeView } from "@/components/content/CodeView";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/form";
-import { InlineError } from "@/components/ui/states";
+import { CommitError } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { joinFrontMatter } from "@/lib/frontmatter";
 import { unwrap } from "@/lib/problem";
@@ -34,6 +34,11 @@ function toBase64(text: string): string {
  * The dataset card editor (DATA-13): a form for pretty name, licence, task
  * categories, languages and Configs that writes valid YAML front matter
  * into README.md, committed to the default branch.
+ *
+ * The card and `parentCommit` are read once, when editing starts. The
+ * Commit sends that parent, so if someone else commits to the branch while
+ * the form is open the server refuses it (412) instead of overwriting their
+ * change, and a refetch in the background cannot move the base.
  */
 export function CardEditor({
   repo,
@@ -48,14 +53,15 @@ export function CardEditor({
   parentCommit?: string;
   onDone: () => void;
 }) {
-  const [form, setForm] = useState<CardForm>(() => toForm(data));
+  const [base] = useState(() => ({ data, parentCommit }));
+  const [form, setForm] = useState<CardForm>(() => toForm(base.data));
   const [text, setText] = useState(body);
   const [summary, setSummary] = useState("Update dataset card");
   const toast = useToast();
   const qc = useQueryClient();
   const ref = { kind: repo.type, ns: repo.namespace, name: repo.name };
   const errors = validateForm(form);
-  const merged = useMemo(() => fromForm(data, form), [data, form]);
+  const merged = useMemo(() => fromForm(base.data, form), [base.data, form]);
   const yaml = useMemo(() => stringify(merged, { lineWidth: 0 }).trimEnd(), [merged]);
 
   const save = useMutation({
@@ -65,7 +71,7 @@ export function CardEditor({
           params: { path: repoPathParams(ref) },
           body: {
             summary,
-            parent_commit: parentCommit,
+            parent_commit: base.parentCommit,
             branch: repo.default_branch,
             operations: [
               {
@@ -321,7 +327,7 @@ export function CardEditor({
             <Input {...p} value={summary} onChange={(e) => setSummary(e.target.value)} required />
           )}
         </Field>
-        <InlineError error={save.error} />
+        <CommitError error={save.error} branch={repo.default_branch} />
         <div className="flex gap-2">
           <Button
             type="submit"

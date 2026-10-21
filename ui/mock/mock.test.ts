@@ -257,6 +257,23 @@ describe("mock server", () => {
       operations: [{ op: "delete", path: "notes.txt" }],
     });
     expect(stale.status).toBe(412);
+    // The head the editor started from is accepted; once someone else has
+    // committed, the same parent is stale and refused, not overwritten.
+    const repoPath = `${api}/repos/models/ada/bert-tiny-finetune`;
+    const head = (await call("GET", repoPath)).json.sha as string;
+    const edit = (text: string) => ({
+      summary: "Edit notes",
+      parent_commit: head,
+      operations: [
+        { op: "add", path: "notes.txt", content_base64: Buffer.from(text).toString("base64") },
+      ],
+    });
+    expect((await call("POST", `${repoPath}/commits`, edit("first"))).status).toBe(201);
+    expect((await call("POST", `${repoPath}/commits`, edit("second"))).status).toBe(412);
+    const notes = await fetch(`${base}/ada/bert-tiny-finetune/resolve/main/notes.txt`, {
+      headers: { cookie },
+    });
+    expect(await notes.text()).toBe("first");
   });
 
   it("opens pull requests from Commits and merges them", async () => {

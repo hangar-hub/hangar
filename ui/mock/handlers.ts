@@ -225,7 +225,9 @@ function applyOps(ctx: Ctx, base: MockCommit, ops: S["CommitOperation"][]): Mock
 }
 
 function refreshSize(r: MockRepo): void {
-  const head = r.commits[0] as MockCommit;
+  // Repo.sha is the head of the default branch, not the newest Commit on
+  // any branch.
+  const head = resolveRev(r, r.repo.default_branch) ?? (r.commits[0] as MockCommit);
   r.repo.sha = head.sha;
   r.repo.size_bytes = head.files.reduce((a, f) => a + fileSize(f), 0);
   r.repo.present_bytes = head.files.reduce(

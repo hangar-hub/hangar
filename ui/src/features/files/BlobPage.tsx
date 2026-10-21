@@ -10,7 +10,7 @@ import { LazyMarkdown } from "@/components/content/LazyMarkdown";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Field, Input, Textarea } from "@/components/ui/form";
-import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
+import { CommitError, EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { formatBytes, formatDateTime, relativeTime, shortSha } from "@/lib/format";
@@ -121,12 +121,20 @@ function ScanPanel({
   );
 }
 
-function Editor({
+/**
+ * The in-browser editor. `parent` is the Commit the edit starts from: the
+ * editor keeps the first value it gets and sends it as `parent_commit`, so
+ * when someone else commits to the branch meanwhile the server refuses the
+ * edit (412) instead of overwriting their change. A refetch that brings a
+ * newer head must not move it.
+ */
+export function FileEditor({
   repo,
   branch,
   path,
   initial,
   parent,
+  creating,
   onDone,
 }: {
   repo: RepoRef;
@@ -134,13 +142,14 @@ function Editor({
   path: string;
   initial: string;
   parent?: string;
+  creating: boolean;
   onDone: () => void;
 }) {
   const [text, setText] = useState(initial);
   const [summary, setSummary] = useState("");
+  const [base] = useState(parent);
   const qc = useQueryClient();
   const toast = useToast();
-  const creating = parent === undefined;
   const save = useMutation({
     mutationFn: async () =>
       unwrap(
@@ -149,7 +158,7 @@ function Editor({
           body: {
             summary: summary || `${creating ? "Create" : "Update"} ${path}`,
             branch,
-            parent_commit: parent,
+            parent_commit: base,
             operations: [{ op: "add", path, content_base64: toBase64(text) }],
           },
         }),
@@ -190,14 +199,7 @@ function Editor({
           />
         )}
       </Field>
-      {errorStatus(save.error) === 412 ? (
-        <p role="alert" className="text-sm text-danger">
-          Someone changed {branch} since you opened this file. Copy your text, reload the page and
-          make your change again.
-        </p>
-      ) : (
-        <InlineError error={save.error} />
-      )}
+      <CommitError error={save.error} branch={branch} />
       <div className="flex gap-2">
         <Button type="submit" variant="primary" disabled={save.isPending}>
           Commit to {branch}
@@ -314,7 +316,8 @@ export function BlobPage({
   });
   const r = repo.data;
   if (!r) return null;
-  const isBranch = Boolean(refs.data?.branches.some((b) => b.name === rev));
+  const branchHead = refs.data?.branches.find((b) => b.name === rev)?.target_commit;
+  const isBranch = branchHead !== undefined;
   const canWrite = Boolean(r.permissions?.write) && !r.mirror && isBranch;
   const view = fileView(path);
   const textual = view === "markdown" || view === "json" || view === "text";
@@ -336,11 +339,13 @@ export function BlobPage({
       return (
         <div className="space-y-3">
           {header}
-          <Editor
+          <FileEditor
             repo={ref}
             branch={rev}
             path={path}
             initial={path.endsWith("README.md") ? `# ${name}\n\n` : ""}
+            parent={branchHead}
+            creating
             onDone={() => go(blobPath(kind, ns, name, rev, path))}
           />
         </div>
@@ -499,19 +504,24 @@ function EditorLoader({
   parent: string;
   onDone: () => void;
 }) {
+  // The Commit the edit starts from, fixed when editing starts. The text
+  // comes from that Commit too, so what the editor shows is what the
+  // server compares against.
+  const [base] = useState(parent);
   const text = useQuery({
-    queryKey: [...repoKey(repo), "text", rev, path],
-    queryFn: () => fetchText(repo, rev, path),
+    queryKey: [...repoKey(repo), "text", base, path],
+    queryFn: () => fetchText(repo, base, path),
   });
   if (text.isPending) return <LoadingRows rows={3} label="Loading the file" />;
   if (text.isError) return <ErrorState error={text.error} onRetry={() => text.refetch()} />;
   return (
-    <Editor
+    <FileEditor
       repo={repo}
       branch={rev}
       path={path}
       initial={text.data ?? ""}
-      parent={parent}
+      parent={base}
+      creating={false}
       onDone={onDone}
     />
   );

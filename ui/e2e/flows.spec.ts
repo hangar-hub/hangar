@@ -330,6 +330,41 @@ test.describe("browse files", () => {
     );
   });
 
+  test("refuses an edit when someone else committed first", async ({ page }) => {
+    const csrf = await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/blob/main/tokenizer_config.json");
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Edit tokenizer_config.json").fill('{\n  "mine": true\n}\n');
+    const other = await callApi(
+      page,
+      csrf,
+      "POST",
+      "/repos/models/ada/bert-tiny-finetune/commits",
+      {
+        summary: "Someone else's change",
+        branch: "main",
+        operations: [
+          {
+            op: "add",
+            path: "tokenizer_config.json",
+            content_base64: Buffer.from('{\n  "theirs": true\n}\n').toString("base64"),
+          },
+        ],
+      },
+    );
+    expect(other.status()).toBe(201);
+    const committed = commitResponse(page, "models/ada/bert-tiny-finetune");
+    await page.getByRole("button", { name: "Commit to main" }).click();
+    expect((await committed).status()).toBe(412);
+    await expect(page.getByRole("alert")).toContainText(
+      "Someone committed to main after you started editing, so Hangar did not save your change.",
+    );
+    const raw = await page.request.get(
+      "/ada/bert-tiny-finetune/resolve/main/tokenizer_config.json",
+    );
+    expect(await raw.text()).toContain('"theirs": true');
+  });
+
   test("shows the Use this model snippets", async ({ page }) => {
     await signIn(page);
     await page.goto("/ml-team/qwen-coder-remote");
