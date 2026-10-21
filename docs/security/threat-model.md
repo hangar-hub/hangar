@@ -156,6 +156,7 @@ Two checks apply to every boundary that accepts requests:
 |---|---|---|---|
 | S | A registry request is forged or replayed. | Requests are signed with the user's registered Ed25519 key; timestamps outside 5 minutes and nonces seen in the last 10 minutes are refused (`internal/auth/ollama.go`). | `TestOllamaKeysAndRegistryTokens` (`internal/auth/keys_test.go`), `FuzzParseOllamaAuthorization`. |
 | I | Private Repos leak through the registry. | The key's owner must be able to read the Repo; others get 404. | `TestPrivateReposUseTheOllamaKeyFlow` (`internal/ollama/registry_test.go`), `TestRouteAuthorisationMatrix`. |
+| E | A restricted or expiring Token registers an Ollama key whose registry tokens read every Repo the user can, for as long as the account exists. | A key added with a Token is bound to it: registry tokens get the Token's scope and restrictions, end no later than the Token, and are refused once it is revoked or has expired (`internal/auth/ollama.go`). | `TestOllamaKeysFollowTheirToken` (`internal/auth/keys_test.go`). |
 | I | An unsafe file is pulled as a layer. | Blob routes and their signed redirects call the download gate. | `TestUnsafeDownloadGateCoversEveryRoute` (`cmd/hangar/unsafe_test.go`). |
 | T | A browser renders a blob as a page. | Blobs are `application/octet-stream`, which browsers do not render. | **Residual risk:** blob responses do not send `X-Content-Type-Options: nosniff` (`internal/ollama/registry.go`, `serve`), unlike every other route that serves file bytes. |
 

@@ -265,7 +265,12 @@ func (ts *TokenStore) authenticate(ctx context.Context, secret string) (model.Pr
 		}
 	}
 	p := u.Principal(model.AuthToken)
-	p.Token = &model.TokenInfo{ID: row.ID, Name: row.Name, Scope: model.Scope(row.Scope),
-		Restrictions: model.TokenRestrictions{Namespaces: row.Restrictions.Namespaces, Repos: row.Restrictions.Repos}, ExpiresAt: row.ExpiresAt}
+	p.Token = tokenInfo(&row)
 	return p, nil
+}
+
+// tokenInfo is the part of a Token a Principal carries.
+func tokenInfo(row *db.Token) *model.TokenInfo {
+	return &model.TokenInfo{ID: row.ID, Name: row.Name, Scope: model.Scope(row.Scope),
+		Restrictions: model.TokenRestrictions{Namespaces: row.Restrictions.Namespaces, Repos: row.Restrictions.Repos}, ExpiresAt: row.ExpiresAt}
 }

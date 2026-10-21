@@ -181,6 +181,93 @@ func TestOllamaKeysAndRegistryTokens(t *testing.T) {
 	})
 }
 
+// TestOllamaKeysFollowTheirToken covers security review finding 4: a
+// restricted or expiring write Token could register an Ollama key whose
+// registry tokens carried the user's full read access for as long as the
+// account existed. A key added with a Token now gets that Token's
+// restrictions and expiry, and stops when the Token is revoked.
+func TestOllamaKeysFollowTheirToken(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(time.Now().UTC().Truncate(time.Second))
+		s, orgs := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		alice := mustUser(t, s, "alice", false)
+		aliceNS, err := orgs.Get(ctx, "alice")
+		require.NoError(t, err)
+		ci := insertRepo(t, d, aliceNS.ID, "alice", "ci-model", model.VisibilityPrivate, false)
+		private := insertRepo(t, d, aliceNS.ID, "alice", "private-llm", model.VisibilityPrivate, false)
+		s.Ollama.Repos = repoMap{"alice/ci-model": ci, "alice/private-llm": private}
+		ciRepo := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "ci-model"}
+		privateRepo := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "private-llm"}
+
+		nonce := 0
+		issue := func(k ollamaKey, id model.RepoID) (time.Time, error) {
+			nonce++
+			u := realmURL(clock.Now(), fmt.Sprintf("n-%d", nonce), id.String())
+			_, exp, err := s.Ollama.IssueRegistryToken(ctx, auth.OllamaTokenRequest{Method: http.MethodGet, URL: u, Authorization: k.sign(t, u), Repo: id})
+			return exp, err
+		}
+		tokenPrincipal := func(nt auth.NewToken) (*auth.Token, model.Principal) {
+			nt.UserID, nt.Scope = alice.ID, model.ScopeWrite
+			tok, secret, err := s.TokenStore.Create(ctx, nt)
+			require.NoError(t, err)
+			r := httptest.NewRequest(http.MethodPost, "http://hangar.test/api/hangar/v1/me/ollama-keys", nil)
+			r.Header.Set("Authorization", "Bearer "+secret)
+			p, err := s.Authenticate(r)
+			require.NoError(t, err)
+			return tok, p
+		}
+
+		// A CI Token restricted to one Repo that expires in a week.
+		weekOut := clock.Now().Add(7 * 24 * time.Hour)
+		_, ciP := tokenPrincipal(auth.NewToken{Name: "ci", ExpiresAt: &weekOut,
+			Restrictions: model.TokenRestrictions{Repos: []string{"model:alice/ci-model"}}})
+		key := newOllamaKey(t)
+		_, err = s.Ollama.Add(ctx, alice.ID, "stolen", key.pub, ciP)
+		require.NoError(t, err)
+		_, err = issue(key, ciRepo)
+		require.NoError(t, err, "the key reads what its Token can read")
+		_, err = issue(key, privateRepo)
+		require.Error(t, err, "but not the user's other Repos")
+
+		// The Token expires: so does the key, and registry tokens never
+		// outlive it.
+		clock.Advance(7*24*time.Hour - 2*time.Minute)
+		exp, err := issue(key, ciRepo)
+		require.NoError(t, err)
+		require.Equal(t, weekOut, exp, "a registry token ends when the Token does")
+		clock.Advance(2 * time.Minute)
+		_, err = issue(key, ciRepo)
+		require.ErrorIs(t, err, auth.ErrInvalidCredentials)
+		keys, err := s.Ollama.List(ctx, alice.ID)
+		require.NoError(t, err)
+		require.Empty(t, keys, "a key whose Token has expired is not listed")
+
+		// Revoking the Token stops the key at once.
+		laptop, laptopP := tokenPrincipal(auth.NewToken{Name: "laptop"})
+
+		key2 := newOllamaKey(t)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", key2.pub, laptopP)
+		require.NoError(t, err)
+		_, err = issue(key2, privateRepo)
+		require.NoError(t, err, "an unrestricted Token that does not expire reads everything the user can")
+		require.NoError(t, s.TokenStore.Revoke(ctx, laptop.ID, alice.Principal(model.AuthSession)))
+		_, err = issue(key2, privateRepo)
+		require.ErrorIs(t, err, auth.ErrInvalidCredentials, "revoking the Token stops the key")
+
+		// The key can be registered again, here in a UI session, which
+		// gives the user's read access with no expiry.
+		k, err := s.Ollama.Add(ctx, alice.ID, "", key.pub, alice.Principal(model.AuthSession))
+		require.NoError(t, err)
+		_, err = issue(key, privateRepo)
+		require.NoError(t, err)
+		keys, err = s.Ollama.List(ctx, alice.ID)
+		require.NoError(t, err)
+		require.Len(t, keys, 1)
+		require.Equal(t, k.ID, keys[0].ID)
+	})
+}
+
 func FuzzParseOllamaAuthorization(f *testing.F) {
 	f.Add("AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q:" + base64.StdEncoding.EncodeToString(make([]byte, 64)))
 	f.Add("a:b")

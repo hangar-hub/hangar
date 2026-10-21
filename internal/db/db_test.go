@@ -258,7 +258,7 @@ func TestMigrateIsIdempotentAndSchemaStatus(t *testing.T) {
 		st, err := d.Schema(ctx)
 		require.NoError(t, err)
 		require.True(t, st.UpToDate())
-		require.Equal(t, "0004", st.Expected)
+		require.Equal(t, "0005", st.Expected)
 		require.Equal(t, st.Expected, st.Current)
 	})
 }
@@ -271,7 +271,7 @@ func TestSchemaStatusBeforeMigrate(t *testing.T) {
 	st, err := d.Schema(ctx)
 	require.NoError(t, err)
 	require.False(t, st.UpToDate())
-	require.Equal(t, []string{"0001", "0002", "0003", "0004"}, st.Pending)
+	require.Equal(t, []string{"0001", "0002", "0003", "0004", "0005"}, st.Pending)
 }
 
 func TestInTxRollsBackAndClassifiesErrors(t *testing.T) {

@@ -326,4 +326,3 @@ func TestOIDCBrowserBinding(t *testing.T) {
 		require.True(t, bind.HttpOnly)
 	})
 }
-
