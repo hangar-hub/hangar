@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LazyMarkdown } from "./LazyMarkdown";
-import Markdown, { isExternal, tableLabel } from "./Markdown";
+import Markdown, { isExternal, rewriteSrcset, tableLabel } from "./Markdown";
 
 describe("Markdown cards", () => {
   it("removes scripts, event handlers and iframes", () => {
@@ -87,6 +87,62 @@ describe("Markdown cards", () => {
     expect(screen.queryByRole("img", { name: "chart" })).toBeNull();
     expect(screen.getByText(/Image from example.com not loaded/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "local" })).toHaveAttribute("src", "/x.png");
+  });
+
+  it("blocks external images while the Instance setting is not known", () => {
+    render(<Markdown>{"![chart](https://example.com/chart.png)"}</Markdown>);
+    expect(screen.queryByRole("img", { name: "chart" })).toBeNull();
+    expect(screen.getByText("Image from example.com not loaded.")).toBeInTheDocument();
+  });
+
+  it("loads external images when the Instance allows them", () => {
+    render(<Markdown externalImages>{"![chart](https://example.com/chart.png)"}</Markdown>);
+    expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
+      "src",
+      "https://example.com/chart.png",
+    );
+  });
+
+  it("drops external srcset candidates from a picture's sources", () => {
+    const card =
+      '<picture><source media="(prefers-color-scheme: dark)" srcset="https://evil.example/dark.png"><source srcset="https://evil.example/a.png 1x, img/local.png 2x"><img src="img/plain.png" alt="logo"></picture>';
+    const { container, rerender } = render(
+      <Markdown externalImages={false} resolveRelative={(p) => `/repo/${p}`}>
+        {card}
+      </Markdown>,
+    );
+    const sources = [...container.querySelectorAll("source")];
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.getAttribute("srcset")).toBe("/repo/img/local.png 2x");
+    expect(container.innerHTML).not.toContain("evil.example");
+    expect(screen.getByRole("img", { name: "logo" })).toHaveAttribute("src", "/repo/img/plain.png");
+    // Unknown counts as off.
+    rerender(<Markdown resolveRelative={(p) => `/repo/${p}`}>{card}</Markdown>);
+    expect(container.innerHTML).not.toContain("evil.example");
+    rerender(
+      <Markdown externalImages resolveRelative={(p) => `/repo/${p}`}>
+        {card}
+      </Markdown>,
+    );
+    expect(container.querySelectorAll("source")).toHaveLength(2);
+    expect(container.querySelector("source")?.getAttribute("srcset")).toBe(
+      "https://evil.example/dark.png",
+    );
+  });
+
+  it("parses srcset lists as browsers do", () => {
+    const keep = (u: string) => u;
+    expect(rewriteSrcset("a.png 1x,b.png 2x", keep)).toBe("a.png 1x, b.png 2x");
+    expect(rewriteSrcset("  a.png,, b.png 640w ", keep)).toBe("a.png, b.png 640w");
+    expect(rewriteSrcset("https://x.example/a,b.png 2x", keep)).toBe(
+      "https://x.example/a,b.png 2x",
+    );
+    expect(
+      rewriteSrcset("a.png 1x, https://x.example/b.png 2x", (u) =>
+        u.startsWith("http") ? null : u,
+      ),
+    ).toBe("a.png 1x");
+    expect(rewriteSrcset("", keep)).toBe("");
   });
 
   it("resolves relative links and images inside the Repo", () => {

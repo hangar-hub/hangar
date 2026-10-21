@@ -19,6 +19,7 @@ import { unwrap } from "@/lib/problem";
 import { filesForQuants, selectionBytes } from "@/lib/pull";
 import { parseRepoId, repoPath } from "@/lib/repo";
 import { ArsenalBadge, DependencyPullBadge } from "../repos/badges";
+import { useExternalImages } from "../repos/useInstance";
 
 function PreviewTable({ preview }: { preview: Record<string, unknown> }) {
   const features = (preview.features ?? []) as { name: string }[];
@@ -69,6 +70,8 @@ export function DiscoverDetailPanel({
   upstream: string;
 }) {
   const [ns, name] = id.split("/") as [string, string];
+  // Upstream cards follow the same Instance setting as cards in the arsenal.
+  const externalImages = useExternalImages();
   const toast = useToast();
   const qc = useQueryClient();
   const detail = useQuery({
@@ -321,7 +324,9 @@ export function DiscoverDetailPanel({
             value: "card",
             label: d.type === "dataset" ? "Dataset card" : "Model card",
             content: card ? (
-              <LazyMarkdown headingLevel={3}>{card}</LazyMarkdown>
+              <LazyMarkdown headingLevel={3} externalImages={externalImages}>
+                {card}
+              </LazyMarkdown>
             ) : (
               <EmptyState size="sm" title="No card on the Upstream" />
             ),

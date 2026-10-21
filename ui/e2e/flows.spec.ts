@@ -139,6 +139,34 @@ test("Discover a dataset and choose a Parquet-only Pull", async ({ page }) => {
   await expect(panel.getByRole("button", { name: "Pull started" })).toBeDisabled();
 });
 
+test("loads no external images in cards when the Instance turns them off", async ({ page }) => {
+  const csrf = await signIn(page);
+  const off = await callApi(page, csrf, "PATCH", "/admin/settings", { ui_external_images: false });
+  expect(off.ok(), await off.text()).toBe(true);
+  const external: string[] = [];
+  await page.route(
+    (url) => url.host === "example.com",
+    (route) => {
+      external.push(route.request().url());
+      return route.abort();
+    },
+  );
+  await page.goto("/ada/bert-tiny-finetune");
+  await expect(
+    page.getByText(
+      "Image from example.com not loaded: this Instance does not load external images.",
+    ),
+  ).toBeVisible();
+  // Discover shows the Upstream's card, which uses a picture whose source
+  // would load its srcset in place of the img.
+  await page.goto("/discover?repo=ada/bert-tiny-finetune");
+  const panel = page.getByRole("dialog");
+  await panel.getByRole("tab", { name: "Model card" }).click();
+  await expect(panel.getByRole("heading", { name: "bert-tiny-finetune" })).toBeVisible();
+  await expect(panel.getByText("Image from example.com not loaded")).toBeVisible();
+  expect(external).toEqual([]);
+});
+
 test.describe("upload", () => {
   test("uploads small and large files in the browser and commits them", async ({ page }) => {
     const problems = watchConsole(page);
