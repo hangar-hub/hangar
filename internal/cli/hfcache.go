@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hangar-hub/hangar/internal/model"
 )
@@ -154,6 +155,9 @@ type cachedSnapshot struct {
 	Commit string
 	// Refs names the branches and tags that point at the Commit.
 	Refs []string
+	// ModTime is when the snapshot folder last changed, which is when
+	// huggingface_hub last added a file to it.
+	ModTime time.Time
 	// Files maps paths in the Repo to their resolved blob files.
 	Files map[string]string
 	// Outside lists files that are symbolic links out of the Repo's cache
@@ -203,6 +207,9 @@ func (h hfCache) snapshots() ([]cachedSnapshot, error) {
 				continue
 			}
 			s := cachedSnapshot{ID: id, Commit: c.Name(), Refs: refs[c.Name()], Files: map[string]string{}}
+			if info, err := c.Info(); err == nil {
+				s.ModTime = info.ModTime()
+			}
 			root := filepath.Join(snapDir, c.Name())
 			err := filepath.WalkDir(root, func(p string, e os.DirEntry, err error) error {
 				if err != nil {

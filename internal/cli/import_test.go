@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -271,6 +272,84 @@ func TestSanitiseName(t *testing.T) {
 	require.Equal(t, "custom-model", sanitiseName("custom model"))
 	require.Equal(t, "a-b", sanitiseName("..a/b.."))
 	require.Len(t, sanitiseName(strings.Repeat("x", 200)), 96)
+}
+
+// TestImportMatchesEverySnapshotByContent is a regression test for issue
+// #29: the import kept one snapshot per Repo, took the alphabetically
+// first without refs/main although the comment said the newest, and
+// matched its files by path against that one Commit, so a file whose
+// content the Mirror had under another Commit was reported as not
+// matched. Every snapshot is now matched by content against every Commit
+// the import checks, the newest snapshot is chosen, and each file that
+// matches nothing is named with a reason.
+func TestImportMatchesEverySnapshotByContent(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	id := mustID(t, model.RepoTypeModel, "acme/omni-small")
+	current, previous := blobOf("current", 100<<10), blobOf("previous", 100<<10)
+	main := []clitest.File{{Path: "model.safetensors", Content: current}, {Path: "config.json", Content: []byte(`{"v":2}`)}}
+	e.inst.AddUpstream(id, main...)
+	newer, older := strings.Repeat("f", 40), strings.Repeat("1", 40)
+	e.inst.AddUpstreamRevision(id, newer, main...)
+	e.inst.AddUpstreamRevision(id, older, clitest.File{Path: "model.safetensors", Content: previous}, clitest.File{Path: "config.json", Content: []byte(`{"v":1}`)})
+	cache := filepath.Join(e.home, "hf-cache")
+	cacheSnapshot(t, cache, id, newer, map[string][]byte{"model.safetensors": current, "config.json": []byte(`{"v":2}`)})
+	// The older snapshot links model.safetensors to the same blob as the
+	// newer one, and holds a file the Mirror has nowhere.
+	cacheSnapshot(t, cache, id, older, map[string][]byte{"model.safetensors": current, "notes.safetensors": blobOf("local notes", 3000)})
+	repoDir := filepath.Join(cache, repoFolderName(id))
+	require.NoError(t, os.Remove(filepath.Join(repoDir, "refs", "main")))
+	past := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(filepath.Join(repoDir, "snapshots", older), past, past))
+
+	r := e.ok("import", "--from-hf-cache", "--json")
+	var res []importResult
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	require.Len(t, res, 1)
+	got := res[0]
+	require.Empty(t, got.Error)
+	require.Equal(t, newer, got.Commit, "without refs/main, the newest snapshot is chosen")
+	require.Equal(t, repoDir, got.Source)
+	require.Equal(t, []string{"model.safetensors"}, got.Uploaded)
+	require.True(t, e.inst.Present(id, newer, "model.safetensors"))
+	require.Equal(t, []string{"notes.safetensors"}, got.Skipped, "model.safetensors of the older snapshot matches by content")
+	require.Len(t, got.NotMatched, 1)
+	require.Equal(t, "notes.safetensors", got.NotMatched[0].Path)
+	require.Equal(t, older, got.NotMatched[0].Snapshot)
+	require.Contains(t, got.NotMatched[0].Reason, "no file in the Mirror at Commits "+shortSHA(newer))
+	require.True(t, strings.HasSuffix(got.NotMatched[0].Reason, " has this content"), got.NotMatched[0].Reason)
+
+	// Without --json, the results name each file that matched nothing.
+	r = e.ok("import", "--from-hf-cache")
+	require.Contains(t, r.stdout, "1 not matched")
+	require.Contains(t, r.stdout, "Not matched:\n  acme/omni-small: notes.safetensors (snapshot "+shortSHA(older)+"): no file in the Mirror at Commits ")
+}
+
+// TestImportMatchesFilesByContentNotPath is the LM Studio side of issue
+// #29: a file whose content the Mirror references under another name was
+// left out, and one whose path matched but content did not was counted as
+// not matched without saying why.
+func TestImportMatchesFilesByContentNotPath(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	id, files := ggufRepo(e)
+	lm := filepath.Join(e.home, ".lmstudio", "models")
+	writeTree(t, lm, map[string][]byte{
+		"bartowski/Tiny-GGUF/renamed-Q8_0.gguf": files["Tiny-Q8_0.gguf"],
+		"bartowski/Tiny-GGUF/Tiny-Q4_K_M.gguf":  blobOf("not the upstream bytes", 1000),
+		"bartowski/Tiny-GGUF/README.md":         files["README.md"],
+	})
+	r := e.ok("import", "--from-lmstudio", "--json")
+	var res []importResult
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &res))
+	require.Len(t, res, 1)
+	got := res[0]
+	require.Empty(t, got.Error)
+	require.Equal(t, []string{"renamed-Q8_0.gguf"}, got.Uploaded, "matched by content, under another name")
+	require.True(t, e.inst.Present(id, "main", "Tiny-Q8_0.gguf"))
+	require.Equal(t, []string{"Tiny-Q4_K_M.gguf"}, got.Skipped, "README.md matches the Mirror's by content")
+	require.Equal(t, []notMatchedFile{{Path: "Tiny-Q4_K_M.gguf",
+		Reason: "its content differs from Tiny-Q4_K_M.gguf at Commit " + shortSHA(got.Commit) + " and from every other file checked"}}, got.NotMatched)
 }
 
 // TestImportFillsAMirrorThatLacksTheCachedCommit is a regression test for
