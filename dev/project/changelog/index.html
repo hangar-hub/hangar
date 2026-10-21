@@ -2750,8 +2750,18 @@
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
 <p>Every release's changes, written by release-please from Conventional Commits. The same notes are on the <a href="https://github.com/hangar-hub/hangar/releases">releases page</a>.</p>
 <h1 id="changelog_1">Changelog<a class="headerlink" href="#changelog_1" title="Permanent link">&para;</a></h1>
-<h2 id="121-2026-10-20"><a href="https://github.com/hangar-hub/hangar/compare/v1.2.0...v1.2.1">1.2.1</a> (2026-10-20)<a class="headerlink" href="#121-2026-10-20" title="Permanent link">&para;</a></h2>
+<h2 id="122-2026-10-21"><a href="https://github.com/hangar-hub/hangar/compare/v1.2.1...v1.2.2">1.2.2</a> (2026-10-21)<a class="headerlink" href="#122-2026-10-21" title="Permanent link">&para;</a></h2>
 <h3 id="bug-fixes">Bug fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>build with Go 1.27.3 for the crypto/x509 fix in GO-2026-6809 (<a href="https://github.com/hangar-hub/hangar/issues/35">#35</a>) (<a href="https://github.com/hangar-hub/hangar/commit/fda68485e10daea6bb8f0417d4502e0994b86b69">fda6848</a>)</li>
+<li>technical SEO fixes for hangar.page, the docs and the demo (<a href="https://github.com/hangar-hub/hangar/issues/32">#32</a>) (<a href="https://github.com/hangar-hub/hangar/commit/e47931980b7f623c639f24c99fec94106df88515">e479319</a>)</li>
+</ul>
+<h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>target private Hugging Face Hub searches, and compare Hangar with alternatives (<a href="https://github.com/hangar-hub/hangar/issues/33">#33</a>) (<a href="https://github.com/hangar-hub/hangar/commit/8c62f152b333e1d773b375871bc2886e4e41ddd5">8c62f15</a>)</li>
+</ul>
+<h2 id="121-2026-10-20"><a href="https://github.com/hangar-hub/hangar/compare/v1.2.0...v1.2.1">1.2.1</a> (2026-10-20)<a class="headerlink" href="#121-2026-10-20" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes_1">Bug fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>docs:</strong> give every docs page its own search description, and name the sites for Google (<a href="https://github.com/hangar-hub/hangar/issues/30">#30</a>) (<a href="https://github.com/hangar-hub/hangar/commit/938f09163f8bef6ca4227c2d2ea6776bc285fef0">938f091</a>)</li>
 </ul>
@@ -2761,7 +2771,7 @@
 <li><strong>ui:</strong> explain badges on hover and click, with ui.docs_url for their docs links (<a href="https://github.com/hangar-hub/hangar/issues/24">#24</a>) (<a href="https://github.com/hangar-hub/hangar/commit/2e3bfbaa241305d48409e60eef9a04ba7691aabd">2e3bfba</a>)</li>
 <li>verify with Bing and improve search ranking for all three sites (<a href="https://github.com/hangar-hub/hangar/issues/23">#23</a>) (<a href="https://github.com/hangar-hub/hangar/commit/c588b7d04853899a1bded21089d1dab63ce1a0f9">c588b7d</a>)</li>
 </ul>
-<h3 id="bug-fixes_1">Bug fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_2">Bug fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>cli:</strong> import files from huggingface_hub 2.x's shared blob store (<a href="https://github.com/hangar-hub/hangar/issues/27">#27</a>) (<a href="https://github.com/hangar-hub/hangar/commit/ebcabed95fef4a2b9bf632b8287c4423df9b1130">ebcabed</a>)</li>
 <li><strong>demo:</strong> index the demo home page for crawlers, and add raster favicons (<a href="https://github.com/hangar-hub/hangar/issues/25">#25</a>) (<a href="https://github.com/hangar-hub/hangar/commit/c6589c83e15dfa09e14af8eb2a8001f483226eac">c6589c8</a>)</li>
@@ -2769,7 +2779,7 @@
 <li><strong>helm:</strong> retry the helm test while the Service starts routing (<a href="https://github.com/hangar-hub/hangar/issues/21">#21</a>) (<a href="https://github.com/hangar-hub/hangar/commit/a57fffd7ea45496c63864687c86fe6f34d9da9b8">a57fffd</a>)</li>
 <li>two races found by CI (S3 part ETag, gitstore Acquire) (<a href="https://github.com/hangar-hub/hangar/issues/14">#14</a>) (<a href="https://github.com/hangar-hub/hangar/commit/311e225f76f9d7e2edb3196337c3450bffa6fb07">311e225</a>)</li>
 </ul>
-<h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
+<h3 id="documentation_1">Documentation<a class="headerlink" href="#documentation_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>build:</strong> record the v1.0.0 and v1.1.0 releases and the CI fixes after them (<a href="https://github.com/hangar-hub/hangar/issues/22">#22</a>) (<a href="https://github.com/hangar-hub/hangar/commit/144b29071a5f149d2229353b6ebb1c5342951982">144b290</a>)</li>
 </ul>
@@ -2787,7 +2797,7 @@
 <li><strong>docs:</strong> say why Hangar exists on the home page (<a href="https://github.com/hangar-hub/hangar/issues/15">#15</a>) (<a href="https://github.com/hangar-hub/hangar/commit/51d20dbf03686d5d79c8a94c9ae183ea55c8741b">51d20db</a>)</li>
 <li><strong>docs:</strong> serve the docs from a Cloudflare Worker, with branch Previews (<a href="https://github.com/hangar-hub/hangar/issues/7">#7</a>) (<a href="https://github.com/hangar-hub/hangar/commit/671948011f0e7a7fa9fd9dc1b82b8ab07949288a">6719480</a>)</li>
 </ul>
-<h3 id="bug-fixes_2">Bug fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_3">Bug fixes<a class="headerlink" href="#bug-fixes_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>jobs:</strong> give an idle bandwidth slice back and take up freed budget sooner (<a href="https://github.com/hangar-hub/hangar/issues/19">#19</a>) (<a href="https://github.com/hangar-hub/hangar/commit/b70eaf3d66c2400919a0c74d3bae0808d289fb77">b70eaf3</a>)</li>
 <li><strong>ui:</strong> say when the admin's Every Token list is empty (<a href="https://github.com/hangar-hub/hangar/issues/10">#10</a>) (<a href="https://github.com/hangar-hub/hangar/commit/c8f01246b5691039bea8e983bba24d822814b7e0">c8f0124</a>)</li>
@@ -2853,7 +2863,7 @@
 <li><strong>xet:</strong> ingest Xet uploads and reassemble them into LFS objects (<a href="https://github.com/hangar-hub/hangar/commit/ee75dcc08a35e74e9f9b0867a5fd77d7c3db8936">ee75dcc</a>)</li>
 <li><strong>xet:</strong> parse and verify xorbs and shards against the Xet reference vectors (<a href="https://github.com/hangar-hub/hangar/commit/3af7bc0188f7596379ac56383b0aa01e2587ed30">3af7bc0</a>)</li>
 </ul>
-<h3 id="bug-fixes_3">Bug fixes<a class="headerlink" href="#bug-fixes_3" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_4">Bug fixes<a class="headerlink" href="#bug-fixes_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li>answer 499 to client-closed requests in the Viewer, Ollama and sign-in writers (<a href="https://github.com/hangar-hub/hangar/commit/9d8d29de56572b6939a2efbf5788f1e825766b38">9d8d29d</a>)</li>
 <li><strong>api:</strong> answer 499 to client-closed requests in every error writer (<a href="https://github.com/hangar-hub/hangar/commit/6c93d8607beb0af76caa2c0db2c8ee7eac453b2a">6c93d86</a>)</li>
@@ -3000,7 +3010,7 @@
 <li><strong>repo:</strong> start a fixed number of git processes per request (<a href="https://github.com/hangar-hub/hangar/commit/6332b504bc78ebdfe868bd67d192242134b8a9db">6332b50</a>)</li>
 <li><strong>upstream:</strong> fetch a Discover detail's card, dependencies and Viewer answers at once (<a href="https://github.com/hangar-hub/hangar/commit/8dc2c71f1ef687f3a335f42094400256368e6742">8dc2c71</a>)</li>
 </ul>
-<h3 id="documentation_1">Documentation<a class="headerlink" href="#documentation_1" title="Permanent link">&para;</a></h3>
+<h3 id="documentation_2">Documentation<a class="headerlink" href="#documentation_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li>add a script that records the Home page demo (<a href="https://github.com/hangar-hub/hangar/commit/99ac4ab119e151bcb120c30b109a135d0d6da915">99ac4ab</a>)</li>
 <li>add load test results and the Phase 3 performance handoff (<a href="https://github.com/hangar-hub/hangar/commit/14e859ef63d083c91ff9d562788b14f221280cbf">14e859e</a>)</li>
