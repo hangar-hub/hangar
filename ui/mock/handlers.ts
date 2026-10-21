@@ -727,7 +727,15 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     const req = b(ctx) as S["CommitRequest"];
     if (r.repo.mirror)
       return problem(403, "Mirrors are read-only. Detach the Mirror to change its files.");
-    const branch = req.branch || r.repo.default_branch;
+    const branch = (req.branch || r.repo.default_branch).replace(/^refs\/heads\//, "");
+    // Commits only go to branches, as on a real Instance: a tag or a
+    // Commit SHA names a fixed Commit, not something that can move.
+    if (!Object.hasOwn(r.branches, branch)) {
+      if (Object.hasOwn(r.tags, branch.replace(/^refs\/tags\//, "")) || resolveRev(r, branch)) {
+        return problem(400, `${branch} is not a branch. Commit to a branch instead.`);
+      }
+      return problem(404, `Branch ${branch} does not exist.`);
+    }
     const base = resolveRev(r, branch);
     if (!base) return problem(404, `Branch ${branch} does not exist.`);
     if (req.parent_commit && req.parent_commit !== base.sha) {

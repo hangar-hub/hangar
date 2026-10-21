@@ -276,6 +276,26 @@ describe("mock server", () => {
     expect(await notes.text()).toBe("first");
   });
 
+  it("only commits to branches, never to tags or Commit SHAs", async () => {
+    const repoPath = `${api}/repos/models/ada/bert-tiny-finetune`;
+    const add = (branch: string) => ({
+      summary: "Add a file",
+      branch,
+      operations: [
+        { op: "add", path: "tagged.txt", content_base64: Buffer.from("x").toString("base64") },
+      ],
+    });
+    const tag = await call("POST", `${repoPath}/commits`, add("v1.0"));
+    expect(tag.status).toBe(400);
+    expect(tag.json.detail).toBe("v1.0 is not a branch. Commit to a branch instead.");
+    const head = (await call("GET", repoPath)).json.sha as string;
+    expect((await call("POST", `${repoPath}/commits`, add(head))).status).toBe(400);
+    expect((await call("POST", `${repoPath}/commits`, add("no-such-branch"))).status).toBe(404);
+    const refs = await call("GET", `${repoPath}/refs`);
+    const branches = refs.json.branches as { name: string }[];
+    expect(branches.map((b) => b.name)).toEqual(["main"]);
+  });
+
   it("opens pull requests from Commits and merges them", async () => {
     const pr = await call("POST", `${api}/repos/models/ada/bert-tiny-finetune/commits`, {
       summary: "Fix the card",

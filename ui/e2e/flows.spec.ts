@@ -294,6 +294,40 @@ test.describe("upload", () => {
     expect(problems).toEqual([]);
   });
 
+  test("adds files in the folder on screen, and only on branches", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/tree/main");
+    // Open both at the root first: they must follow the user into a folder.
+    await page.getByRole("button", { name: "New file" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "New file" }).getByLabel("File path"),
+    ).toHaveValue("");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Upload files" }).click();
+    await page
+      .getByRole("table", { name: "Files in the Repo root" })
+      .getByRole("link", { name: "onnx", exact: true })
+      .click();
+    await expect(page.getByRole("table", { name: "Files in onnx" })).toBeVisible();
+    await chooseFiles(page.getByLabel("Choose files"), [
+      { name: "notes.txt", buffer: Buffer.from("notes") },
+    ]);
+    await expect(page.getByLabel("Upload into folder")).toHaveValue("onnx");
+    await expect(page.getByRole("list", { name: "Files to upload" })).toContainText(
+      "onnx/notes.txt",
+    );
+    await page.getByRole("button", { name: "New file" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "New file" }).getByLabel("File path"),
+    ).toHaveValue("onnx/");
+    await page.keyboard.press("Escape");
+    // A tag names a fixed Commit: nothing can be added there.
+    await page.goto("/ada/bert-tiny-finetune/tree/v1.0");
+    await expect(page.getByRole("table", { name: "Files in the Repo root" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload files" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New file" })).toHaveCount(0);
+  });
+
   test("opens a pull request from an upload", async ({ page }) => {
     await signIn(page);
     await page.goto("/ada/bert-tiny-finetune/tree/main");
