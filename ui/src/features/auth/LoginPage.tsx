@@ -49,6 +49,8 @@ export function LoginPage() {
     redirect?: string;
     error?: string;
     register?: string;
+    /** Set when the UI sent the user here because their session ended. */
+    ended?: string;
   };
   const redirect = safeRedirect(search.redirect);
   const [register, setRegister] = useState(search.register === "1");
@@ -96,6 +98,14 @@ export function LoginPage() {
       <h1 id="page-title" className="text-2xl font-semibold tracking-tight">
         {register ? "Create an account" : "Sign in to Hangar"}
       </h1>
+      {search.ended === "1" && !register ? (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-info/30 bg-info-soft px-3 py-2 text-sm text-info"
+        >
+          Your session has ended. Sign in again to go back to the page you were on.
+        </p>
+      ) : null}
       {search.error ? (
         <p
           role="alert"

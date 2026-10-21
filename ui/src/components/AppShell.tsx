@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LogOut, Menu, Settings, Shield, User } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
@@ -34,11 +34,20 @@ function UserMenu() {
   const signOut = useSignOut();
   const navigate = useNavigate();
   const toast = useToast();
+  // Sign in returns to this page. On the sign-in pages themselves, keep the
+  // page they were already going to return to.
+  const here = useRouterState({ select: (s) => s.location });
+  const onAuthPage = here.pathname.startsWith("/auth/");
+  const redirect = onAuthPage
+    ? (here.search as { redirect?: string }).redirect
+    : `${here.pathname}${here.searchStr}`;
   if (me.isPending) return <div className="h-7 w-16" aria-hidden="true" />;
   if (!me.data) {
     return (
       <Button asChild size="sm" variant="primary">
-        <Link to="/auth/login">Sign in</Link>
+        <Link to="/auth/login" search={redirect && redirect !== "/" ? { redirect } : {}}>
+          Sign in
+        </Link>
       </Button>
     );
   }

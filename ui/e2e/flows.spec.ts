@@ -55,6 +55,39 @@ test.describe("sign-in", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Collections" })).toBeVisible();
   });
 
+  test("sends a user whose session ended to sign in, then back to the page", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/settings/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "Profile" })).toBeVisible();
+    // The session ends behind the page's back, as when it expires or is
+    // revoked from another browser.
+    await page.context().clearCookies();
+    await page
+      .getByRole("navigation", { name: "Settings" })
+      .getByRole("link", { name: "Tokens", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/auth\/login\?redirect=%2Fsettings%2Ftokens&ended=1$/);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Your session has ended." }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Account menu/ })).toHaveCount(0);
+    await page.getByLabel("Username").fill("ada");
+    await page.getByLabel("Password").fill("correct-horse-battery");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings\/tokens$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Tokens" })).toBeVisible();
+  });
+
+  test("the header's Sign in link returns to the page", async ({ page }) => {
+    await page.goto("/collections?sort=name");
+    await page.getByRole("banner").getByRole("link", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/auth\/login\?redirect=%2Fcollections%3Fsort%3Dname$/);
+    await page.getByLabel("Username").fill("ada");
+    await page.getByLabel("Password").fill("correct-horse-battery");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/collections\?sort=name$/);
+  });
+
   test("explains OIDC errors", async ({ page }) => {
     await page.goto("/auth/login?error=oidc_link_required");
     await expect(page.getByRole("alert")).toContainText("link the provider from Settings");

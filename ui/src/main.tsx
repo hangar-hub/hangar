@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { setNonce } from "get-nonce";
 import { StrictMode } from "react";
@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { ToastProvider } from "./components/ui/toast";
 import { errorStatus } from "./lib/problem";
 import { parseSearch, stringifySearch } from "./lib/search-params";
+import { onSessionEnded } from "./lib/session";
 import { applyTheme, loadTheme, resolveTheme } from "./lib/theme";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
@@ -16,7 +17,15 @@ import "./styles.css";
 const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
 if (nonce) setNonce(nonce);
 
+// A 401 while signed in can mean the session ended (05-auth.md
+// "Sessions"): send the user to sign in, then back to this page.
+const sessionEnded = (err: unknown) => {
+  void handleSessionEnd(err);
+};
+
 const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: sessionEnded }),
+  mutationCache: new MutationCache({ onError: sessionEnded }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
@@ -33,6 +42,10 @@ const router = createRouter({
   defaultPreload: "intent",
   parseSearch,
   stringifySearch,
+});
+
+const handleSessionEnd = onSessionEnded(queryClient, (redirect) => {
+  void router.navigate({ to: "/auth/login", search: { redirect, ended: "1" } });
 });
 
 declare module "@tanstack/react-router" {
