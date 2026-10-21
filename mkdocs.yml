@@ -140,7 +140,6 @@ nav:
       - Webhooks: guides/webhooks.md
   - Operate:
       - operate/index.md
-      - Configuration: reference/configuration.md
       - Storage backends: operate/storage.md
       - Databases: operate/databases.md
       - Scaling: operate/scaling.md
