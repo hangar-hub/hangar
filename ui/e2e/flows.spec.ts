@@ -421,6 +421,12 @@ test("creates a Token that is shown once, then revokes it", async ({ page }) => 
   const secret = (await shown.getByTestId("token-secret").textContent()) ?? "";
   // 05-auth.md: hgr_ and 40 base62 characters.
   expect(secret).toMatch(/^hgr_[0-9A-Za-z]{40}$/);
+  // The secret is shown once, so neither Escape nor a click outside closes
+  // the dialog: only the button that says it was copied.
+  await page.keyboard.press("Escape");
+  await page.mouse.click(5, 5);
+  await expect(shown).toBeVisible();
+  await expect(shown.getByRole("button", { name: "Close" })).toHaveCount(0);
   await shown.getByRole("button", { name: "I've copied it" }).click();
   const row = page.getByRole("row").filter({ hasText: name });
   await expect(row).toContainText("write");
