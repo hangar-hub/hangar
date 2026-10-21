@@ -11,7 +11,7 @@ Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their g
 - [Point HF_ENDPOINT at Hangar](https://hangar.page/latest/get-started/hf-endpoint/): use Hangar in place of huggingface.co
 - [Repos and Revisions](https://hangar.page/latest/concepts/repos/): how models and datasets are stored
 - [Mirrors and Upstreams](https://hangar.page/latest/concepts/mirrors/): pulling from huggingface.co and other hubs
-- [How Hangar compares](https://hangar.page/latest/concepts/comparison/): Hangar beside olah, JFrog Artifactory, Sonatype Nexus, CSGHub, MLflow and Hugging Face Enterprise
+- [How Hangar compares](https://hangar.page/latest/concepts/comparison/): Hangar beside MatrixHub, KohakuHub, CSGHub, olah, JFrog Artifactory, Sonatype Nexus, MLflow and Hugging Face Enterprise
 - [Ollama](https://hangar.page/latest/guides/ollama/): `ollama pull` GGUF models from Hangar
 - [LM Studio](https://hangar.page/latest/guides/lm-studio/): install models into LM Studio from Hangar
 - [Air-gapped Instances](https://hangar.page/latest/guides/air-gapped/): run Hangar with no internet access
