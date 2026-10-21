@@ -13,7 +13,7 @@ export HF_TOKEN=hgr_...
 export DISABLE_SAFETENSORS_CONVERSION=1
 ```
 
-(`eval "$(hangar env)"` sets all three.) The compatibility suite runs `huggingface_hub`, `transformers`, `sentence-transformers`, `datasets` and `diffusers` against Hangar on every change; the [compatibility matrix](../reference/hub-api-compatibility.md) lists every Hub endpoint and its status.
+(`eval "$(hangar env)"` sets all three.) The compatibility suite runs `huggingface_hub`, `transformers`, `sentence-transformers` and `datasets` against Hangar on every pull request, and `diffusers` nightly. The [compatibility matrix](../reference/hub-api-compatibility.md) lists every Hub endpoint and its status.
 
 ## huggingface_hub
 

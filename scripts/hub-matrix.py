@@ -17,6 +17,20 @@ SRC = ROOT / "compat/hf/compatibility-matrix.json"
 OUT = ROOT / "docs/reference/hub-api-compatibility.md"
 
 LABEL = {"supported": "Supported", "partial": "Partial", "not supported": "Not supported"}
+# The order the summary sentence lists the statuses in.
+ORDER = ["supported", "partial", "not supported"]
+
+
+def summary(counts):
+    """The counts as a sentence that does not start with a numeral, such as
+    "65 endpoints supported and 4 not supported"."""
+    statuses = sorted(counts, key=lambda s: (ORDER.index(s) if s in ORDER else len(ORDER), s))
+    parts = [f"{counts[s]} {LABEL.get(s, s).lower()}" for s in statuses]
+    if parts:
+        parts[0] = parts[0].replace(" ", " endpoints ", 1)
+    if len(parts) > 1:
+        return ", ".join(parts[:-1]) + " and " + parts[-1]
+    return "".join(parts)
 
 
 def cell(s):
@@ -36,8 +50,7 @@ def render(m):
         "Every Hugging Face Hub endpoint that `huggingface_hub` and the libraries built on it call, and whether Hangar serves it. "
         "The compatibility suite in `compat/hf` writes this table from its own results, so every row marked supported is covered by a passing test against real clients.",
         "",
-        f"Tested with `huggingface_hub` {m.get('huggingface_hub', 'unknown')}. "
-        + ", ".join(f"{n} {LABEL.get(s, s).lower()}" for s, n in sorted(counts.items())) + ".",
+        f"Tested with `huggingface_hub` {m.get('huggingface_hub', 'unknown')}: {summary(counts)}.",
         "",
         "| Endpoint | Status | Covered by | Notes |",
         "|---|---|---|---|",
@@ -45,7 +58,12 @@ def render(m):
     for ep, v in rows:
         tests = ", ".join(f"`{t}`" for t in v.get("tests", [])) or "-"
         out.append(f"| `{cell(ep)}` | {LABEL.get(v['status'], v['status'])} | {tests} | {cell(v.get('note', ''))} |")
-    out += ["", "Spaces, the Inference API, Jobs, buckets, kernels and Xet downloads are out of scope for Hangar 1.0; see [What Hangar is](../index.md).", ""]
+    out += [
+        "",
+        "Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope; "
+        "see [What it is not](../index.md#what-it-is-not).",
+        "",
+    ]
     return "\n".join(out)
 
 

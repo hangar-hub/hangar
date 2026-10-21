@@ -85,6 +85,8 @@ Open <http://localhost:8080> and choose **Sign in with Keycloak**. The realm has
 Every example takes `HANGAR_IMAGE`, `HANGAR_PORT` and `HANGAR_PUBLIC_URL`. `HANGAR_PUBLIC_URL` defaults to `http://localhost:` followed by `HANGAR_PORT`; set it when people reach Hangar at another address.
 
 ```sh
-HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.0.0 HANGAR_PORT=9090 \
+HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.2.3 HANGAR_PORT=9090 \
   docker compose -f quickstart.yaml up -d
 ```
+
+The examples run `ghcr.io/hangar-hub/hangar:latest` by default. On an Instance other people rely on, pin a version instead: `1.2.3` for one release, or `1.2` to get patch releases of 1.2 only. Put `HANGAR_IMAGE` in `.env` to keep the pin, and change it when you [upgrade](../operate/upgrades.md). The [releases page](https://github.com/hangar-hub/hangar/releases) lists every version.

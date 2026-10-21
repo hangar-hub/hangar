@@ -8,16 +8,20 @@ One binary is both the server and the client. Install it with any of these:
 
 === "Release archive"
 
-    Download the archive for your system from the [releases page](https://github.com/hangar-hub/hangar/releases), check it, and put `hangar` on your `PATH`:
+    Download the archive for your system from the [releases page](https://github.com/hangar-hub/hangar/releases), check it, and put `hangar` on your `PATH`. Set `VERSION` to the release you want, without the `v`:
 
     ```sh
-    curl -LO https://github.com/hangar-hub/hangar/releases/latest/download/checksums.txt
-    curl -LO https://github.com/hangar-hub/hangar/releases/latest/download/hangar_<version>_linux_amd64.tar.gz
+    VERSION=1.2.3
+    curl -LO "https://github.com/hangar-hub/hangar/releases/download/v$VERSION/checksums.txt"
+    curl -LO "https://github.com/hangar-hub/hangar/releases/download/v$VERSION/hangar_${VERSION}_linux_amd64.tar.gz"
     sha256sum --ignore-missing -c checksums.txt
-    tar xzf hangar_*_linux_amd64.tar.gz hangar && sudo mv hangar /usr/local/bin/
+    tar xzf "hangar_${VERSION}_linux_amd64.tar.gz" hangar && sudo mv hangar /usr/local/bin/
+    hangar version
     ```
 
-    Archives are built for Linux, macOS and Windows on amd64 and arm64.
+    On macOS, check the archive with `shasum -a 256 --ignore-missing -c checksums.txt`. To check that `checksums.txt` itself came from Hangar's release workflow, verify its signature as [Verify the image](../operate/security.md#verify-the-image) describes.
+
+    Archives are built for Linux, macOS and Windows on amd64 and arm64, named `hangar_<version>_<os>_<arch>`: `.tar.gz` for Linux and macOS, and `.zip` for Windows.
 
 === "Homebrew"
 
@@ -31,7 +35,7 @@ One binary is both the server and the client. Install it with any of these:
     go install github.com/hangar-hub/hangar/cmd/hangar@latest
     ```
 
-    This builds without the web UI embedded, which is fine for the CLI. Use a release archive or the image to run a server with the UI.
+    This builds without the web UI embedded, which is fine for the CLI, and `hangar version` reports `dev`. Use a release archive or the image to run a server with the UI.
 
 ## Run a server
 

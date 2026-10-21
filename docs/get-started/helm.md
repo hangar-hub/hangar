@@ -103,7 +103,7 @@ spec:
   source:
     repoURL: ghcr.io/hangar-hub/charts
     chart: hangar
-    targetRevision: 1.0.0   # the chart version to deploy
+    targetRevision: 1.2.3   # the chart version to deploy, which is also the Hangar version
     helm:
       releaseName: hangar
       valuesObject:

@@ -57,14 +57,24 @@ Either way, a user who has reviewed a file can download it through the Hub API o
 
 Images are signed with cosign keyless signing from the release workflow, with an SPDX SBOM attestation and SLSA build provenance. The signing identity is the release workflow at the release tag, `refs/tags/v<version>`, because a tag push is the only thing that starts a release:
 
+Replace `1.2.3` with the version you run:
+
 ```sh
-cosign verify ghcr.io/hangar-hub/hangar:1.0.0 \
+cosign verify ghcr.io/hangar-hub/hangar:1.2.3 \
   --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-cosign verify-attestation --type spdxjson ghcr.io/hangar-hub/hangar:1.0.0 \
+cosign verify-attestation --type spdxjson ghcr.io/hangar-hub/hangar:1.2.3 \
   --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify oci://ghcr.io/hangar-hub/hangar:1.0.0 --owner hangar-hub
+gh attestation verify oci://ghcr.io/hangar-hub/hangar:1.2.3 --owner hangar-hub
+```
+
+The Helm chart is signed by the same workflow. Verify it the same way:
+
+```sh
+cosign verify ghcr.io/hangar-hub/charts/hangar:1.2.3 \
+  --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 Release archives come with `checksums.txt`, signed the same way into a Sigstore bundle (`checksums.txt.sigstore.json`), and an SPDX SBOM per archive (`<archive>.spdx.json`). Check the signature, then the archive you downloaded against `checksums.txt`:

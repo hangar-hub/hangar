@@ -4,7 +4,7 @@
 
 Every Hugging Face Hub endpoint that `huggingface_hub` and the libraries built on it call, and whether Hangar serves it. The compatibility suite in `compat/hf` writes this table from its own results, so every row marked supported is covered by a passing test against real clients.
 
-Tested with `huggingface_hub` 2.2.0. 4 not supported, 65 supported.
+Tested with `huggingface_hub` 2.2.0: 65 endpoints supported and 4 not supported.
 
 | Endpoint | Status | Covered by | Notes |
 |---|---|---|---|
@@ -78,4 +78,4 @@ Tested with `huggingface_hub` 2.2.0. 4 not supported, 65 supported.
 | `bad token` | Supported | `test_bad_token` |  |
 | `hf upload` | Supported | `test_hf_download_and_upload` |  |
 
-Spaces, the Inference API, Jobs, buckets, kernels and Xet downloads are out of scope for Hangar 1.0; see [What Hangar is](../index.md).
+Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope; see [What it is not](../index.md#what-it-is-not).

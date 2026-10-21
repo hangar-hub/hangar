@@ -1804,7 +1804,7 @@
               <h3>Sign in with your identity provider</h3>
               <p>
                 Local accounts and OIDC, with guides for Keycloak, Authentik, Microsoft Entra ID,
-                Google, Okta and GitLab.
+                Google, Okta, GitLab and UniFi Identity.
               </p>
             </li>
             <li data-reveal style="--i: 1">
@@ -1817,8 +1817,8 @@
             <li data-reveal style="--i: 2">
               <h3>Security scans</h3>
               <p>
-                Every Commit is scanned for pickle files that run code when loaded, and you choose
-                what to block.
+                Hangar scans the tip of every branch, tag and pull request for pickle files that
+                run code when loaded, and you choose what to block.
               </p>
             </li>
             <li data-reveal style="--i: 0">
@@ -1966,17 +1966,29 @@ docker logs hangar</code></pre>
 
     <script>
       (() => {
-        // The latest version, from the versions.json that mike keeps at the
-        // root. The pill stays hidden if it cannot be read.
-        fetch("/versions.json")
-          .then((r) => (r.ok ? r.json() : []))
-          .then((versions) => {
-            const latest = versions.find((v) => (v.aliases || []).includes("latest"));
-            if (!latest) return;
-            document.getElementById("release-label").textContent = "v" + latest.version + " is out";
-            document.getElementById("release").hidden = false;
+        // The latest release, such as v1.2.3, from the GitHub API, which the
+        // Content Security Policy allows (_headers). If GitHub cannot be
+        // reached or rate-limits the visitor, the docs version from the
+        // versions.json that mike keeps at the root, such as v1.2, stands in.
+        // The pill stays hidden if neither can be read.
+        const showRelease = (label) => {
+          document.getElementById("release-label").textContent = label + " is out";
+          document.getElementById("release").hidden = false;
+        };
+        const fromDocs = () =>
+          fetch("/versions.json")
+            .then((r) => (r.ok ? r.json() : []))
+            .then((versions) => {
+              const latest = versions.find((v) => (v.aliases || []).includes("latest"));
+              if (latest) showRelease("v" + latest.version);
+            });
+        fetch("https://api.github.com/repos/hangar-hub/hangar/releases/latest")
+          .then((r) => (r.ok ? r.json() : Promise.reject()))
+          .then((release) => {
+            if (!/^v\d+\.\d+\.\d+$/.test(release.tag_name || "")) return Promise.reject();
+            showRelease(release.tag_name);
           })
-          .catch(() => {});
+          .catch(() => fromDocs().catch(() => {}));
 
         // Sections rise in as they scroll into view, once.
         const reveal = document.querySelectorAll("[data-reveal]");

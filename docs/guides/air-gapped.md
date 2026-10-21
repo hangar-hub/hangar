@@ -32,10 +32,11 @@ Mirrors keep the Repo IDs and Commit SHAs from the outer Instance, which kept th
 
 The web UI links to the documentation at https://hangar.page/, for example from the explanation that opens when you hover over or click a badge such as **Unsafe imports**. On a network without internet access, point those links at a copy of the documentation, or turn them off, with `ui.docs_url` (`HANGAR_UI_DOCS_URL`).
 
-To use a copy, build the documentation from the Hangar source at your release tag and serve the `site` folder on the inside. The copy must serve the same paths as https://hangar.page/, such as `concepts/mirrors/`.
+To use a copy, build the documentation from the Hangar source at the release tag your Instance runs, on a machine with internet access, and serve the `site` folder on the inside. The copy must serve the same paths as https://hangar.page/, such as `concepts/mirrors/`. `hangar version` prints the version, and so does **Admin**, **System** in the web UI. For version 1.2.3:
 
 ```sh
-git checkout v1.1.0
+git clone --branch v1.2.3 https://github.com/hangar-hub/hangar.git
+cd hangar
 uv run --no-project --with-requirements docs/requirements.txt mkdocs build
 ```
 

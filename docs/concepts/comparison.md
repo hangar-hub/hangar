@@ -57,7 +57,7 @@ Choose Hangar when the files must stay on your own servers or network, including
 
 ## What Hangar does not do
 
-Hangar stores and serves files; it does not run models. Spaces, the Inference API, SSH git and Xet downloads are out of scope. For the Hub API endpoints Hangar serves, see [Hub API compatibility](../reference/hub-api-compatibility.md).
+Hangar stores and serves files; it does not run models. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope. For the Hub API endpoints Hangar serves, see [Hub API compatibility](../reference/hub-api-compatibility.md).
 
 ## Sources
 

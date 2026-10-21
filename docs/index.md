@@ -48,7 +48,7 @@ Hangar runs as one container on a laptop or homelab, with SQLite and a local fol
 
 ## What it is not
 
-Hangar stores and serves files; it does not run models. Spaces, the Inference API, SSH git and Xet downloads are out of scope. It accepts Xet uploads, so `huggingface_hub` with `hf_xet` installed works with no setup, but it stores whole files and serves them over plain HTTP.
+Hangar stores and serves files; it does not run models. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope. It accepts Xet uploads, so `huggingface_hub` with `hf_xet` installed works with no setup, but it stores whole files and serves them over plain HTTP.
 
 ## Licence
 
