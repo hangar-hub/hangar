@@ -26,6 +26,14 @@ plugins:
   - search
   - mike:
       canonical_version: latest
+  # Serves the theme's Google Fonts from the site itself, downloaded at build
+  # time, so pages render without waiting on another host. The cache is in
+  # .cache/, which git ignores.
+  - privacy:
+      links: false
+      assets_include:
+        - fonts.googleapis.com/*
+        - fonts.gstatic.com/*
 
 theme:
   name: material

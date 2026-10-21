@@ -310,7 +310,7 @@ func TestDocsHomePage(t *testing.T) {
 			faq = append(faq, q.Name, q.Answer.Text)
 		}
 	}
-	if !slices.Equal(types, []string{"WebSite", "SoftwareApplication", "FAQPage"}) {
+	if !slices.Equal(types, []string{"WebSite", "Organization", "SoftwareApplication", "FAQPage"}) {
 		t.Errorf("JSON-LD types = %v", types)
 	}
 	var shown []string

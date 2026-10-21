@@ -61,7 +61,16 @@
             "url": "https://hangar.page/",
             "name": "Hangar",
             "alternateName": "Hangar model registry",
-            "inLanguage": "en-GB"
+            "inLanguage": "en-GB",
+            "publisher": { "@id": "https://hangar.page/#organization" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://hangar.page/#organization",
+            "name": "Hangar",
+            "url": "https://hangar.page/",
+            "logo": "https://hangar.page/apple-touch-icon.png",
+            "sameAs": ["https://github.com/hangar-hub"]
           },
           {
             "@type": "SoftwareApplication",
@@ -78,8 +87,14 @@
             "installUrl": "https://hangar.page/latest/get-started/",
             "softwareHelp": { "@type": "CreativeWork", "url": "https://hangar.page/latest/" },
             "license": "https://hangar.page/latest/project/licence/",
-            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
-            "sameAs": ["https://github.com/hangar-hub/hangar"]
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "GBP",
+              "availability": "https://schema.org/InStock"
+            },
+            "publisher": { "@id": "https://hangar.page/#organization" },
+            "sameAs": ["https://github.com/hangar-hub/hangar", "https://github.com/hangar-hub/hangar/pkgs/container/hangar"]
           },
           {
             "@type": "FAQPage",
@@ -383,6 +398,12 @@
         .nav a.btn-primary:hover {
           color: var(--accent-ink);
           background: var(--accent);
+        }
+      }
+      /* Touch targets at least 44px tall. */
+      @media (pointer: coarse) {
+        .nav a {
+          min-height: 44px;
         }
       }
       @media (max-width: 520px) {
@@ -1583,6 +1604,7 @@
                     width="1440"
                     height="900"
                     alt="The Models list in Hangar's web UI, with filters for format, task, quantisation and size"
+                    fetchpriority="high"
                     decoding="async"
                   />
                 </figure>
@@ -1907,6 +1929,7 @@ docker logs hangar</code></pre>
             <li><a href="https://demo.hangar.page/">Demo</a></li>
             <li><a href="https://github.com/hangar-hub/hangar">GitHub</a></li>
             <li><a href="https://github.com/hangar-hub/hangar/releases">Releases</a></li>
+            <li><a href="/latest/benchmarks/">Benchmarks</a></li>
             <li><a href="/latest/project/changelog/">Changelog</a></li>
             <li><a href="/latest/project/security/">Security</a></li>
             <li><a href="/latest/project/licence/">Licence</a></li>
