@@ -48,4 +48,4 @@ Symbolic links are followed only to files inside the folder, or to files in a Hu
 
 ## Your own models, not on any Upstream
 
-Repos you upload are ordinary Repos: they have the same history, browsing, indexing and security scanning as Mirrors, and you can share them through Organisations, collaborators or visibility. Repos in the Arsenal that came from somewhere else can be [imported](import.md) without uploading them through the network twice.
+Repos you upload are ordinary Repos: they have the same history, browsing, indexing and security scanning as Mirrors, and you can share them through Organisations, collaborators or visibility. Models you already have on disk, in a Hugging Face cache, LM Studio or Ollama, can be [imported](import.md) without downloading them again.

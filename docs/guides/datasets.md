@@ -25,7 +25,7 @@ datasets:
 ---
 ```
 
-To set it in the UI, open the model's **Settings** tab and use **Datasets used**: search the arsenal by name, or type the ID of a dataset on an Upstream, then **Commit to the Model card**. Hangar keeps the card's other metadata and text. The model's sidebar then lists the datasets under **Datasets used**, and each dataset's sidebar lists the model under **Used by**. Mirrors keep their upstream card, so set it on the Upstream instead.
+To set it in the UI, open the model's **Settings** tab and use **Datasets used**: search the Arsenal by name, or type the ID of a dataset on an Upstream, then **Commit to the Model card**. Hangar keeps the card's other metadata and text. The model's sidebar then lists the datasets under **Datasets used**, and each dataset's sidebar lists the model under **Used by**. Mirrors keep their upstream card, so set it on the Upstream instead.
 
 To group a project's models and datasets, put them in a [Collection](collections.md).
 

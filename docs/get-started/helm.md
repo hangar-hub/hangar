@@ -73,7 +73,7 @@ Argo CD, Flux and other GitOps tools render the chart with `helm template` and a
 - **No cluster access while rendering.** `lookup` returns nothing, so the chart cannot keep generated secrets and stops with an error if `generateSecrets` would generate them. Create the Secret yourself and name it in `existingSecret`.
 - **The test Pod is a hook too.** The chart's `helm test` Pod carries `helm.sh/hook: test`. Argo CD skips it, but `helm template` renders it as an ordinary Pod. A tool that applies the render as it is, such as `kubectl apply` or Kustomize's `helmCharts`, starts it before Hangar is up, and it stays in `Error`. Pass `--skip-tests` to `helm template`, or set `skipTests: true` in Kustomize's `helmCharts` entry.
 
-Create the namespace and the Secret once, outside Git or with a secrets operator such as Sealed Secrets or External Secrets:
+Create the namespace and the Secret once, outside your git repository or with a secrets operator such as Sealed Secrets or External Secrets:
 
 ```sh
 kubectl create namespace hangar

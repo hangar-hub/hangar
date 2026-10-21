@@ -1,11 +1,11 @@
 ---
 title: Hugging Face models on an air-gapped network
-description: "Run Hangar as an air-gapped model and dataset store: feed an Instance with no internet access from another Instance, or carry a backup or cache across."
+description: "Run Hangar as an air-gapped model and dataset store: feed an offline Instance from another Instance, or carry a backup or a Hugging Face cache across."
 ---
 
 # Air-gapped Instances
 
-An Instance with no internet access can be fed from another Hangar that has it.
+An Instance with no internet access can be fed from another Hangar Instance that has internet access.
 
 1. Run an outer Instance with internet access, and pull what the inner network needs into it.
 2. On the inner Instance, add the outer one as an Upstream: **Admin**, **Upstreams**, **Add upstream**, with its URL and a read Token for it as the Instance token. Or in configuration:

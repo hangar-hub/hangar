@@ -32,14 +32,14 @@ hangar admin restore /backups/hangar-2026-10-13 --config /etc/hangar/hangar.yaml
 
 A backup made on SQLite restores into Postgres and the other way round, and a filesystem backup restores into S3 and the other way round, so restore is also how you move between backends. Restore with the Hangar version that made the backup, then upgrade. `--force` empties a database that is not empty first.
 
-Stop Hangar before you restore. Keep the Instance key with the backup, separately from it.
+Stop Hangar before you restore. Keep a copy of the Instance key: a restore needs it, but store it separately from the backup.
 
 ## Per backend combination
 
 | Setup | Back up with | Notes |
 |---|---|---|
 | SQLite and filesystem (one container) | `hangar admin backup` with Hangar stopped, or a snapshot of the volume with Hangar stopped | SQLite allows one process, so `admin backup` cannot run beside the server. With Docker, see [Back up a container](#back-up-a-container). |
-| Postgres and filesystem | `hangar admin backup` while running, or `pg_dump` plus a filesystem snapshot or `rsync` of the blobs folder | Take the database dump before the files. |
+| Postgres and filesystem | `hangar admin backup` while running, or `pg_dump` plus a filesystem snapshot or `rsync` of the `storage.fs.path` folder | Take the database dump before the files. |
 | Postgres and S3 | `hangar admin backup --skip-blobs` (or `pg_dump`) plus bucket versioning or replication | Copying a large bucket through Hangar is slow; S3's own replication is better. Take the database backup first. |
 | SQLite and S3 | `hangar admin backup --skip-blobs` with Hangar stopped, plus bucket versioning or replication | |
 

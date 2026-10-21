@@ -59,7 +59,7 @@ docker compose -f quickstart.yaml logs hangar   # the generated admin password, 
 docker compose -f postgres-minio.yaml up -d
 ```
 
-Sign in as `hangar-admin` with `HANGAR_ADMIN_PASSWORD`. The MinIO console is at <http://127.0.0.1:9001> (user `hangar`, password `MINIO_ROOT_PASSWORD`). MinIO's root user can read and change every Blob without going through Hangar's permissions, so do not publish the console on other interfaces.
+Sign in as `hangar-admin` with `HANGAR_ADMIN_PASSWORD`. The MinIO console is at <http://127.0.0.1:9001> (user `hangar`, password `MINIO_ROOT_PASSWORD`). MinIO's root user can read and change every LFS object and all git data without going through Hangar's permissions, so do not publish the console on other interfaces.
 
 Downloads and uploads go through Hangar in this example (`storage.s3.download_mode: proxy` and `storage.s3.upload_mode: proxy`), because your browser and your clients cannot reach `http://minio:9000`. If MinIO has a public address, set `HANGAR_STORAGE_S3_ENDPOINT` to it and remove `HANGAR_STORAGE_S3_DOWNLOAD_MODE` and `HANGAR_STORAGE_S3_UPLOAD_MODE`, so clients download from and upload to MinIO directly.
 

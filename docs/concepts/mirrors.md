@@ -1,6 +1,6 @@
 ---
 title: Mirror Hugging Face Repos with full git history
-description: "How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with partial mirrors, tracking and pull-through."
+description: "How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with Partial mirrors, tracking and Pull-through."
 ---
 
 # Mirrors and Upstreams
@@ -11,7 +11,7 @@ An Upstream is a hub that speaks the Hugging Face Hub API. huggingface.co is bui
 
 Requests to an Upstream use your own upstream token if you saved one (**Settings**, **Upstream tokens**), otherwise the Instance token configured for that Upstream, otherwise none.
 
-An Upstream can be on your local network, such as another Hangar on the LAN. Hangar connects to an Upstream's own host wherever it is, but follows a redirect to a private address only when the Upstream's own host is private too, so huggingface.co or another public Upstream cannot point Hangar at services inside your network. Hangar never connects to link-local or cloud metadata addresses. If Hangar reaches Upstreams through a proxy (`HTTPS_PROXY`), the proxy decides which addresses it can reach.
+An Upstream can be on your local network, such as another Hangar Instance on the LAN. Hangar connects to an Upstream's own host wherever it is, but follows a redirect to a private address only when the Upstream's own host is private too, so huggingface.co or another public Upstream cannot point Hangar at services inside your network. Hangar never connects to link-local or cloud metadata addresses. If Hangar reaches Upstreams through a proxy (`HTTPS_PROXY`), the proxy decides which addresses it can reach.
 
 ## Mirrors keep upstream IDs
 

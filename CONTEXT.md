@@ -4,6 +4,8 @@ A self-hosted model and dataset hub, compatible with the Hugging Face Hub API, g
 
 ## Language
 
+Write these terms capitalised in prose (a Repo, the Arsenal, a Pull), except the few marked as ordinary nouns, which stay lowercase. Verbs stay lowercase: you pull a Repo, and the result is a Pull.
+
 ### The instance
 
 **Instance**:
@@ -11,7 +13,7 @@ One running deployment of Hangar, made of one or more server and worker processe
 _Avoid_: Server (when the whole deployment is meant), cluster, site
 
 **Arsenal**:
-Everything stored in an Instance that a user can see. Used in the UI and docs, never in API names. The UI lists it in two sections, **Models** and **Datasets**.
+Everything stored in an Instance that a user can see. Used in the UI and docs, never in API names. The UI lists it in two sections, **Models** and **Datasets**. Sentences write "the Arsenal"; short UI labels such as **Pull into arsenal**, **In arsenal** and **Not in arsenal** keep a lowercase "arsenal".
 _Avoid_: Library, catalogue (when local content is meant)
 
 **Namespace**:
@@ -75,7 +77,7 @@ Another Hugging Face-compatible hub that Hangar can fetch from, such as huggingf
 _Avoid_: Remote, source, registry
 
 **Mirror**:
-A Repo that tracks a Repo on an Upstream, keeping the upstream ID and Commit SHAs. A Mirror can hold every file or only selected files.
+A Repo that tracks a Repo on an Upstream, keeping the upstream ID and Commit SHAs. A Mirror can hold every file or only selected files. A tracking Mirror's check for new upstream Commits is a **Mirror sync**, as in the **Sync now** button and the `mirror.synced` event; this is the one place "sync" is allowed.
 _Avoid_: Cache, copy, fork
 
 **Partial mirror**:
@@ -83,7 +85,7 @@ A Mirror that holds the full git history but only some LFS objects, for example 
 
 **Pull**:
 Fetching a Repo, or some of its files, from an Upstream into the Arsenal. Pulls run as Jobs.
-_Avoid_: Download (when fetching from an Upstream is meant), sync
+_Avoid_: Download (when fetching from an Upstream is meant), sync (except Mirror sync)
 
 **Pull-through**:
 An optional mode where a client's request for a Repo that is not in the Arsenal starts a Pull automatically.
@@ -100,18 +102,18 @@ The UI view that searches Upstreams and marks what is already in the Arsenal.
 **Job**:
 A unit of background work run by a worker: Pull, index, scan, garbage collection, webhook delivery.
 
-**Index**:
-Metadata extracted from a Commit's files: formats, architecture, parameter count, quantisation, context length, licence.
+**index**:
+Metadata extracted from a Commit's files: formats, architecture, parameter count, quantisation, context length, licence. An ordinary noun: write "index" in lowercase.
 
-**Scan**:
-A security check on a Commit's files, such as finding dangerous imports in pickle files.
+**scan**:
+A security check on a Commit's files, such as finding dangerous imports in pickle files. An ordinary noun: write "scan" in lowercase.
 
 **Collection**:
 A named, ordered list of Repos that a Namespace curates.
 _Avoid_: Loadout, list
 
-**Webhook**:
-An HTTP callback that a Namespace or Repo admin registers for events.
+**webhook**:
+An HTTP callback that a Namespace or Repo admin registers for events. An ordinary noun: write "webhook" in lowercase.
 
 **Token**:
 A secret that a client presents as a bearer token or git password. Tokens have scopes and an optional expiry.
