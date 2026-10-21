@@ -144,7 +144,11 @@ func newHandler(ctx context.Context, in *instance, health *httpx.Health, workerO
 	h = httpx.AccessLog(in.log)(h)
 	h = httpx.Recover(in.log)(h)
 	h = httpx.TrustedProxies(trusted)(h)
-	h = otelhttp.NewHandler(h, "http", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }))
+	// otelhttp records the raw path as url.path, so it sees invite, reset
+	// and email confirmation paths with the code replaced.
+	h = httpx.HideSecretPaths(func(next http.Handler) http.Handler {
+		return otelhttp.NewHandler(next, "http", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }))
+	}, auth.InvitePath, auth.ResetPath, auth.EmailPath)(h)
 	h = httpx.RequestIDs(h)
 	return h, nil
 }
