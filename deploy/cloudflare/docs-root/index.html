@@ -14,7 +14,7 @@
     <title>Hangar: a private, self-hosted Hugging Face Hub alternative</title>
     <meta
       name="description"
-      content="Hangar is a private, self-hosted model registry and dataset store for ML models, LLMs and datasets, compatible with the Hugging Face Hub, git and Ollama."
+      content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio: a private model registry and dataset store."
     />
     <link rel="canonical" href="https://hangar.page/" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -30,7 +30,7 @@
     <meta property="og:site_name" content="Hangar" />
     <meta property="og:locale" content="en_GB" />
     <meta property="og:url" content="https://hangar.page/" />
-    <meta property="og:title" content="Hangar: a self-hosted home for your arsenal of models" />
+    <meta property="og:title" content="Hangar: a private, self-hosted Hugging Face Hub alternative" />
     <meta
       property="og:description"
       content="Keep models and datasets on your own storage, with full version history, and serve them to huggingface_hub, transformers, git, Ollama and LM Studio."
@@ -44,10 +44,10 @@
       content="The Hangar logo and tagline: a self-hosted home for your arsenal of models"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Hangar: a self-hosted home for your arsenal of models" />
+    <meta name="twitter:title" content="Hangar: a private, self-hosted Hugging Face Hub alternative" />
     <meta
       name="twitter:description"
-      content="A self-hosted, Hugging Face Hub-compatible server for models and datasets, with git, Ollama and LM Studio support."
+      content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio."
     />
     <meta name="twitter:image" content="https://hangar.page/og.png" />
 
@@ -60,7 +60,7 @@
             "@id": "https://hangar.page/#website",
             "url": "https://hangar.page/",
             "name": "Hangar",
-            "alternateName": "Hangar model registry",
+            "alternateName": "Hangar model hub",
             "inLanguage": "en-GB",
             "publisher": { "@id": "https://hangar.page/#organization" }
           },
@@ -77,7 +77,7 @@
             "@id": "https://hangar.page/#software",
             "name": "Hangar",
             "url": "https://hangar.page/",
-            "description": "A self-hosted model registry and dataset store, compatible with the Hugging Face Hub API, with git, Ollama, LM Studio and Dataset Viewer support.",
+            "description": "Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.",
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "Model registry",
             "operatingSystem": "Linux, macOS, Windows",
@@ -105,7 +105,7 @@
                 "name": "Is Hangar a model registry?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio."
+                  "text": "It covers the storage and serving side of one. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio. For experiment tracking and model lineage, pair it with MLflow: MLflow records runs and model versions, and Hangar stores and serves the files."
                 }
               },
               {
@@ -142,10 +142,10 @@
               },
               {
                 "@type": "Question",
-                "name": "Can Hangar run without internet access?",
+                "name": "Can Hangar run air-gapped, with no internet access?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Hangar runs as an air-gapped model and dataset store: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache."
+                  "text": "Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache."
                 }
               },
               {
@@ -1473,15 +1473,15 @@
                   <span class="dot" aria-hidden="true"></span>
                   <span id="release-label">Latest release</span>
                 </a>
-                <span>Private, self-hosted model and dataset store</span>
+                <span>Private, self-hosted model and dataset hub</span>
               </p>
               <h1 data-stagger style="--i: 1">
                 A self-hosted home for your <em>arsenal of models</em>.
               </h1>
               <p class="lead" data-stagger style="--i: 2">
-                Hangar is a private, self-hosted model registry and dataset store for your machine learning models, LLMs
-                and datasets, compatible with the Hugging Face Hub. Pull from huggingface.co once, keep full version history on your own
-                storage, and serve it to the tools you already use.
+                Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama
+                and LM Studio. Pull from huggingface.co once, keep full version history on your own storage, and
+                serve your models, LLMs and datasets to the tools you already use.
               </p>
               <div class="actions" data-stagger style="--i: 3">
                 <a class="btn btn-primary" href="/latest/get-started/">
@@ -1886,7 +1886,7 @@ docker logs hangar</code></pre>
           <div class="faq" data-reveal>
             <details>
               <summary>Is Hangar a model registry?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.</p>
+              <p>It covers the storage and serving side of one. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio. For experiment tracking and model lineage, pair it with MLflow: MLflow records runs and model versions, and Hangar stores and serves the files.</p>
             </details>
             <details>
               <summary>Is Hangar a private Hugging Face Hub?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
@@ -1905,8 +1905,8 @@ docker logs hangar</code></pre>
               <p>No. Set HF_ENDPOINT to your Instance and HF_TOKEN to a Token you create in Hangar. huggingface_hub, the hf CLI, transformers, diffusers, sentence-transformers, datasets and vLLM then work unchanged.</p>
             </details>
             <details>
-              <summary>Can Hangar run without internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>Yes. Hangar runs as an air-gapped model and dataset store: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache.</p>
+              <summary>Can Hangar run air-gapped, with no internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache.</p>
             </details>
             <details>
               <summary>Does it work with hf_xet?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>

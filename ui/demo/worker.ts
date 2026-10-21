@@ -79,8 +79,8 @@ export const indexedPage = "https://demo.hangar.page/";
  * WebSite names hangar.page's as its parent and the same publisher.
  */
 export const indexedHead =
-  "<title>Hangar live demo: the self-hosted model registry</title>" +
-  '<meta name="description" content="Try Hangar in your browser with sample data: browse models and datasets, read model cards and preview dataset rows in the self-hosted model registry." />' +
+  "<title>Hangar live demo: a self-hosted model and dataset hub</title>" +
+  '<meta name="description" content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Try it in your browser with sample data." />' +
   `<link rel="canonical" href="${indexedPage}" />` +
   '<meta property="og:site_name" content="Hangar demo" />' +
   `<script type="application/ld+json">${JSON.stringify({

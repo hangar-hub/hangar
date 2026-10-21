@@ -1,6 +1,6 @@
 # Hangar
 
-A self-hosted model hub: one place to keep your arsenal of machine learning models, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
+A self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio: one place to keep your arsenal of machine learning models and datasets.
 
 ## Language
 

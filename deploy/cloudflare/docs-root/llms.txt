@@ -1,6 +1,6 @@
 # Hangar
 
-> Hangar is a self-hosted model and dataset hub that serves the Hugging Face Hub API. huggingface_hub, the hf CLI, transformers, datasets, git and git-lfs, Ollama and LM Studio load files from it unchanged, and its web UI includes a Dataset Viewer. It is source-available under the Elastic License 2.0. It stores and serves model files; it does not run models.
+> Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. huggingface_hub, the hf CLI, transformers, datasets, git and git-lfs, Ollama and LM Studio load files from it unchanged, and its web UI includes a Dataset Viewer. It is source-available under the Elastic License 2.0. It stores and serves model files; it does not run models.
 
 Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their git history and Commit SHAs, and serves them from your own storage. Set `HF_ENDPOINT` to an Instance to use it in place of huggingface.co.
 

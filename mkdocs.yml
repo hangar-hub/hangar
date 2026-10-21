@@ -1,5 +1,5 @@
 site_name: Hangar
-site_description: Hangar is a self-hosted model registry for your arsenal of models and datasets. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.
+site_description: Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
 site_url: https://hangar.page/
 repo_url: https://github.com/hangar-hub/hangar
 repo_name: hangar-hub/hangar
