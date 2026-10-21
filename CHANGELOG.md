@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/hangar-hub/hangar/compare/v1.2.2...v1.2.3) (2026-10-21)
+
+
+### Documentation
+
+* describe Hangar as a model and dataset store, and answer whether it is open source ([#37](https://github.com/hangar-hub/hangar/issues/37)) ([751a1a5](https://github.com/hangar-hub/hangar/commit/751a1a578630b4458a10382f4862ad927b2460f7))
+
 ## [1.2.2](https://github.com/hangar-hub/hangar/compare/v1.2.1...v1.2.2) (2026-10-21)
 
 
