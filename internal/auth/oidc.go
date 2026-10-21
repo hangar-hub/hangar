@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/url"
@@ -206,35 +207,63 @@ func localRedirect(to string, raw bool) bool {
 	return true
 }
 
-// Start begins a sign-in and returns the provider's authorisation URL.
-// linkUser, when set, links the identity to that signed-in User instead
-// of signing in.
-func (o *OIDCService) Start(ctx context.Context, providerID, redirectTo string, linkUser uuid.UUID) (string, error) {
+// OIDCFlow is a sign-in that has started.
+type OIDCFlow struct {
+	// AuthURL is the provider's authorisation URL to send the browser to.
+	AuthURL string
+	// Binding is the secret the browser that started the sign-in keeps in
+	// OIDCCookie until the callback. Only its hash is stored, with the
+	// state, so the sign-in can be finished only in that browser.
+	Binding string
+}
+
+// Start begins a sign-in and returns the provider's authorisation URL and
+// the browser binding. linkUser, when set, links the identity to that
+// signed-in User instead of signing in.
+func (o *OIDCService) Start(ctx context.Context, providerID, redirectTo string, linkUser uuid.UUID) (*OIDCFlow, error) {
 	p, err := o.provider(ctx, providerID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	state, err := randomString(32)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	nonce, err := randomString(32)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	binding, err := randomString(32)
+	if err != nil {
+		return nil, err
 	}
 	verifier := oauth2.GenerateVerifier()
 	row := &db.OIDCState{StateHash: hashSecret(state), Provider: providerID, Nonce: nonce, PKCEVerifier: verifier,
-		RedirectTo: SafeRedirect(redirectTo), ExpiresAt: o.s.nowUTC().Add(oidcStateTTL)}
+		RedirectTo: SafeRedirect(redirectTo), BrowserHash: hashSecret(binding), ExpiresAt: o.s.nowUTC().Add(oidcStateTTL)}
 	if linkUser != uuid.Nil {
 		row.LinkUserID = &linkUser
 	}
 	if _, err := o.s.db.NewDelete().Model((*db.OIDCState)(nil)).Where("expires_at < ?", o.s.nowUTC()).Exec(ctx); err != nil {
-		return "", err
+		return nil, err
 	}
 	if _, err := o.s.db.NewInsert().Model(row).Exec(ctx); err != nil {
-		return "", err
+		return nil, err
 	}
-	return p.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), nil
+	return &OIDCFlow{AuthURL: p.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), Binding: binding}, nil
+}
+
+// OIDCCallback is the provider's redirect back to Hangar.
+type OIDCCallback struct {
+	Provider string
+	State    string
+	Code     string
+	// Binding is the value of the browser's OIDCCookie.
+	Binding string
+	// SessionUser is the User whose session sent the callback, or uuid.Nil.
+	// A link finishes only in a session of the User who started it.
+	SessionUser uuid.UUID
+	IP          string
+	UserAgent   string
 }
 
 // CallbackResult is a finished OIDC sign-in.
@@ -246,12 +275,15 @@ type CallbackResult struct {
 	Linked bool
 }
 
-// Callback finishes a sign-in: it checks the state, exchanges the code
-// with the PKCE verifier, verifies the ID token and nonce, and finds,
-// links or creates the User. It records login.succeeded or login.failed.
-func (o *OIDCService) Callback(ctx context.Context, providerID, state, code, ip, userAgent string) (*CallbackResult, error) {
-	res, err := o.callback(ctx, providerID, state, code)
-	ev := audit.Event{IP: ip, UserAgent: userAgent, TargetType: "user"}
+// Callback finishes a sign-in: it checks the state and that the browser
+// and, for a link, the signed-in User are the ones that started it,
+// exchanges the code with the PKCE verifier, verifies the ID token and
+// nonce, and finds, links or creates the User. It records login.succeeded
+// or login.failed.
+func (o *OIDCService) Callback(ctx context.Context, c OIDCCallback) (*CallbackResult, error) {
+	providerID := c.Provider
+	res, err := o.callback(ctx, c)
+	ev := audit.Event{IP: c.IP, UserAgent: c.UserAgent, TargetType: "user"}
 	if err != nil {
 		ev.Action, ev.Actor = audit.LoginFailed, model.Anonymous()
 		ev.Data = map[string]any{"method": string(model.AuthOIDC), "provider": providerID, "reason": OIDCErrorCode(err)}
@@ -352,13 +384,14 @@ func mapClaims(cfg config.OIDCProvider, raw map[string]any) identityClaims {
 	return c
 }
 
-func (o *OIDCService) callback(ctx context.Context, providerID, state, code string) (*CallbackResult, error) {
-	if state == "" || code == "" {
+func (o *OIDCService) callback(ctx context.Context, c OIDCCallback) (*CallbackResult, error) {
+	providerID, code := c.Provider, c.Code
+	if c.State == "" || code == "" || c.Binding == "" {
 		return nil, ErrOIDCState
 	}
 	var st db.OIDCState
 	err := o.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
-		if err := tx.NewSelect().Model(&st).Where("state_hash = ?", hashSecret(state)).Scan(ctx); err != nil {
+		if err := tx.NewSelect().Model(&st).Where("state_hash = ?", hashSecret(c.State)).Scan(ctx); err != nil {
 			if db.IsNotFound(err) {
 				return ErrOIDCState
 			}
@@ -371,6 +404,18 @@ func (o *OIDCService) callback(ctx context.Context, providerID, state, code stri
 		return nil, err
 	}
 	if st.Provider != providerID || !o.s.nowUTC().Before(st.ExpiresAt) {
+		return nil, ErrOIDCState
+	}
+	// The state, nonce and PKCE verifier live on the server, so they prove
+	// nothing about who sends the callback. The browser binding stops login
+	// CSRF (a victim's browser finishing the attacker's sign-in), and the
+	// session check stops a link URL started by one User being finished by
+	// another, which would attach the victim's identity and groups to the
+	// attacker's account.
+	if st.BrowserHash == "" || subtle.ConstantTimeCompare([]byte(hashSecret(c.Binding)), []byte(st.BrowserHash)) != 1 {
+		return nil, ErrOIDCState
+	}
+	if st.LinkUserID != nil && *st.LinkUserID != c.SessionUser {
 		return nil, ErrOIDCState
 	}
 	p, err := o.provider(ctx, providerID)

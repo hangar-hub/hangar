@@ -219,6 +219,7 @@ type OIDCState struct {
 	PKCEVerifier  string     `bun:"pkce_verifier,notnull"`
 	RedirectTo    string     `bun:"redirect_to,notnull"`
 	LinkUserID    *uuid.UUID `bun:"link_user_id,type:uuid"`
+	BrowserHash   string     `bun:"browser_hash,notnull"`
 	ExpiresAt     time.Time  `bun:"expires_at,notnull"`
 	Timestamps
 }
