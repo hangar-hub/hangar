@@ -12,10 +12,18 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { ProgressBar } from "@/components/ui/progress";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
-import { formatBytes, formatCompact, formatDuration, formatRate, relativeTime } from "@/lib/format";
+import {
+  formatBytes,
+  formatCompact,
+  formatDuration,
+  formatRate,
+  relativeTime,
+  shortSha,
+} from "@/lib/format";
 import { isActive } from "@/lib/jobs";
+import { useDocumentTitle } from "@/lib/page";
 import { errorMessage, errorStatus, unwrap } from "@/lib/problem";
-import { type RepoKind, repoPath } from "@/lib/repo";
+import { baseName, type RepoKind, repoPath } from "@/lib/repo";
 import { useMe } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import {
@@ -153,13 +161,61 @@ function MirrorStatus({ repo }: { repo: Repo }) {
 
 type Tab = { to: string; label: string; match: RegExp; show: boolean };
 
+/**
+ * The browser tab's text for a Repo page, before "· Hangar": the Repo ID,
+ * after the file, Commit, discussion or tab when the page shows one.
+ * `rest` is the path after the Repo's own, such as "/tree/main/data";
+ * `params` are the route's, which hold the file path decoded.
+ */
+export function repoPageTitle(
+  id: string,
+  kind: RepoKind,
+  rest: string,
+  params: { _splat?: string; sha?: string; num?: string },
+): string {
+  const section = /^\/([^/]+)/.exec(rest)?.[1] ?? "";
+  let page = "";
+  switch (section) {
+    case "tree":
+    case "blob":
+      page = params._splat ? baseName(params._splat.replace(/\/$/, "")) : "Files";
+      break;
+    case "commits":
+      page = "Commits";
+      break;
+    case "commit":
+      page = params.sha ? `Commit ${shortSha(params.sha)}` : "Commits";
+      break;
+    case "discussions":
+      page = params.num ? `Discussion #${params.num}` : "Community";
+      break;
+    case "viewer":
+      page = "Viewer";
+      break;
+    case "settings":
+      page = "Settings";
+      break;
+    default:
+      page = "";
+  }
+  const repo = kind === "dataset" ? `datasets/${id}` : id;
+  return page ? `${page} · ${repo}` : repo;
+}
+
 /** Header, tabs and page content shared by every Repo page. */
 export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; name: string }) {
   const ref: RepoRef = { kind, ns, name };
   const repo = useRepo(ref);
   const me = useMe();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const params = useRouterState({
+    select: (s) => s.matches[s.matches.length - 1]?.params as Record<string, string> | undefined,
+  });
   const base = repoPath(kind, ns, name);
+  const rest = decodeURIComponent(pathname)
+    .slice(decodeURIComponent(base).length)
+    .replace(/\/$/, "");
+  useDocumentTitle(repoPageTitle(`${ns}/${name}`, kind, rest, params ?? {}));
 
   if (repo.isPending) {
     return (
@@ -234,9 +290,6 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
       show: Boolean(r.permissions?.admin),
     },
   ];
-  const rest = decodeURIComponent(pathname)
-    .slice(decodeURIComponent(base).length)
-    .replace(/\/$/, "");
   return (
     <div className="space-y-5">
       <header>

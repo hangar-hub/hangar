@@ -8,6 +8,7 @@ import { useGo } from "@/components/AppLink";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { ErrorState, InlineError, Skeleton } from "@/components/ui/states";
+import { useDocumentTitle } from "@/lib/page";
 import { ApiError, fieldErrors, unwrap } from "@/lib/problem";
 import { useSignedIn } from "@/lib/session";
 
@@ -51,6 +52,7 @@ export function LoginPage() {
   };
   const redirect = safeRedirect(search.redirect);
   const [register, setRegister] = useState(search.register === "1");
+  useDocumentTitle(register ? "Create an account" : "Sign in");
   const [form, setForm] = useState({ username: "", password: "", email: "", display_name: "" });
   const signedIn = useSignedIn();
   const go = useGo();

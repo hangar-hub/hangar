@@ -13,6 +13,7 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
+import { useFocusOnNavigation } from "@/lib/page";
 import { errorMessage } from "@/lib/problem";
 import { useMe, useSignOut } from "@/lib/session";
 import { DemoBanner, isDemo } from "./DemoBanner";
@@ -133,6 +134,7 @@ function MobileNav() {
 /** The global layout: top bar with name, search, navigation, Jobs and user menu, then the page. */
 export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
+  useFocusOnNavigation();
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
       <a
@@ -175,7 +177,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main id="main" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 focus:outline-none"
+      >
         {children}
       </main>
       <footer className="border-t border-line py-4">

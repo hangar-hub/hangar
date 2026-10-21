@@ -6,6 +6,7 @@ import { useGo } from "@/components/AppLink";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { InlineError } from "@/components/ui/states";
+import { useDocumentTitle } from "@/lib/page";
 import { ApiError, fieldErrors } from "@/lib/problem";
 import { useSignedIn } from "@/lib/session";
 
@@ -14,6 +15,7 @@ import { useSignedIn } from "@/lib/session";
  * copy (AUTH-1). Both post to the `/auth/` handler and sign the user in.
  */
 export function AccountLinkPage({ mode, code }: { mode: "invite" | "reset"; code: string }) {
+  useDocumentTitle(mode === "invite" ? "Accept your invite" : "Choose a new password");
   const [form, setForm] = useState({
     username: "",
     password: "",
