@@ -396,8 +396,11 @@ func (in *instance) newWorker() *jobs.Worker {
 	return jobs.NewWorker(in.db, in.reg, jobs.WorkerOptions{
 		Owner: in.owner, Concurrency: in.cfg.Jobs.Workers, Lease: in.cfg.Jobs.Lease, Location: in.loc,
 		InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: in.cfg.Pull.Concurrency},
-		LeaderTasks:    []func(context.Context) error{jobs.RecordQueueGauge(in.db, in.tel.Instruments)},
-		Logger:         in.log, Tracer: in.tel.Tracer(), Instrument: in.tel.Instruments,
+		// Rebuilding Repo listing facts each minute keeps their change
+		// records few and spares listings the work.
+		LeaderTasks: []func(context.Context) error{jobs.RecordQueueGauge(in.db, in.tel.Instruments),
+			func(ctx context.Context) error { _, err := in.repos.RefreshListFacts(ctx); return err }},
+		Logger: in.log, Tracer: in.tel.Tracer(), Instrument: in.tel.Instruments,
 	})
 }
 
