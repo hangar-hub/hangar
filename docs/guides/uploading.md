@@ -1,4 +1,5 @@
 ---
+title: Upload models to a private Hugging Face Hub
 description: "Upload models and datasets to Hangar with huggingface_hub, the hf CLI, hangar push, git or the web UI. Every upload is a real Commit."
 ---
 

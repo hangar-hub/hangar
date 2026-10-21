@@ -1,4 +1,5 @@
 ---
+title: Hugging Face Hub on Kubernetes with Helm
 description: "Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD."
 ---
 

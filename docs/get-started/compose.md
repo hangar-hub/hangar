@@ -1,4 +1,5 @@
 ---
+title: Run Hangar with Docker Compose and Postgres
 description: "Run Hangar with Docker Compose: a quickstart, Postgres with MinIO, a scaled-out Instance, and OIDC sign-in with Keycloak."
 ---
 

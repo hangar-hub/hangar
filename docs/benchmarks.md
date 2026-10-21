@@ -1,4 +1,5 @@
 ---
+title: Model download benchmarks for a self-hosted hub
 description: "Load test results for Hangar's scale targets, such as download latency, large Repo listings, clones and memory use, with the setup and commands."
 ---
 
