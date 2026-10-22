@@ -58,9 +58,11 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Choose the multipart test size
         run: |
-          # 200 MB on pull requests; a 6 GiB file nightly (13-testing.md).
-          if [ "${{ github.event_name }}" = "schedule" ]; then size=6442450944; else size=200000000; fi
-          echo "HANGAR_HF_MULTIPART_FILE_SIZE=$size" >> "$GITHUB_ENV"
+          # 200 MB, nightly too. These cells run against repotest.Fake, which
+          # keeps every upload in memory, so the nightly 6 GiB file ran the
+          # runner out of memory and stopped it. The binary cells below
+          # upload 6 GiB nightly to a real Blob store (13-testing.md).
+          echo "HANGAR_HF_MULTIPART_FILE_SIZE=200000000" >> "$GITHUB_ENV"
       - name: Run the cell
         env:
           CELL: ${{ matrix.cell }}
@@ -129,8 +131,9 @@ jobs:
         run: go build -o "$RUNNER_TEMP/hangar" ./cmd/hangar && echo "HANGAR_BINARY=$RUNNER_TEMP/hangar" >> "$GITHUB_ENV"
       - name: Choose the multipart test size
         run: |
-          # 200 MB on pull requests; a 6 GiB file nightly (13-testing.md).
-          if [ "${{ github.event_name }}" = "schedule" ]; then size=6442450944; else size=200000000; fi
+          # 200 MB on pull requests; a 6 GiB file nightly and on manual runs
+          # (13-testing.md).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then size=200000000; else size=6442450944; fi
           echo "HANGAR_HF_MULTIPART_FILE_SIZE=$size" >> "$GITHUB_ENV"
       - name: Run the cell
         env:
