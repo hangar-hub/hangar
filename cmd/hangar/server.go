@@ -90,6 +90,15 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	// 503 until the full handler is installed and the worker has started.
 	var started atomic.Bool
 	var waiting atomic.Pointer[string]
+	// Name the Blob store as the reason only when start-up may wait for
+	// it. The filesystem backend opens at once or fails, and a /readyz
+	// answered while it opens would otherwise report a wait that never
+	// happens. It is set before the listener opens, so the first /readyz
+	// names it too.
+	if blobStoreWaits(cfg) {
+		waitingForBlobs := "waiting for the Blob store to answer"
+		waiting.Store(&waitingForBlobs)
+	}
 	var store atomic.Pointer[blob.Store]
 	health := newHealthFor(d, func() blob.Store {
 		if s := store.Load(); s != nil {
@@ -124,14 +133,6 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return nil
 	}
 
-	// Name the Blob store as the reason only when start-up may wait for
-	// it. The filesystem backend opens at once or fails, and a /readyz
-	// answered while it opens would otherwise report a wait that never
-	// happens.
-	if blobStoreWaits(cfg) {
-		waitingForBlobs := "waiting for the Blob store to answer"
-		waiting.Store(&waitingForBlobs)
-	}
 	blobs, err := openBlobStoreWaiting(ctx, cfg, func(ctx context.Context) (blob.Store, error) {
 		return openBlobStore(ctx, cfg, tel)
 	}, log)
