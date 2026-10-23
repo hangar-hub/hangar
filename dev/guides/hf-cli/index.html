@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos.">
+        <meta name="description" content="Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos, branches and datasets.">
       
       
       
@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/hf-cli/"><meta property="og:title" content="Use the hf CLI with a self-hosted Hugging Face Hub - Hangar"><meta property="og:description" content="Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Use the hf CLI with a self-hosted Hugging Face Hub", "description": "Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos.", "url": "https://hangar.page/latest/guides/hf-cli/", "mainEntityOfPage": "https://hangar.page/latest/guides/hf-cli/", "inLanguage": "en-GB", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "The hf CLI", "item": "https://hangar.page/latest/guides/hf-cli/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/hf-cli/"><meta property="og:title" content="Use the hf CLI with a self-hosted Hugging Face Hub - Hangar"><meta property="og:description" content="Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos, branches and datasets."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Use the hf CLI with a self-hosted Hugging Face Hub", "description": "Use the Hugging Face hf CLI with Hangar: set HF_ENDPOINT, sign in with a Token or the browser, and download, create and upload Repos, branches and datasets.", "url": "https://hangar.page/latest/guides/hf-cli/", "mainEntityOfPage": "https://hangar.page/latest/guides/hf-cli/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "The hf CLI", "item": "https://hangar.page/latest/guides/hf-cli/"}]}]}</script></head>
   
   
     
@@ -361,7 +361,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../project/architecture/" class="md-tabs__link">
+        <a href="../../project/support/" class="md-tabs__link">
           
   
   
@@ -372,6 +372,25 @@
         </a>
       </li>
     
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
   
 
       
@@ -473,6 +492,8 @@
       
         
       
+        
+      
     
     
     
@@ -525,6 +546,34 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/requirements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
               
             
               
@@ -755,6 +804,8 @@
       
         
       
+        
+      
     
     
     
@@ -956,6 +1007,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../concepts/data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Where Hangar keeps data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../concepts/comparison/" class="md-nav__link">
         
   
@@ -1130,6 +1209,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The hf CLI
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1146,6 +1243,69 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sign in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upload
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors-you-may-see" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors you may see
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1621,34 +1781,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/configuration/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Configuration
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../operate/storage/" class="md-nav__link">
         
   
@@ -1766,7 +1898,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -1788,14 +1920,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2130,6 +2262,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../operate/uninstall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uninstall
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../operate/security/" class="md-nav__link">
         
   
@@ -2239,6 +2399,8 @@
       
         
       
+        
+      
     
     
     
@@ -2308,6 +2470,34 @@
     
   
     Hub API compatibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tested versions and platforms
   
 
     
@@ -2489,6 +2679,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -2533,6 +2727,62 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get help
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/versioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Versioning and support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2709,6 +2959,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -2729,6 +3006,58 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sign in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upload
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors-you-may-see" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors you may see
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2748,7 +3077,7 @@
 
 
 <h1 id="use-the-hf-cli">Use the hf CLI<a class="headerlink" href="#use-the-hf-cli" title="Permanent link">&para;</a></h1>
-<p>The <code>hf</code> CLI that comes with <code>huggingface_hub</code> works against Hangar with <code>HF_ENDPOINT</code>:</p>
+<p>The <code>hf</code> CLI that comes with <code>huggingface_hub</code> works against Hangar with <code>HF_ENDPOINT</code>. The compatibility suite runs <code>hf auth login</code>, <code>hf auth whoami</code>, <code>hf repos create</code>, <code>hf upload</code> and <code>hf download</code> against Hangar on every pull request.</p>
 <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">HF_ENDPOINT</span><span class="o">=</span>https://hangar.example.com
 hf<span class="w"> </span>auth<span class="w"> </span>login<span class="w"> </span>--token<span class="w"> </span>hgr_...
 hf<span class="w"> </span>auth<span class="w"> </span>whoami
@@ -2756,8 +3085,61 @@ hf<span class="w"> </span>download<span class="w"> </span>hf-internal-testing/ti
 hf<span class="w"> </span>repos<span class="w"> </span>create<span class="w"> </span>acme/my-model<span class="w"> </span>--private
 hf<span class="w"> </span>upload<span class="w"> </span>acme/my-model<span class="w"> </span>./weights
 </code></pre></div>
+<h2 id="sign-in">Sign in<a class="headerlink" href="#sign-in" title="Permanent link">&para;</a></h2>
 <p>Use <code>hf auth login --token</code>, or the <code>HF_TOKEN</code> variable. The browser sign-in that <code>hf auth login</code> starts without <code>--token</code> also works: it opens Hangar's device page, where you approve the code, and Hangar creates a write Token for the CLI.</p>
-<p><code>hf</code> keeps one active Token in <code>~/.cache/huggingface/token</code>, whichever endpoint it came from. If you also use huggingface.co, set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code> in each shell instead of signing in to both.</p>
+<p><code>hf</code> keeps one active Token in <code>~/.cache/huggingface/token</code>, whichever endpoint it came from. If you also use huggingface.co, set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code> in each shell instead of signing in to both:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">HF_ENDPOINT</span><span class="o">=</span>https://hangar.example.com<span class="w"> </span><span class="nv">HF_TOKEN</span><span class="o">=</span>hgr_...<span class="w"> </span>hf<span class="w"> </span>auth<span class="w"> </span>whoami
+</code></pre></div>
+<p><code>eval "$(hangar env)"</code> sets both for the Instance you signed in to with <code>hangar login</code>.</p>
+<h2 id="download">Download<a class="headerlink" href="#download" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>hf<span class="w"> </span>download<span class="w"> </span>acme/my-model<span class="w">                              </span><span class="c1"># every file, into the Hugging Face cache</span>
+hf<span class="w"> </span>download<span class="w"> </span>acme/my-model<span class="w"> </span>config.json<span class="w">                  </span><span class="c1"># one file</span>
+hf<span class="w"> </span>download<span class="w"> </span>acme/my-model<span class="w"> </span>--include<span class="w"> </span><span class="s2">"*.safetensors"</span><span class="w">    </span><span class="c1"># files that match</span>
+hf<span class="w"> </span>download<span class="w"> </span>acme/my-model<span class="w"> </span>--revision<span class="w"> </span>dev<span class="w">               </span><span class="c1"># a branch, a tag or a Commit SHA</span>
+hf<span class="w"> </span>download<span class="w"> </span>acme/my-model<span class="w"> </span>--local-dir<span class="w"> </span>./my-model<span class="w">       </span><span class="c1"># into a folder instead of the cache</span>
+hf<span class="w"> </span>download<span class="w"> </span>acme/reviews<span class="w"> </span>--repo-type<span class="w"> </span>dataset<span class="w">           </span><span class="c1"># a dataset Repo</span>
+</code></pre></div>
+<p>Mirrors keep the upstream Repo IDs and Commit SHAs, so the same commands and Revisions work against Hangar and huggingface.co. If a Repo is not in the Arsenal yet, pull it first with <code>hangar pull</code> or from <strong>Discover</strong>.</p>
+<h2 id="upload">Upload<a class="headerlink" href="#upload" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>hf<span class="w"> </span>repos<span class="w"> </span>create<span class="w"> </span>acme/my-model<span class="w"> </span>--private
+hf<span class="w"> </span>upload<span class="w"> </span>acme/my-model<span class="w"> </span>./weights<span class="w"> </span>.<span class="w">                            </span><span class="c1"># a folder, as one Commit</span>
+hf<span class="w"> </span>upload<span class="w"> </span>acme/my-model<span class="w"> </span>./weights<span class="w"> </span>.<span class="w"> </span>--commit-message<span class="w"> </span><span class="s2">"Add weights"</span>
+hf<span class="w"> </span>upload<span class="w"> </span>acme/my-model<span class="w"> </span>./config.json<span class="w"> </span>copy/config.json<span class="w"> </span>--revision<span class="w"> </span>dev
+</code></pre></div>
+<p>Uploading to a branch that does not exist yet creates it. With <code>hf_xet</code> installed, large files go up as Xet uploads, which Hangar accepts with no setup. Every upload is a real Commit, the same as one made with git; see <a href="../uploading/">Uploading</a>.</p>
+<h2 id="errors-you-may-see">Errors you may see<a class="headerlink" href="#errors-you-may-see" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Invalid credentials in Authorization header"</td>
+<td>The Token is wrong, expired or revoked, or it is a huggingface.co token (<code>hf_...</code>) rather than a Hangar one (<code>hgr_...</code>).</td>
+<td>Create a Token in Hangar under <strong>Settings</strong>, <strong>Tokens</strong>.</td>
+</tr>
+<tr>
+<td><code>hf auth whoami</code> shows your huggingface.co account</td>
+<td><code>HF_ENDPOINT</code> is not set in this shell.</td>
+<td>Export <code>HF_ENDPOINT</code>, or use <code>eval "$(hangar env)"</code>.</td>
+</tr>
+<tr>
+<td>"Repository Not Found for url"</td>
+<td>The Repo is private and your Token cannot read it, or it is not in the Arsenal. Private Repos answer as if they did not exist.</td>
+<td>Check the Token, and pull the Repo first.</td>
+</tr>
+<tr>
+<td>HTTP 409, naming a <code>hangar pull</code> command</td>
+<td>The Repo is a Partial mirror and the file was not pulled.</td>
+<td>Run the command it names.</td>
+</tr>
+</tbody>
+</table>
+<p>See also <a href="../python/">Python libraries</a> and <a href="../../operate/troubleshooting/">Troubleshooting</a>.</p>
 
 
 
@@ -2838,7 +3220,7 @@ hf<span class="w"> </span>upload<span class="w"> </span>acme/my-model<span class
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Hangar is source-available under the Elastic License 2.0.
+      Hangar is source-available under the Elastic License 2.0. Hugging Face, Ollama and LM Studio are trademarks of their owners. Hangar is an independent project, not affiliated with or endorsed by them.
     </div>
   
   

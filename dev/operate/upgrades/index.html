@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Upgrade Hangar in one container or across several processes, with database migrations, and what to do if you need to downgrade.">
+        <meta name="description" content="Upgrade Hangar with Docker, Docker Compose, Helm, Homebrew or the binary, with database migrations, checks afterwards, and what to do to go back.">
       
       
       
@@ -16,7 +16,7 @@
         <link rel="prev" href="../backup/">
       
       
-        <link rel="next" href="../security/">
+        <link rel="next" href="../uninstall/">
       
       
         
@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/upgrades/"><meta property="og:title" content="Upgrades - Hangar"><meta property="og:description" content="Upgrade Hangar in one container or across several processes, with database migrations, and what to do if you need to downgrade."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Upgrades", "description": "Upgrade Hangar in one container or across several processes, with database migrations, and what to do if you need to downgrade.", "url": "https://hangar.page/latest/operate/upgrades/", "mainEntityOfPage": "https://hangar.page/latest/operate/upgrades/", "inLanguage": "en-GB", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Upgrades", "item": "https://hangar.page/latest/operate/upgrades/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/upgrades/"><meta property="og:title" content="Upgrades - Hangar"><meta property="og:description" content="Upgrade Hangar with Docker, Docker Compose, Helm, Homebrew or the binary, with database migrations, checks afterwards, and what to do to go back."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Upgrades", "description": "Upgrade Hangar with Docker, Docker Compose, Helm, Homebrew or the binary, with database migrations, checks afterwards, and what to do to go back.", "url": "https://hangar.page/latest/operate/upgrades/", "mainEntityOfPage": "https://hangar.page/latest/operate/upgrades/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Upgrades", "item": "https://hangar.page/latest/operate/upgrades/"}]}]}</script></head>
   
   
     
@@ -361,7 +361,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../project/architecture/" class="md-tabs__link">
+        <a href="../../project/support/" class="md-tabs__link">
           
   
   
@@ -372,6 +372,25 @@
         </a>
       </li>
     
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
   
 
       
@@ -473,6 +492,8 @@
       
         
       
+        
+      
     
     
     
@@ -525,6 +546,34 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/requirements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
               
             
               
@@ -755,6 +804,8 @@
       
         
       
+        
+      
     
     
     
@@ -936,6 +987,34 @@
     
   
     Permissions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Where Hangar keeps data
   
 
     
@@ -1611,34 +1690,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/configuration/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Configuration
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../storage/" class="md-nav__link">
         
   
@@ -1759,7 +1810,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -1781,14 +1832,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2155,6 +2206,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#before-you-upgrade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before you upgrade
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-a-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin a version
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#one-container" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2166,10 +2239,65 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#docker-compose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker Compose
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#several-processes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Several processes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#helm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Helm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-the-upgrade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check the upgrade
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-per-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes per version
       
     </span>
   </a>
@@ -2191,6 +2319,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../uninstall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uninstall
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2312,6 +2468,8 @@
       
         
       
+        
+      
     
     
     
@@ -2381,6 +2539,34 @@
     
   
     Hub API compatibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tested versions and platforms
   
 
     
@@ -2562,6 +2748,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -2606,6 +2796,62 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get help
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/versioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Versioning and support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2782,6 +3028,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -2809,6 +3082,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#before-you-upgrade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before you upgrade
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-a-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin a version
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#one-container" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2820,10 +3115,65 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#docker-compose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker Compose
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#several-processes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Several processes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#helm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Helm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-the-upgrade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check the upgrade
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-per-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes per version
       
     </span>
   </a>
@@ -2862,21 +3212,68 @@
 
 
 <h1 id="upgrade-hangar">Upgrade Hangar<a class="headerlink" href="#upgrade-hangar" title="Permanent link">&para;</a></h1>
-<p>Hangar follows semantic versioning. Read the <a href="../../project/changelog/">changelog</a> before you upgrade, and back up first (<a href="../backup/">Backup and restore</a>).</p>
+<p>Hangar follows <a href="../../project/versioning/">semantic versioning</a>. Each release's container image, Helm chart, archives and Homebrew cask carry the same version.</p>
+<h2 id="before-you-upgrade">Before you upgrade<a class="headerlink" href="#before-you-upgrade" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Find the version you run: <code>hangar version</code>, or <strong>Admin</strong>, <strong>System</strong> in the web UI.</li>
+<li>Read the <a href="../../project/changelog/">changelog</a> from your version to the new one. A major version lists what is not backward compatible under <strong>BREAKING CHANGES</strong>. <a href="#notes-per-version">Notes per version</a> lists anything you need to do.</li>
+<li>Back up the database, the Blob store and the Instance key; see <a href="../backup/">Backup and restore</a>. A backup is the only way back to the old version.</li>
+</ol>
+<p><code>hangar admin migrate</code> applies every pending migration, so you can upgrade from any earlier release of the same major version straight to the latest one.</p>
+<h2 id="pin-a-version">Pin a version<a class="headerlink" href="#pin-a-version" title="Permanent link">&para;</a></h2>
+<p><code>latest</code> moves to every new release, so a container restart can upgrade an Instance without anyone choosing to. On an Instance other people rely on, run a version tag instead, and change it when you upgrade:</p>
+<ul>
+<li><code>ghcr.io/hangar-hub/hangar:1.2.3</code> stays on one release.</li>
+<li><code>ghcr.io/hangar-hub/hangar:1.2</code> follows patch releases of 1.2 only.</li>
+</ul>
 <h2 id="one-container">One container<a class="headerlink" href="#one-container" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/hangar-hub/hangar:latest
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/hangar-hub/hangar:1.2.3
 docker<span class="w"> </span>stop<span class="w"> </span>hangar<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>docker<span class="w"> </span>rm<span class="w"> </span>hangar
-docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--name<span class="w"> </span>hangar<span class="w"> </span>...<span class="w">   </span><span class="c1"># the same options as before</span>
+docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--name<span class="w"> </span>hangar<span class="w"> </span>...<span class="w"> </span>ghcr.io/hangar-hub/hangar:1.2.3<span class="w">   </span><span class="c1"># the same options as before</span>
 </code></pre></div>
-<p>A process in role <code>all</code> applies migrations when it starts.</p>
+<p>The data is in the volume, so the new container starts with it. A process in role <code>all</code> applies migrations when it starts.</p>
+<h2 id="docker-compose">Docker Compose<a class="headerlink" href="#docker-compose" title="Permanent link">&para;</a></h2>
+<p>Set the new version in <code>.env</code> next to the Compose files, for example <code>HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.2.3</code>, then pull it and recreate the containers:</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>postgres-minio.yaml<span class="w"> </span>pull
+docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>postgres-minio.yaml<span class="w"> </span>up<span class="w"> </span>-d
+</code></pre></div>
+<p>Use the file you started with. In <code>scale.yaml</code>, the one-off <code>migrate</code> service runs <code>hangar admin migrate</code> with the new image, and Compose starts the new <code>web</code> and <code>worker</code> replicas once it has finished.</p>
+<h2 id="binary">Binary<a class="headerlink" href="#binary" title="Permanent link">&para;</a></h2>
+<p>Download the new archive and replace the binary, as <a href="../../get-started/binary/">Run the hangar binary</a> shows, then restart the server. With Homebrew:</p>
+<div class="highlight"><pre><span></span><code>brew<span class="w"> </span>upgrade<span class="w"> </span>--cask<span class="w"> </span>hangar-hub/tap/hangar
+</code></pre></div>
+<p>Binaries built with <code>go install</code> report their version as <code>dev</code>, so use a release archive for a server you need to keep track of.</p>
 <h2 id="several-processes">Several processes<a class="headerlink" href="#several-processes" title="Permanent link">&para;</a></h2>
 <ol>
 <li>Run the new version's <code>hangar admin migrate</code> once. Migrations only add to the schema within a major version, so processes of the previous version keep working while it runs.</li>
 <li>Roll the <code>worker</code> processes, then the <code>web</code> processes. New processes report ready once the schema matches.</li>
 </ol>
-<p>The Helm chart runs the migration in a pre-upgrade Job, or in an init container in each Pod with <code>migrations.mode: initContainer</code> (for Argo CD; see <a href="../../get-started/helm/#run-with-argo-cd">Run with Argo CD</a>), and rolls the Deployments for you:</p>
-<div class="highlight"><pre><span></span><code>helm<span class="w"> </span>upgrade<span class="w"> </span>hangar<span class="w"> </span>oci://ghcr.io/hangar-hub/charts/hangar<span class="w"> </span>--namespace<span class="w"> </span>hangar<span class="w"> </span>-f<span class="w"> </span>values.yaml
+<h2 id="helm">Helm<a class="headerlink" href="#helm" title="Permanent link">&para;</a></h2>
+<p>The chart version is the Hangar version, so upgrading the chart upgrades Hangar:</p>
+<div class="highlight"><pre><span></span><code>helm<span class="w"> </span>upgrade<span class="w"> </span>hangar<span class="w"> </span>oci://ghcr.io/hangar-hub/charts/hangar<span class="w"> </span>--version<span class="w"> </span><span class="m">1</span>.2.3<span class="w"> </span>--namespace<span class="w"> </span>hangar<span class="w"> </span>-f<span class="w"> </span>values.yaml
 </code></pre></div>
+<p>The chart runs the migration in a pre-upgrade Job, or in an init container in each Pod with <code>migrations.mode: initContainer</code>, and rolls the Deployments for you. With Argo CD, change <code>targetRevision</code> in the Application; see <a href="../../get-started/helm/#run-with-argo-cd">Run with Argo CD</a>.</p>
+<h2 id="check-the-upgrade">Check the upgrade<a class="headerlink" href="#check-the-upgrade" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>hangar version</code>, or <strong>Admin</strong>, <strong>System</strong>, shows the new version.</li>
+<li><code>/readyz</code> answers 200. If it answers 503, the body names the check that failed, such as a pending migration.</li>
+<li><code>hangar admin doctor</code> checks the configuration, the database, the Blob store and git end to end; see <a href="../troubleshooting/#run-the-doctor">Troubleshooting</a>.</li>
+</ul>
+<h2 id="notes-per-version">Notes per version<a class="headerlink" href="#notes-per-version" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Upgrade</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.1.x or 1.2.x, from any earlier 1.x</td>
+<td>Nothing. No release since 1.0.0 has changed the database schema or the Helm chart's values. 1.2.0 added <code>ui.docs_url</code>, which defaults to https://hangar.page/; on an <a href="../../guides/air-gapped/#keep-the-web-ui-on-the-inside">air-gapped network</a>, point it at your copy of the docs.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="downgrades">Downgrades<a class="headerlink" href="#downgrades" title="Permanent link">&para;</a></h2>
 <p>Migrations do not run backwards. To go back to an earlier version, restore a backup made with it.</p>
 
@@ -2936,13 +3333,13 @@ docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </sp
         
         
           
-          <a href="../security/" class="md-footer__link md-footer__link--next" aria-label="Next: Security hardening">
+          <a href="../uninstall/" class="md-footer__link md-footer__link--next" aria-label="Next: Uninstall">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Security hardening
+                Uninstall
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2959,7 +3356,7 @@ docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </sp
       <div class="md-copyright">
   
     <div class="md-copyright__highlight">
-      Hangar is source-available under the Elastic License 2.0.
+      Hangar is source-available under the Elastic License 2.0. Hugging Face, Ollama and LM Studio are trademarks of their owners. Hangar is an independent project, not affiliated with or endorsed by them.
     </div>
   
   
