@@ -7,7 +7,7 @@
 | Language | Go, current stable release | Pin the exact version in `go.mod` (`toolchain`) and the Dockerfile. |
 | HTTP | `net/http` with `github.com/go-chi/chi/v5` | chi handles the Hub's mixed path shapes; see "Routing". |
 | Database access | `github.com/uptrace/bun` with `pgdriver` and `sqliteshim` over `modernc.org/sqlite` | Pure Go, so `CGO_ENABLED=0` static builds for every platform. |
-| Migrations | `bun/migrate`, SQL files per dialect | `internal/db/migrations/{postgres,sqlite}/NNNN_name.up.sql`. |
+| Migrations | `bun/migrate`, SQL files per dialect | `internal/db/migrations/{postgres,sqlite}/NNNN_name.tx.up.sql`: each migration runs, and is recorded, in one transaction. |
 | Object storage | `github.com/minio/minio-go/v7` | Works with every S3-compatible store and supports presigning and multipart. |
 | Git | `git` binary (2.39 or later) for fetch; `github.com/go-git/go-git/v6` (pinned pre-release) for push, server-side Commits and Mirror fetches | See [04](04-git.md). |
 | OIDC | `github.com/coreos/go-oidc/v3` and `golang.org/x/oauth2` | |
@@ -150,7 +150,7 @@ All tables have `created_at` and `updated_at` (UTC). IDs are UUIDv7 unless state
 | `repo_redirects` | Renames and transfers | `old_namespace`, `old_name`, `type`, `repo_id` |
 | `collaborators` | Per-repo access | `repo_id`, `user_id`, `role` |
 | `refs` | Branches, tags, PR refs | `repo_id`, `name` (full, for example `refs/heads/main`), `target` (SHA-1); compare-and-swap on `target` ([04](04-git.md)) |
-| `packs` | git packfiles per Repo | `repo_id`, `pack_sha1`, `size`, `object_count`, `state` (`pending`, `live`, `retired`, `orphaned`), `retired_at` |
+| `packs` | git packfiles per Repo | `repo_id`, `pack_sha1`, `size`, `object_count`, `state` (`pending`, `live`, `retired`, `orphaned`, `deleting`), `retired_at` |
 | `commits` | Commit metadata cache for fast listing | `repo_id`, `sha`, `parents`, `author`, `committer`, `title`, `message`, `authored_at` |
 | `tree_entries` | Flattened file list per indexed Commit, for fast Hub API listing | `repo_id`, `commit`, `path`, `type`, `size`, `git_oid`, `lfs_oid`, `lfs_size`, `last_commit` |
 | `lfs_objects` | One row per stored LFS object | `oid` (SHA-256, primary key), `size`, `storage_key`, `verified_at`, `last_referenced_at` |

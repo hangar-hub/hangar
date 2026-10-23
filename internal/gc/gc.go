@@ -36,6 +36,7 @@ import (
 
 	"github.com/hangar-hub/hangar/internal/blob"
 	"github.com/hangar-hub/hangar/internal/db"
+	"github.com/hangar-hub/hangar/internal/gitstore"
 	"github.com/hangar-hub/hangar/internal/jobs"
 	"github.com/hangar-hub/hangar/internal/telemetry"
 )
@@ -331,16 +332,20 @@ func PackPrefix(repoID uuid.UUID, packSHA1 string) string {
 }
 
 // collectPacks deletes retired and orphaned packs after the pack grace
-// period, and pending packs of pushes that died.
+// period, pending packs of pushes that died, and packs an earlier run did
+// not finish deleting. gitstore.DeletePack re-checks the conditions as it
+// claims each pack, so a pack stored again since the query is kept.
 func (c *Collector) collectPacks(ctx context.Context, r *Report) error {
 	now := c.now()
 	retiredCutoff := now.Add(-c.opts.PackGracePeriod)
 	pendingCutoff := now.Add(-c.opts.PendingPackAge)
-	const cond = `((state IN ('retired', 'orphaned') AND COALESCE(retired_at, updated_at) < ?) OR (state = 'pending' AND created_at < ?))`
+	const cond = `((state IN ('retired', 'orphaned') AND COALESCE(retired_at, updated_at) < ?) OR (state = 'pending' AND updated_at < ?)
+		OR (state = 'deleting' AND updated_at < ?))`
+	args := []any{retiredCutoff, pendingCutoff, retiredCutoff}
 	for {
 		var batch []db.Pack
 		if err := c.db.NewSelect().Model(&batch).Column("repo_id", "pack_sha1", "size", "state").
-			Where(cond, retiredCutoff, pendingCutoff).Limit(batchSize).Scan(ctx); err != nil {
+			Where(cond, args...).Limit(batchSize).Scan(ctx); err != nil {
 			return err
 		}
 		if len(batch) == 0 {
@@ -348,41 +353,27 @@ func (c *Collector) collectPacks(ctx context.Context, r *Report) error {
 		}
 		progressed := false
 		for _, p := range batch {
-			res, err := c.db.NewDelete().Model((*db.Pack)(nil)).
-				Where("repo_id = ? AND pack_sha1 = ? AND state = ?", p.RepoID, p.PackSHA1, p.State).
-				Where(cond, retiredCutoff, pendingCutoff).Exec(ctx)
-			if err != nil {
-				return err
-			}
-			if n, _ := res.RowsAffected(); n != 1 {
+			claimed, err := gitstore.DeletePack(ctx, c.db, c.store, p.RepoID, p.PackSHA1, cond, args...)
+			if !claimed {
+				if err != nil {
+					return err
+				}
 				continue
 			}
 			progressed = true
+			if err != nil {
+				// The pack stays deleting, and a later run finishes it.
+				r.Errors++
+				c.opts.Logger.WarnContext(ctx, "delete pack", "repo_id", p.RepoID, "pack", p.PackSHA1, "error", err)
+				continue
+			}
 			r.PacksDeleted++
 			r.PackBytesFreed += p.Size
-			if err := c.deletePrefix(ctx, PackPrefix(p.RepoID, p.PackSHA1)); err != nil {
-				r.Errors++
-				c.opts.Logger.WarnContext(ctx, "delete pack files", "repo_id", p.RepoID, "pack", p.PackSHA1, "error", err)
-			}
 		}
 		if !progressed || len(batch) < batchSize {
 			return nil
 		}
 	}
-}
-
-func (c *Collector) deletePrefix(ctx context.Context, prefix string) error {
-	var keys []string
-	if err := c.store.List(ctx, prefix, func(i blob.Info) error { keys = append(keys, i.Key); return nil }); err != nil {
-		return err
-	}
-	var errs []error
-	for _, k := range keys {
-		if err := c.store.Delete(ctx, k); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
 }
 
 // collectOrphanGitBlobs deletes git data of Repos that no longer exist,

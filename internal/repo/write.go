@@ -97,10 +97,15 @@ type applyParams struct {
 
 // apply stores the pack, then in one transaction moves every ref with
 // compare-and-swap, marks the pack live and records LFS references. On a
-// conflict the pack is marked orphaned and ErrRefConflict is returned.
+// conflict the pack is marked orphaned and ErrRefConflict is returned. A
+// pack that a failed attempt orphaned, or that a sweep is deleting, gives
+// ErrRetryable: storing it again recovers it.
 func (s *Store) apply(ctx context.Context, p applyParams) error {
 	if p.pack != "" {
 		if _, err := p.st.StorePack(ctx, p.pack); err != nil {
+			if errors.Is(err, gitstore.ErrPackDeleting) {
+				return fmt.Errorf("%w: %w", ErrRetryable, err)
+			}
 			return err
 		}
 	}
@@ -131,6 +136,9 @@ func (s *Store) apply(ctx context.Context, p applyParams) error {
 		if errors.Is(err, gitstore.ErrInvalidUpdate) {
 			return fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
+		if errors.Is(err, gitstore.ErrPackNotPending) {
+			return fmt.Errorf("%w: %w", ErrRetryable, err)
+		}
 		return err
 	}
 	s.afterRefMove(ctx, p.row, p.updates, p.actor)
@@ -152,10 +160,14 @@ func upsertLFS(ctx context.Context, tx bun.IDB, repoID uuid.UUID, refs []LFSRef,
 	}
 	now := db.Now()
 	rows := make([]db.RepoLFS, 0, len(byOID))
-	oids := make([]string, 0, len(byOID))
+	var present, absent []string
 	for _, r := range byOID {
 		rows = append(rows, db.RepoLFS{RepoID: repoID, OID: r.OID, Size: r.Size, Present: r.Present, Timestamps: db.Timestamps{CreatedAt: now, UpdatedAt: now}})
-		oids = append(oids, r.OID)
+		if r.Present {
+			present = append(present, r.OID)
+		} else {
+			absent = append(absent, r.OID)
+		}
 	}
 	presentExpr := "present = repo_lfs.present OR EXCLUDED.present"
 	if overwrite {
@@ -168,7 +180,10 @@ func upsertLFS(ctx context.Context, tx bun.IDB, repoID uuid.UUID, refs []LFSRef,
 			return fmt.Errorf("repo: record lfs references: %w", err)
 		}
 	}
-	return Touch(ctx, tx, oids, now)
+	if err := touchReferenced(ctx, tx, present, now); err != nil {
+		return err
+	}
+	return Touch(ctx, tx, absent, now)
 }
 
 // touchRepo updates last_modified_at and the size columns.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -402,6 +403,11 @@ func (l *LFS) GetUpload(ctx context.Context, id uuid.UUID) (*Upload, error) {
 			u.Done = assembledParts(row, nil)
 			return u, nil
 		}
+		// The Blob store no longer has the multipart upload, such as when
+		// an S3 lifecycle rule aborted it, so it cannot be resumed. The
+		// upload is gone as far as callers are concerned: they start again.
+		_ = l.discard(context.WithoutCancel(ctx), row)
+		return nil, fmt.Errorf("%w: upload %s lost its parts; upload the file again", ErrNotFound, id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("repo: list upload parts: %w", err)
@@ -885,8 +891,49 @@ func (l *LFS) PresignGet(ctx context.Context, oid string, ttl time.Duration, fil
 	return l.blobs.PresignGet(ctx, obj.StorageKey, ttl, filename)
 }
 
+// touchReferenced records that the stored objects oids, which must be
+// distinct, are referenced now, inside the transaction that inserts their
+// repo_lfs rows. This is the referencing protocol of internal/gc: garbage
+// collection deletes an object's row with a conditional DELETE before it
+// deletes the blob, so an object whose row this cannot update is gone or
+// going. touchReferenced then returns ErrLFSObjectMissing, naming it, and
+// the caller rolls back; the client uploads the object again.
+func touchReferenced(ctx context.Context, tx bun.IDB, oids []string, at time.Time) error {
+	for start := 0; start < len(oids); start += 500 {
+		chunk := oids[start:min(start+500, len(oids))]
+		res, err := tx.NewUpdate().Model((*db.LFSObject)(nil)).Set("last_referenced_at = ?", at).
+			Where("oid IN (?)", bun.List(chunk)).Exec(ctx)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == int64(len(chunk)) {
+			continue
+		}
+		var found []string
+		if err := tx.NewSelect().Model((*db.LFSObject)(nil)).Column("oid").Where("oid IN (?)", bun.List(chunk)).Scan(ctx, &found); err != nil {
+			return err
+		}
+		have := make(map[string]bool, len(found))
+		for _, oid := range found {
+			have[oid] = true
+		}
+		var missing []string
+		for _, oid := range chunk {
+			if !have[oid] {
+				missing = append(missing, oid)
+			}
+		}
+		sort.Strings(missing)
+		return fmt.Errorf("%w: %s is no longer stored; upload it again", ErrLFSObjectMissing, strings.Join(missing, ", "))
+	}
+	return nil
+}
+
 // Touch records that oids are referenced now, so garbage collection's grace
-// period starts from their last reference.
+// period starts from their last reference. Objects that are not stored are
+// skipped; a new reference to a stored object goes through touchReferenced.
 func Touch(ctx context.Context, idb bun.IDB, oids []string, at time.Time) error {
 	for start := 0; start < len(oids); start += 500 {
 		chunk := oids[start:min(start+500, len(oids))]
