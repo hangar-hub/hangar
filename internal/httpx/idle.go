@@ -45,15 +45,44 @@ func IdleTimeout(d time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
-// idleBody pushes the read deadline back before each read of the body.
+// BodyTimeout gives the whole request body of a buffered endpoint at most
+// d, on top of IdleTimeout's limit between reads, so a client that sends a
+// small body a byte at a time cannot hold a goroutine for longer.
+// Streaming endpoints (uploads, downloads, git, Xet) must not use it.
+func BodyTimeout(d time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil && r.Body != http.NoBody {
+				until := time.Now().Add(d)
+				if b, ok := r.Body.(*idleBody); ok {
+					b.until = until
+				} else {
+					r.Body = &idleBody{ReadCloser: r.Body, rc: http.NewResponseController(w), until: until}
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// idleBody pushes the read deadline back before each read of the body,
+// to d from now, but never past until when BodyTimeout set it.
 type idleBody struct {
 	io.ReadCloser
-	rc *http.ResponseController
-	d  time.Duration
+	rc    *http.ResponseController
+	d     time.Duration
+	until time.Time
 }
 
 func (b *idleBody) Read(p []byte) (int, error) {
-	_ = b.rc.SetReadDeadline(time.Now().Add(b.d))
+	var deadline time.Time
+	if b.d > 0 {
+		deadline = time.Now().Add(b.d)
+	}
+	if !b.until.IsZero() && (deadline.IsZero() || b.until.Before(deadline)) {
+		deadline = b.until
+	}
+	_ = b.rc.SetReadDeadline(deadline)
 	n, err := b.ReadCloser.Read(p)
 	if errors.Is(err, io.EOF) {
 		// The body is done; net/http's background read takes over the

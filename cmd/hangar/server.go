@@ -256,6 +256,17 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 // reading data, and how long a keep-alive connection may sit idle.
 const streamIdleTimeout = 5 * time.Minute
 
+// Total limits on the request bodies of buffered endpoints, on top of
+// streamIdleTimeout, so a client that sends a body a byte at a time cannot
+// hold a goroutine, or a place in the sign-in queue, for long. Native API
+// bodies may be up to server.max_request_body (64 MiB by default), which
+// nativeBodyTimeout allows at about 0.5 MB/s; sign-in and registration
+// bodies are at most 64 KiB.
+const (
+	nativeBodyTimeout = 2 * time.Minute
+	authBodyTimeout   = 30 * time.Second
+)
+
 // Bounds of the retry interval in openBlobStoreWaiting.
 const (
 	blobRetryFirst = time.Second
