@@ -7,6 +7,7 @@
 - Runs as UID 65532, read-only root filesystem (with a writable `/var/cache/hangar` and `/tmp`), data in `/var/lib/hangar` (volume), config at `/etc/hangar/hangar.yaml` (optional; env vars are enough).
 - Compose and Helm use `/readyz` for health. The image also declares `HEALTHCHECK CMD ["hangar", "healthcheck"]` (a subcommand that calls `/readyz` on localhost).
 - Image is signed with cosign keyless (GitHub OIDC), with an SPDX SBOM attestation and SLSA build provenance.
+- OCI labels (title, description, URL, documentation, source, vendor, licence) in the Dockerfile, set again as `docker/metadata-action` labels and as manifest and index annotations in `release.yml`, because metadata-action otherwise replaces them with the repository's description and the licence GitHub detects (NOASSERTION), and GHCR reads a multi-arch image's description from the index. `TestImageMetadataMatchesDockerfile` keeps the three lists the same.
 
 ## Quickstart (must work in under 5 minutes on a clean machine)
 
@@ -37,10 +38,30 @@ CI starts each one and runs the smoke test ([13](13-testing.md)).
 - Migrations run in a pre-install and pre-upgrade Job (`hangar admin migrate`), or, with `migrations.mode: initContainer` for GitOps tools that run Helm hooks before the rest of a sync, in an init container of each `web` and `worker` pod; `web` and `worker` pods wait for the expected schema version in `/readyz`.
 - Security context: non-root, read-only root filesystem, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp.
 - `helm lint`, `kubeconform` and `ct install` against kind in CI.
+- The package carries `README.md`, for `helm show readme` and Artifact Hub, and `Chart.yaml` carries Artifact Hub's annotations: `artifacthub.io/license`, `category`, `links` (a link named `support` shows as the place to report an issue) and `images`. `helm package` sets `version` and `appVersion` but not annotations, so `release.yml` replaces the `0.0.0` image tag in `artifacthub.io/images` with the release version first, and fails if the package has no README. `TestChartPackageMetadata` checks both files.
+- Signed with cosign keyless at the release tag, like the image; the chart README shows how to verify it.
+
+### Artifact Hub
+
+Artifact Hub indexes the chart from the registry. The repository's ID there is `091c5c96-fbf7-4db8-8ef5-48b68410bf68`, recorded in `deploy/helm/artifacthub-repo.yml`. Listing it was a one-off task for James, and these steps repeat it if the listing or the `artifacthub.io` tag is lost:
+
+1. Sign in at <https://artifacthub.io>, open **Control Panel**, **Add repository**, and add kind **Helm charts**, name `hangar`, URL `oci://ghcr.io/hangar-hub/charts/hangar`. Add it under an Artifact Hub organisation to show the project, not a person, as the publisher.
+2. Copy the repository ID from the new repository's card into `deploy/helm/artifacthub-repo.yml` as `repositoryID`, check that the `owners` email is the one you sign in to Artifact Hub with, and commit it.
+3. Push the file to the chart's repository under the tag `artifacthub.io`, with [oras](https://oras.land) logged in to ghcr.io with a token that has `write:packages`:
+
+   ```sh
+   cd deploy/helm
+   oras push ghcr.io/hangar-hub/charts/hangar:artifacthub.io \
+     --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+     artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+   ```
+
+   The tag is not a semantic version, so Helm and Artifact Hub do not list it as a chart version. On its next scan Artifact Hub marks the repository as a verified publisher.
+4. Add the Artifact Hub badge to the README, `https://artifacthub.io/badge/repository/hangar`, once the listing shows.
 
 ## Binaries
 
-GoReleaser builds `hangar` for linux, darwin and windows on amd64 and arm64, with checksums, SBOMs and cosign signatures. Install options in the docs: release archives, `go install github.com/hangar-hub/hangar/cmd/hangar@latest`, the container image, and a Homebrew tap (`hangar-hub/homebrew-tap`, updated by GoReleaser; creating the tap repo is a release step that needs James).
+GoReleaser builds `hangar` for linux, darwin and windows on amd64 and arm64, with checksums, SBOMs and cosign signatures. release-please creates the GitHub release, with its changelog entry as the notes, before it pushes the tag; GoReleaser adds the files to that release and, with `release.mode: append`, adds its footer after the notes: install commands for the image, the chart and Homebrew, a link to the upgrade notes, and cosign commands for the release's signing identity (`TestGoReleaserFooterReachesTheRelease`). Builds without `-ldflags`, such as `go install`, take the version, commit and date for `hangar version` from the build information Go embeds. Install options in the docs: release archives, `go install github.com/hangar-hub/hangar/cmd/hangar@latest`, the container image, and a Homebrew tap (`hangar-hub/homebrew-tap`, updated by GoReleaser; creating the tap repo is a release step that needs James).
 
 ## Documentation site
 
@@ -74,7 +95,7 @@ A demo of the web UI at `https://demo.hangar.page/`, on Cloudflare's free plan: 
 
 ## Repository files
 
-`README.md` (tagline, screenshot, feature summary, quickstart, links, licence), `LICENSE` (Elastic License 2.0), `NOTICE` (third-party notices, including Ollama templates), `CONTRIBUTING.md` (dev setup, `make` targets, tests, commit style, contributor licence agreement through the CLA Assistant GitHub app), `CODE_OF_CONDUCT.md` (Contributor Covenant), `SECURITY.md` (private vulnerability reporting through GitHub security advisories), `CHANGELOG.md` (Keep a Changelog, written by release-please), `.github/ISSUE_TEMPLATE/` (bug, feature, compatibility gap), `.github/pull_request_template.md`, `CODEOWNERS`, `.github/dependabot.yml` (Go modules, npm, Actions, Docker), `Makefile` (`dev`, `build`, `test`, `test-compat`, `lint`, `ui`, `docs`, `image`), `.devcontainer/`.
+`README.md` (tagline, screenshot, feature summary, quickstart, links, licence), `LICENSE` (Elastic License 2.0), `NOTICE` (third-party notices, including Ollama templates), `CONTRIBUTING.md` (dev setup, `make` targets, tests, commit style, contributor licence agreement through the CLA Assistant GitHub app), `CODE_OF_CONDUCT.md` (Contributor Covenant), `SECURITY.md` (private vulnerability reporting through GitHub security advisories), `SUPPORT.md` (where to get help: the docs, the issue forms and private security reports), `CITATION.cff` (its version updated by release-please through `extra-files`), `CHANGELOG.md` (Keep a Changelog, written by release-please), `.github/ISSUE_TEMPLATE/` (bug, feature, compatibility gap, question; blank issues off, with contact links to the docs and security reports), `.github/pull_request_template.md`, `CODEOWNERS`, `.github/dependabot.yml` (Go modules, npm, Actions, Docker), `Makefile` (`dev`, `build`, `test`, `test-compat`, `lint`, `ui`, `docs`, `image`), `.devcontainer/`.
 
 ## Licence
 

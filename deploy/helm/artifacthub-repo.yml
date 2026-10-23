@@ -1,0 +1,13 @@
+# Artifact Hub repository metadata for the chart at
+# oci://ghcr.io/hangar-hub/charts/hangar. Artifact Hub reads it from the
+# special tag artifacthub.io in that repository, not from git; push it by hand
+# as docs/spec/12-packaging-and-release.md ("Artifact Hub") describes.
+#
+# repositoryID is the repository's ID on Artifact Hub, which makes it a
+# verified publisher. owners lets the people listed claim the repository on
+# Artifact Hub. Each email must be the one that person signs in to Artifact
+# Hub with.
+repositoryID: 091c5c96-fbf7-4db8-8ef5-48b68410bf68
+owners:
+  - name: James Garside
+    email: info@hangar.page

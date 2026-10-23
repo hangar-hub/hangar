@@ -80,12 +80,43 @@ release:
   github:
     owner: hangar-hub
     name: hangar
-  # release-please creates the release; GoReleaser adds the files to it.
-  mode: keep-existing
+  # release-please creates the release, with its changelog entry as the
+  # notes, before it pushes the tag that starts release.yml. GoReleaser finds
+  # that release by tag, adds the files to it, and with mode append adds its
+  # own notes after release-please's. The changelog pipe is off, so its notes
+  # are only this footer. (keep-existing, the default, would drop the footer.)
+  # Re-running the binaries job of a release appends the footer again; delete
+  # the copy from the release notes by hand.
+  mode: append
   footer: |
-    Container image: `ghcr.io/hangar-hub/hangar:{{ .Version }}` (linux/amd64 and linux/arm64, signed with cosign).
-    Helm chart: `oci://ghcr.io/hangar-hub/charts/hangar` version {{ .Version }}.
-    Hangar is source-available under the Elastic License 2.0.
+    ## Install
+
+    ```sh
+    docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
+      -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
+      ghcr.io/hangar-hub/hangar:{{ .Version }}
+    helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --version {{ .Version }} \
+      --set publicURL=https://hangar.example.com
+    brew install --cask hangar-hub/tap/hangar
+    ```
+
+    The image is for linux/amd64 and linux/arm64. The archives below are for Linux, macOS and Windows, with an SPDX SBOM for each. Before you upgrade an Instance, read [Upgrade Hangar](https://hangar.page/latest/operate/upgrades/) and back it up.
+
+    ## Verify
+
+    The image, the Helm chart and `checksums.txt` are signed with cosign keyless signing by the release workflow:
+
+    ```sh
+    id=https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/{{ .Tag }}
+    issuer=https://token.actions.githubusercontent.com
+    cosign verify ghcr.io/hangar-hub/hangar:{{ .Version }} --certificate-identity "$id" --certificate-oidc-issuer "$issuer"
+    cosign verify ghcr.io/hangar-hub/charts/hangar:{{ .Version }} --certificate-identity "$id" --certificate-oidc-issuer "$issuer"
+    cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json --certificate-identity "$id" --certificate-oidc-issuer "$issuer"
+    ```
+
+    [Security hardening](https://hangar.page/latest/operate/security/#verify-the-image) also shows how to check the SBOM attestation and build provenance.
+
+    Hangar is source-available under the [Elastic License 2.0](https://github.com/hangar-hub/hangar/blob/{{ .Tag }}/LICENSE).
 
 homebrew_casks:
   - name: hangar
@@ -96,7 +127,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: https://hangar.page/
-    description: Self-hosted home for your arsenal of models, compatible with the Hugging Face Hub
+    description: Self-hosted model and dataset hub, compatible with the Hugging Face Hub
     license: Elastic-2.0
     commit_author:
       name: hangar-release

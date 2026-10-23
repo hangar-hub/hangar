@@ -8,6 +8,7 @@
       "package-name": "hangar",
       "initial-version": "1.0.0",
       "release-as": "1.3.0",
+      "extra-files": ["CITATION.cff"],
       "changelog-sections": [
         {"type": "feat", "section": "Features"},
         {"type": "fix", "section": "Bug fixes"},

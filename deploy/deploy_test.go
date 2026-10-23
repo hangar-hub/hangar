@@ -331,7 +331,7 @@ var helmCommand = regexp.MustCompile(`helm (?:install|upgrade)[^` + "`" + `\n]*`
 // command in the README and the docs: the chart refuses to render without
 // publicURL, so a command that sets neither it nor a values file fails.
 func TestHelmInstallCommandsSetPublicURL(t *testing.T) {
-	files := []string{"../README.md"}
+	files := []string{"../README.md", "helm/hangar/README.md"}
 	err := filepath.WalkDir("../docs", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
