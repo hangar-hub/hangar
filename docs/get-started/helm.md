@@ -64,6 +64,8 @@ kubectl create secret generic hangar-secrets --namespace hangar \
 helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --namespace hangar -f values.yaml
 ```
 
+Every `web` and `worker` Pod must have the same Instance key, and Hangar refuses to start in those roles without one. Give it through `existingSecret` as above, through `secrets`, or let the chart generate it (`generateSecrets`, the default, which needs `helm install` or `helm upgrade`). A render that gives the Pods no key stops with an error.
+
 A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `worker` Pods report ready only when the schema is at the version they expect. With `migrations.mode: initContainer`, each `web` and `worker` Pod runs the migration in an init container instead, with no Helm hooks; see [Run with Argo CD](#run-with-argo-cd). A fuller example is [`deploy/helm/examples/scale-values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/examples/scale-values.yaml).
 
 ## Run with Argo CD

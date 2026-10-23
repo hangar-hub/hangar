@@ -125,7 +125,7 @@ const (
 
 // SecurityConfig configures secrets and sign-in.
 type SecurityConfig struct {
-	InstanceKey    string          `koanf:"instance_key" desc:"32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. Generated on first start if empty." secret:"true"`
+	InstanceKey    string          `koanf:"instance_key" desc:"32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. In role all, Hangar generates one in server.data_dir on first start if it is empty; roles web and worker need it set, to the same key on every process." secret:"true"`
 	AnonymousRead  bool            `koanf:"anonymous_read" desc:"Let anonymous users read public Repos and see user and Organisation profiles."`
 	Registration   string          `koanf:"registration" desc:"Who can create an account: open, invite or closed."`
 	LocalLogin     bool            `koanf:"local_login" desc:"Show the username and password form. The bootstrap admin can always sign in at /auth/login?local=1."`

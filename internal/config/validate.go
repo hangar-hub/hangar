@@ -145,7 +145,13 @@ func (c *Config) validate(requireInstanceKey bool) error {
 
 	// security
 	if c.Security.InstanceKey == "" {
-		if requireInstanceKey {
+		if c.Server.Role == RoleWeb || c.Server.Role == RoleWorker {
+			// Every process of an Instance must use the same key. A web or
+			// worker process that generated its own in server.data_dir could
+			// not read secrets or URLs the others sealed or signed.
+			e.addf("security.instance_key is required when server.role is %s: give every web and worker process the same base64-encoded 32-byte key "+
+				"(HANGAR_SECURITY_INSTANCE_KEY), for example one made with openssl rand -base64 32. Hangar generates a key only in role all", c.Server.Role)
+		} else if requireInstanceKey {
 			e.addf("security.instance_key is required: set a base64-encoded 32-byte key, or leave it empty on first start so Hangar generates one in server.data_dir")
 		}
 	} else if _, err := c.InstanceKeyBytes(); err != nil {

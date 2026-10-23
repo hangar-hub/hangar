@@ -52,6 +52,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default "sqlite" $db.driver -}}
 {{- end }}
 
+{{/*
+Non-empty when the Pods get security.instance_key from somewhere: the
+generated Secret, `secrets`, `config`, extraEnv, or a Secret the chart cannot
+read (existingSecret, extraEnvFrom), which is trusted to hold it.
+*/}}
+{{- define "hangar.instanceKeySet" -}}
+{{- $security := default dict .Values.config.security }}
+{{- $inExtraEnv := false }}
+{{- range .Values.extraEnv }}
+{{- if eq (toString .name) "HANGAR_SECURITY_INSTANCE_KEY" }}{{ $inExtraEnv = true }}{{ end }}
+{{- end }}
+{{- if or (include "hangar.generate" .) (hasKey .Values.secrets "HANGAR_SECURITY_INSTANCE_KEY") $security.instance_key .Values.existingSecret .Values.extraEnvFrom $inExtraEnv }}true{{ end }}
+{{- end }}
+
 {{/* Fail early on combinations that cannot work. */}}
 {{- define "hangar.validate" -}}
 {{- if not .Values.publicURL }}
@@ -71,6 +85,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- if lt (int .Values.web.replicas) 1 }}
 {{- fail "web.replicas must be at least 1" }}
+{{- end }}
+{{- if not (include "hangar.instanceKeySet" .) }}
+{{- fail "persistence.enabled is false, so the chart runs web and worker Pods, and they must share one Instance key: Hangar refuses to start in role web or worker without security.instance_key. Turn generateSecrets on, put HANGAR_SECURITY_INSTANCE_KEY in secrets, or set existingSecret to a Secret that holds it" }}
 {{- end }}
 {{- end }}
 {{- if not (has .Values.migrations.mode (list "hook" "initContainer")) }}

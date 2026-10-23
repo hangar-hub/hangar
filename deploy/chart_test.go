@@ -342,6 +342,35 @@ func TestChartGenerateSecretsNeedsCluster(t *testing.T) {
 	}
 }
 
+// TestChartScaledOutPodsShareAnInstanceKey: with persistence off the chart
+// runs web and worker Pods, which refuse to start without
+// security.instance_key, so a render that gives them none fails with a
+// message that says where to put it.
+func TestChartScaledOutPodsShareAnInstanceKey(t *testing.T) {
+	scale := []string{"-f", "helm/examples/scale-values.yaml", "--set", "existingSecret=", "--set", "generateSecrets=false",
+		"--set-string", "secrets.HANGAR_DATABASE_DSN=postgres://hangar@db/hangar"}
+	msg := renderChartError(t, scale...)
+	for _, want := range []string{"HANGAR_SECURITY_INSTANCE_KEY", "existingSecret", "generateSecrets"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("helm template error does not mention %s:\n%s", want, msg)
+		}
+	}
+	for name, extra := range map[string][]string{
+		"secrets":        {"--set-string", "secrets.HANGAR_SECURITY_INSTANCE_KEY=key"},
+		"existingSecret": {"--set", "existingSecret=hangar-secrets"},
+		"config":         {"--set-string", "config.security.instance_key=key"},
+		"extraEnv":       {"--set", "extraEnv[0].name=HANGAR_SECURITY_INSTANCE_KEY", "--set", "extraEnv[0].valueFrom.secretKeyRef.name=keys", "--set", "extraEnv[0].valueFrom.secretKeyRef.key=instance"},
+		"extraEnvFrom":   {"--set", "extraEnvFrom[0].secretRef.name=keys"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			renderChart(t, append(slices.Clone(scale), extra...)...)
+		})
+	}
+	// With persistence on, the single Pod runs in role all and generates
+	// the key on its volume.
+	renderChart(t, "-f", "helm/hangar/ci/default-values.yaml", "--set", "generateSecrets=false")
+}
+
 // hooked returns the kind and name of every rendered resource with a Helm
 // hook other than the helm test Pod.
 func hooked(docs []map[string]any) []string {

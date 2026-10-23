@@ -176,6 +176,25 @@ func TestValidateBeforeSecretsAllowsAnEmptyInstanceKey(t *testing.T) {
 	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "storage.backend")
 }
 
+// TestWebAndWorkerRolesNeedAnExplicitInstanceKey: a web or worker process
+// with its own server.data_dir would otherwise generate a key of its own,
+// and could not read what the other processes sealed or signed.
+func TestWebAndWorkerRolesNeedAnExplicitInstanceKey(t *testing.T) {
+	for _, role := range []string{"web", "worker"} {
+		cfg, err := config.Load(config.LoadOptions{Env: []string{"HANGAR_SERVER_PUBLIC_URL=http://localhost:8080",
+			"HANGAR_SERVER_ROLE=" + role, "HANGAR_DATABASE_DRIVER=postgres", "HANGAR_DATABASE_DSN=postgres://hangar@db/hangar"}})
+		require.NoError(t, err)
+		for _, validate := range []func() error{cfg.ValidateBeforeSecrets, cfg.Validate} {
+			err := validate()
+			require.ErrorContains(t, err, "security.instance_key is required when server.role is "+role, role)
+			require.NotContains(t, err.Error(), "leave it empty on first start", role)
+		}
+		cfg.Security.InstanceKey = testKey
+		require.NoError(t, cfg.ValidateBeforeSecrets(), role)
+		require.NoError(t, cfg.Validate(), role)
+	}
+}
+
 // TestValidateRefusesURLDSNsForSQLite: database.driver defaults to sqlite,
 // so a Postgres DSN without HANGAR_DATABASE_DRIVER=postgres used to pass
 // validation and become a relative SQLite file path.

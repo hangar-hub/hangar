@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -477,6 +478,7 @@ func TestReadyzWhileWaitingForMigrate(t *testing.T) {
 	dbtest.RequirePostgres(t)
 	cfg := testConfig(t)
 	cfg.Server.Role = config.RoleWeb
+	cfg.Security.InstanceKey = base64.StdEncoding.EncodeToString(make([]byte, config.InstanceKeyBytes))
 	cfg.Database.Driver = "postgres"
 	cfg.Database.DSN = dbtest.PostgresDSN(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
