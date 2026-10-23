@@ -79,3 +79,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT
 ## Licence
 
 Hangar is source-available under the [Elastic License 2.0](LICENSE). You can use, change and self-host it, including inside your company. You can't offer it to others as a hosted or managed service, or remove licence notices. Third-party notices are in [NOTICE](NOTICE).
+
+Hugging Face, Ollama and LM Studio are trademarks of their owners. Hangar is an independent project, not affiliated with or endorsed by them.
