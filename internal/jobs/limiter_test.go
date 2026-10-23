@@ -264,3 +264,47 @@ func TestLimiterLooksForMoreEveryQuarterRefresh(t *testing.T) {
 	shareA, _ = a.Share("pull")
 	require.Equal(t, int64(1000), shareA, "a slice given back is taken up within a quarter of a refresh period")
 }
+
+// TestLimiterRemainingTransferGetsTheWholeBudget checks the case
+// TestRealBandwidthCapAcrossTwoWorkers fails in on CI: one worker runs both
+// transfers while the other runs none. Both transfers together get the
+// whole budget, and when one ends the other gets the whole budget, not a
+// fraction: worker-b never asks for a slice, so it holds none to give back.
+func TestLimiterRemainingTransferGetsTheWholeBudget(t *testing.T) {
+	const (
+		budget = 256 << 10 // bytes per second
+		phase  = 40 * time.Second
+	)
+	d := dbtest.SQLite(t)
+	ctx := context.Background()
+	clk := newClock()
+	advance := func(_ context.Context, dur time.Duration) error { clk.Add(dur); return nil }
+	budgets := jobs.StaticBudget(map[string]int64{"pull": budget})
+	a := jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "worker-a", Budget: budgets, Now: clk.Now, Sleep: advance})
+	b := jobs.NewLimiter(d, jobs.LimiterOptions{Owner: "worker-b", Budget: budgets, Now: clk.Now, Sleep: advance})
+	t.Cleanup(func() { _ = a.Close(ctx); _ = b.Close(ctx) })
+	// transfer asks for each of the reads in turn until phase has passed,
+	// and returns the bytes per second it was granted.
+	transfer := func(reads ...int64) float64 {
+		start := clk.Now()
+		var moved int64
+		for clk.Now().Sub(start) < phase {
+			for _, n := range reads {
+				require.NoError(t, a.WaitN(ctx, "pull", n))
+				moved += n
+			}
+		}
+		return float64(moved) / clk.Now().Sub(start).Seconds()
+	}
+
+	// Two transfers on worker-a, one reading 64 KiB at a time and the other
+	// 16 KiB, as on CI.
+	both := transfer(64<<10, 16<<10)
+	require.InEpsilon(t, budget, both, 0.02, "two transfers together get the whole budget")
+	// One ends; the other carries on alone.
+	alone := transfer(16 << 10)
+	require.InEpsilon(t, budget, alone, 0.02, "the remaining transfer gets the whole budget")
+	shareA, _ := a.Share("pull")
+	shareB, _ := b.Share("pull")
+	require.Equal(t, []int64{budget, 0}, []int64{shareA, shareB})
+}
