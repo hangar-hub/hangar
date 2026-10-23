@@ -14,7 +14,7 @@ import { formatBytes, formatDateTime, relativeTime } from "@/lib/format";
 import { errorMessage, unwrap } from "@/lib/problem";
 import { baseName, blobPath, joinPath, type RepoKind, repoPath, treePath } from "@/lib/repo";
 import { LfsBadge, NotPresentBadge, ScanBadge } from "../repos/badges";
-import { type RepoRef, repoKey, repoPathParams, useRepo } from "../repos/hooks";
+import { type RepoRef, repoKey, repoPathParams, useRefs, useRepo } from "../repos/hooks";
 import { UploadPanel } from "../upload/UploadPanel";
 import { Breadcrumbs, RefPicker, ZipButton } from "./common";
 
@@ -25,6 +25,10 @@ function toBase64(text: string): string {
   return btoa(bin);
 }
 
+/**
+ * Creates a text file in the folder being viewed. TreePage keys it by
+ * branch and folder, so the path starts in the folder on screen.
+ */
 function NewFileDialog({ repo, branch, folder }: { repo: Repo; branch: string; folder: string }) {
   const [open, setOpen] = useState(false);
   const [path, setPath] = useState(folder ? `${folder}/` : "");
@@ -171,6 +175,7 @@ export function TreePage({
 }) {
   const ref: RepoRef = { kind, ns, name };
   const repo = useRepo(ref);
+  const refs = useRefs(ref);
   const [uploading, setUploading] = useState(false);
   const dir = path.replace(/\/$/, "");
   const tree = useInfiniteQuery({
@@ -194,7 +199,10 @@ export function TreePage({
   if (!r) return null;
   const entries = tree.data?.pages.flatMap((p) => p.items) ?? [];
   const isFile = entries.length === 1 && entries[0]?.type === "file" && entries[0]?.path === dir;
-  const canWrite = Boolean(r.permissions?.write) && !r.mirror;
+  // Files are only added on a branch: a tag or a Commit SHA names a fixed
+  // Commit, so New file and Upload are not offered there.
+  const isBranch = Boolean(refs.data?.branches.some((b) => b.name === rev));
+  const canWrite = Boolean(r.permissions?.write) && !r.mirror && isBranch;
   const canPull = r.mirror && Boolean(r.permissions?.pull_mirror);
   const commit = tree.data?.pages[0]?.commit;
   const columns: Column<TreeEntry>[] = [
@@ -283,7 +291,7 @@ export function TreePage({
           <ZipButton repo={ref} rev={commit ?? rev} path={dir || undefined} />
           {canWrite ? (
             <>
-              <NewFileDialog repo={r} branch={rev} folder={dir} />
+              <NewFileDialog key={`${rev}:${dir}`} repo={r} branch={rev} folder={dir} />
               <Button
                 size="sm"
                 variant="primary"
@@ -297,7 +305,7 @@ export function TreePage({
           ) : null}
         </div>
       </div>
-      {uploading ? (
+      {uploading && canWrite ? (
         <UploadPanel repo={r} branch={rev} folder={dir} onClose={() => setUploading(false)} />
       ) : null}
       {tree.isPending ? (

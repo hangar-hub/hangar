@@ -242,6 +242,31 @@ test("the main navigation works on every width", async ({ page, isMobile }) => {
   ).toHaveCount(0);
 });
 
+test("each page names the browser tab and gets focus after navigating", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/settings/tokens");
+  await expect(page).toHaveTitle("Tokens · Hangar");
+  await page
+    .getByRole("navigation", { name: "Settings" })
+    .getByRole("link", { name: "Sessions" })
+    .click();
+  await expect(page).toHaveTitle("Sessions · Hangar");
+  // Focus moves from the link to the new page's heading, so screen readers
+  // announce the page and the next Tab starts from its content.
+  await expect(page.getByRole("heading", { level: 1, name: "Sessions" })).toBeFocused();
+  await page.goto("/ada/bert-tiny-finetune");
+  await expect(page).toHaveTitle("ada/bert-tiny-finetune · Hangar");
+  await page.getByRole("navigation", { name: "Repo" }).getByRole("link", { name: "Files" }).click();
+  await expect(page).toHaveTitle("Files · ada/bert-tiny-finetune · Hangar");
+  await expect(page.locator("#page-title")).toBeFocused();
+  // A change to the query string alone, such as the list view, keeps focus.
+  await page.goto("/models");
+  const list = page.getByRole("button", { name: "List", exact: true });
+  await list.click();
+  await expect(page).toHaveURL(/view=list/);
+  await expect(list).toBeFocused();
+});
+
 // Taxiway teal, decided by James on 2026-10-16 (docs/build/decisions.md).
 const accents = {
   light: { accent: "#0b6e64", fill: "#0b7a6e", ink: "#ffffff", soft: "#dff3ef" },

@@ -257,6 +257,43 @@ describe("mock server", () => {
       operations: [{ op: "delete", path: "notes.txt" }],
     });
     expect(stale.status).toBe(412);
+    // The head the editor started from is accepted; once someone else has
+    // committed, the same parent is stale and refused, not overwritten.
+    const repoPath = `${api}/repos/models/ada/bert-tiny-finetune`;
+    const head = (await call("GET", repoPath)).json.sha as string;
+    const edit = (text: string) => ({
+      summary: "Edit notes",
+      parent_commit: head,
+      operations: [
+        { op: "add", path: "notes.txt", content_base64: Buffer.from(text).toString("base64") },
+      ],
+    });
+    expect((await call("POST", `${repoPath}/commits`, edit("first"))).status).toBe(201);
+    expect((await call("POST", `${repoPath}/commits`, edit("second"))).status).toBe(412);
+    const notes = await fetch(`${base}/ada/bert-tiny-finetune/resolve/main/notes.txt`, {
+      headers: { cookie },
+    });
+    expect(await notes.text()).toBe("first");
+  });
+
+  it("only commits to branches, never to tags or Commit SHAs", async () => {
+    const repoPath = `${api}/repos/models/ada/bert-tiny-finetune`;
+    const add = (branch: string) => ({
+      summary: "Add a file",
+      branch,
+      operations: [
+        { op: "add", path: "tagged.txt", content_base64: Buffer.from("x").toString("base64") },
+      ],
+    });
+    const tag = await call("POST", `${repoPath}/commits`, add("v1.0"));
+    expect(tag.status).toBe(400);
+    expect(tag.json.detail).toBe("v1.0 is not a branch. Commit to a branch instead.");
+    const head = (await call("GET", repoPath)).json.sha as string;
+    expect((await call("POST", `${repoPath}/commits`, add(head))).status).toBe(400);
+    expect((await call("POST", `${repoPath}/commits`, add("no-such-branch"))).status).toBe(404);
+    const refs = await call("GET", `${repoPath}/refs`);
+    const branches = refs.json.branches as { name: string }[];
+    expect(branches.map((b) => b.name)).toEqual(["main"]);
   });
 
   it("opens pull requests from Commits and merges them", async () => {

@@ -101,7 +101,7 @@ const models: Upstream[] = [
       arsenal: "full",
       local_sha: "0123456789abcdef0123456789abcdef01234567",
     },
-    card: "# bert-tiny-finetune\n",
+    card: '# bert-tiny-finetune\n\n<picture><source srcset="https://example.com/loss-dark.png"><img src="https://example.com/loss.png" alt="Loss curve"></picture>\n',
     files: [{ path: "model.safetensors", size: 17_557_844, lfs: true }],
   },
 ];

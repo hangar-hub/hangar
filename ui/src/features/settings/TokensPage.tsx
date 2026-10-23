@@ -313,6 +313,7 @@ export function TokensPage() {
         }}
         title="Copy your new Token"
         description="This is the only time Hangar shows it. Store it somewhere safe."
+        persistent
         footer={<Button onClick={() => setCreated(null)}>I've copied it</Button>}
       >
         {created ? (

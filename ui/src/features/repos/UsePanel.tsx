@@ -10,8 +10,12 @@ import { errorStatus } from "@/lib/problem";
 import { snippets } from "@/lib/snippets";
 import { useDatasetConfigs, useDependencies, useQuants } from "./hooks";
 
-/** The **Use this model** panel, with a tab and copy button per client. */
-export function UsePanel({ repo }: { repo: Repo }) {
+/**
+ * The **Use this model** panel, with a tab and copy button per client.
+ * `revision` is the branch, tag or Commit being viewed, when it is not the
+ * default branch, so the snippets fetch what is on screen.
+ */
+export function UsePanel({ repo, revision }: { repo: Repo; revision?: string }) {
   const [open, setOpen] = useState(false);
   const ref = { kind: repo.type, ns: repo.namespace, name: repo.name };
   const isGguf = Boolean(repo.summary?.formats?.includes("gguf"));
@@ -23,6 +27,7 @@ export function UsePanel({ repo }: { repo: Repo }) {
     kind: repo.type,
     id: repo.id,
     origin: window.location.origin,
+    revision,
     library: repo.summary?.library_name,
     formats: repo.summary?.formats,
     quants: quants.data?.items.map((g) => g.name) ?? repo.summary?.quants,
@@ -41,7 +46,11 @@ export function UsePanel({ repo }: { repo: Repo }) {
       onOpenChange={setOpen}
       wide
       title={label}
-      description={`Snippets for ${repo.id} on this Instance.`}
+      description={
+        revision
+          ? `Snippets for ${repo.id} at ${revision} on this Instance.`
+          : `Snippets for ${repo.id} on this Instance.`
+      }
       trigger={
         <Button variant="primary" size="sm">
           <Code2 aria-hidden="true" />

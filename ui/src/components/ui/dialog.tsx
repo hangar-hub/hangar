@@ -20,6 +20,7 @@ export function Dialog({
   trigger,
   initialFocus,
   instant,
+  persistent,
 }: {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -36,6 +37,12 @@ export function Dialog({
    */
   initialFocus?: RefObject<HTMLElement | null>;
   instant?: boolean;
+  /**
+   * For dialogs that show a secret once, such as a new Token: Escape and
+   * clicks outside do not close it, and there is no close button, so it
+   * only closes with the explicit button in its footer.
+   */
+  persistent?: boolean;
 }) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -50,6 +57,8 @@ export function Dialog({
             e.preventDefault();
             initialFocus.current.focus();
           }}
+          onEscapeKeyDown={persistent ? (e) => e.preventDefault() : undefined}
+          onInteractOutside={persistent ? (e) => e.preventDefault() : undefined}
           className={cn(
             "fixed z-50 flex flex-col border border-line bg-surface text-ink shadow-xl focus:outline-none",
             !instant && (side ? `hg-sheet-${side}` : "hg-modal"),
@@ -78,12 +87,14 @@ export function Dialog({
                 <RadixDialog.Description className="sr-only">{title}</RadixDialog.Description>
               )}
             </div>
-            <RadixDialog.Close
-              className="-mr-1 rounded-md p-1 text-muted transition-[color,background-color,scale] duration-150 ease-out hover:bg-raised hover:text-ink active:scale-[0.97]"
-              aria-label="Close"
-            >
-              <X className="size-4" />
-            </RadixDialog.Close>
+            {persistent ? null : (
+              <RadixDialog.Close
+                className="-mr-1 rounded-md p-1 text-muted transition-[color,background-color,scale] duration-150 ease-out hover:bg-raised hover:text-ink active:scale-[0.97]"
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </RadixDialog.Close>
+            )}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
           {footer ? (
