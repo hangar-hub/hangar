@@ -53,6 +53,13 @@ These come from the contract and are repeated here because breaking them breaks 
 
 Count a download when the `X-HF-Download-Counter: 1` header is present and the file is the Repo's counted file ([02](02-architecture.md)).
 
+## Files a Partial mirror does not hold
+
+Info, trees and `HEAD /resolve` list such files as present, with their metadata. An `EntryNotFound` on `HEAD` would make the client cache the file as missing for that Commit, and keep it missing after a Pull.
+
+- With Pull-through on, `GET /resolve` starts the file's Pull and streams it. A ranged `GET` waits for the bytes before the range and answers a real 206.
+- Otherwise `GET /resolve` answers 409 with `X-Error-Code: EntryNotFound` and `X-Repo-Commit`, so `huggingface_hub` raises `RemoteEntryNotFoundError`. The message tells the user to pass `allow_patterns` to `snapshot_download` (`--include` to `hf download`), or to pull the file with `hangar pull`.
+
 ## transformers safetensors auto-conversion
 
 When a model has `.bin` weights and no safetensors weights, `transformers` (`safetensors_conversion.py`) lists the Repo's Commits and discussions, looking for an open pull request titled ``Adding `safetensors` variant of this model``. If it finds none, it posts the Repo ID, the private flag and any token passed explicitly to `https://safetensors-convert.hf.space`. Against Hangar, that would leak private Repo names, and possibly a Hangar token, to a third party.
