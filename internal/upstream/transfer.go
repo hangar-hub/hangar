@@ -260,11 +260,11 @@ func (s *Service) open(ctx context.Context, src fileSource, offset int64) (io.Re
 	}
 	if meta.Size != 0 && meta.Size != src.size {
 		_ = rc.Close()
-		return nil, jobs.Permanent(fmt.Errorf("the upstream file %s is %d bytes, not the %d its LFS pointer names", src.path, meta.Size, src.size))
+		return nil, jobs.Permanent(fmt.Errorf("the file %s on the Upstream is %d bytes, not the %d its LFS pointer names", src.path, meta.Size, src.size))
 	}
 	if model.IsSHA256(meta.ETag) && meta.ETag != src.oid {
 		_ = rc.Close()
-		return nil, jobs.Permanent(fmt.Errorf("the upstream file %s has sha256 %s, not the %s its LFS pointer names", src.path, meta.ETag, src.oid))
+		return nil, jobs.Permanent(fmt.Errorf("the file %s on the Upstream has sha256 %s, not the %s its LFS pointer names", src.path, meta.ETag, src.oid))
 	}
 	return rc, nil
 }

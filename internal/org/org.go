@@ -30,7 +30,7 @@ var (
 	ErrNotFound = errors.New("namespace not found")
 	ErrExists   = errors.New("namespace name is taken")
 	// ErrLastAdmin stops removing or demoting an Organisation's last admin.
-	ErrLastAdmin = errors.New("an organisation needs at least one admin")
+	ErrLastAdmin = errors.New("an Organisation needs at least one admin")
 	ErrInvalid   = errors.New("invalid request")
 )
 

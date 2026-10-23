@@ -180,7 +180,7 @@ func TestApplyErrorMapping(t *testing.T) {
 	check(&repo.PolicyError{Ref: "refs/heads/main", Message: "no"}, outcomeRejected, "refs/heads/main: no")
 	check(errors.Join(errors.New("x"), repo.ErrRefConflict), outcomeConflict, "fetch first")
 	check(repo.ErrReadOnly, outcomeRejected, "read-only")
-	check(repo.ErrLFSObjectMissing, outcomeRejected, "lfs object")
+	check(repo.ErrLFSObjectMissing, outcomeRejected, "LFS object")
 	other := errors.New("disk on fire")
 	require.Equal(t, other, applyError(other))
 	require.Equal(t, "a b c", oneLine("a\nb  \t c\n"))

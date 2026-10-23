@@ -203,7 +203,7 @@ func WriteUnauthorized(w http.ResponseWriter, r *http.Request) {
 		WriteHubError(w, r, &HubError{Status: http.StatusUnauthorized, Message: MsgInvalidCredentials})
 	case telemetry.ProtocolGit, telemetry.ProtocolLFS:
 		w.Header().Set("WWW-Authenticate", `Basic realm="Hangar"`)
-		WriteError(w, r, http.StatusUnauthorized, "", "Authentication failed: the token is invalid, expired or revoked.")
+		WriteError(w, r, http.StatusUnauthorized, "", "Authentication failed: the Token is invalid, expired or revoked.")
 	default:
 		WriteError(w, r, http.StatusUnauthorized, "", "The credentials in the request are invalid, expired or revoked.")
 	}

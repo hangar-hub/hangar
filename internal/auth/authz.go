@@ -98,7 +98,7 @@ func (a *Authorizer) canInstance(p model.Principal) error {
 		return fmt.Errorf("%w: only Instance admins can do this", ErrForbidden)
 	}
 	if p.Token != nil && (!p.Token.Scope.Includes(model.ScopeAdmin) || !p.Token.Restrictions.IsZero()) {
-		return fmt.Errorf("%w: Instance administration needs an unrestricted token with the admin scope", ErrForbidden)
+		return fmt.Errorf("%w: Instance administration needs an unrestricted Token with the admin scope", ErrForbidden)
 	}
 	return nil
 }
@@ -169,7 +169,7 @@ func (a *Authorizer) canRepo(ctx context.Context, p model.Principal, action Acti
 		return fmt.Errorf("%w: repo %s", ErrNotFound, r.ID)
 	}
 	if !p.IsAnonymous() && !p.MaxScope().Includes(requiredScope(action)) {
-		return fmt.Errorf("%w: the token's %s scope does not allow this; it needs %s", ErrForbidden, p.MaxScope(), requiredScope(action))
+		return fmt.Errorf("%w: the Token's %s scope does not allow this; it needs %s", ErrForbidden, p.MaxScope(), requiredScope(action))
 	}
 	switch action {
 	case ActionRead:
@@ -234,10 +234,10 @@ func (a *Authorizer) canNamespace(ctx context.Context, p model.Principal, action
 	}
 	if p.Token != nil {
 		if !p.Token.Scope.Includes(requiredScope(action)) {
-			return fmt.Errorf("%w: the token's %s scope does not allow this; it needs %s", ErrForbidden, p.Token.Scope, requiredScope(action))
+			return fmt.Errorf("%w: the Token's %s scope does not allow this; it needs %s", ErrForbidden, p.Token.Scope, requiredScope(action))
 		}
 		if !p.Token.Restrictions.IsZero() && !containsFold(p.Token.Restrictions.Namespaces, ns.Name) {
-			return fmt.Errorf("%w: the token is restricted to other Namespaces", ErrForbidden)
+			return fmt.Errorf("%w: the Token is restricted to other Namespaces", ErrForbidden)
 		}
 	}
 	nsID := ns.ID

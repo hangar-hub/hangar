@@ -109,7 +109,7 @@ hf_xet caches the shards it uploaded for 21 days, and later uploads from the sam
 `hfapi.xet` config:
 
 - `ingest` (default): everything above.
-- `reject`: the token endpoints return 400 with `X-Error-Message: Xet uploads are turned off on this Hangar. Set HF_HUB_DISABLE_XET=1 to upload.`, and preupload answers `regular` for files up to `hfapi.regular_upload_max`, so small uploads still work with no client setup.
+- `reject`: the token endpoints return 400 with `X-Error-Message: Xet uploads are turned off on this Instance. Set HF_HUB_DISABLE_XET=1 to upload.`, and preupload answers `regular` for files up to `hfapi.regular_upload_max`, so small uploads still work with no client setup.
 
 ### Not supported
 

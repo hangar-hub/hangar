@@ -23,7 +23,7 @@ var (
 	// in only through an OIDC provider, which owns their password.
 	ErrNoLocalPassword = fmt.Errorf("%w: this account signs in with a sign-in provider and has no Hangar password; change your password with your provider", ErrForbidden)
 	// ErrPasswordNeedsSession means a Token tried to change a password.
-	ErrPasswordNeedsSession = fmt.Errorf("%w: change your password in the web UI; a token cannot change it", ErrForbidden)
+	ErrPasswordNeedsSession = fmt.Errorf("%w: change your password in the web UI; a Token cannot change it", ErrForbidden)
 	// ErrWrongPassword means the current password given for a change is
 	// wrong. Handlers answer 403, not 401, so clients do not read it as an
 	// ended session.

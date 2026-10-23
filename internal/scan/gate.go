@@ -66,7 +66,7 @@ func (e *BlockedError) Error() string {
 			"An admin blocks suspicious downloads on this Instance."
 	case BlockNotScanned:
 		return name + " has not been scanned by Hangar's security scan yet, and loading it can run code. " +
-			"An admin blocks unsafe downloads on this Instance, so it downloads once the scan finds it safe."
+			"An admin blocks unsafe downloads on this Instance, so you can download it once the scan finds it safe."
 	default:
 		return name + " is marked unsafe by Hangar's security scan: loading it can run code. " +
 			"An admin blocks unsafe downloads on this Instance."

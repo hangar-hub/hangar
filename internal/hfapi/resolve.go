@@ -238,7 +238,7 @@ func (h *Handler) serveNotPresent(w http.ResponseWriter, r *http.Request, rp *re
 	}
 	httpx.WriteHubError(w, r, &httpx.HubError{
 		Status:  http.StatusConflict,
-		Message: e.Path + " is not in the arsenal: this Repo is a Partial mirror. Pull the file into the arsenal from the Repo page, or with `hangar pull " + rp.ID.String() + " --include '" + e.Path + "'`.",
+		Message: e.Path + " is not in the Arsenal: this Repo is a Partial mirror. Pull the file into the Arsenal from the Repo page, or with `hangar pull " + rp.ID.String() + " --include '" + e.Path + "'`.",
 	})
 }
 

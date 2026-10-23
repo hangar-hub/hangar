@@ -99,10 +99,10 @@ func (d *MetaDeps) metaProblem(w http.ResponseWriter, r *http.Request, err error
 	switch {
 	case errors.Is(err, repo.ErrNotFound), errors.Is(err, auth.ErrNotFound):
 		status = http.StatusNotFound
-		detail = "Repository not found. If it is private, make sure you are signed in and have access to it."
+		detail = "Repo not found. If it is private, make sure you are signed in and have access to it."
 		if httpx.Principal(r.Context()).IsAnonymous() {
 			status = http.StatusUnauthorized
-			detail = "Repository not found. If it is private, sign in to see it."
+			detail = "Repo not found. If it is private, sign in to see it."
 		}
 	case errors.Is(err, repo.ErrRevisionNotFound), errors.Is(err, repo.ErrEntryNotFound), errors.Is(err, community.ErrNotFound),
 		errors.Is(err, collections.ErrNotFound), errors.Is(err, webhook.ErrNotFound), errors.Is(err, org.ErrNotFound),
@@ -110,7 +110,7 @@ func (d *MetaDeps) metaProblem(w http.ResponseWriter, r *http.Request, err error
 		status = http.StatusNotFound
 	case errors.Is(err, repo.ErrNotPresent):
 		status = http.StatusNotFound
-		detail = "This file is not in the arsenal yet. Pull it from the Upstream to read it."
+		detail = "This file is not in the Arsenal yet. Pull it from the Upstream to read it."
 	case errors.Is(err, auth.ErrGated):
 		status = http.StatusForbidden
 		detail = "This Repo is gated. Request access to read its files."

@@ -379,7 +379,7 @@ func (h *Jobs) GetJob(w http.ResponseWriter, r *http.Request, id gen.ID) {
 
 func jobsCanWrite(w http.ResponseWriter, r *http.Request, p model.Principal) bool {
 	if !p.MaxScope().Includes(model.ScopeWrite) {
-		platformProblem(w, r, http.StatusForbidden, "This token's scope does not allow changing Jobs. Use a token with write scope.")
+		platformProblem(w, r, http.StatusForbidden, "This Token's scope does not allow changing Jobs. Use a Token with write scope.")
 		return false
 	}
 	return true

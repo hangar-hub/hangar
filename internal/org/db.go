@@ -18,7 +18,7 @@ import (
 
 // ErrNotEmpty stops deleting an Organisation that still owns Repos,
 // including soft-deleted Repos that have not been purged yet.
-var ErrNotEmpty = errors.New("organisation still owns repos; delete or transfer them, and wait for deleted repos to be purged")
+var ErrNotEmpty = errors.New("the Organisation still owns Repos; delete or transfer them, and wait for deleted Repos to be purged")
 
 // DBService is the database implementation of Service. It owns the
 // namespaces, memberships and collaborators tables. It reads the users
@@ -128,7 +128,7 @@ func (o *DBService) CreateOrg(ctx context.Context, name, displayName string, cre
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if !creator.IsUser() || creator.UserID == uuid.Nil {
-		return nil, fmt.Errorf("%w: sign in to create an organisation", ErrInvalid)
+		return nil, fmt.Errorf("%w: sign in to create an Organisation", ErrInvalid)
 	}
 	var created *db.Namespace
 	err := o.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
@@ -183,7 +183,7 @@ func (o *DBService) EnsureMirrorNamespace(ctx context.Context, name string) (*Na
 	}
 	check := func(ns *Namespace) (*Namespace, error) {
 		if !ns.ReservedMirror {
-			return nil, fmt.Errorf("%w: %s is a local namespace; set a namespace_prefix for this Upstream", ErrExists, name)
+			return nil, fmt.Errorf("%w: %s is a local Namespace; set a namespace_prefix for this Upstream", ErrExists, name)
 		}
 		return ns, nil
 	}
@@ -213,7 +213,7 @@ func (o *DBService) getOrg(ctx context.Context, idb bun.IDB, name string) (*Name
 		return nil, err
 	}
 	if ns.Kind != KindOrg {
-		return nil, fmt.Errorf("%w: %s is not an organisation", ErrNotFound, name)
+		return nil, fmt.Errorf("%w: %s is not an Organisation", ErrNotFound, name)
 	}
 	return ns, nil
 }
@@ -235,7 +235,7 @@ func (o *DBService) UpdateOrg(ctx context.Context, name string, u OrgUpdate, act
 	}
 	if u.Description != nil {
 		if len(*u.Description) > 2000 {
-			return nil, fmt.Errorf("%w: the description can be at most 2000 characters", ErrInvalid)
+			return nil, fmt.Errorf("%w: the description can be at most 2,000 characters", ErrInvalid)
 		}
 		q = q.Set("description = ?", *u.Description)
 		changed["description"] = true

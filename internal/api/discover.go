@@ -73,10 +73,10 @@ func (h *Upstreams) upFail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, upstream.ErrUpstreamDisabled):
 		upProblem(w, r, http.StatusConflict, "That Upstream is disabled.")
 	case errors.Is(err, upstream.ErrInvalidSelection), errors.Is(err, upstream.ErrUpstreamInvalid):
-		upProblem(w, r, http.StatusBadRequest, err.Error())
+		upProblem(w, r, http.StatusBadRequest, idSentence(err))
 	case errors.Is(err, upstream.ErrConflict), errors.Is(err, upstream.ErrUpstreamExists), errors.Is(err, upstream.ErrUpstreamConfigured),
 		errors.Is(err, upstream.ErrUpstreamInUse):
-		upProblem(w, r, http.StatusConflict, err.Error())
+		upProblem(w, r, http.StatusConflict, idSentence(err))
 	case errors.Is(err, upstream.ErrOverrideNotAllowed):
 		upProblem(w, r, http.StatusForbidden, "Pulling outside the pull windows is turned off on this Instance.")
 	case errors.Is(err, upstream.ErrNotMirror):
@@ -84,11 +84,11 @@ func (h *Upstreams) upFail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, auth.ErrNotFound), errors.Is(err, repo.ErrNotFound):
 		upProblem(w, r, http.StatusNotFound, "Repo not found.")
 	case errors.Is(err, auth.ErrForbidden):
-		upProblem(w, r, http.StatusForbidden, err.Error())
+		upProblem(w, r, http.StatusForbidden, idSentence(err))
 	case errors.Is(err, upstream.ErrGated):
-		upProblem(w, r, http.StatusForbidden, "The upstream Repo is gated. Request access on the Upstream, then save your token for it in Settings > Upstream tokens.")
+		upProblem(w, r, http.StatusForbidden, "The upstream Repo is gated. Request access on the Upstream, then save your token for it under Settings, Upstream tokens.")
 	case errors.Is(err, upstream.ErrUnauthorized):
-		upProblem(w, r, http.StatusForbidden, "The Upstream rejected the credentials. Check your token for it in Settings > Upstream tokens.")
+		upProblem(w, r, http.StatusForbidden, "The Upstream rejected the credentials. Check your token for it under Settings, Upstream tokens.")
 	case errors.Is(err, upstream.ErrNotFound):
 		upProblem(w, r, http.StatusNotFound, "Not found on the Upstream, or the Upstream does not show it to your credentials.")
 	case errors.Is(err, upstream.ErrUnavailable):
@@ -104,7 +104,7 @@ func (h *Upstreams) upFail(w http.ResponseWriter, r *http.Request, err error) {
 func upSignedIn(w http.ResponseWriter, r *http.Request) (model.Principal, bool) {
 	p := httpx.Principal(r.Context())
 	if p.IsAnonymous() {
-		upProblem(w, r, http.StatusUnauthorized, "Sign in to search Upstreams and pull into the arsenal.")
+		upProblem(w, r, http.StatusUnauthorized, "Sign in to search Upstreams and pull into the Arsenal.")
 		return p, false
 	}
 	return p, true
@@ -297,7 +297,7 @@ func (h *Upstreams) GetDiscoverDetail(w http.ResponseWriter, r *http.Request, pT
 	}
 	id := model.RepoID{Type: t, Namespace: ns, Name: name}
 	if err := id.Validate(); err != nil {
-		upProblem(w, r, http.StatusBadRequest, err.Error())
+		upProblem(w, r, http.StatusBadRequest, idSentence(err))
 		return
 	}
 	up, rev := "", ""

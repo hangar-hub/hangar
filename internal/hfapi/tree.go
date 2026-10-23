@@ -96,7 +96,7 @@ func (h *Handler) pathsInfo(w http.ResponseWriter, r *http.Request, ref repoRef,
 		return
 	}
 	if len(paths) > maxPathsInfo {
-		h.writeBadRequest(w, r, "Send at most 1000 paths per request.")
+		h.writeBadRequest(w, r, "Send at most 1,000 paths per request.")
 		return
 	}
 	clean := make([]string, 0, len(paths))

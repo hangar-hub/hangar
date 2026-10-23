@@ -46,7 +46,7 @@ func (p LFSPointer) PointerSize() int { return len(p.Bytes()) }
 // Validate checks the OID format and size.
 func (p LFSPointer) Validate() error {
 	if !IsSHA256(p.OID) {
-		return fmt.Errorf("%w: oid %q is not a lower-case sha256", ErrNotLFSPointer, p.OID)
+		return fmt.Errorf("%w: oid %q is not a lowercase sha256", ErrNotLFSPointer, p.OID)
 	}
 	if p.Size < 0 {
 		return fmt.Errorf("%w: negative size", ErrNotLFSPointer)
@@ -93,7 +93,7 @@ func ParseLFSPointer(data []byte) (LFSPointer, error) {
 		case "oid":
 			hex, ok := strings.CutPrefix(value, "sha256:")
 			if !ok || !IsSHA256(hex) {
-				return LFSPointer{}, fmt.Errorf("%w: oid must be sha256:<64 lower-case hex>", ErrNotLFSPointer)
+				return LFSPointer{}, fmt.Errorf("%w: oid must be sha256:<64 lowercase hex>", ErrNotLFSPointer)
 			}
 			p.OID, haveOID = hex, true
 		case "size":

@@ -150,7 +150,7 @@ func (c *Collector) Run(ctx context.Context, scope string, p jobs.Progress) (Rep
 		run   func(context.Context, *Report) error
 	}{
 		{"Deleting unreferenced LFS objects", ScopeLFS, c.collectLFSObjects},
-		{"Deleting orphaned LFS blobs", ScopeLFS, c.collectOrphanLFSBlobs},
+		{"Deleting orphaned LFS objects", ScopeLFS, c.collectOrphanLFSBlobs},
 		{"Deleting retired git packs", ScopeGit, c.collectPacks},
 		{"Deleting orphaned git data", ScopeGit, c.collectOrphanGitBlobs},
 		{"Deleting stale staging data", ScopeAll, c.collectStaging},

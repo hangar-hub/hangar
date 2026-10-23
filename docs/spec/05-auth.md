@@ -75,13 +75,13 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 
 ## Ollama keys
 
-Ollama signs registry requests with the user's Ollama key pair (`~/.ollama/id_ed25519`). Users paste their public key in **Settings > Ollama keys**, as on the Hub. The Ollama auth flow is specified in [08](08-local-tools.md).
+Ollama signs registry requests with the user's Ollama key pair (`~/.ollama/id_ed25519`). Users paste their public key in **Settings**, **Ollama keys**, as on the Hub. The Ollama auth flow is specified in [08](08-local-tools.md).
 
 A key is a credential like a Token, so it can never give more than the credential that registered it. A key added in a UI session reads what the user can read. A key added with a Token (`hangar ollama key register` uses the CLI's Token) is bound to that Token: registry tokens for it get the Token's scope and restrictions, end no later than the Token expires, and are refused once the Token is revoked or has expired. Such a key is no longer listed and can be registered again. Keys added before this rule have no Token and keep the user's read access.
 
 ## Upstream tokens
 
-Users can store a token per Upstream (for example their huggingface.co token) in **Settings > Upstream tokens**. Pulls they start use it, which makes gated and private upstream Repos work. Stored with AES-256-GCM under `security.instance_key`; never returned by any API after it is saved.
+Users can store a token per Upstream (for example their huggingface.co token) in **Settings**, **Upstream tokens**. Pulls they start use it, which makes gated and private upstream Repos work. Stored with AES-256-GCM under `security.instance_key`; never returned by any API after it is saved.
 
 ## Secrets at rest
 

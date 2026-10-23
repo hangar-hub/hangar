@@ -505,7 +505,7 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 	require.Equal(t, "64", r.Header.Get("Content-Length"))
 	r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "")
 	require.Equal(t, http.StatusConflict, r.StatusCode)
-	require.Contains(t, r.Header.Get("X-Error-Message"), "not in the arsenal")
+	require.Contains(t, r.Header.Get("X-Error-Message"), "not in the Arsenal")
 
 	// A policy refusal, such as the Namespace's storage quota, is a 403
 	// with the message.
