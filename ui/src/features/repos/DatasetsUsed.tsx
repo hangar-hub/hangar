@@ -175,7 +175,7 @@ export function DatasetsUsed({ repo }: { repo: Repo }) {
       )}
       <Field
         label="Find a dataset"
-        hint="Search the arsenal by name, or type the ID of a dataset on an Upstream, such as imdb."
+        hint="Search the Arsenal by name, or type the ID of a dataset on an Upstream, such as imdb."
       >
         {(p) => (
           <Input
@@ -209,7 +209,7 @@ export function DatasetsUsed({ repo }: { repo: Repo }) {
       ) : null}
       <p role="status" className="text-sm text-muted empty:hidden">
         {query && !matches.isFetching && !found.length && !canAddTyped
-          ? `No datasets in the arsenal match ${query}.`
+          ? `No datasets in the Arsenal match ${query}.`
           : ""}
       </p>
       <InlineError error={save.error} />

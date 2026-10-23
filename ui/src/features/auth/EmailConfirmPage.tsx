@@ -38,7 +38,7 @@ export function EmailConfirmPage({ code }: { code: string }) {
             Email confirmed. It is now the email of your Hangar account.
           </p>
           <AppLink href="/settings/profile" className="hg-link text-sm">
-            Go to your profile
+            Go to your profile settings
           </AppLink>
         </div>
       ) : (

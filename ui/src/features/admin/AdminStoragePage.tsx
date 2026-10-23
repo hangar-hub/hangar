@@ -160,11 +160,11 @@ export function AdminStoragePage() {
           trigger={
             <Button>
               <Trash aria-hidden="true" />
-              Run GC
+              Run garbage collection
             </Button>
           }
           title="Run garbage collection now?"
-          actionLabel="Run GC"
+          actionLabel="Run garbage collection"
           onConfirm={async () => {
             unwrap(await api.POST("/admin/gc"));
             toast("Garbage collection started. Follow it on the Jobs page.");
@@ -172,8 +172,8 @@ export function AdminStoragePage() {
           }}
         >
           <p>
-            GC deletes LFS objects and git data that no Repo or upload has referenced for the grace
-            period. It runs on a schedule as well.
+            Garbage collection deletes LFS objects and git data that no Repo or upload has
+            referenced for the grace period. It runs on a schedule as well.
           </p>
         </ConfirmDialog>
       }

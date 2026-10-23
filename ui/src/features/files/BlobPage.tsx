@@ -50,7 +50,7 @@ function toBase64(text: string): string {
 const scanExplanations: Record<ScanStatus, string> = {
   safe: "The pickle scan found only imports that rebuild tensors and containers.",
   suspicious:
-    "The pickle scan found imports that are not on the allowlist. Loading this file with pickle could run them. Check the source before you load it, or prefer a safetensors copy.",
+    "The pickle scan found imports that are not on the allowlist. Loading this file with pickle could run them. Check where the file came from before you load it, or prefer a safetensors copy.",
   unsafe:
     "The pickle scan found imports that can run code or touch the system, such as os or subprocess. Do not load this file with pickle or torch.load unless you trust where it came from.",
   error: "The pickle scan could not read this file.",
@@ -453,7 +453,7 @@ export function BlobPage({
         <ScanPanel status={e.scan_status} repo={ref} rev={commit} path={path} />
       ) : null}
       {!e.present ? (
-        <EmptyState size="sm" title="This file is not in the arsenal">
+        <EmptyState size="sm" title="This file is not in the Arsenal">
           This Mirror holds the file's history but not its content yet. Pull it from the Files tab
           to read it here.
         </EmptyState>

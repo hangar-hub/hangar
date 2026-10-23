@@ -221,7 +221,7 @@ export function TokensPage() {
       cell: (t) => (
         <span className="flex flex-wrap items-center gap-1.5">
           <span className="font-medium wrap-anywhere">{t.name}</span>
-          <span className="font-mono text-xs text-muted">{t.prefix}...</span>
+          <span className="font-mono text-xs text-muted">{t.prefix}…</span>
         </span>
       ),
     },
@@ -331,7 +331,7 @@ export function TokensPage() {
             >
               <pre className="px-3 py-2 font-mono text-xs">
                 export HF_ENDPOINT={window.location.origin}
-                {"\n"}hf auth login --token {created.prefix}...
+                {"\n"}hf auth login --token {created.secret}
               </pre>
             </ScrollRegion>
           </div>

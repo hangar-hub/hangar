@@ -60,7 +60,7 @@ function Preparing({ split }: { split?: DatasetSplit }) {
       className="space-y-2 rounded-lg border border-info/30 bg-info-soft px-4 py-4"
     >
       <p className="font-medium">
-        Preparing preview. Hangar is converting this dataset to Parquet.
+        Preparing preview. Hangar is building this dataset's Parquet export.
       </p>
       {p && p.bytes_total > 0 ? (
         <>
@@ -72,8 +72,8 @@ function Preparing({ split }: { split?: DatasetSplit }) {
         </>
       ) : (
         <p className="text-sm text-muted">
-          The preview appears here when the export finishes. You can load the dataset with the
-          datasets library already.
+          The preview appears here when the export finishes. You can already load the dataset with
+          the datasets library.
         </p>
       )}
     </div>
@@ -416,10 +416,11 @@ export function ViewerPage({
         }
       >
         <p>
-          The Viewer previews rows from data files that the datasets library reads, such as Parquet,
-          CSV, JSON Lines, text and Arrow files, WebDataset archives, and folders of images or
-          audio. This dataset has none it can read, which is normal for a dataset that holds other
-          files. Download them from the Files tab, or with the snippets under Use this dataset.
+          The Dataset Viewer previews rows from data files that the datasets library reads, such as
+          Parquet, CSV, JSON Lines, text and Arrow files, WebDataset archives, and folders of images
+          or audio. This dataset has none it can read, which is normal for a dataset that holds
+          other files. Download them from the Files tab, or with the snippets under Use this
+          dataset.
         </p>
         <p className="mt-2 text-xs">{errorMessage(configs.error)}</p>
       </EmptyState>
@@ -591,7 +592,7 @@ export function ViewerPage({
                   Rows where <code className="font-mono text-ink">{search.where}</code>
                 </>
               )}
-              {rows.data?.partial ? ". The scan stopped early, so there could be more." : ""}
+              {rows.data?.partial ? ". The search stopped early, so there could be more." : ""}
             </p>
           ) : null}
           {rows.isPending ? (
