@@ -423,6 +423,9 @@ func (d *DB) Schema(ctx context.Context) (SchemaStatus, error) {
 	}
 	ms, err := mg.MigrationsWithStatus(ctx)
 	if err != nil {
+		if !isUndefinedTable(err) {
+			return SchemaStatus{}, fmt.Errorf("read applied migrations: %w", err)
+		}
 		// The migrations table does not exist yet.
 		all := known.Sorted()
 		st := SchemaStatus{}
@@ -485,6 +488,22 @@ func IsForeignKeyViolation(err error) bool {
 	var sqlErr *sqlite.Error
 	if errors.As(err, &sqlErr) {
 		return sqlErr.Code() == sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY
+	}
+	return false
+}
+
+// isUndefinedTable reports whether err says a table does not exist:
+// SQLSTATE 42P01 on Postgres, "no such table" on SQLite. Schema reads only
+// that error as "not migrated yet", so a permission or network error is
+// reported as it is.
+func isUndefinedTable(err error) bool {
+	var pgErr pgdriver.Error
+	if errors.As(err, &pgErr) {
+		return pgErr.Field('C') == "42P01"
+	}
+	var sqlErr *sqlite.Error
+	if errors.As(err, &sqlErr) {
+		return strings.Contains(sqlErr.Error(), "no such table")
 	}
 	return false
 }
