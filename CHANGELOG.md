@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.3.0](https://github.com/hangar-hub/hangar/compare/v1.2.3...v1.3.0) (2026-10-23)
+
+
+### Bug fixes
+
+* bind OIDC to the browser and harden sign-in, Ollama keys, webhooks and dataset conversion ([#40](https://github.com/hangar-hub/hangar/issues/40)) ([7c62055](https://github.com/hangar-hub/hangar/commit/7c6205544ba3f0d5cb6083652ab2c18f13367679))
+* cut stalled transfers and idle connections, stream JSON datasets and list non-ASCII trees ([#42](https://github.com/hangar-hub/hangar/issues/42)) ([c37484d](https://github.com/hangar-hub/hangar/commit/c37484d18b135cd5254f3ce1e3dab41f3828bb09))
+* **import:** upload duplicate files once, fill Mirrors at the matched Commit and match the cache by content ([#41](https://github.com/hangar-hub/hangar/issues/41)) ([65196cd](https://github.com/hangar-hub/hangar/commit/65196cdd4ad0decbeb563da8ac040eb3614a93ac)), closes [#29](https://github.com/hangar-hub/hangar/issues/29)
+* **server:** name the Blob store wait on /readyz from the first answer ([#49](https://github.com/hangar-hub/hangar/issues/49)) ([24dbd81](https://github.com/hangar-hub/hangar/commit/24dbd81ac58a5de612e642f213332b3d2dc30332))
+* stop retried writes and garbage collection losing packs and LFS objects ([#39](https://github.com/hangar-hub/hangar/issues/39)) ([3b11b84](https://github.com/hangar-hub/hangar/commit/3b11b8468e1c4013721d4688a3b319cf230591d6))
+* **ui:** stop editors overwriting Commits, enforce the external images setting and fix accessibility gaps ([#43](https://github.com/hangar-hub/hangar/issues/43)) ([03e65ca](https://github.com/hangar-hub/hangar/commit/03e65caf18e6078c86e6fee4b0bf5b288ad16979))
+
+
+### Performance
+
+* list Repos with a fixed number of queries, measured at 100,000 Repos ([#46](https://github.com/hangar-hub/hangar/issues/46)) ([f0f1051](https://github.com/hangar-hub/hangar/commit/f0f105136eac5316a90e9ae676cbc8d20675ed2a))
+
+
+### Documentation
+
+* one positioning sentence, new evaluator pages and corrected statements for launch ([#44](https://github.com/hangar-hub/hangar/issues/44)) ([0c7165a](https://github.com/hangar-hub/hangar/commit/0c7165a9b194ce8b621e13f4b7970b300ae99146))
+* rework the README, add support files, and publish install notes and Helm metadata ([#45](https://github.com/hangar-hub/hangar/issues/45)) ([9ef06a4](https://github.com/hangar-hub/hangar/commit/9ef06a4d5baee02e66da088503ee5e1cb9f105a9))
+
+
+### Dependencies
+
+* bump certifi from 2026.7.22 to 2026.10.19 in /compat ([#36](https://github.com/hangar-hub/hangar/issues/36)) ([4b142d3](https://github.com/hangar-hub/hangar/commit/4b142d3774a0cc2f167da8de0ff8f5c5540f2084))
+
 ## [1.2.3](https://github.com/hangar-hub/hangar/compare/v1.2.2...v1.2.3) (2026-10-21)
 
 
