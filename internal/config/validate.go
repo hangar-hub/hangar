@@ -225,6 +225,9 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	if c.Pull.Concurrency < 1 {
 		e.addf("pull.concurrency must be at least 1")
 	}
+	if c.Pull.StallTimeout < 10*time.Second {
+		e.addf("pull.stall_timeout must be at least 10s")
+	}
 	for _, w := range c.Pull.Windows {
 		if !windowRe.MatchString(w) {
 			e.addf("pull.windows: %q must have the form HH:MM-HH:MM", w)

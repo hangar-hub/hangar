@@ -148,7 +148,7 @@ Every `/locks*` endpoint returns `404` with `{"message": "Locking is not support
 
 ### Auth
 
-HTTP Basic: any username, token as password, the same as git. Unauthenticated batch requests for public Repos are allowed for downloads only.
+HTTP Basic: any username, token as password, the same as git. Unauthenticated batch requests for public Repos are allowed for downloads only. Uploads need `write`, or the right to open a pull request on the Repo: `huggingface_hub` uploads LFS files for `create_pr=True` through the batch API when Xet is off, and the batch request does not say that the bytes are for a pull request. Such a user can only use the objects in a Commit they may make, which is one that opens or updates a pull request, and pushing still needs `write`.
 
 ## Compaction and garbage collection
 

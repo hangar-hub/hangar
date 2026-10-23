@@ -113,6 +113,7 @@ Pull scheduling and network controls.
 | `pull.bandwidth_limit`<br>`HANGAR_PULL_BANDWIDTH_LIMIT` | size | `0` | Bytes per second across the Instance. 0 means unlimited. |
 | `pull.concurrency`<br>`HANGAR_PULL_CONCURRENCY` | int | `4` | Files transferred at once across the Instance. |
 | `pull.windows`<br>`HANGAR_PULL_WINDOWS` | list of strings | `[]` | Times when Pull transfers may run, such as 01:00-07:00, in server.timezone. Empty means any time. |
+| `pull.stall_timeout`<br>`HANGAR_PULL_STALL_TIMEOUT` | duration | `2m` | How long an Upstream may take to answer a request, or go without sending data during a download, before Hangar cuts the connection and retries. Raise it on slow or congested links. |
 | `pull.pull_through.enabled`<br>`HANGAR_PULL_PULL_THROUGH_ENABLED` | bool | `false` | Turn on Pull-through. |
 | `pull.pull_through.allow`<br>`HANGAR_PULL_PULL_THROUGH_ALLOW` | list of strings | `[*]` | Globs of upstream Repo IDs that may be pulled through. |
 | `pull.pull_through.min_role`<br>`HANGAR_PULL_PULL_THROUGH_MIN_ROLE` | string | `user` | Who may trigger Pull-through: anonymous or user (any signed-in user). |

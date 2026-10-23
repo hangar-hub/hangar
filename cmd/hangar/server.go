@@ -110,10 +110,14 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	var current atomic.Pointer[http.Handler]
 	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
 	current.Store(&starting)
+	// No ReadTimeout or WriteTimeout: uploads, downloads and git have no
+	// total timeout, only the idle timeout (02-architecture.md, "Errors
+	// and limits").
 	srv := &http.Server{
-		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { (*current.Load()).ServeHTTP(w, r) }),
+		Handler: httpx.IdleTimeout(streamIdleTimeout)(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { (*current.Load()).ServeHTTP(w, r) })),
 		ReadHeaderTimeout: 30 * time.Second,
-		IdleTimeout:       5 * time.Minute,
+		IdleTimeout:       streamIdleTimeout,
 	}
 	ln, err := net.Listen("tcp", cfg.Server.Listen)
 	if err != nil {
@@ -247,6 +251,10 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 		}
 	}
 }
+
+// streamIdleTimeout is how long a request may go without sending or
+// reading data, and how long a keep-alive connection may sit idle.
+const streamIdleTimeout = 5 * time.Minute
 
 // Bounds of the retry interval in openBlobStoreWaiting.
 const (

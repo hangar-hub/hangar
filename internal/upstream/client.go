@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -41,6 +42,12 @@ type HTTPOptions struct {
 	// RequestTimeout bounds metadata requests (not downloads or fetches).
 	// Zero means 60 seconds.
 	RequestTimeout time.Duration
+	// StallTimeout bounds the wait for response headers and, during a
+	// download, for each read of the body, so a connection that stays open
+	// but stops sending fails with ErrUnavailable and the transfer is
+	// retried. Zero means DefaultStallTimeout. The wait for headers applies
+	// only to the default Transport.
+	StallTimeout time.Duration
 	// MaxJSONBytes bounds JSON responses. Zero means 64 MiB.
 	MaxJSONBytes int64
 	// Sleep waits for d or until ctx ends. Nil means a timer.
@@ -71,8 +78,11 @@ func NewHTTPClient(opts HTTPOptions) *HTTPClient {
 	if opts.Version == "" {
 		opts.Version = "dev"
 	}
+	if opts.StallTimeout <= 0 {
+		opts.StallTimeout = DefaultStallTimeout
+	}
 	if opts.Transport == nil {
-		opts.Transport = newGuardedTransport()
+		opts.Transport = newGuardedTransport(opts.StallTimeout)
 	}
 	if opts.MaxAttempts <= 0 {
 		opts.MaxAttempts = 4
@@ -657,10 +667,15 @@ func (c *HTTPClient) Download(ctx context.Context, u Upstream, cred Credentials,
 		}
 		h.Set("Range", "bytes="+strconv.FormatInt(rng.Start, 10)+"-"+end)
 	}
-	resp, err := c.do(ctx, request{method: http.MethodGet, url: target, route: "/{repo}/resolve/{rev}/{path}", header: h, cred: cred, upName: u.Name, stream: true})
+	// The stall watch cancels this context to cut a body that stops
+	// sending; closing the body releases it.
+	ctx, cancel := context.WithCancel(ctx)
+	resp, err := c.do(ctx, request{method: http.MethodGet, url: target, route: "/{repo}/resolve/{rev}/{path}", header: h, cred: cred, upName: u.Name, stream: true}) //nolint:bodyclose // closed through stallBody
 	if err != nil {
+		cancel()
 		return nil, FileMeta{}, err
 	}
+	body := newStallBody(resp.Body, c.opts.StallTimeout, cancel)
 	// Read the Hub's headers from the first response (the redirect), not
 	// from the CDN's final answer, whose ETag is its own.
 	var chain []http.Header
@@ -693,11 +708,55 @@ func (c *HTTPClient) Download(ctx context.Context, u Upstream, cred Credentials,
 		meta.Size = totalSize(resp)
 	}
 	if rng != nil && rng.Start > 0 && resp.StatusCode != http.StatusPartialContent {
-		_ = resp.Body.Close()
+		_ = body.Close()
 		return nil, FileMeta{}, fmt.Errorf("%w: upstream ignored the Range request", ErrUnavailable)
 	}
 	meta.LFS = model.IsSHA256(meta.ETag)
-	return &redactingBody{rc: resp.Body}, meta, nil
+	return &redactingBody{rc: body}, meta, nil
+}
+
+// DefaultStallTimeout is how long an Upstream may keep a download waiting
+// for headers or for more of the body before Hangar cuts it.
+const DefaultStallTimeout = 2 * time.Minute
+
+// stallBody cuts a response body that sends nothing for timeout while it
+// is being read. Time between reads does not count, so a slow reader
+// (the bandwidth limit, a slow store) is never taken for a stall.
+type stallBody struct {
+	rc      io.ReadCloser
+	timeout time.Duration
+	cancel  context.CancelFunc
+	timer   *time.Timer
+	stalled atomic.Bool
+}
+
+func newStallBody(rc io.ReadCloser, timeout time.Duration, cancel context.CancelFunc) *stallBody {
+	b := &stallBody{rc: rc, timeout: timeout, cancel: cancel}
+	b.timer = time.AfterFunc(timeout, func() {
+		b.stalled.Store(true)
+		cancel()
+	})
+	b.timer.Stop()
+	return b
+}
+
+func (b *stallBody) Read(p []byte) (int, error) {
+	b.timer.Reset(b.timeout)
+	n, err := b.rc.Read(p)
+	b.timer.Stop()
+	if err != nil && !errors.Is(err, io.EOF) && b.stalled.Load() {
+		// Not wrapped: the cause is a cancelled context, which callers
+		// would take for their own cancellation instead of a retry.
+		err = fmt.Errorf("the upstream sent no data for %s", b.timeout)
+	}
+	return n, err
+}
+
+func (b *stallBody) Close() error {
+	b.timer.Stop()
+	err := b.rc.Close()
+	b.cancel()
+	return err
 }
 
 // normaliseETag strips the weak prefix and quotes, as huggingface_hub does.

@@ -263,6 +263,18 @@ func (s *Server) batch(w http.ResponseWriter, r *http.Request, rp repoPath) {
 		action = auth.ActionWrite
 	}
 	rec, err := s.lookup(r.Context(), rp.ID, action)
+	var ae *accessError
+	if req.Operation == "upload" && errors.As(err, &ae) && ae.status == http.StatusForbidden {
+		// A user who may open a pull request but not write may upload too,
+		// as for preupload, commit and xet-write-token with create_pr=1:
+		// the batch does not say whether the bytes are for a pull request.
+		// The objects are only usable in a Commit the user may make, which
+		// for them is one on a pull request, and who may reference them is
+		// checked at Commit (04-git.md "Who may reference an LFS object").
+		if discuss, derr := s.lookup(r.Context(), rp.ID, auth.ActionDiscuss); derr == nil {
+			rec, err = discuss, nil
+		}
+	}
 	if err != nil {
 		s.lfsFailure(w, r, err)
 		return

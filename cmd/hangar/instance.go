@@ -228,7 +228,7 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	}
 
 	// Upstreams and Pulls (W6).
-	in.client = upstream.NewHTTPClient(upstream.HTTPOptions{Version: version, Tracer: tel.Tracer()})
+	in.client = upstream.NewHTTPClient(upstream.HTTPOptions{Version: version, Tracer: tel.Tracer(), StallTimeout: cfg.Pull.StallTimeout})
 	in.pulls, err = upstream.New(upstream.Options{
 		DB: d, Registry: in.registry, Client: in.client, Repos: in.repos, LFS: in.lfs, Orgs: in.orgs, Queue: in.queue,
 		Limiter: in.limiter, Authz: in.auth.Authz(), Layout: in.layout, Webhooks: in.webhooks, Audit: in.audit,
