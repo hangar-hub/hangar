@@ -110,7 +110,7 @@ Elastic License 2.0, matching Crockery. The README says what it means in plain w
 | `fuzz.yml` | nightly | 10 minutes per fuzz target. |
 | `codeql.yml` | PRs, weekly | CodeQL for Go and TypeScript. |
 | `release-please.yml` | `main` | Release PRs and changelog from Conventional Commits, as the `hangar-hub-release` GitHub App, so its pull requests run CI and its release tags start `release.yml`. |
-| `release.yml` | tags `v*` (from release-please or pushed by hand) | GoReleaser, multi-arch image build and push, cosign signing, SBOM and provenance, Helm chart package and push, docs publish, moving the `demo` branch to the tag for the demo, Trivy scan of the image (fails on critical CVEs with fixes available). |
+| `release.yml` | tags `v*` (from release-please or pushed by hand) | GoReleaser (an exact version, the same as `ci.yml`), multi-arch image build and push by digest, Trivy scan of that digest (fails on critical CVEs with fixes available), then cosign signing, SBOM and provenance and the image tags, then Helm chart package and push, docs publish and moving the `demo` branch to the tag for the demo. Nothing after the scan runs if it fails. |
 | `docs.yml` | `main` | Publish `dev` docs to `gh-pages`, which the docs Worker serves. |
 
 ## Release v1.0.0 checklist
