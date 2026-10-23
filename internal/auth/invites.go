@@ -282,7 +282,7 @@ func (s *Service) ResetPassword(ctx context.Context, code, password, ip, userAge
 	s.record(ctx, audit.Event{Action: audit.UserPasswordReset, Actor: u.Principal(model.AuthPassword), TargetType: "user",
 		TargetID: u.Username, IP: ip, UserAgent: userAgent, Data: map[string]any{"step": "completed"}})
 	// Clear the throttle so the user can sign in at once.
-	if _, err := s.db.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", throttleKeys(u.Username, "")[0]).Exec(ctx); err != nil {
+	if _, err := s.db.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", userThrottleKey(u.Username)).Exec(ctx); err != nil {
 		s.log.WarnContext(ctx, "clear sign-in throttle", "error", err)
 	}
 	return s.Users.Get(ctx, u.ID)

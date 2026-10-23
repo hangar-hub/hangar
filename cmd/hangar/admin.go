@@ -48,7 +48,7 @@ func newAdminCommand() *cobra.Command {
 	addJSONFlag(migrate, &asJSON)
 	migrate.Flags().DurationVar(&waitForDatabase, "wait-for-database", 0,
 		"how long to keep trying to connect while a Postgres database does not answer (0 fails at once)")
-	cmd.AddCommand(migrate, newCreateUserCommand(), newResetPasswordCommand(), newGCCommand(), newReindexCommand())
+	cmd.AddCommand(migrate, newCreateUserCommand(), newResetPasswordCommand(), newUnlockSignInCommand(), newGCCommand(), newReindexCommand())
 	return cmd
 }
 

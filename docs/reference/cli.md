@@ -31,6 +31,7 @@ Subcommands:
 - [`hangar admin reset-password`](#hangar-admin-reset-password): Set a local user's password
 - [`hangar admin restore`](#hangar-admin-restore): Restore a backup made by hangar admin backup
 - [`hangar admin rotate-key`](#hangar-admin-rotate-key): Replace the Instance key and re-encrypt every stored secret
+- [`hangar admin unlock-sign-in`](#hangar-admin-unlock-sign-in): Clear sign-in throttling for a user or an IP address
 
 ## hangar admin backup
 
@@ -340,6 +341,45 @@ Flags:
 | `--json` | print JSON instead of text |  |
 | `--new-key` | the new key, 32 bytes base64-encoded (default: generate one) |  |
 | `--set` | set a configuration key, such as --set database.dsn=... (repeatable) |  |
+
+## hangar admin unlock-sign-in
+
+Clear sign-in throttling for a user or an IP address.
+
+```text
+Clears the sign-in throttle for a username, an IP address (--ip), or every
+username and address (--all), so they can sign in again at once. Use it when
+failed sign-ins, perhaps someone else's, have locked out an account you need,
+such as the bootstrap admin. The password is not changed; to change it, use
+hangar admin reset-password instead.
+```
+
+Usage:
+
+```sh
+hangar admin unlock-sign-in [username] [flags]
+```
+
+Examples:
+
+```sh
+hangar admin unlock-sign-in hangar-admin
+hangar admin unlock-sign-in --ip 192.0.2.10
+hangar admin unlock-sign-in --all
+```
+
+Flags:
+
+| Flag | Description | Default |
+|---|---|---|
+| `--all` | clear the throttle of every username and IP address |  |
+| `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
+| `--ip` | clear the throttle of this client IP address |  |
+| `--json` | print JSON instead of text |  |
+| `--listen` | shortcut for --set server.listen=... |  |
+| `--public-url` | shortcut for --set server.public_url=... |  |
+| `--role` | shortcut for --set server.role=... |  |
+| `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
 
 ## hangar config
 
@@ -775,8 +815,10 @@ Sign in to an Instance and save the Token.
 
 ```text
 Signs in to an Instance. Without --token, starts a device-code login: the
-browser opens a page on the Instance where you approve the code shown here,
-and the Instance creates a write Token for the CLI.
+browser opens a page on the Instance where you type the code shown here,
+check the details and approve it. The Instance then creates a Token for the
+CLI that expires in 30 days, with read access, or write access if you choose
+it on that page (needed to push, upload and pull into the Instance).
 
 The URL and username are saved in ~/.config/hangar/config.yaml. The Token is
 saved in the OS keychain where one is available, otherwise in that file with

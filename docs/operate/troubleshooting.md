@@ -44,6 +44,8 @@ The usual cause is a name meant for another tool. The Docker Compose examples re
 
 **"database is in use by another Hangar process".** SQLite allows one process. Stop the other one, or move to Postgres to run several.
 
+**Sign-in says "Too many failed sign-in attempts".** Someone, perhaps not the user, has sent wrong passwords for the account or from the address. The username's lock does not apply from addresses the user has signed in from with a password in the last 90 days, so they can usually sign in from their usual network. Otherwise wait for the lock to end (at most 15 minutes), or on the server host clear it with `hangar admin unlock-sign-in <username>` (or `--ip <address>`, or `--all`). With SQLite, stop the server first. If every user is throttled at once, check `server.trusted_proxies`: see [TLS and reverse proxies](proxies.md).
+
 **Every admin is locked out.** On the server host, set a new password with `hangar admin reset-password <username>`, which prints a generated password once (or reads one with `--password-stdin`), signs the user out everywhere and clears sign-in throttling. `hangar admin create-user <username> --admin` creates another Instance admin. With SQLite, stop the server first.
 
 **Index or scan results look out of date.** `hangar admin reindex` queues index and scan Jobs for every branch head, or for the Repos you name; the workers run them.

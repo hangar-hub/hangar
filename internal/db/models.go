@@ -212,6 +212,16 @@ type LoginAttempt struct {
 	Timestamps
 }
 
+// LoginKnownClient is a row of login_known_clients: an IP address a User
+// has signed in from with a password.
+type LoginKnownClient struct {
+	bun.BaseModel `bun:"table:login_known_clients"`
+	UserID        uuid.UUID `bun:"user_id,pk,type:uuid"`
+	IP            string    `bun:"ip,pk"`
+	LastSuccessAt time.Time `bun:"last_success_at,notnull"`
+	Timestamps
+}
+
 // OIDCState is a row of oidc_states.
 type OIDCState struct {
 	bun.BaseModel `bun:"table:oidc_states"`
@@ -792,7 +802,7 @@ func AllModels() []any {
 	return []any{
 		(*Namespace)(nil), (*User)(nil), (*Identity)(nil), (*Session)(nil), (*Token)(nil),
 		(*OllamaKey)(nil), (*OllamaNonce)(nil), (*OllamaBlob)(nil), (*Membership)(nil),
-		(*Invite)(nil), (*PasswordReset)(nil), (*EmailChange)(nil), (*LoginAttempt)(nil), (*OIDCState)(nil),
+		(*Invite)(nil), (*PasswordReset)(nil), (*EmailChange)(nil), (*LoginAttempt)(nil), (*LoginKnownClient)(nil), (*OIDCState)(nil),
 		(*OAuthDeviceCode)(nil), (*Repo)(nil), (*RepoRedirect)(nil), (*Collaborator)(nil),
 		(*Ref)(nil), (*Pack)(nil), (*Commit)(nil), (*TreeEntry)(nil), (*LFSObject)(nil),
 		(*LFSUploader)(nil), (*RepoLFS)(nil), (*Upload)(nil), (*Upstream)(nil), (*UpstreamToken)(nil),

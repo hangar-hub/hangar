@@ -284,7 +284,10 @@ func (s *Service) ChangePassword(ctx context.Context, p model.Principal, c Passw
 		failed("no_password")
 		return ErrNoLocalPassword
 	}
-	keys := throttleKeys(u.Username, c.IP)
+	keys, err := s.Login.keysFor(ctx, u, u.Username, c.IP)
+	if err != nil {
+		return err
+	}
 	wait, err := s.Login.throttled(ctx, keys)
 	if err != nil {
 		return err

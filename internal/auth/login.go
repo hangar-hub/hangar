@@ -22,12 +22,19 @@ import (
 // on success. They live in the database so every replica sees them. Each
 // attempt counts before its password is hashed (reserve), so parallel
 // guesses cannot outrun the count.
+//
+// The username's counter does not apply from an IP address the User has
+// signed in from with a password in the last knownClientTTL: there only
+// the IP address's counter does. So anyone can slow down guesses against
+// an account from new addresses, but nobody can lock its owner out from
+// where they usually sign in by sending wrong passwords for it.
 const (
 	throttleFree     = 5
 	throttleBase     = time.Second
 	throttleMax      = 15 * time.Minute
 	throttleDecay    = time.Hour
 	maxUsernameInput = 256
+	knownClientTTL   = 90 * 24 * time.Hour
 )
 
 // Login errors.
@@ -63,12 +70,102 @@ type LoginAttempt struct {
 	UserAgent string
 }
 
-func throttleKeys(username, ip string) []string {
-	keys := []string{"user:" + strings.ToLower(username)}
+// userThrottleKey is the throttle key of a username.
+func userThrottleKey(username string) string { return "user:" + strings.ToLower(username) }
+
+// ipThrottleKey is the throttle key of an IP address.
+func ipThrottleKey(ip string) string { return "ip:" + ip }
+
+// throttleKeys returns the keys an attempt counts against: the IP
+// address's, and the username's unless the IP address is one the User
+// has signed in from before (known).
+func throttleKeys(username, ip string, known bool) []string {
+	var keys []string
+	if !known || ip == "" {
+		keys = append(keys, userThrottleKey(username))
+	}
 	if ip != "" {
-		keys = append(keys, "ip:"+ip)
+		keys = append(keys, ipThrottleKey(ip))
 	}
 	return keys
+}
+
+// keysFor returns the throttle keys for an attempt to sign in as username
+// from ip; u is the User with that username, or nil if there is none.
+func (l *LoginService) keysFor(ctx context.Context, u *User, username, ip string) ([]string, error) {
+	known := false
+	if u != nil && ip != "" {
+		n, err := l.s.db.NewSelect().Model((*db.LoginKnownClient)(nil)).
+			Where("user_id = ? AND ip = ? AND last_success_at > ?", u.ID, ip, l.s.nowUTC().Add(-knownClientTTL)).Count(ctx)
+		if err != nil {
+			return nil, err
+		}
+		known = n > 0
+	}
+	return throttleKeys(username, ip, known), nil
+}
+
+// rememberClient records that u signed in with a password from ip.
+func (l *LoginService) rememberClient(ctx context.Context, u *User, ip string) error {
+	if ip == "" {
+		return nil
+	}
+	now := l.s.nowUTC()
+	row := &db.LoginKnownClient{UserID: u.ID, IP: ip, LastSuccessAt: now}
+	_, err := l.s.db.NewInsert().Model(row).
+		On("CONFLICT (user_id, ip) DO UPDATE").Set("last_success_at = EXCLUDED.last_success_at").Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	return err
+}
+
+// ThrottleTarget names the throttle counters ClearThrottle removes: a
+// username's, an IP address's, or with All every counter.
+type ThrottleTarget struct {
+	Username string
+	IP       string
+	All      bool
+}
+
+// ClearThrottle removes sign-in throttle counters, so a locked-out user or
+// address can sign in again at once (`hangar admin unlock-sign-in`), and
+// records a login.throttle_cleared event. It returns how many counters
+// it removed.
+func (l *LoginService) ClearThrottle(ctx context.Context, t ThrottleTarget, actor model.Principal) (int64, error) {
+	q := l.s.db.NewDelete().Model((*db.LoginAttempt)(nil))
+	var keys []string
+	switch {
+	case t.All:
+		q = q.Where("1 = 1")
+	case t.Username == "" && t.IP == "":
+		return 0, fmt.Errorf("%w: name a username, an IP address, or all", ErrInvalid)
+	default:
+		if t.Username != "" {
+			keys = append(keys, userThrottleKey(t.Username))
+		}
+		if t.IP != "" {
+			keys = append(keys, ipThrottleKey(t.IP))
+		}
+		q = q.Where("key IN (?)", bun.List(keys))
+	}
+	res, err := q.Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	data := map[string]any{"removed": n}
+	switch {
+	case t.All:
+		data["all"] = true
+	default:
+		if t.Username != "" {
+			data["username"] = t.Username
+		}
+		if t.IP != "" {
+			data["ip"] = t.IP
+		}
+	}
+	l.s.record(ctx, audit.Event{Action: audit.LoginThrottleCleared, Actor: actor, TargetType: "login_throttle", TargetID: strings.Join(keys, ","), Data: data})
+	return n, nil
 }
 
 // backoff returns the lock time after n failures.
@@ -297,7 +394,14 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 	if a.Username == "" || a.Password == "" || len(a.Username) > maxUsernameInput {
 		return nil, ErrLoginFailed
 	}
-	keys := throttleKeys(a.Username, a.IP)
+	u, err := l.s.Users.GetByUsername(ctx, a.Username)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	keys, err := l.keysFor(ctx, u, a.Username, a.IP)
+	if err != nil {
+		return nil, err
+	}
 	wait, err := l.throttled(ctx, keys)
 	if err != nil {
 		return nil, err
@@ -316,10 +420,6 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 	// password takes it back: see reserve.
 	att, err := l.reserve(ctx, keys)
 	if err != nil {
-		return nil, err
-	}
-	u, err := l.s.Users.GetByUsername(ctx, a.Username)
-	if err != nil && !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}
 	ok := false
@@ -347,7 +447,10 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 	if u.Disabled() {
 		return nil, ErrDisabled
 	}
-	if _, err := l.s.db.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", keys[0]).Exec(ctx); err != nil {
+	if _, err := l.s.db.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", userThrottleKey(a.Username)).Exec(ctx); err != nil {
+		return nil, err
+	}
+	if err := l.rememberClient(ctx, u, a.IP); err != nil {
 		return nil, err
 	}
 	return u, nil

@@ -7,7 +7,7 @@ description: "Put Hangar behind a reverse proxy for TLS: the settings every prox
 Hangar serves plain HTTP; put a reverse proxy in front of it for TLS. Whatever proxy you use:
 
 - Set `server.public_url` to the address clients use, with `https://`.
-- Set `server.trusted_proxies` to the proxy's addresses, so Hangar believes its `X-Forwarded-For` and `X-Forwarded-Proto` headers and nobody else's.
+- Set `server.trusted_proxies` to the proxy's addresses, so Hangar believes its `X-Forwarded-For` and `X-Forwarded-Proto` headers and nobody else's. Without it, every client has the proxy's address: one client's failed sign-ins throttle everyone, and the audit log records the proxy. Hangar logs a warning the first time a request with `X-Forwarded-For` comes from a peer that is not in the list.
 - Do not buffer request or response bodies, and do not set a total request timeout: uploads and downloads stream and can take hours. Hangar closes connections idle for 5 minutes itself.
 - Allow large request bodies (5 TiB files go up in parts of up to 512 MiB).
 - Route `datasets-server.<host>` to Hangar as well, for the `datasets` library (see [Datasets](../guides/datasets.md#the-datasets-server-name)).

@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -181,15 +182,7 @@ func Authenticate(authn Authenticator, onError func(w http.ResponseWriter, r *ht
 // the direct peer is in one of the trusted ranges. The client address is the
 // rightmost X-Forwarded-For entry that is not itself a trusted proxy.
 func TrustedProxies(trusted []netip.Prefix) func(http.Handler) http.Handler {
-	isTrusted := func(a netip.Addr) bool {
-		a = a.Unmap()
-		for _, p := range trusted {
-			if p.Contains(a) {
-				return true
-			}
-		}
-		return false
-	}
+	isTrusted := inPrefixes(trusted)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			peer, ok := remoteAddr(r.RemoteAddr)
@@ -218,6 +211,44 @@ func TrustedProxies(trusted []netip.Prefix) func(http.Handler) http.Handler {
 				r2.Host = host
 			}
 			next.ServeHTTP(w, r2)
+		})
+	}
+}
+
+// inPrefixes returns a check for whether an address is in one of prefixes.
+func inPrefixes(prefixes []netip.Prefix) func(netip.Addr) bool {
+	return func(a netip.Addr) bool {
+		a = a.Unmap()
+		for _, p := range prefixes {
+			if p.Contains(a) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// WarnUntrustedForwarding logs one warning per process the first time a
+// request carries X-Forwarded-For from a peer outside trusted, the sign of
+// a reverse proxy missing from server.trusted_proxies. Hangar then takes
+// the proxy's address as every client's, so one client's failed sign-ins
+// throttle everyone behind the proxy, and the audit log records the proxy.
+// It logs the peer address only, never the header, which the client sets.
+func WarnUntrustedForwarding(trusted []netip.Prefix, log *slog.Logger) func(http.Handler) http.Handler {
+	isTrusted := inPrefixes(trusted)
+	var once sync.Once
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("X-Forwarded-For") != "" {
+				if peer, ok := remoteAddr(r.RemoteAddr); ok && !isTrusted(peer) {
+					once.Do(func() {
+						log.WarnContext(r.Context(), "X-Forwarded-For from a peer outside server.trusted_proxies was ignored",
+							"hint", "if Hangar runs behind a reverse proxy, add its address range to server.trusted_proxies, "+
+								"or every client shares its address for sign-in throttling and the audit log; logged once", "peer", peer.Unmap().String())
+					})
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

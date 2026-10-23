@@ -144,6 +144,8 @@ func newHandler(ctx context.Context, in *instance, health *httpx.Health, workerO
 	h = httpx.AccessLog(in.log)(h)
 	h = httpx.Recover(in.log)(h)
 	h = httpx.TrustedProxies(trusted)(h)
+	// Outside TrustedProxies, so it sees the peer before any rewrite.
+	h = httpx.WarnUntrustedForwarding(trusted, in.log)(h)
 	// otelhttp records the raw path as url.path, so it sees invite, reset
 	// and email confirmation paths with the code replaced.
 	h = httpx.HideSecretPaths(func(next http.Handler) http.Handler {

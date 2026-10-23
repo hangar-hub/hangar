@@ -293,6 +293,33 @@ func TestTrustedProxies(t *testing.T) {
 	require.Equal(t, "orig", got.Host)
 }
 
+// TestWarnUntrustedForwarding covers the warning for a reverse proxy
+// missing from server.trusted_proxies (security review finding 11): one
+// warning naming the peer, and none for trusted peers or plain requests.
+func TestWarnUntrustedForwarding(t *testing.T) {
+	var logs bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+	h := httpx.WarnUntrustedForwarding(trusted, log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	send := func(peer, xff string) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = peer
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	send("198.51.100.7:4444", "")
+	send("10.1.2.3:5555", "203.0.113.9")
+	require.Empty(t, logs.String(), "no warning without the header or from a trusted proxy")
+	send("192.0.2.5:4444", "203.0.113.9")
+	send("192.0.2.6:4444", "203.0.113.10")
+	require.Equal(t, 1, strings.Count(logs.String(), "level=WARN"), "logged once: %s", logs.String())
+	require.Contains(t, logs.String(), "peer=192.0.2.5")
+	require.Contains(t, logs.String(), "server.trusted_proxies")
+	require.NotContains(t, logs.String(), "203.0.113.9", "the header, which the client sets, is not logged")
+}
+
 func TestMaxBody(t *testing.T) {
 	h := httpx.MaxBody(4)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		buf := new(bytes.Buffer)
