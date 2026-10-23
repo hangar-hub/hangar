@@ -2872,7 +2872,7 @@
 <p><code>hangar admin backup</code> reads the configuration like <code>hangar server</code> does and writes a folder with:</p>
 <ul>
 <li><code>manifest.json</code>: the Hangar version, schema version, database driver, row counts and object counts;</li>
-<li><code>db/&lt;table&gt;.jsonl</code>: every table, read in one transaction, so it is consistent;</li>
+<li><code>db/&lt;table&gt;.jsonl</code>: every table, read in one transaction, so it is consistent, except the Repo listing facts (<code>repo_facts</code>, <code>repo_facet_values</code> and <code>repo_facts_changes</code>), which Hangar rebuilds from the other tables after a restore;</li>
 <li><code>blobs/&lt;key&gt;</code>: every Blob store object, except staging areas.</li>
 </ul>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>backup<span class="w"> </span>--config<span class="w"> </span>/etc/hangar/hangar.yaml<span class="w"> </span>--output<span class="w"> </span>/backups/hangar-<span class="k">$(</span>date<span class="w"> </span>+%F<span class="k">)</span>
