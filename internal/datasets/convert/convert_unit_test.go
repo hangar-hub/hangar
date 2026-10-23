@@ -196,6 +196,7 @@ func TestCast(t *testing.T) {
 		{1.5, "int64"}, {math.NaN(), "int64"}, {"x", "int32"}, {[]any{}, "int64"}, {"x", "float64"}, {[]any{}, "float32"},
 		{[]byte{0xff}, "string"}, {[]any{}, "string"}, {int64(1), "binary"}, {"not a date", "timestamp[s]"}, {true, "date32"},
 		{"x", "time32[ms]"}, {1.5, "duration[us]"}, {"abc", "decimal128(5, 2)"}, {true, "decimal128(5, 2)"}, {"x", "null"},
+		{1e300, "duration[s]"}, {math.Inf(1), "time64[us]"}, {math.Inf(-1), "int64"}, {1e19, "int64"},
 	}
 	for _, c := range bad {
 		_, err := convert.Cast(c.v, arrow(t, c.dtype))
