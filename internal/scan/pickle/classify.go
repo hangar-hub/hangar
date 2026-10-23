@@ -82,6 +82,12 @@ func denied(path string) bool {
 			}
 			continue
 		}
+		if prefix, ok := strings.CutSuffix(e, "*"); ok {
+			if strings.HasPrefix(path, prefix) {
+				return true
+			}
+			continue
+		}
 		if path == e || strings.HasPrefix(path, e+".") {
 			return true
 		}

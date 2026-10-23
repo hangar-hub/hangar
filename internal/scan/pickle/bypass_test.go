@@ -267,3 +267,53 @@ func TestScanSpotsDataThatIsNotAPickle(t *testing.T) {
 	require.ErrorIs(t, err, pickle.ErrInvalid)
 	require.False(t, res.NotPickle, "a MARK ran first")
 }
+
+func TestClassifyDeniesLoadersFoundInReview(t *testing.T) {
+	// Each of these runs code from a string or loads a pickle the outer
+	// pickle supplies (1.2.3 security review, finding 9).
+	unsafe := [][2]string{
+		{"sympy", "sympify"},
+		{"sympy", "S"},
+		{"sympy", "parse_expr"},
+		{"sympy", "lambdify"},
+		{"sympy.core.sympify", "sympify"},
+		{"sympy.core.singleton", "S"},
+		{"sympy.parsing.sympy_parser", "parse_expr"},
+		{"sympy.utilities.lambdify", "lambdify"},
+		{"sympy", "core.sympify.sympify"},
+		{"torch.storage", "_load_from_bytes"},
+		{"torch.storage", "_load_from_bytes_v2"},
+		{"torch", "storage._load_from_bytes"},
+		{"torch.serialization", "_load"},
+		{"torch.serialization", "_legacy_load"},
+		{"yaml", "load"},
+		{"yaml", "load_all"},
+		{"yaml", "unsafe_load"},
+		{"yaml", "unsafe_load_all"},
+		{"yaml", "full_load"},
+		{"yaml", "full_load_all"},
+		{"yaml", "UnsafeLoader"},
+		{"yaml.constructor", "UnsafeConstructor"},
+	}
+	for _, g := range unsafe {
+		require.Equal(t, pickle.Unsafe, pickle.Classify(g[0], g[1]), "%s.%s", g[0], g[1])
+	}
+	// Neighbours stay as they were.
+	require.Equal(t, pickle.Suspicious, pickle.Classify("sympy", "Symbol"))
+	require.Equal(t, pickle.Suspicious, pickle.Classify("yaml", "safe_load"))
+	require.Equal(t, pickle.Suspicious, pickle.Classify("torch.storage", "TypedStorage"))
+	require.Equal(t, pickle.Safe, pickle.Classify("torch.serialization", "_get_layout"))
+	require.Equal(t, pickle.Safe, pickle.Classify("torch", "FloatStorage"))
+}
+
+func TestScanFindsTorchLoadFromBytes(t *testing.T) {
+	// torch.storage._load_from_bytes(b) runs torch.load on b with
+	// weights_only=False, so the import alone makes the file unsafe.
+	p := scantest.NewPickle(2).Global("torch.storage", "_load_from_bytes")
+	p.Raw('C', byte(len(scantest.OSSystemProtocol0())))
+	p.Raw(scantest.OSSystemProtocol0()...)
+	p.Raw(0x85).Op("R.")
+	res, err := scanBytes(t, p.Bytes())
+	require.NoError(t, err)
+	requireUnsafe(t, res, "torch.storage._load_from_bytes")
+}
