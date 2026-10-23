@@ -5,6 +5,7 @@
 [![Latest release](https://img.shields.io/github/v/release/hangar-hub/hangar)](https://github.com/hangar-hub/hangar/releases/latest)
 [![CI](https://github.com/hangar-hub/hangar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hangar-hub/hangar/actions/workflows/ci.yml)
 [![Licence: Elastic 2.0](https://img.shields.io/badge/licence-Elastic%202.0-blue)](LICENSE)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/hangar)](https://artifacthub.io/packages/search?repo=hangar)
 
 Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Use it as a private Hugging Face Hub alternative, a model registry for your own models, or a Hugging Face mirror that also works on an air-gapped network.
 

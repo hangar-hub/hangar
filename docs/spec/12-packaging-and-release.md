@@ -43,7 +43,7 @@ CI starts each one and runs the smoke test ([13](13-testing.md)).
 
 ### Artifact Hub
 
-Artifact Hub indexes the chart from the registry. Listing it is a one-off task for James:
+Artifact Hub indexes the chart from the registry. The repository's ID there is `091c5c96-fbf7-4db8-8ef5-48b68410bf68`, recorded in `deploy/helm/artifacthub-repo.yml`. Listing it was a one-off task for James, and these steps repeat it if the listing or the `artifacthub.io` tag is lost:
 
 1. Sign in at <https://artifacthub.io>, open **Control Panel**, **Add repository**, and add kind **Helm charts**, name `hangar`, URL `oci://ghcr.io/hangar-hub/charts/hangar`. Add it under an Artifact Hub organisation to show the project, not a person, as the publisher.
 2. Copy the repository ID from the new repository's card into `deploy/helm/artifacthub-repo.yml` as `repositoryID`, check that the `owners` email is the one you sign in to Artifact Hub with, and commit it.
