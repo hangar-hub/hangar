@@ -1,0 +1,8 @@
+{#-
+  Material's script that shows the older-version banner (overrides/main.html)
+  before its main bundle loads. Material's own copy passes base_url to
+  new URL() alone, and MkDocs makes base_url relative, such as "../..", so it
+  throws "Invalid URL" on every page. Resolving it against the page's address
+  makes it work as intended.
+-#}
+<script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("{{ base_url }}",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>

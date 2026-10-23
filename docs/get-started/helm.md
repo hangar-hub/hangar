@@ -160,3 +160,7 @@ With persistence on (SQLite in one Pod), you can instead set `generateSecrets: f
 Every Pod runs as non-root with a read-only root filesystem, no privilege escalation, every capability dropped and the `RuntimeDefault` seccomp profile. `helm test` checks `/readyz` from inside the cluster.
 
 The full list is in the chart's [`values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/hangar/values.yaml).
+
+## Next steps
+
+To load models into other Pods in the cluster from Hangar, without downloading them on every Pod start, see [Load models in Kubernetes](../guides/kubernetes.md).
