@@ -472,6 +472,37 @@ type Metadata struct {
 	Timestamps
 }
 
+// RepoFacts is a row of repo_facts: what Repo listings filter and sort
+// on, from the index results at the default branch head.
+type RepoFacts struct {
+	bun.BaseModel `bun:"table:repo_facts"`
+	RepoID        uuid.UUID `bun:"repo_id,pk,type:uuid"`
+	Version       int       `bun:"version,notnull"`
+	Parameters    int64     `bun:"parameters,notnull"`
+	ContextLength int64     `bun:"context_length,notnull"`
+	NumRows       int64     `bun:"num_rows,notnull"`
+	Timestamps
+}
+
+// RepoFactsChange is a row of repo_facts_changes: a Repo whose repo_facts
+// row is out of date. Triggers add them.
+type RepoFactsChange struct {
+	bun.BaseModel `bun:"table:repo_facts_changes"`
+	ID            int64     `bun:"id,pk,autoincrement"`
+	RepoID        uuid.UUID `bun:"repo_id,notnull,type:uuid"`
+	Timestamps
+}
+
+// RepoFacetValue is a row of repo_facet_values: one facet value of a Repo.
+type RepoFacetValue struct {
+	bun.BaseModel `bun:"table:repo_facet_values"`
+	RepoID        uuid.UUID `bun:"repo_id,pk,type:uuid"`
+	Facet         string    `bun:"facet,pk"`
+	Value         string    `bun:"value,pk"`
+	Folded        string    `bun:"folded,notnull"`
+	Timestamps
+}
+
 // ScanResult is a row of scan_results.
 type ScanResult struct {
 	bun.BaseModel  `bun:"table:scan_results"`
@@ -729,6 +760,30 @@ type DatasetStat struct {
 	Timestamps
 }
 
+// DerivedModels returns the models of the tables that hold data the Repo
+// service derives from other tables and rebuilds when they change: the
+// Repo listing facts and the records of which are out of date. Backups
+// leave them out; after a restore, every restored Repo is recorded as out
+// of date, so its facts are rebuilt.
+func DerivedModels() []any {
+	return []any{(*RepoFacts)(nil), (*RepoFacetValue)(nil), (*RepoFactsChange)(nil)}
+}
+
+// BackupModels returns AllModels without DerivedModels, in creation order.
+func BackupModels() []any {
+	derived := map[any]bool{}
+	for _, m := range DerivedModels() {
+		derived[m] = true
+	}
+	var out []any
+	for _, m := range AllModels() {
+		if !derived[m] {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // AllModels returns a pointer to the zero value of every model, in
 // creation order. Tests use it to check that every table round-trips.
 func AllModels() []any {
@@ -744,6 +799,7 @@ func AllModels() []any {
 		(*CollectionItem)(nil), (*Discussion)(nil), (*DiscussionEvent)(nil), (*Like)(nil),
 		(*DownloadCount)(nil), (*AccessRequest)(nil), (*Webhook)(nil), (*WebhookDelivery)(nil),
 		(*AuditEvent)(nil), (*Quota)(nil), (*Setting)(nil), (*XetXorb)(nil), (*XetFile)(nil),
-		(*DatasetSplit)(nil), (*DatasetStat)(nil),
+		(*DatasetSplit)(nil), (*DatasetStat)(nil), (*RepoFacts)(nil), (*RepoFacetValue)(nil),
+		(*RepoFactsChange)(nil),
 	}
 }

@@ -43,8 +43,10 @@ func (o ListOptions) needsFacts() bool {
 
 // List implements Service. Plain listings are filtered, sorted and paged in
 // the database. Metadata filters, facets and the parameters, downloads and
-// likes sorts read each candidate's index (at its default branch head) and
-// community counts, so they need Options.Index and Options.Community.
+// likes sorts need Options.Index and Options.Community. With
+// Options.SQLFacets they are answered in the database too (listFacts);
+// otherwise List reads each candidate's index (at its default branch head)
+// and community counts.
 func (s *Store) List(ctx context.Context, opts ListOptions) (*ListResult, error) {
 	switch opts.Sort {
 	case "", "name", "created", "updated", "size", "parameters", "downloads", "likes":
@@ -88,6 +90,9 @@ func (s *Store) List(ctx context.Context, opts ListOptions) (*ListResult, error)
 	}
 	if s.opts.Index == nil || (s.opts.Community == nil && (opts.Sort == "downloads" || opts.Sort == "likes")) {
 		return nil, fmt.Errorf("%w: metadata filters, facets and this sort need the index and community services", ErrInvalid)
+	}
+	if s.opts.SQLFacets {
+		return s.listFacts(ctx, opts, offset)
 	}
 	var rows []repoRow
 	if err := q.Scan(ctx, &rows); err != nil {
@@ -181,38 +186,66 @@ func (s *Store) sortExpr(sortBy string, desc bool) string {
 // listQuery applies the filters the database can check: deletion, read
 // access, Token restrictions, type, Namespaces, search, Mirror and tags.
 func (s *Store) listQuery(ctx context.Context, opts ListOptions) (*bun.SelectQuery, error) {
-	q := s.selectRepo(s.db).Where("repo.deleted_at IS NULL")
+	f, err := s.newListFilter(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return f.apply(s.selectRepo(s.db)), nil
+}
+
+// listFilter holds what listQuery's filters need from the database, the
+// anonymous read setting and the viewer's Organisations, so that one List
+// can apply them to several queries for the cost of reading them once.
+type listFilter struct {
+	s        *Store
+	opts     ListOptions
+	anonRead bool
+	nsIDs    []uuid.UUID
+}
+
+func (s *Store) newListFilter(ctx context.Context, opts ListOptions) (*listFilter, error) {
+	f := &listFilter{s: s, opts: opts}
+	p := opts.Viewer
+	if p.IsAdmin && !p.IsAnonymous() {
+		return f, nil
+	}
+	if p.IsAnonymous() && s.opts.AnonymousRead != nil {
+		var err error
+		if f.anonRead, err = s.opts.AnonymousRead(ctx); err != nil {
+			return nil, fmt.Errorf("repo: list anonymous read setting: %w", err)
+		}
+	}
+	if p.IsUser() && p.UserID != uuid.Nil {
+		if p.NamespaceID != uuid.Nil {
+			f.nsIDs = append(f.nsIDs, p.NamespaceID)
+		}
+		ms, err := s.ns.MembershipsOf(ctx, p.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("repo: list memberships: %w", err)
+		}
+		for _, m := range ms {
+			f.nsIDs = append(f.nsIDs, m.Org.ID)
+		}
+	}
+	return f, nil
+}
+
+// apply adds the filters to q, which must select from repos AS repo joined
+// to namespaces AS ns.
+func (f *listFilter) apply(q *bun.SelectQuery) *bun.SelectQuery {
+	s, opts := f.s, f.opts
+	q = q.Where("repo.deleted_at IS NULL")
 	p := opts.Viewer
 	if !p.IsAdmin || p.IsAnonymous() {
-		anonRead := false
-		if p.IsAnonymous() && s.opts.AnonymousRead != nil {
-			var err error
-			if anonRead, err = s.opts.AnonymousRead(ctx); err != nil {
-				return nil, fmt.Errorf("repo: list anonymous read setting: %w", err)
-			}
-		}
-		var nsIDs []uuid.UUID
-		if p.IsUser() && p.UserID != uuid.Nil {
-			if p.NamespaceID != uuid.Nil {
-				nsIDs = append(nsIDs, p.NamespaceID)
-			}
-			ms, err := s.ns.MembershipsOf(ctx, p.UserID)
-			if err != nil {
-				return nil, fmt.Errorf("repo: list memberships: %w", err)
-			}
-			for _, m := range ms {
-				nsIDs = append(nsIDs, m.Org.ID)
-			}
-		}
 		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-			if !p.IsAnonymous() || anonRead {
+			if !p.IsAnonymous() || f.anonRead {
 				q = q.WhereOr("repo.visibility = ?", string(model.VisibilityPublic))
 			}
 			if !p.IsAnonymous() {
 				q = q.WhereOr("repo.visibility = ?", string(model.VisibilityInternal))
 			}
-			if len(nsIDs) > 0 {
-				q = q.WhereOr("repo.namespace_id IN (?)", bun.List(nsIDs))
+			if len(f.nsIDs) > 0 {
+				q = q.WhereOr("repo.namespace_id IN (?)", bun.List(f.nsIDs))
 			}
 			if p.IsUser() && p.UserID != uuid.Nil {
 				q = q.WhereOr("repo.id IN (SELECT repo_id FROM collaborators WHERE user_id = ?)", p.UserID)
@@ -259,7 +292,7 @@ func (s *Store) listQuery(ctx context.Context, opts ListOptions) (*bun.SelectQue
 	if opts.SizeMax > 0 {
 		q = q.Where("repo.size_bytes <= ?", opts.SizeMax)
 	}
-	return q, nil
+	return q
 }
 
 func (s *Store) mirrorExpr() string {

@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -258,7 +259,8 @@ func TestMigrateIsIdempotentAndSchemaStatus(t *testing.T) {
 		st, err := d.Schema(ctx)
 		require.NoError(t, err)
 		require.True(t, st.UpToDate())
-		require.Equal(t, "0006", st.Expected)
+		versions := migrationVersions(t, d.Driver())
+		require.Equal(t, versions[len(versions)-1], st.Expected)
 		require.Equal(t, st.Expected, st.Current)
 	})
 }
@@ -271,7 +273,24 @@ func TestSchemaStatusBeforeMigrate(t *testing.T) {
 	st, err := d.Schema(ctx)
 	require.NoError(t, err)
 	require.False(t, st.UpToDate())
-	require.Equal(t, []string{"0001", "0002", "0003", "0004", "0005", "0006"}, st.Pending)
+	require.Equal(t, migrationVersions(t, db.SQLite), st.Pending)
+}
+
+// migrationVersions returns the versions of a driver's migration files,
+// such as "0001", in order.
+func migrationVersions(t *testing.T, driver string) []string {
+	t.Helper()
+	files, err := db.MigrationFiles(driver)
+	require.NoError(t, err)
+	names, err := fs.Glob(files, "*.up.sql")
+	require.NoError(t, err)
+	var out []string
+	for _, n := range names {
+		v, _, _ := strings.Cut(n, "_")
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestInTxRollsBackAndClassifiesErrors(t *testing.T) {

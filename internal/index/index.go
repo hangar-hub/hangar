@@ -183,6 +183,38 @@ type Indexer interface {
 	Quants(ctx context.Context, id model.RepoID, commit model.CommitSHA) ([]QuantGroup, error)
 }
 
+// BatchGetter is implemented by Indexers that read the stored results of
+// many Commits at once, for pages and listings of Repos.
+type BatchGetter interface {
+	// GetMany returns what Get returns for each Repo's Commit, leaving out
+	// Commits that are not indexed.
+	GetMany(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID]*Summary, error)
+}
+
+// GetMany reads the stored results of many Commits, with i's GetMany when
+// it is a BatchGetter and one Get per Commit otherwise. Commits that are
+// not indexed are left out.
+func GetMany(ctx context.Context, i Indexer, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID]*Summary, error) {
+	if len(commits) == 0 {
+		return map[uuid.UUID]*Summary{}, nil
+	}
+	if bg, ok := i.(BatchGetter); ok {
+		return bg.GetMany(ctx, commits)
+	}
+	out := make(map[uuid.UUID]*Summary, len(commits))
+	for id, sha := range commits {
+		sum, err := i.Get(ctx, id, sha)
+		switch {
+		case err == nil:
+			out[id] = sum
+		case errors.Is(err, ErrNotIndexed):
+		default:
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // quantRe matches quantisation names in GGUF filenames, case-insensitively.
 var quantRe = regexp.MustCompile(`(?i)(?:^|[-_.])((?:I?Q[1-8](?:_[0-9A-Z]+)*)|F16|F32|BF16|MXFP4|TQ[12]_0)(?:[-_.]|$)`)
 

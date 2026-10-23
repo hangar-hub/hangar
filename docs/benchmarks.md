@@ -5,7 +5,7 @@ description: "Load test results for Hangar's scale targets, such as download lat
 
 # Benchmarks
 
-These are the load test results for Hangar's scale targets: the targets in the [specification's architecture chapter](https://github.com/hangar-hub/hangar/blob/main/docs/spec/02-architecture.md#scale-targets) and the scenarios in `loadtest/`, run as `loadtest/README.md` describes. They were measured on 17 October 2026 on a pre-release build of Hangar 1.0.0: the performance changes that were then merged into 1.0.0 as commit `40ad448`. Releases since then have not been measured again.
+These are the load test results for Hangar's scale targets: the targets in the [specification's architecture chapter](https://github.com/hangar-hub/hangar/blob/main/docs/spec/02-architecture.md#scale-targets) and the scenarios in `loadtest/`, run as `loadtest/README.md` describes. They were measured on 17 October 2026 on a pre-release build of Hangar 1.0.0: the performance changes that were then merged into 1.0.0 as commit `40ad448`. The [Repo listings](#repo-listings) results, for 100,000 Repos per Instance, were measured on 21 and 22 October 2026 with an in-process load test. Releases since then have not been measured again.
 
 The numbers come from one shared laptop, not dedicated hardware, so read them as evidence that a target holds or fails on modest hardware rather than as capacity figures. [Deviations](#deviations) lists every way the setup differs from the reference setup.
 
@@ -22,7 +22,7 @@ The numbers come from one shared laptop, not dedicated hardware, so read them as
 | Download throughput in `proxy` mode limited by network and storage, not CPU | 1.2 GB/s in total with each replica using 0.35 of its 2 CPUs | Pass |
 | Web replica start to ready under 5 seconds | 0.85 to 1.61 s | Pass |
 | Dataset Viewer `/rows` p99 under 200 ms on a 10 million row Split | p99 16.1 and 27.8 ms at 50 requests per second | Pass |
-| 100,000 Repos per Instance | Not measured: no scenario creates them | Not tested |
+| 100,000 Repos per Instance | Repo listings on Postgres: Arsenal page p50 212 ms, Hub `list_models` with a filter and a sort p50 186 to 244 ms, 12 to 18 queries a request at any size | Pass for listings, see [Repo listings](#repo-listings) |
 
 ## Setup
 
@@ -152,6 +152,79 @@ Five times, a stopped web replica was started with `docker start` while a contai
 
 `viewer_rows.js` against a 10 million row Parquet Split (184 MB, three columns), 50 requests per second for 2 minutes, 100 rows from a random offset each: p99 27.77 and 16.11 ms, median 9.28 and 8.54 ms, every response the requested rows. The in-process load test (`go test -tags load -run TestLoadRows ./internal/datasets/viewer`) measured p99 1.89 ms on the same machine.
 
+### Repo listings
+
+The Arsenal page asks the native API for a page of Repos with facet counts, and the Hub's `/api/models` and `/api/datasets` take filters such as `filter=library:transformers` and sorts by downloads and likes. Until this change, each of these read every Repo the caller could see, with two to four queries per Repo, and then each Repo on the page cost 4 to 15 more queries. Now the Repo service keeps each Repo's facets in the `repo_facts` and `repo_facet_values` tables, which triggers mark out of date when a ref, index result, Split size or setting changes, and filters, sorts, pages and counts facets in SQL. A page's heads, index results, scan statuses, likes, downloads and the caller's Roles are read with one or two queries each.
+
+#### Method
+
+`TestLoadListing` (`cmd/hangar/listing_load_test.go`, build tag `load`) runs the whole server in the test process: authentication, the native API, the Hub API and the Repo service. It writes N Repos straight into the database, so the sizes it reaches are not limited by how fast git creates Repos:
+
+- 100 Organisations and the caller's own Namespace; the caller belongs to 5 of the Organisations.
+- 70% public, 15% internal and 15% private Repos; 80% models and 20% datasets.
+- Every Repo has a branch head, a Commit row, a scan result and index results shaped like real ones: transformers models with four safetensors files, a config and card data; GGUF models with two to seven quantisations and a chat template; datasets with Parquet files, a language, a task and a size category.
+- A third of the Repos have between 1 and 19 likes and downloads on 10 of the last 60 days.
+
+Each request carries a read Token of a user who is not an admin. For each scenario the test sends one request, then 20 timed ones (5 at 100,000 Repos, and 1 for the Postgres baseline at 100,000 Repos, where one request took more than a minute), and counts the queries each runs with a bun query hook:
+
+| Scenario | Request |
+|---|---|
+| Arsenal page | `GET /api/hangar/v1/repos?limit=60` |
+| Arsenal with a filter and a sort | `GET /api/hangar/v1/repos?limit=60&library=transformers&sort=downloads` |
+| Hub, filter and sort | `GET /api/models?filter=library:transformers&sort=downloads&limit=100` |
+| Hub, likes sort | `GET /api/models?sort=likes&limit=100` |
+
+```sh
+go test -tags load -run TestLoadListing -timeout 60m -v ./cmd/hangar
+HANGAR_LOAD_REPOS=100000 go test -tags load -run TestLoadListing -timeout 60m -v ./cmd/hangar
+HANGAR_TEST_POSTGRES=1 HANGAR_LOAD_DRIVER=postgres HANGAR_LOAD_REPOS=1000,10000,100000 \
+  go test -tags load -run TestLoadListing -timeout 120m -v ./cmd/hangar
+```
+
+`HANGAR_LOAD_RUNS` sets the number of timed requests, and `HANGAR_LOAD_TRACE=1` logs the slowest queries of each scenario. The baseline is `1d42e93` (v1.2.3) with the same test files added. Both ran on the laptop in [Setup](#setup), with Go 1.27.3, SQLite in a temporary folder and Postgres 18 (`postgres:18-alpine` with `fsync=off`, as the test suite runs it) in Docker Desktop, with nothing else running. Each query to Postgres in Docker Desktop costs about 0.4 ms in round trips, which is most of the baseline's time on Postgres.
+
+#### Results
+
+Postgres, the database the 100,000 Repo target is for. Median latency, then queries per request:
+
+| Scenario | Repos | Before | After |
+|---|---|---|---|
+| Arsenal page | 1,000 | 987 ms, 3,109 queries | 15 ms, 18 queries |
+| Arsenal page | 10,000 | 5.79 s, 20,138 queries | 32 ms, 18 queries |
+| Arsenal page | 100,000 | 74.7 s, 189,883 queries | 212 ms, 18 queries |
+| Arsenal with a filter and a sort | 1,000 | 1.34 s, 4,808 queries | 22 ms, 17 queries |
+| Arsenal with a filter and a sort | 10,000 | 11.5 s, 37,271 queries | 44 ms, 17 queries |
+| Arsenal with a filter and a sort | 100,000 | 134.7 s, 361,517 queries | 493 ms, 17 queries |
+| Hub, filter and sort | 1,000 | 888 ms, 3,372 queries | 31 ms, 12 queries |
+| Hub, filter and sort | 10,000 | 8.85 s, 27,820 queries | 22 ms, 12 queries |
+| Hub, filter and sort | 100,000 | 102.4 s, 275,781 queries | 186 ms, 12 queries |
+| Hub, likes sort | 1,000 | 1.00 s, 3,372 queries | 12 ms, 12 queries |
+| Hub, likes sort | 10,000 | 6.54 s, 27,820 queries | 22 ms, 12 queries |
+| Hub, likes sort | 100,000 | 119.2 s, 275,781 queries | 244 ms, 12 queries |
+
+SQLite:
+
+| Scenario | Repos | Before | After |
+|---|---|---|---|
+| Arsenal page | 1,000 | 75 ms, 3,109 queries | 16 ms, 18 queries |
+| Arsenal page | 10,000 | 567 ms, 20,138 queries | 93 ms, 18 queries |
+| Arsenal page | 100,000 | 8.34 s, 189,883 queries | 1.13 s, 18 queries |
+| Arsenal with a filter and a sort | 1,000 | 107 ms, 4,808 queries | 12 ms, 17 queries |
+| Arsenal with a filter and a sort | 10,000 | 1.08 s, 37,271 queries | 71 ms, 17 queries |
+| Arsenal with a filter and a sort | 100,000 | 15.3 s, 361,516 queries | 666 ms, 17 queries |
+| Hub, filter and sort | 1,000 | 75 ms, 3,372 queries | 12 ms, 12 queries |
+| Hub, filter and sort | 10,000 | 755 ms, 27,820 queries | 32 ms, 12 queries |
+| Hub, filter and sort | 100,000 | 9.14 s, 275,780 queries | 188 ms, 12 queries |
+| Hub, likes sort | 1,000 | 76 ms, 3,372 queries | 13 ms, 12 queries |
+| Hub, likes sort | 10,000 | 844 ms, 27,820 queries | 34 ms, 12 queries |
+| Hub, likes sort | 100,000 | 8.29 s, 275,780 queries | 153 ms, 12 queries |
+
+`TestListingQueriesDoNotGrowWithRepos` (`cmd/hangar/listing_queries_test.go`) keeps the query counts the same at 40 and 440 Repos, and `TestListingPagesMatchReadingEachRepo` (`cmd/hangar/listing_pages_test.go`) and `TestListFactsMatchReadingEveryRepo` (`internal/repo/listfacts_test.go`) check that the answers, facet counts and cursors are the same as before.
+
+The first listing after Repos are created or change rebuilds their `repo_facts` rows, 500 Repos at a time. Building rows for 100,000 new Repos took 28.3 s on Postgres and 39.8 s on SQLite, once. After an upgrade, workers build them on start, and the worker leader rebuilds rows that are out of date every minute, so listings seldom have rows to build.
+
+At 100,000 Repos, what is left is work in the database that grows with the Repos the caller can see: counting facet values (about 120 ms on Postgres and 700 ms on SQLite for the Arsenal page) and sorting by downloads or likes, which sums each visible Repo's downloads or likes (about 200 to 300 ms on Postgres).
+
 ### Sign-in burst
 
 Not one of the targets, but found while measuring memory: 40 parallel failed sign-ins (`POST /api/hangar/v1/auth/login`) took the baseline's replicas to their 1 GiB limit, and the kernel killed one. Each password check holds 64 MiB (argon2id), and nothing limited how many ran at once. With password hashing limited to two at a time per process (one on a 2 CPU replica), the same burst finished in 5 seconds and each replica peaked at 209 MiB.
@@ -164,4 +237,5 @@ Not one of the targets, but found while measuring memory: 40 parallel failed sig
 - **50 GiB transfers.** The laptop's disk had too little room for a 50 GiB upload, so uploads were 4 × 1 GiB. Downloads repeated a 1 GiB file to 140 GiB in total.
 - **Upload Repos.** `upload.js` commits each VU's file to its own Repo. With all four on one branch, a Commit could get 409 when its three retries ran out, which was then the specified behaviour for Commits without a parent Commit, not what this scenario measures. Since 2026-10-18, such Commits wait a jittered, growing time between up to seven retries (the specification's Git chapter, "Server-side Commits"); `TestConcurrentCommitsToOneBranch` (`internal/repo/commit_test.go`) covers eight at once. The load test was not run again with one branch, so the numbers above are unchanged.
 - **Rows dataset.** `seed.sh` does not create the 10 million row dataset; it was generated with PyArrow (columns `n` int64, `s` string, `f` float64) and pushed with git LFS.
-- **Not measured.** 100,000 Repos per Instance, and the `/filter` target in the Dataset Viewer chapter, which only the in-process load test covers.
+- **Repo listings in process.** The [Repo listings](#repo-listings) results come from an in-process load test on SQLite and on Postgres in Docker Desktop, not from k6 against `deploy/compose/scale.yaml`, and cover listings only: the other scenarios ran with a few Repos, not 100,000.
+- **Not measured.** The `/filter` target in the Dataset Viewer chapter, which only the in-process load test covers.

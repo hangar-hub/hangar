@@ -82,6 +82,14 @@ type CommitResult struct {
 	Files  []FileResult `json:"files"`
 }
 
+// StatusReader is implemented by Scanners that read the overall status of
+// many Commits at once, for pages of Repos.
+type StatusReader interface {
+	// Statuses returns the Status that Results reports for each Repo's
+	// Commit, leaving out Commits that are not scanned.
+	Statuses(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID]Status, error)
+}
+
 // Scanner scans files and Commits.
 type Scanner interface {
 	// ScanFile scans one file's content without executing it. path and
