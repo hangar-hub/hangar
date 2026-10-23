@@ -153,6 +153,7 @@ Hugging Face Hub API behaviour.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `hfapi.regular_upload_max`<br>`HANGAR_HFAPI_REGULAR_UPLOAD_MAX` | size | `10MiB` | Preupload answers regular for files below this size unless .gitattributes says LFS. |
+| `hfapi.commit_inline_max`<br>`HANGAR_HFAPI_COMMIT_INLINE_MAX` | size | `1GiB` | Most bytes of regular (non-LFS) file content one Hub API commit may carry. Content past 32 MiB is spooled to the temporary directory, so this bounds the disk a commit can fill. Larger commits get 413. |
 | `hfapi.xet`<br>`HANGAR_HFAPI_XET` | string | `ingest` | ingest accepts Xet uploads; reject turns them off and asks clients to set HF_HUB_DISABLE_XET=1. |
 | `hfapi.default_namespace`<br>`HANGAR_HFAPI_DEFAULT_NAMESPACE` | string | `""` | Namespace that single-segment Repo IDs such as gpt2 redirect to. Empty turns the redirect off. |
 

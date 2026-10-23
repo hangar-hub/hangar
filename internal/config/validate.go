@@ -275,6 +275,9 @@ func (c *Config) validate(requireInstanceKey bool) error {
 
 	// hfapi
 	positiveSize(&e, "hfapi.regular_upload_max", c.HFAPI.RegularUploadMax)
+	if c.HFAPI.CommitInlineMax < c.HFAPI.RegularUploadMax {
+		e.addf("hfapi.commit_inline_max must be at least hfapi.regular_upload_max, so a commit can carry one regular file")
+	}
 	switch c.HFAPI.Xet {
 	case XetIngest, XetReject:
 	default:

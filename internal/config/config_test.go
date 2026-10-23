@@ -176,6 +176,17 @@ func TestValidateBeforeSecretsAllowsAnEmptyInstanceKey(t *testing.T) {
 	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "storage.backend")
 }
 
+func TestCommitInlineMaxHoldsARegularFile(t *testing.T) {
+	cfg, err := config.Load(config.LoadOptions{Env: []string{"HANGAR_SERVER_PUBLIC_URL=http://localhost:8080", "HANGAR_HFAPI_COMMIT_INLINE_MAX=1MiB"}})
+	require.NoError(t, err)
+	require.ErrorContains(t, cfg.ValidateBeforeSecrets(), "hfapi.commit_inline_max must be at least hfapi.regular_upload_max")
+	cfg.HFAPI.CommitInlineMax = 10 * config.MiB
+	require.NoError(t, cfg.ValidateBeforeSecrets())
+	def, err := config.Load(config.LoadOptions{Env: []string{"HANGAR_SERVER_PUBLIC_URL=http://localhost:8080"}})
+	require.NoError(t, err)
+	require.Equal(t, config.GiB, def.HFAPI.CommitInlineMax)
+}
+
 // TestWebAndWorkerRolesNeedAnExplicitInstanceKey: a web or worker process
 // with its own server.data_dir would otherwise generate a key of its own,
 // and could not read what the other processes sealed or signed.

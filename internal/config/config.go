@@ -228,6 +228,7 @@ const (
 // HFAPIConfig configures the Hub API.
 type HFAPIConfig struct {
 	RegularUploadMax ByteSize `koanf:"regular_upload_max" desc:"Preupload answers regular for files below this size unless .gitattributes says LFS."`
+	CommitInlineMax  ByteSize `koanf:"commit_inline_max" desc:"Most bytes of regular (non-LFS) file content one Hub API commit may carry. Content past 32 MiB is spooled to the temporary directory, so this bounds the disk a commit can fill. Larger commits get 413."`
 	Xet              string   `koanf:"xet" desc:"ingest accepts Xet uploads; reject turns them off and asks clients to set HF_HUB_DISABLE_XET=1."`
 	DefaultNamespace string   `koanf:"default_namespace" desc:"Namespace that single-segment Repo IDs such as gpt2 redirect to. Empty turns the redirect off."`
 }
@@ -343,7 +344,7 @@ func Default() Config {
 			UploadURLTTL:       24 * time.Hour,
 			VerifyWait:         10 * time.Minute,
 		},
-		HFAPI: HFAPIConfig{RegularUploadMax: 10 * MiB, Xet: XetIngest},
+		HFAPI: HFAPIConfig{RegularUploadMax: 10 * MiB, CommitInlineMax: 1 * GiB, Xet: XetIngest},
 		Xet:   XetConfig{TokenTTL: time.Hour, XorbRetention: 672 * time.Hour, MaxFileSize: 50 * GiB},
 		Jobs:  JobsConfig{Workers: 4, Lease: 60 * time.Second},
 		GC:    GCConfig{Schedule: "0 3 * * *", GracePeriod: 168 * time.Hour},
