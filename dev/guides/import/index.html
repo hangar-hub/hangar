@@ -1413,6 +1413,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="A Hugging Face cache">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#files-that-do-not-match" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files that do not match
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2858,6 +2875,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="A Hugging Face cache">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#files-that-do-not-match" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files that do not match
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2952,8 +2986,17 @@
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w">                     </span><span class="c1"># ~/.cache/huggingface/hub, or $HF_HUB_CACHE</span>
 hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w"> </span>/mnt/models/hub
 </code></pre></div>
-<p>For each Repo in the cache, Hangar creates a Mirror of the huggingface.co Repo with the same ID at the cached Commit: the Instance fetches the history, which is small, and the CLI uploads only the cached large files whose SHA-256 matches. Files you have not cached show as <strong>Not in arsenal</strong>, and you can pull them later.</p>
-<p>With <code>--offline</code>, or for a Repo huggingface.co does not have, each Repo becomes a local Repo with one Commit of the cached files instead. Add <code>--namespace</code> to put those in a Namespace of your choice.</p>
+<p>For each Repo in the cache, Hangar creates a Mirror of the huggingface.co Repo with the same ID at the cached Commit: the snapshot that <code>main</code> points at, or the newest snapshot if the cache does not record <code>main</code>. The Instance fetches the history, which is small, and the CLI uploads only the cached large files that the Mirror is missing. Files you have not cached show as <strong>Not in arsenal</strong>, and you can pull them later.</p>
+<p>The import reads every cached snapshot of a Repo, not only that one, and matches files by content rather than by name: the SHA-256 of large files and the git blob ID of the others. A file counts as matched when the Mirror has the same content at the cached Commit, the default branch or the Commit of any other cached snapshot, under any path.</p>
+<p>If the Repo is already a Mirror, the import fills in the files it is missing. When the cached Commit is newer than the Mirror's last sync, Hangar fetches its history first. The uploaded files are added to the Mirror at the Commit they matched, so files that have changed on huggingface.co since are not downloaded again.</p>
+<p>With <code>--offline</code>, or for a Repo huggingface.co does not have, each Repo becomes a local Repo with one Commit of the cached files instead, from the snapshot of <code>main</code> or else the newest. Add <code>--namespace</code> to put those in a Namespace of your choice. An import never commits to a Mirror, because Mirrors are read-only.</p>
+<h3 id="files-that-do-not-match">Files that do not match<a class="headerlink" href="#files-that-do-not-match" title="Permanent link">&para;</a></h3>
+<p>A file whose content matches nothing in the Mirror is not uploaded. The results count it as not matched, then name it with the reason:</p>
+<div class="highlight"><pre><span></span><code>Not matched:
+  acme/model: notes.safetensors (snapshot 1a2b3c4d5e6f): no file in the Mirror at Commits 9f8e7d6c5b4a or 0c1d2e3f4a5b has this content
+  acme/model: model.safetensors: its content differs from model.safetensors at Commit 9f8e7d6c5b4a and from every other file checked
+</code></pre></div>
+<p>The snapshot is named when the Repo has more than one in the cache. With <code>--json</code>, each result lists these files under <code>not_matched</code>, with <code>path</code>, <code>reason</code> and <code>snapshot</code>.</p>
 <h2 id="a-folder">A folder<a class="headerlink" href="#a-folder" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-dir<span class="w"> </span>./weights<span class="w"> </span>--repo<span class="w"> </span>acme/my-model
 </code></pre></div>
@@ -2962,7 +3005,7 @@ hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-lmstudio
 hangar<span class="w"> </span>import<span class="w"> </span>--from-lmstudio<span class="w"> </span>~/lm-models
 </code></pre></div>
-<p>Each <code>&lt;publisher&gt;/&lt;repo&gt;</code> folder that matches a huggingface.co Repo of the same name becomes a Partial mirror holding the files whose SHA-256 matches; files that differ are reported as not matched. Other folders become local Repos.</p>
+<p>Each <code>&lt;publisher&gt;/&lt;repo&gt;</code> folder that matches a huggingface.co Repo of the same name becomes a Partial mirror holding the files whose content matches a file of the Mirror's default branch, whatever their names. Files that match nothing are reported as not matched, with the reason. Other folders become local Repos.</p>
 <h2 id="ollama">Ollama<a class="headerlink" href="#ollama" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-ollama<span class="w"> </span>--namespace<span class="w"> </span>acme
 </code></pre></div>
