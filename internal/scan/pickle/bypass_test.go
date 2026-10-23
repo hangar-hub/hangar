@@ -306,6 +306,154 @@ func TestClassifyDeniesLoadersFoundInReview(t *testing.T) {
 	require.Equal(t, pickle.Safe, pickle.Classify("torch", "FloatStorage"))
 }
 
+// binBytes writes BINBYTES with b.
+func binBytes(p *scantest.Pickle, b []byte) *scantest.Pickle {
+	p.Raw('B').Raw(binary.LittleEndian.AppendUint32(nil, uint32(len(b)))...) //nolint:gosec // test fixtures are small.
+	return p.Raw(b...)
+}
+
+// loadBytes is a pickle that calls module.name with one byte string, as
+// torch.storage._load_from_bytes is called.
+func loadBytes(module, name string, b []byte) []byte {
+	p := scantest.NewPickle(4).Global(module, name)
+	return binBytes(p, b).Raw(0x85).Op("R.").Bytes()
+}
+
+// requireNested checks that global is a nested import with the given
+// classification.
+func requireNested(t *testing.T, res pickle.Result, global string, c pickle.Classification) {
+	t.Helper()
+	for _, i := range res.Imports {
+		if i.Global() == global && i.Nested {
+			require.Equal(t, c, i.Classification, global)
+			return
+		}
+	}
+	require.Failf(t, "nested import not found", "%s not in %v", global, globals(res))
+}
+
+func TestScanFollowsByteStringsPassedToCallables(t *testing.T) {
+	// A loader that is on neither list, called with a pickle in a byte
+	// string: the loader is suspicious, and what it would unpickle is
+	// unsafe.
+	const loader = "mypkg.serialise"
+	evil := scantest.OSSystemProtocol0()
+	cases := map[string][]byte{
+		"BINBYTES": loadBytes(loader, "from_bytes", evil),
+		"SHORT_BINBYTES": scantest.NewPickle(3).Global(loader, "from_bytes").
+			Raw('C', byte(len(evil))).Raw(evil...).Raw(0x85).Op("R.").Bytes(),
+		"BYTEARRAY8": scantest.NewPickle(5).Global(loader, "from_bytes").
+			Raw(0x96).Raw(binary.LittleEndian.AppendUint64(nil, uint64(len(evil)))...).Raw(evil...).Raw(0x85).Op("R.").Bytes(),
+		// The byte string is memoized first and read back for the call.
+		"through the memo": func() []byte {
+			p := scantest.NewPickle(4)
+			binBytes(p, evil).Memoize()
+			p.Op("0").Global(loader, "from_bytes").BinGet(0).Raw(0x85).Op("R.")
+			return p.Bytes()
+		}(),
+		// The byte string is appended to a list after the list is put in
+		// the argument tuple.
+		"appended to a list later": func() []byte {
+			p := scantest.NewPickle(4).Global(loader, "from_list")
+			p.Op("]").Memoize()
+			p.Raw(0x85)
+			p.BinGet(0)
+			binBytes(p, evil).Op("a0R.")
+			return p.Bytes()
+		}(),
+		// BUILD hands the byte string to the __setstate__ of a class on
+		// neither list.
+		"BUILD state": func() []byte {
+			p := scantest.NewPickle(4).Global(loader, "Thing").Op(")").Raw(0x81)
+			return binBytes(p, evil).Op("b.").Bytes()
+		}(),
+		// SETITEM on an instance calls its __setitem__.
+		"SETITEM": func() []byte {
+			p := scantest.NewPickle(4).Global(loader, "Store").Op(")").Raw(0x81)
+			p.Unicode("k")
+			return binBytes(p, evil).Op("s.").Bytes()
+		}(),
+		// Protocol 2 writes bytes as _codecs.encode(text, 'latin1').
+		"protocol 2 bytes": scantest.NewPickle(2).Global(loader, "from_bytes").
+			Global("_codecs", "encode").BinUnicode(string(evil)).BinUnicode("latin1").Raw(0x86).Op("R").
+			Raw(0x85).Op("R.").Bytes(),
+		// A bytearray made from text, as protocol 2 writes one.
+		"protocol 2 bytearray": scantest.NewPickle(2).Global(loader, "from_bytes").
+			Global("__builtin__", "bytearray").BinUnicode(string(evil)).BinUnicode("latin-1").Raw(0x86).Op("R").
+			Raw(0x85).Op("R.").Bytes(),
+		// A zip-based PyTorch archive, as torch.load(io.BytesIO(b)) reads.
+		"zip archive": loadBytes(loader, "from_bytes", scantest.TorchZip(evil, 0)),
+		// Two levels deep.
+		"nested twice": loadBytes(loader, "from_bytes", loadBytes(loader, "from_bytes", evil)),
+		// The callable cannot be named.
+		"computed callable": func() []byte {
+			p := scantest.NewPickle(4).Global("builtins", "str").Op(")R").Unicode("x").Raw(0x93)
+			return binBytes(p, evil).Raw(0x85).Op("R.").Bytes()
+		}(),
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			res, err := scanBytes(t, data)
+			require.NoError(t, err)
+			requireNested(t, res, "os.system", pickle.Unsafe)
+			require.Equal(t, pickle.Unsafe, res.Worst())
+		})
+	}
+}
+
+func TestScanFollowsByteStringsInTheJoblibReading(t *testing.T) {
+	res, err := pickle.ScanJoblib(bytes.NewReader(loadBytes("mypkg.serialise", "from_bytes", scantest.OSSystemProtocol0())))
+	require.NoError(t, err)
+	requireNested(t, res, "os.system", pickle.Unsafe)
+}
+
+func TestScanLeavesByteStringsOfAllowedCallables(t *testing.T) {
+	// The raw data of a NumPy array goes to the __setstate__ of an array
+	// that numpy.core.multiarray._reconstruct made, and torch tensors are
+	// rebuilt by allow-listed functions: neither unpickles bytes, so data
+	// that happens to look like a pickle is not read as one.
+	evil := scantest.OSSystemProtocol0()
+	p := scantest.NewPickle(4)
+	p.Global("numpy.core.multiarray", "_reconstruct").Global("numpy", "ndarray").Int(0).Raw(0x85).Raw('C', 1, 'b').Raw(0x87).Op("R")
+	p.Op("(").Int(1).Int(1).Raw(0x85).Global("numpy", "dtype").Unicode("u1").Raw(0x85).Op("R").Raw(0x89)
+	binBytes(p, evil).Op("tb.")
+	res, err := scanBytes(t, p.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, pickle.Safe, res.Worst(), "%v", globals(res))
+
+	// A byte string longer than the scan keeps, given to an allowed
+	// callable, is not an error.
+	p = scantest.NewPickle(4).Global("_codecs", "encode")
+	binBytes(p, make([]byte, (16<<20)+1)).Raw(0x85).Op("R.")
+	res, err = scanBytes(t, p.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, pickle.Safe, res.Worst())
+}
+
+func TestScanRefusesByteStringsItCannotFollow(t *testing.T) {
+	const loader = "mypkg.serialise"
+	deep := scantest.OSSystemProtocol0()
+	for range 5 {
+		deep = loadBytes(loader, "from_bytes", deep)
+	}
+	cases := map[string][]byte{
+		// Longer than the scan keeps.
+		"long byte string": loadBytes(loader, "from_bytes", make([]byte, (16<<20)+1)),
+		// Nested deeper than the scan follows.
+		"too deep": deep,
+		// Text in an encoding the scan does not decode.
+		"unknown encoding": scantest.NewPickle(2).Global(loader, "from_bytes").
+			Global("_codecs", "encode").BinUnicode("x").BinUnicode("rot13").Raw(0x86).Op("R").
+			Raw(0x85).Op("R.").Bytes(),
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := scanBytes(t, data)
+			require.ErrorIs(t, err, pickle.ErrUnsupported)
+		})
+	}
+}
+
 func TestScanFindsTorchLoadFromBytes(t *testing.T) {
 	// torch.storage._load_from_bytes(b) runs torch.load on b with
 	// weights_only=False, so the import alone makes the file unsafe.

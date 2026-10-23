@@ -14,6 +14,7 @@
 package pickle
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"encoding/binary"
@@ -78,7 +79,25 @@ const (
 	maxFrame = 64 << 20
 	// maxNested bounds pickles nested in joblib object arrays.
 	maxNested = 1 << 12
+	// maxPayload is the longest byte string kept for the nested scan;
+	// longer ones are skipped as they stream past.
+	maxPayload = 16 << 20
+	// maxPayloads bounds the bytes of byte strings one pickle keeps.
+	maxPayloads = 64 << 20
+	// maxNestedBytes bounds the bytes scanned as pickles nested in byte
+	// strings, across one stream and everything nested in it.
+	maxNestedBytes = 256 << 20
+	// maxDepth bounds pickles nested in byte strings.
+	maxDepth = 4
+	// maxHeld bounds the byte strings and containers one holder records.
+	maxHeld = 1 << 16
+	// maxWalk bounds the holders visited to collect the byte strings of
+	// calls, across one stream.
+	maxWalk = 1 << 24
 )
+
+// lostHolder stands for byte strings the scan could not keep track of.
+var lostHolder = &holder{lost: true}
 
 // Import is one global a pickle imports.
 type Import struct {
@@ -87,6 +106,9 @@ type Import struct {
 	// Opcode is GLOBAL, STACK_GLOBAL or INST.
 	Opcode         string
 	Classification Classification
+	// Nested is set on an import of a pickle held in a byte string that
+	// the outer pickle passes to a callable not on the allow list.
+	Nested bool
 }
 
 // Global returns `module.name`.
@@ -164,6 +186,7 @@ const (
 	kindDict
 	kindGlobal
 	kindObject
+	kindBytes
 )
 
 type value struct {
@@ -171,18 +194,79 @@ type value struct {
 	// taint is set on a value that may be, or hold, a NumpyArrayWrapper
 	// (ScanJoblib only).
 	taint bool
-	// trunc is set on a string that was cut to maxStrKept, or on an
-	// unknown string (kindOther) whose content was not kept.
+	// trunc is set on a string that was cut to maxStrKept, on a byte
+	// string whose content was not kept, on a global whose name was cut,
+	// or on an unknown string (kindOther) whose content was not kept.
 	trunc bool
 	// big is set on an int that does not fit in int64.
 	big bool
-	// s is a string, or a global's module.
+	// trusted is set on a value whose methods cannot unpickle what BUILD,
+	// APPEND or SETITEM pass to them: a container the opcodes made, or the
+	// result of a callable on the allow list.
+	trusted bool
+	// s is a string, a byte string, or a global's module.
 	s string
 	// name is a global's name.
-	name  string
-	n     int64
+	name string
+	n    int64
+	// items are a tuple's items. In the plain reading they are kept only
+	// for a tuple of one or two items that starts with a string, the
+	// arguments an encoder such as _codecs.encode takes.
 	items []value
 	ref   *ref
+	// hold records the byte strings the value holds.
+	hold *holder
+}
+
+// payload is a byte string's content, as the nested scan reads it.
+type payload struct {
+	data string
+	// trunc is set when the content was not kept.
+	trunc bool
+}
+
+// holder records the byte strings a container, or the result of a
+// callable on the allow list, holds: directly, or through the holders of
+// the values in it. A list or dict shares its holder with every copy of it
+// on the stack and in the memo, so items appended later are seen.
+type holder struct {
+	payloads []payload
+	inner    []*holder
+	// lost is set when the holder could not record everything added to it.
+	lost bool
+}
+
+// add records the byte strings v is or holds.
+func (h *holder) add(v value) {
+	if h == nil || h == lostHolder || (v.kind != kindBytes && v.hold == nil) || v.hold == h {
+		return
+	}
+	if len(h.payloads)+len(h.inner) >= maxHeld {
+		h.lost = true
+		return
+	}
+	if v.kind == kindBytes {
+		h.payloads = append(h.payloads, payload{data: v.s, trunc: v.trunc})
+	}
+	if v.hold != nil {
+		h.inner = append(h.inner, v.hold)
+	}
+}
+
+// holderOf returns a holder of the byte strings in items, or nil when
+// they hold none.
+func holderOf(items []value) *holder {
+	var h *holder
+	for _, it := range items {
+		if it.kind != kindBytes && it.hold == nil {
+			continue
+		}
+		if h == nil {
+			h = &holder{}
+		}
+		h.add(it)
+	}
+	return h
 }
 
 // ref is a mutable Python object: a list, a dict or an instance, shared
@@ -273,10 +357,23 @@ type machine struct {
 	ops    int64
 	nested int
 	sawJob bool
+	// kept is the bytes of byte strings kept in the current pickle.
+	kept int64
+	// depth is how many byte strings this pickle is nested in.
+	depth  int
+	shared *budget
+}
+
+// budget is the work shared by a stream and every pickle nested in it.
+type budget struct {
+	// nested is the bytes scanned as pickles nested in byte strings.
+	nested int64
+	// walked is the holders visited to collect the byte strings of calls.
+	walked int64
 }
 
 func newMachine(in *input, joblib bool) *machine {
-	return &machine{in: in, joblib: joblib}
+	return &machine{in: in, joblib: joblib, shared: &budget{}}
 }
 
 func (m *machine) reset() {
@@ -284,6 +381,7 @@ func (m *machine) reset() {
 	m.stackStrings = 0
 	m.memo = memo{values: map[int64]value{}}
 	m.ops = 0
+	m.kept = 0
 }
 
 func (m *machine) push(v value) error {
@@ -379,7 +477,17 @@ func (m *machine) memoPut(idx int64) error {
 	if !was {
 		m.memo.count++
 	}
-	keep := v.kind == kindString || (m.joblib && v.kind != kindOther)
+	// The plain reading keeps strings, byte strings, globals, and what the
+	// nested scan needs of other values; ScanJoblib keeps every value it
+	// tracks.
+	stored := v
+	keep := v.kind == kindString || v.kind == kindBytes || v.kind == kindGlobal || (m.joblib && v.kind != kindOther)
+	if !keep && (v.trusted || v.hold != nil) {
+		keep = true
+		if !m.joblib {
+			stored = value{kind: kindOther, trusted: v.trusted, hold: v.hold}
+		}
+	}
 	switch {
 	case keep && v.kind == kindString:
 		if m.memo.strings+int64(len(v.s)) > maxMemoStrings {
@@ -396,7 +504,13 @@ func (m *machine) memoPut(idx int64) error {
 	}
 	switch {
 	case keep:
-		m.memo.values[idx] = v
+		m.memo.values[idx] = stored
+	case v.kind == kindBytes:
+		// A byte string that could not be kept reads back as one whose
+		// content is unknown.
+		m.memo.values[idx] = value{kind: kindBytes, trunc: true}
+	case v.hold != nil:
+		m.memo.values[idx] = value{kind: kindOther, trunc: true, taint: m.joblib, hold: lostHolder}
 	case v.kind == kindOther && !v.trunc && (!m.joblib || !v.tainted()):
 		delete(m.memo.values, idx)
 	default:
@@ -426,12 +540,28 @@ func (m *machine) addImport(module, name, opcode string, trunc bool) value {
 		c = Unsafe
 	}
 	m.imports = append(m.imports, Import{Module: module, Name: name, Opcode: opcode, Classification: c})
-	g := value{kind: kindGlobal, s: module, name: name}
+	g := value{kind: kindGlobal, s: module, name: name, trunc: trunc}
 	if mentionsJoblib(module) || mentionsJoblib(name) {
 		m.sawJob = true
 		g.taint = m.joblib
 	}
 	return g
+}
+
+// pushBytes reads a byte string whose length takes width bytes. Byte
+// strings are kept, within maxPayload and maxPayloads, for the nested
+// scan; a longer one is pushed with its content unknown.
+func (m *machine) pushBytes(width int) error {
+	room := max(min(maxPayloads-m.kept, maxPayload), 0)
+	s, trunc, err := m.in.lenData(width, uint64(room), true) //nolint:gosec // room is not negative.
+	if err != nil {
+		return err
+	}
+	if trunc {
+		return m.push(value{kind: kindBytes, trunc: true})
+	}
+	m.kept += int64(len(s))
+	return m.push(value{kind: kindBytes, s: s})
 }
 
 // pythonInt parses a protocol 0 integer argument as Python's int() does:
@@ -608,36 +738,43 @@ func stringArg(s string) (string, error) {
 
 // tuple returns a tuple value of items.
 func (m *machine) tuple(items []value) value {
+	v := value{kind: kindOther, trusted: true, hold: holderOf(items)}
 	if !m.joblib {
-		return value{kind: kindOther}
+		if len(items) > 0 && len(items) <= 2 && items[0].kind == kindString {
+			v.items = items
+		}
+		return v
 	}
-	v := value{kind: kindTuple}
 	for _, it := range items {
 		v.taint = v.taint || it.tainted()
 	}
 	if len(items) > maxTracked {
-		return other(v.taint)
+		return v
 	}
+	v.kind = kindTuple
 	v.items = items
 	return v
 }
 
 func (m *machine) newList() value {
 	if !m.joblib {
-		return value{kind: kindOther}
+		return value{kind: kindOther, trusted: true, hold: &holder{}}
 	}
-	return value{kind: kindList, ref: &ref{}}
+	return value{kind: kindList, trusted: true, hold: &holder{}, ref: &ref{}}
 }
 
 func (m *machine) newDict() value {
 	if !m.joblib {
-		return value{kind: kindOther}
+		return value{kind: kindOther, trusted: true, hold: &holder{}}
 	}
-	return value{kind: kindDict, ref: &ref{keys: map[string]value{}}}
+	return value{kind: kindDict, trusted: true, hold: &holder{}, ref: &ref{keys: map[string]value{}}}
 }
 
 // appendItems adds items to the list (or other target) under them.
 func (m *machine) appendItems(target value, items []value) {
+	for _, it := range items {
+		target.hold.add(it)
+	}
 	if !m.joblib {
 		return
 	}
@@ -658,6 +795,9 @@ func (m *machine) appendItems(target value, items []value) {
 // setItems sets key and value pairs on the dict (or other target) under
 // them.
 func (m *machine) setItems(target value, kv []value) {
+	for _, it := range kv {
+		target.hold.add(it)
+	}
 	if !m.joblib {
 		return
 	}
@@ -695,6 +835,228 @@ func (m *machine) call(callable, args value, called bool) value {
 		r.class, r.called, r.args = r.args[0], false, nil
 	}
 	return value{kind: kindObject, ref: r}
+}
+
+// invoke handles a call of callable with args, and kwargs for NEWOBJ_EX.
+// A callable that is not on the allow list may unpickle a byte string it
+// is given, as torch.storage._load_from_bytes does, so the byte strings in
+// its arguments are scanned as pickles. The result of a callable on the
+// allow list holds the byte strings of its arguments, and an encoder's
+// result holds the bytes it makes.
+func (m *machine) invoke(callable, args value, called bool, kwargs ...value) (value, error) {
+	ok := allowed(callable)
+	if !ok {
+		if err := m.scanArgs(append([]value{args}, kwargs...)...); err != nil {
+			return value{}, err
+		}
+	}
+	res := m.call(callable, args, called)
+	if !ok {
+		return res, nil
+	}
+	res.trusted = true
+	res.hold = &holder{}
+	res.hold.add(args)
+	for _, kw := range kwargs {
+		res.hold.add(kw)
+	}
+	if encoder(callable) {
+		if p, ok := encoded(args); ok {
+			res.hold.payloads = append(res.hold.payloads, p)
+		}
+	}
+	return res, nil
+}
+
+// allowed reports whether a value is a global on the allow list.
+func allowed(v value) bool {
+	return v.kind == kindGlobal && !v.trunc && Classify(v.s, v.name) == Safe
+}
+
+// encoder reports whether a global on the allow list makes bytes from a
+// string: protocols 0 to 2 write bytes as _codecs.encode(text, 'latin1')
+// and a bytearray as bytearray(text, 'latin-1').
+func encoder(g value) bool {
+	m, n := compatName(g.s, g.name)
+	return (m == "_codecs" && n == "encode") || (m == "builtins" && n == "bytearray")
+}
+
+// encoded returns the bytes an encoder makes from args, a string and an
+// optional encoding name. ok is false when the call makes no bytes the
+// scan can tell, such as text that latin-1 cannot encode, which fails. An
+// encoding the scan does not know gives bytes whose content is unknown.
+func encoded(args value) (payload, bool) {
+	if len(args.items) == 0 || len(args.items) > 2 || args.items[0].kind != kindString {
+		return payload{}, false
+	}
+	text := args.items[0]
+	enc := "utf-8"
+	if len(args.items) == 2 {
+		if args.items[1].kind != kindString {
+			return payload{trunc: true}, true
+		}
+		enc = args.items[1].s
+	}
+	if text.trunc {
+		return payload{trunc: true}, true
+	}
+	// Python normalises codec names to lower case with underscores.
+	switch strings.NewReplacer("-", "_", " ", "_").Replace(strings.ToLower(enc)) {
+	case "latin_1", "latin1", "latin", "l1", "iso8859_1", "iso_8859_1", "8859", "cp819":
+		b := make([]byte, 0, len(text.s))
+		for _, r := range text.s {
+			if r > 0xff {
+				return payload{}, false
+			}
+			b = append(b, byte(r))
+		}
+		return payload{data: string(b)}, true
+	case "utf_8", "utf8", "u8", "utf":
+		return payload{data: text.s}, true
+	}
+	return payload{trunc: true}, true
+}
+
+// feed handles values that BUILD, APPEND, APPENDS, ADDITEMS, SETITEM or
+// SETITEMS pass to target: unless target is trusted, its __setstate__,
+// append, extend, add or __setitem__ may unpickle them.
+func (m *machine) feed(target value, vs ...value) error {
+	if target.trusted {
+		return nil
+	}
+	return m.scanArgs(vs...)
+}
+
+// scanArgs scans the byte strings in vs, and in every holder they reach,
+// as pickles.
+func (m *machine) scanArgs(vs ...value) error {
+	var ps []payload
+	var queue []*holder
+	for _, v := range vs {
+		if v.kind == kindBytes {
+			ps = append(ps, payload{data: v.s, trunc: v.trunc})
+		}
+		if v.hold != nil {
+			queue = append(queue, v.hold)
+		}
+	}
+	if len(queue) > 0 {
+		seen := map[*holder]bool{}
+		for len(queue) > 0 {
+			h := queue[len(queue)-1]
+			queue = queue[:len(queue)-1]
+			if seen[h] {
+				continue
+			}
+			seen[h] = true
+			m.shared.walked++
+			if m.shared.walked > maxWalk {
+				return unsupported("more than %d containers to search for byte strings", maxWalk)
+			}
+			if h.lost {
+				return unsupported("byte strings the scanner did not keep track of are passed to a callable that is not on the allow list")
+			}
+			ps = append(ps, h.payloads...)
+			queue = append(queue, h.inner...)
+		}
+	}
+	for _, p := range ps {
+		if err := m.scanPayload(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// scanPayload scans a byte string as torch.load reads it: a zip-based
+// PyTorch archive, or pickles back to back. Its imports are added to the
+// pickle's as nested imports.
+func (m *machine) scanPayload(p payload) error {
+	if p.trunc {
+		return unsupported("a byte string the scanner did not keep is passed to a callable that is not on the allow list")
+	}
+	if p.data == "" {
+		return nil
+	}
+	if m.depth >= maxDepth {
+		return unsupported("pickles nested in byte strings more than %d deep", maxDepth)
+	}
+	// budgetReader counts the bytes read; each scan also costs a small
+	// allocation, so count that too.
+	m.shared.nested += 64
+	if m.shared.nested > maxNestedBytes {
+		return unsupported("more than %d bytes to scan as pickles nested in byte strings", maxNestedBytes)
+	}
+	var res Result
+	var err error
+	if strings.HasPrefix(p.data, "PK\x03\x04") || strings.HasPrefix(p.data, "PK\x05\x06") {
+		res, err = m.scanNestedZip(p.data)
+	} else {
+		res, err = m.scanNested(strings.NewReader(p.data), len(p.data))
+	}
+	for _, imp := range res.Imports {
+		imp.Nested = true
+		m.imports = append(m.imports, imp)
+	}
+	if err != nil && errors.Is(err, ErrUnsupported) {
+		return err
+	}
+	// An invalid nested pickle stops its loader where the scan stopped.
+	return nil
+}
+
+// scanNested scans a stream nested in a byte string with the plain
+// reading.
+func (m *machine) scanNested(r io.Reader, size int) (Result, error) {
+	sub := newMachine(&input{file: bufio.NewReaderSize(budgetReader{r: r, b: m.shared}, min(max(size, 16), 64<<10))}, false)
+	sub.depth, sub.shared = m.depth+1, m.shared
+	res, err := sub.scanStream()
+	if m.shared.nested > maxNestedBytes {
+		return res, unsupported("more than %d bytes to scan as pickles nested in byte strings", maxNestedBytes)
+	}
+	return res, err
+}
+
+// scanNestedZip scans the .pkl members of a zip archive in a byte string,
+// as torch.load and torch.jit.load read them.
+func (m *machine) scanNestedZip(data string) (Result, error) {
+	zr, err := zip.NewReader(strings.NewReader(data), int64(len(data)))
+	if err != nil {
+		return Result{}, unsupported("a zip archive in a byte string cannot be read: %v", err)
+	}
+	var res Result
+	for _, f := range zr.File {
+		if !strings.HasSuffix(strings.ToLower(f.Name), ".pkl") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return res, unsupported("a zip archive in a byte string cannot be read: %v", err)
+		}
+		sub, err := m.scanNested(rc, int(min(f.UncompressedSize64, 64<<10))) //nolint:gosec // at most 64 KiB.
+		_ = rc.Close()
+		res.Imports = append(res.Imports, sub.Imports...)
+		if err != nil && errors.Is(err, ErrUnsupported) {
+			return res, err
+		}
+	}
+	return res, nil
+}
+
+// budgetReader counts the bytes read from a nested stream, decompressed,
+// against the shared budget, and stops reading when it is used up.
+type budgetReader struct {
+	r io.Reader
+	b *budget
+}
+
+func (br budgetReader) Read(p []byte) (int, error) {
+	if br.b.nested > maxNestedBytes {
+		return 0, io.EOF
+	}
+	n, err := br.r.Read(p)
+	br.b.nested += int64(n)
+	return n, err
 }
 
 func isCopyregNew(g value) bool {
@@ -1003,6 +1365,7 @@ func (m *machine) nestedPickle() (value, error) {
 	}
 	m.nested++
 	sub := newMachine(&input{file: m.in.file}, false)
+	sub.depth, sub.shared = m.depth, m.shared
 	sub.reset()
 	err := sub.run()
 	m.imports = append(m.imports, sub.imports...)
@@ -1133,44 +1496,35 @@ func (m *machine) step(op byte) error {
 	case 0x89: // NEWFALSE
 		return m.push(value{kind: kindInt, n: 0})
 	case 'T', 'X': // BINSTRING, BINUNICODE
-		s, trunc, err := in.lenData(4)
+		s, trunc, err := in.lenData(4, maxStrKept, false)
 		if err != nil {
 			return err
 		}
 		return m.push(m.str(s, trunc))
 	case 'U', 0x8c: // SHORT_BINSTRING, SHORT_BINUNICODE
-		s, trunc, err := in.lenData(1)
+		s, trunc, err := in.lenData(1, maxStrKept, false)
 		if err != nil {
 			return err
 		}
 		return m.push(m.str(s, trunc))
 	case 0x8d: // BINUNICODE8
-		s, trunc, err := in.lenData(8)
+		s, trunc, err := in.lenData(8, maxStrKept, false)
 		if err != nil {
 			return err
 		}
 		return m.push(m.str(s, trunc))
 	case 'B': // BINBYTES
-		if _, _, err := in.lenData(4); err != nil {
-			return err
-		}
-		return m.push(other(false))
+		return m.pushBytes(4)
 	case 'C': // SHORT_BINBYTES
-		if _, _, err := in.lenData(1); err != nil {
-			return err
-		}
-		return m.push(other(false))
+		return m.pushBytes(1)
 	case 0x8e, 0x96: // BINBYTES8, BYTEARRAY8
-		if _, _, err := in.lenData(8); err != nil {
-			return err
-		}
-		return m.push(other(false))
+		return m.pushBytes(8)
 	case 0x8a, 0x8b: // LONG1, LONG4
 		width := 1
 		if op == 0x8b {
 			width = 4
 		}
-		s, trunc, err := in.lenData(width)
+		s, trunc, err := in.lenData(width, maxStrKept, false)
 		if err != nil {
 			return err
 		}
@@ -1184,9 +1538,12 @@ func (m *machine) step(op byte) error {
 		if err != nil {
 			return err
 		}
+		if err := m.feed(t, v); err != nil {
+			return err
+		}
 		m.appendItems(t, []value{v})
 		return nil
-	case 'e': // APPENDS
+	case 'e', 0x90: // APPENDS, ADDITEMS
 		items, err := m.popMark()
 		if err != nil {
 			return err
@@ -1195,15 +1552,7 @@ func (m *machine) step(op byte) error {
 		if err != nil {
 			return err
 		}
-		m.appendItems(t, items)
-		return nil
-	case 0x90: // ADDITEMS
-		items, err := m.popMark()
-		if err != nil {
-			return err
-		}
-		t, err := m.top()
-		if err != nil {
+		if err := m.feed(t, items...); err != nil {
 			return err
 		}
 		m.appendItems(t, items)
@@ -1217,6 +1566,9 @@ func (m *machine) step(op byte) error {
 		if err != nil {
 			return err
 		}
+		if err := m.feed(t, kv...); err != nil {
+			return err
+		}
 		m.setItems(t, kv)
 		return nil
 	case 'u': // SETITEMS
@@ -1228,11 +1580,21 @@ func (m *machine) step(op byte) error {
 		if err != nil {
 			return err
 		}
+		if err := m.feed(t, kv...); err != nil {
+			return err
+		}
 		m.setItems(t, kv)
 		return nil
 	case 'b': // BUILD
 		state, err := m.pop()
 		if err != nil {
+			return err
+		}
+		t, err := m.top()
+		if err != nil {
+			return err
+		}
+		if err := m.feed(t, state); err != nil {
 			return err
 		}
 		return m.build(state)
@@ -1293,19 +1655,30 @@ func (m *machine) step(op byte) error {
 		if err != nil {
 			return err
 		}
-		return m.push(m.call(vs[0], vs[1], true))
+		res, err := m.invoke(vs[0], vs[1], true)
+		if err != nil {
+			return err
+		}
+		return m.push(res)
 	case 0x81: // NEWOBJ
 		vs, err := m.popN(2)
 		if err != nil {
 			return err
 		}
-		return m.push(m.call(vs[0], vs[1], false))
+		res, err := m.invoke(vs[0], vs[1], false)
+		if err != nil {
+			return err
+		}
+		return m.push(res)
 	case 0x92: // NEWOBJ_EX
 		vs, err := m.popN(3)
 		if err != nil {
 			return err
 		}
-		res := m.call(vs[0], vs[1], false)
+		res, err := m.invoke(vs[0], vs[1], false, vs[2])
+		if err != nil {
+			return err
+		}
 		if vs[2].tainted() && res.ref != nil {
 			res.ref.taint = true
 		}
@@ -1334,7 +1707,11 @@ func (m *machine) step(op byte) error {
 		if err != nil {
 			return err
 		}
-		return m.push(m.call(g, m.tuple(args), true))
+		res, err := m.invoke(g, m.tuple(args), true)
+		if err != nil {
+			return err
+		}
+		return m.push(res)
 	case 'o': // OBJ
 		items, err := m.popMark()
 		if err != nil {
@@ -1343,7 +1720,11 @@ func (m *machine) step(op byte) error {
 		if len(items) == 0 {
 			return invalid("OBJ without a class")
 		}
-		return m.push(m.call(items[0], m.tuple(items[1:]), true))
+		res, err := m.invoke(items[0], m.tuple(items[1:]), true)
+		if err != nil {
+			return err
+		}
+		return m.push(res)
 	case 0x93: // STACK_GLOBAL
 		vs, err := m.popN(2)
 		if err != nil {
@@ -1538,8 +1919,8 @@ func (in *input) line() (string, bool, error) {
 }
 
 // lenData reads a length of width bytes and then that many bytes, keeping
-// the first maxStrKept of them.
-func (in *input) lenData(width int) (string, bool, error) {
+// the first keep of them, or, with whole, all of them or none.
+func (in *input) lenData(width int, keep uint64, whole bool) (string, bool, error) {
 	b, err := in.read(width)
 	if err != nil {
 		return "", false, err
@@ -1556,7 +1937,10 @@ func (in *input) lenData(width int) (string, bool, error) {
 	if n > math.MaxInt64 {
 		return "", false, invalid("length %d is too large", n)
 	}
-	keep := min(n, maxStrKept)
+	if whole && n > keep {
+		keep = 0
+	}
+	keep = min(n, keep)
 	kb := make([]byte, keep)
 	if in.fromFrame() {
 		k, _ := io.ReadFull(in.frame, kb)
@@ -1627,7 +2011,11 @@ const legacyPickles = 5
 // ErrUnsupported when it could not follow any of the pickles to its end;
 // the imports found before the error are returned with it.
 func Scan(r io.Reader) (Result, error) {
-	m := newMachine(newInput(r), false)
+	return newMachine(newInput(r), false).scanStream()
+}
+
+// scanStream is Scan on the machine's input.
+func (m *machine) scanStream() (Result, error) {
 	var res Result
 	for {
 		m.reset()
