@@ -65,7 +65,7 @@ func TestUpstreamRedirectsCannotReachTheLocalNetwork(t *testing.T) {
 	t.Cleanup(hub.Close)
 	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "a", Name: "b"}
 
-	g := newGuardedTransport()
+	g := newGuardedTransport(DefaultStallTimeout)
 	fakePublicDNS(t, g, strings.TrimPrefix(hub.URL, "http://"))
 	_, port, _ := net.SplitHostPort(strings.TrimPrefix(hub.URL, "http://"))
 	public := Upstream{Name: "hf", BaseURL: "http://hub.public.test:" + port}
@@ -77,7 +77,7 @@ func TestUpstreamRedirectsCannotReachTheLocalNetwork(t *testing.T) {
 
 	// A LAN Upstream (a loopback address here) may redirect within the LAN.
 	lan := Upstream{Name: "lan", BaseURL: hub.URL}
-	info, err := testClient(newGuardedTransport()).RepoInfo(context.Background(), lan, Credentials{}, id, "")
+	info, err := testClient(newGuardedTransport(DefaultStallTimeout)).RepoInfo(context.Background(), lan, Credentials{}, id, "")
 	require.NoError(t, err)
 	require.Equal(t, model.CommitSHA(strings.Repeat("a", 40)), info.SHA)
 	require.Equal(t, int32(1), internalHits.Load())
@@ -94,7 +94,7 @@ func TestUpstreamNeverReachesReservedAddresses(t *testing.T) {
 	t.Cleanup(local.Close)
 	_, port, _ := net.SplitHostPort(strings.TrimPrefix(local.URL, "http://"))
 	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "a", Name: "b"}
-	c := testClient(newGuardedTransport())
+	c := testClient(newGuardedTransport(DefaultStallTimeout))
 	for _, base := range []string{"http://0.0.0.0:" + port, "http://169.254.169.254", "http://[fe80::1]:" + port, "http://100.100.100.200"} {
 		_, err := c.RepoInfo(context.Background(), Upstream{Name: "x", BaseURL: base}, Credentials{}, id, "")
 		require.ErrorIs(t, err, ErrBlockedAddress, base)

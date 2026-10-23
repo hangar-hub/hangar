@@ -270,6 +270,8 @@ func TestBlobsStreamWithSignedRanges(t *testing.T) {
 	require.Equal(t, http.StatusOK, head.StatusCode)
 	require.Equal(t, fmt.Sprint(model.Size), head.Header.Get("Content-Length"))
 	require.Equal(t, model.Digest, head.Header.Get("Docker-Content-Digest"))
+	require.Equal(t, "nosniff", head.Header.Get("X-Content-Type-Options"), "a browser never renders a blob")
+	require.Equal(t, "application/octet-stream", head.Header.Get("Content-Type"))
 
 	// Ollama reads the direct URL from Location and downloads parts from
 	// it without an Authorization header.

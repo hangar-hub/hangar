@@ -90,6 +90,15 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	// 503 until the full handler is installed and the worker has started.
 	var started atomic.Bool
 	var waiting atomic.Pointer[string]
+	// Name the Blob store as the reason only when start-up may wait for
+	// it. The filesystem backend opens at once or fails, and a /readyz
+	// answered while it opens would otherwise report a wait that never
+	// happens. It is set before the listener opens, so the first /readyz
+	// names it too.
+	if blobStoreWaits(cfg) {
+		waitingForBlobs := "waiting for the Blob store to answer"
+		waiting.Store(&waitingForBlobs)
+	}
 	var store atomic.Pointer[blob.Store]
 	health := newHealthFor(d, func() blob.Store {
 		if s := store.Load(); s != nil {
@@ -101,10 +110,14 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	var current atomic.Pointer[http.Handler]
 	starting := httpx.RequestIDs(httpx.Dispatch(httpx.Protocols{Health: health}, cfg.Server.PublicURL))
 	current.Store(&starting)
+	// No ReadTimeout or WriteTimeout: uploads, downloads and git have no
+	// total timeout, only the idle timeout (02-architecture.md, "Errors
+	// and limits").
 	srv := &http.Server{
-		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { (*current.Load()).ServeHTTP(w, r) }),
+		Handler: httpx.IdleTimeout(streamIdleTimeout)(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { (*current.Load()).ServeHTTP(w, r) })),
 		ReadHeaderTimeout: 30 * time.Second,
-		IdleTimeout:       5 * time.Minute,
+		IdleTimeout:       streamIdleTimeout,
 	}
 	ln, err := net.Listen("tcp", cfg.Server.Listen)
 	if err != nil {
@@ -124,14 +137,6 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 		return nil
 	}
 
-	// Name the Blob store as the reason only when start-up may wait for
-	// it. The filesystem backend opens at once or fails, and a /readyz
-	// answered while it opens would otherwise report a wait that never
-	// happens.
-	if blobStoreWaits(cfg) {
-		waitingForBlobs := "waiting for the Blob store to answer"
-		waiting.Store(&waitingForBlobs)
-	}
 	blobs, err := openBlobStoreWaiting(ctx, cfg, func(ctx context.Context) (blob.Store, error) {
 		return openBlobStore(ctx, cfg, tel)
 	}, log)
@@ -211,7 +216,8 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 }
 
 // waitForSchema waits until the database schema is current, so a web or
-// worker process can start while hangar admin migrate runs.
+// worker process can start while hangar admin migrate runs. It fails at
+// once when a newer version of Hangar has migrated the database.
 func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 	logged := false
 	for {
@@ -222,8 +228,13 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 		if err == nil {
 			st, err = d.Schema(ctx)
 		}
-		if err == nil && st.UpToDate() {
-			return nil
+		if err == nil {
+			if err := st.CheckNotNewer(); err != nil {
+				return err
+			}
+			if st.UpToDate() {
+				return nil
+			}
 		}
 		if !logged {
 			if err != nil {
@@ -240,6 +251,10 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 		}
 	}
 }
+
+// streamIdleTimeout is how long a request may go without sending or
+// reading data, and how long a keep-alive connection may sit idle.
+const streamIdleTimeout = 5 * time.Minute
 
 // Bounds of the retry interval in openBlobStoreWaiting.
 const (

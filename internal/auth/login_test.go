@@ -3,7 +3,9 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -139,6 +141,129 @@ func TestPasswordLoginAndThrottling(t *testing.T) {
 		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword})
 		require.ErrorIs(t, err, auth.ErrLoginFailed)
 		_ = bob
+	})
+}
+
+// TestLoginThrottleLockStartsAfterTheHash checks that the lock a failure
+// sets runs from when the password was found wrong, not from when the
+// attempt was counted before the hash. A hash slower than the first
+// one-second lock used to leave no lock at all by the next request.
+func TestLoginThrottleLockStartsAfterTheHash(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		_, err := s.Users.Create(ctx, auth.NewUser{Username: "alice", Password: goodPassword}, model.System())
+		require.NoError(t, err)
+		for i := range 4 {
+			_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: fmt.Sprintf("10.3.0.%d", i)})
+			require.ErrorIs(t, err, auth.ErrLoginFailed)
+		}
+		// The fifth failure locks the username for a second. Each read of
+		// the clock now moves it on two seconds, so the check takes longer
+		// than the lock.
+		clock.SetTick(2 * time.Second)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "10.3.0.9"})
+		clock.SetTick(0)
+		require.ErrorIs(t, err, auth.ErrLoginFailed)
+		var row db.LoginAttempt
+		require.NoError(t, d.NewSelect().Model(&row).Where("key = ?", "user:alice").Scan(ctx))
+		require.Equal(t, 5, row.Failures)
+		require.NotNil(t, row.LastFailureAt)
+		require.NotNil(t, row.LockedUntil)
+		require.Greater(t, row.LockedUntil.Sub(*row.LastFailureAt), time.Second,
+			"the lock runs from the end of the check, after the attempt was counted")
+	})
+}
+
+// TestLoginThrottleHoldsUnderParallelAttempts covers security review
+// finding 3: the throttle was checked before the password hash and the
+// failure written after it, so a burst of parallel guesses all passed the
+// check while the first ones were hashing. Each attempt now counts before
+// the hash, so a burst gets the same five guesses as a sequence.
+func TestLoginThrottleHoldsUnderParallelAttempts(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		alice, err := s.Users.Create(ctx, auth.NewUser{Username: "alice", Password: goodPassword}, model.System())
+		require.NoError(t, err)
+		const burst = 24
+		run := func(attempt func(i int) error) (failed, throttled int) {
+			errs := make(chan error, burst)
+			var wg sync.WaitGroup
+			for i := range burst {
+				wg.Go(func() { errs <- attempt(i) })
+			}
+			wg.Wait()
+			close(errs)
+			for err := range errs {
+				var te *auth.ThrottledError
+				switch {
+				case errors.As(err, &te):
+					throttled++
+				case errors.Is(err, auth.ErrLoginFailed), errors.Is(err, auth.ErrWrongPassword):
+					failed++
+				default:
+					t.Fatalf("unexpected result: %v", err)
+				}
+			}
+			return failed, throttled
+		}
+
+		// One username from many IP addresses: only the username's counter
+		// decides.
+		failed, throttled := run(func(i int) error {
+			_, err := s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: fmt.Sprintf("10.9.0.%d", i)})
+			return err
+		})
+		require.Equal(t, 5, failed, "only five guesses are checked")
+		require.Equal(t, burst-5, throttled)
+
+		// Many usernames from one IP address (password spraying).
+		failed, throttled = run(func(i int) error {
+			_, err := s.Login.Password(ctx, auth.LoginAttempt{Username: fmt.Sprintf("spray%d", i), Password: "wrong-password-1", IP: "192.0.2.50"})
+			return err
+		})
+		require.Equal(t, 5, failed, "only five guesses are checked")
+		require.Equal(t, burst-5, throttled)
+
+		// Changing a password through the account page counts the same way.
+		bob, err := s.Users.Create(ctx, auth.NewUser{Username: "bob", Password: goodPassword}, model.System())
+		require.NoError(t, err)
+		sess, _, err := s.Sessions.Create(ctx, bob.ID, "", "")
+		require.NoError(t, err)
+		p := bob.Principal(model.AuthSession)
+		p.SessionID = sess.ID
+		failed, throttled = run(func(i int) error {
+			return s.ChangePassword(ctx, p, auth.PasswordChange{Current: "wrong-password-1", New: "another good password 9", IP: fmt.Sprintf("10.8.0.%d", i)})
+		})
+		require.Equal(t, 5, failed, "only five guesses are checked")
+		require.Equal(t, burst-5, throttled)
+
+		// A right password takes its count back: four failures and a
+		// success from one IP address leave it unlocked.
+		clock.Advance(2 * time.Hour)
+		for i := range 4 {
+			_, err := s.Login.Password(ctx, auth.LoginAttempt{Username: fmt.Sprintf("guess%d", i), Password: "wrong-password-1", IP: "198.51.100.1"})
+			require.ErrorIs(t, err, auth.ErrLoginFailed)
+		}
+		for range 3 {
+			u, err := s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "198.51.100.1"})
+			require.NoError(t, err)
+			require.Equal(t, alice.ID, u.ID)
+		}
+		// A success from an address with no failures leaves no row behind.
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "198.51.100.77"})
+		require.NoError(t, err)
+		n, err := d.NewSelect().Model((*db.LoginAttempt)(nil)).Where("key = ?", "ip:198.51.100.77").Count(ctx)
+		require.NoError(t, err)
+		require.Zero(t, n)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "guess9", Password: "wrong-password-1", IP: "198.51.100.1"})
+		require.ErrorIs(t, err, auth.ErrLoginFailed, "the fifth failure is checked")
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "198.51.100.1"})
+		var te *auth.ThrottledError
+		require.True(t, errors.As(err, &te), "and then the IP address is locked: %v", err)
 	})
 }
 

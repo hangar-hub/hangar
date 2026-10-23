@@ -2609,6 +2609,12 @@ type GetRepoMetadataParams struct {
 	Rev *RevQuery `form:"rev,omitempty" json:"rev,omitempty"`
 }
 
+// PullMoreIntoMirrorParams defines parameters for PullMoreIntoMirror.
+type PullMoreIntoMirrorParams struct {
+	// Revision Branch, tag or Commit SHA on the Upstream; default: the Mirror's tracked branch.
+	Revision *string `form:"revision,omitempty" json:"revision,omitempty"`
+}
+
 // ListQuantsParams defines parameters for ListQuants.
 type ListQuantsParams struct {
 	// Rev Revision; the default branch when absent.
@@ -3698,17 +3704,21 @@ type ClientInterface interface {
 
 	// PullMoreIntoMirrorWithBody Pull more files into a Mirror
 	//
+	// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-	PullMoreIntoMirrorWithBody(ctx context.Context, pType RepoType, ns Ns, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PullMoreIntoMirrorWithBody(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PullMoreIntoMirror Pull more files into a Mirror
+	//
+	// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-	PullMoreIntoMirror(ctx context.Context, pType RepoType, ns Ns, name Name, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PullMoreIntoMirror(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SyncMirror Sync a Mirror now
 	//
@@ -6018,11 +6028,13 @@ func (c *Client) DetachMirror(ctx context.Context, pType RepoType, ns Ns, name N
 
 // PullMoreIntoMirrorWithBody Pull more files into a Mirror
 //
+// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-func (c *Client) PullMoreIntoMirrorWithBody(ctx context.Context, pType RepoType, ns Ns, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPullMoreIntoMirrorRequestWithBody(c.Server, pType, ns, name, contentType, body)
+func (c *Client) PullMoreIntoMirrorWithBody(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullMoreIntoMirrorRequestWithBody(c.Server, pType, ns, name, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6035,11 +6047,13 @@ func (c *Client) PullMoreIntoMirrorWithBody(ctx context.Context, pType RepoType,
 
 // PullMoreIntoMirror Pull more files into a Mirror
 //
+// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+//
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-func (c *Client) PullMoreIntoMirror(ctx context.Context, pType RepoType, ns Ns, name Name, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPullMoreIntoMirrorRequest(c.Server, pType, ns, name, body)
+func (c *Client) PullMoreIntoMirror(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullMoreIntoMirrorRequest(c.Server, pType, ns, name, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11635,18 +11649,18 @@ func NewDetachMirrorRequest(server string, pType RepoType, ns Ns, name Name) (*h
 }
 
 // NewPullMoreIntoMirrorRequest calls the generic PullMoreIntoMirror builder with application/json body
-func NewPullMoreIntoMirrorRequest(server string, pType RepoType, ns Ns, name Name, body PullMoreIntoMirrorJSONRequestBody) (*http.Request, error) {
+func NewPullMoreIntoMirrorRequest(server string, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, body PullMoreIntoMirrorJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPullMoreIntoMirrorRequestWithBody(server, pType, ns, name, "application/json", bodyReader)
+	return NewPullMoreIntoMirrorRequestWithBody(server, pType, ns, name, params, "application/json", bodyReader)
 }
 
 // NewPullMoreIntoMirrorRequestWithBody constructs an http.Request for the PullMoreIntoMirror method, with any body, and a specified content type
-func NewPullMoreIntoMirrorRequestWithBody(server string, pType RepoType, ns Ns, name Name, contentType string, body io.Reader) (*http.Request, error) {
+func NewPullMoreIntoMirrorRequestWithBody(server string, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -11683,6 +11697,33 @@ func NewPullMoreIntoMirrorRequestWithBody(server string, pType RepoType, ns Ns, 
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
@@ -14128,17 +14169,21 @@ type ClientWithResponsesInterface interface {
 
 	// PullMoreIntoMirrorWithBodyWithResponse Pull more files into a Mirror
 	//
+	// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-	PullMoreIntoMirrorWithBodyWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error)
+	PullMoreIntoMirrorWithBodyWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error)
 
 	// PullMoreIntoMirrorWithResponse Pull more files into a Mirror
+	//
+	// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-	PullMoreIntoMirrorWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error)
+	PullMoreIntoMirrorWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error)
 
 	// SyncMirrorWithResponse Sync a Mirror now
 	//
@@ -21757,11 +21802,13 @@ func (c *ClientWithResponses) DetachMirrorWithResponse(ctx context.Context, pTyp
 
 // PullMoreIntoMirrorWithBodyWithResponse Pull more files into a Mirror
 //
+// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-func (c *ClientWithResponses) PullMoreIntoMirrorWithBodyWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error) {
-	rsp, err := c.PullMoreIntoMirrorWithBody(ctx, pType, ns, name, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PullMoreIntoMirrorWithBodyWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error) {
+	rsp, err := c.PullMoreIntoMirrorWithBody(ctx, pType, ns, name, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -21770,11 +21817,13 @@ func (c *ClientWithResponses) PullMoreIntoMirrorWithBodyWithResponse(ctx context
 
 // PullMoreIntoMirrorWithResponse Pull more files into a Mirror
 //
+// Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+//
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /repos/{type}/{ns}/{name}/mirror/pull (the `PullMoreIntoMirror` operationId).
-func (c *ClientWithResponses) PullMoreIntoMirrorWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error) {
-	rsp, err := c.PullMoreIntoMirror(ctx, pType, ns, name, body, reqEditors...)
+func (c *ClientWithResponses) PullMoreIntoMirrorWithResponse(ctx context.Context, pType RepoType, ns Ns, name Name, params *PullMoreIntoMirrorParams, body PullMoreIntoMirrorJSONRequestBody, reqEditors ...RequestEditorFn) (*PullMoreIntoMirrorResponse, error) {
+	rsp, err := c.PullMoreIntoMirror(ctx, pType, ns, name, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -26406,7 +26455,7 @@ type ServerInterface interface {
 	DetachMirror(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name)
 	// PullMoreIntoMirror Pull more files into a Mirror
 	// (POST /repos/{type}/{ns}/{name}/mirror/pull)
-	PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name)
+	PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, params PullMoreIntoMirrorParams)
 	// SyncMirror Sync a Mirror now
 	// (POST /repos/{type}/{ns}/{name}/mirror/sync)
 	SyncMirror(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name)
@@ -27057,7 +27106,7 @@ func (_ Unimplemented) DetachMirror(w http.ResponseWriter, r *http.Request, pTyp
 
 // PullMoreIntoMirror Pull more files into a Mirror
 // (POST /repos/{type}/{ns}/{name}/mirror/pull)
-func (_ Unimplemented) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name) {
+func (_ Unimplemented) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, pType RepoType, ns Ns, name Name, params PullMoreIntoMirrorParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -31050,8 +31099,24 @@ func (siw *ServerInterfaceWrapper) PullMoreIntoMirror(w http.ResponseWriter, r *
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PullMoreIntoMirrorParams
+
+	// ------------- Optional query parameter "revision" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "revision", r.URL.Query(), &params.Revision, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revision"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revision", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PullMoreIntoMirror(w, r, pType, ns, name)
+		siw.Handler.PullMoreIntoMirror(w, r, pType, ns, name, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -32909,37 +32974,39 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
+	"MVojpDLcttJZf0Az6f8bAA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

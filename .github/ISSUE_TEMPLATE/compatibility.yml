@@ -19,7 +19,7 @@ body:
     id: version
     attributes:
       label: Hangar version
-      description: The output of `hangar version`.
+      description: The output of `hangar version`. If it prints `dev`, give the release, image tag or chart version you installed.
     validations: {required: true}
   - type: textarea
     id: notes

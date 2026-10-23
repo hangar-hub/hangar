@@ -28,12 +28,18 @@ type Config struct {
 	Repos     ReposConfig               `koanf:"repos" desc:"Repo lifecycle."`
 	Viewer    ViewerConfig              `koanf:"viewer" desc:"Dataset Viewer and Parquet export."`
 	UI        UIConfig                  `koanf:"ui" desc:"Web UI."`
+	Webhooks  WebhooksConfig            `koanf:"webhooks" desc:"Webhook deliveries."`
 	Telemetry TelemetryConfig           `koanf:"telemetry" desc:"OpenTelemetry traces, metrics and logs. Standard OTEL_* variables also apply and win."`
 }
 
 // UIConfig configures the web UI.
 type UIConfig struct {
 	DocsURL string `koanf:"docs_url" desc:"Where the web UI's links to the documentation go, such as a docs mirror on an air-gapped network. The mirror must serve the same paths as https://hangar.page/. Empty removes the links."`
+}
+
+// WebhooksConfig configures webhook deliveries.
+type WebhooksConfig struct {
+	AllowPrivateTargets bool `koanf:"allow_private_targets" desc:"Let webhooks reach private addresses: loopback, RFC 1918, carrier-grade NAT and unique local. Off by default, so users cannot make Hangar send requests into your network. Link-local and cloud metadata addresses are refused whatever this says. This is the default for the Instance setting of the same name, which an Instance admin can change under Admin, Settings."`
 }
 
 // DefaultDocsURL is the public documentation site.
@@ -175,6 +181,7 @@ type PullConfig struct {
 	BandwidthLimit ByteSize          `koanf:"bandwidth_limit" desc:"Bytes per second across the Instance. 0 means unlimited."`
 	Concurrency    int               `koanf:"concurrency" desc:"Files transferred at once across the Instance."`
 	Windows        []string          `koanf:"windows" desc:"Times when Pull transfers may run, such as 01:00-07:00, in server.timezone. Empty means any time."`
+	StallTimeout   time.Duration     `koanf:"stall_timeout" desc:"How long an Upstream may take to answer a request, or go without sending data during a download, before Hangar cuts the connection and retries. Raise it on slow or congested links."`
 	PullThrough    PullThroughConfig `koanf:"pull_through" desc:"Start Pulls automatically when clients ask for Repos that are not in the Arsenal."`
 	Dependencies   DependencyConfig  `koanf:"dependencies" desc:"Dependency resolution."`
 }
@@ -313,9 +320,10 @@ func Default() Config {
 			"huggingface": {BaseURL: "https://huggingface.co", Enabled: true},
 		},
 		Pull: PullConfig{
-			Concurrency: 4,
-			Windows:     []string{},
-			PullThrough: PullThroughConfig{Allow: []string{"*"}, MinRole: "user"},
+			Concurrency:  4,
+			Windows:      []string{},
+			StallTimeout: 2 * time.Minute,
+			PullThrough:  PullThroughConfig{Allow: []string{"*"}, MinRole: "user"},
 			Dependencies: DependencyConfig{
 				AutoPullCode: true,
 				MaxDepth:     5,

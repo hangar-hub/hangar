@@ -116,7 +116,8 @@ type TokenRestrictionsColumn struct {
 	Repos      []string `json:"repos,omitempty"`
 }
 
-// OllamaKey is a row of ollama_keys.
+// OllamaKey is a row of ollama_keys. TokenID is the Token that registered
+// the key, if a Token did.
 type OllamaKey struct {
 	bun.BaseModel `bun:"table:ollama_keys"`
 	ID            uuid.UUID  `bun:"id,pk,type:uuid"`
@@ -124,6 +125,7 @@ type OllamaKey struct {
 	Name          string     `bun:"name,notnull"`
 	PublicKey     string     `bun:"public_key,notnull"`
 	Fingerprint   string     `bun:"fingerprint,notnull"`
+	TokenID       *uuid.UUID `bun:"token_id,type:uuid"`
 	LastUsedAt    *time.Time `bun:"last_used_at"`
 	Timestamps
 }
@@ -219,6 +221,7 @@ type OIDCState struct {
 	PKCEVerifier  string     `bun:"pkce_verifier,notnull"`
 	RedirectTo    string     `bun:"redirect_to,notnull"`
 	LinkUserID    *uuid.UUID `bun:"link_user_id,type:uuid"`
+	BrowserHash   string     `bun:"browser_hash,notnull"`
 	ExpiresAt     time.Time  `bun:"expires_at,notnull"`
 	Timestamps
 }

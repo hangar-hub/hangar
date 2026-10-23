@@ -11,7 +11,7 @@ Hangar serves GGUF Repos to Ollama the way huggingface.co does. Ollama signs its
 hangar ollama key register
 ```
 
-or paste `~/.ollama/id_ed25519.pub` under **Settings**, **Ollama keys**. Then this works with no Modelfile:
+or paste `~/.ollama/id_ed25519.pub` under **Settings**, **Ollama keys**. A key you paste in Settings reads every Repo you can read. A key the CLI registers is tied to the CLI's token: it reads only what that token can read, and stops working when the token expires or is revoked. Run `hangar ollama key register` again after you sign the CLI in with a new token. Then this works with no Modelfile:
 
 ```sh
 ollama pull hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M

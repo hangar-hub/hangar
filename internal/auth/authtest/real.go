@@ -17,18 +17,30 @@ import (
 
 // Clock is a settable clock for tests.
 type Clock struct {
-	mu sync.Mutex
-	t  time.Time
+	mu   sync.Mutex
+	t    time.Time
+	tick time.Duration
 }
 
 // NewClock returns a Clock at t.
 func NewClock(t time.Time) *Clock { return &Clock{t: t} }
 
-// Now returns the clock's time.
+// Now returns the clock's time, then moves it forward by the tick, if any.
 func (c *Clock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.t
+	now := c.t
+	c.t = c.t.Add(c.tick)
+	return now
+}
+
+// SetTick makes every later call to Now move the clock forward by d, so
+// time passes between the steps of one request, as it does on a slow
+// machine. Zero stops it.
+func (c *Clock) SetTick(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tick = d
 }
 
 // Advance moves the clock forward.

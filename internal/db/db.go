@@ -216,18 +216,67 @@ func (d *DB) migrator() (*migrate.Migrator, *migrate.Migrations, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	return d.migratorFor(sub)
+}
+
+// migrationsTable is where bun records applied migrations.
+const migrationsTable = "bun_migrations"
+
+// migratorFor returns a migrator over the migration files in fsys.
+//
+// Every migration file is named NNNN_name.tx.up.sql, so bun runs it in a
+// transaction, and markAppliedInTx records it as applied in that same
+// transaction: a migrator killed part of the way through a migration
+// leaves neither its changes nor its record behind, and the next run
+// applies it again from the start. bun names a migration by its number
+// alone, so the .tx suffix does not change the names recorded by earlier
+// versions. bun records the migration again after the transaction commits;
+// WithUpsert makes that an update of the row markAppliedInTx inserted.
+func (d *DB) migratorFor(fsys fs.FS) (*migrate.Migrator, *migrate.Migrations, error) {
 	m := migrate.NewMigrations()
-	if err := m.Discover(sub); err != nil {
+	if err := m.Discover(fsys); err != nil {
 		return nil, nil, fmt.Errorf("discover migrations: %w", err)
 	}
-	return migrate.NewMigrator(d.DB, m, migrate.WithMarkAppliedOnSuccess(true)), m, nil
+	return migrate.NewMigrator(d.DB, m, migrate.WithMarkAppliedOnSuccess(true), migrate.WithUpsert(true),
+		migrate.AfterMigration(markAppliedInTx)), m, nil
 }
+
+// markAppliedInTx records a migration as applied inside the transaction it
+// runs in. bun gives a migration that is not transactional a plain
+// connection, and it is then recorded only after it succeeds.
+func markAppliedInTx(ctx context.Context, conn bun.IConn, m *migrate.Migration) error {
+	tx, ok := conn.(bun.Tx)
+	if !ok {
+		return nil
+	}
+	_, err := tx.NewInsert().Model(&migrate.Migration{Name: m.Name, GroupID: m.GroupID}).
+		ModelTableExpr(migrationsTable).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("record migration %s: %w", m.Name, err)
+	}
+	return nil
+}
+
+// ErrSchemaNewer means the database has migrations applied that this
+// binary does not know, because a newer version of Hangar migrated it.
+var ErrSchemaNewer = errors.New("the database schema is newer than this version of Hangar")
 
 // Migrate applies every pending migration. Migrators that start together,
 // such as the migrate init containers of several Pods, wait for one another
-// instead of failing: see lockMigrations.
+// instead of failing: see lockMigrations. It returns ErrSchemaNewer, and
+// changes nothing, when the database has migrations this binary does not
+// know.
 func (d *DB) Migrate(ctx context.Context) error {
-	mg, _, err := d.migrator()
+	sub, err := migrationsFS(d.driver)
+	if err != nil {
+		return err
+	}
+	return d.migrateFS(ctx, sub)
+}
+
+// migrateFS is Migrate with the migration files in fsys.
+func (d *DB) migrateFS(ctx context.Context, fsys fs.FS) error {
+	mg, _, err := d.migratorFor(fsys)
 	if err != nil {
 		return err
 	}
@@ -243,6 +292,13 @@ func (d *DB) Migrate(ctx context.Context) error {
 	// lockMigrations replaces it, so Migrate never takes it.
 	if err := mg.Init(ctx); err != nil {
 		return fmt.Errorf("init migrations: %w", err)
+	}
+	unknown, err := mg.MissingMigrations(ctx)
+	if err != nil {
+		return fmt.Errorf("read applied migrations: %w", err)
+	}
+	if err := newerError(migrationNames(unknown)); err != nil {
+		return err
 	}
 	if _, err := mg.Migrate(ctx); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -328,10 +384,35 @@ type SchemaStatus struct {
 	Current string
 	// Pending lists migrations this binary knows that are not applied.
 	Pending []string
+	// Unknown lists applied migrations this binary does not know: a newer
+	// version of Hangar migrated the database.
+	Unknown []string
 }
 
 // UpToDate reports whether every known migration is applied.
 func (s SchemaStatus) UpToDate() bool { return len(s.Pending) == 0 }
+
+// CheckNotNewer returns an error wrapping ErrSchemaNewer when the database
+// has migrations this binary does not know. Hangar must not run against
+// such a schema: the binary does not know what the migrations changed.
+func (s SchemaStatus) CheckNotNewer() error { return newerError(s.Unknown) }
+
+func newerError(unknown []string) error {
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	return fmt.Errorf("%w: it has migrations %s, which this version does not know. "+
+		"Run the version of Hangar that migrated the database, or a newer one", ErrSchemaNewer, strings.Join(unknown, ", "))
+}
+
+func migrationNames(ms migrate.MigrationSlice) []string {
+	out := make([]string, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, m.Name)
+	}
+	return out
+}
 
 // Schema reports the schema status. /readyz uses it so pods wait for the
 // migration Job.
@@ -366,6 +447,16 @@ func (d *DB) Schema(ctx context.Context) (SchemaStatus, error) {
 	sort.Strings(names)
 	if len(names) > 0 {
 		st.Expected = names[len(names)-1]
+	}
+	unknown, err := mg.MissingMigrations(ctx)
+	if err != nil {
+		return SchemaStatus{}, fmt.Errorf("read applied migrations: %w", err)
+	}
+	for _, m := range unknown {
+		st.Unknown = append(st.Unknown, m.Name)
+		if m.Name > st.Current {
+			st.Current = m.Name
+		}
 	}
 	return st, nil
 }

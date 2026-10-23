@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/hangar-hub/hangar/internal/blob"
 	"github.com/hangar-hub/hangar/internal/httpx"
 	"github.com/hangar-hub/hangar/internal/jobs"
 	"github.com/hangar-hub/hangar/internal/model"
@@ -469,7 +470,9 @@ func (pt *PullThrough) Handler() http.Handler {
 			httpx.WriteError(w, r, http.StatusNotFound, "not_found", "No branch of the Repo references this object.")
 			return
 		}
-		w.Header().Set("Content-Type", "application/octet-stream")
+		// The same headers as every other download of stored bytes: an
+		// attachment with nosniff, so a browser never renders the object.
+		blob.SetDownloadHeaders(w.Header(), "")
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		if r.Method == http.MethodHead {
 			w.WriteHeader(http.StatusOK)

@@ -102,6 +102,32 @@ func verifyBody(oid string, size int) []byte {
 	return b
 }
 
+// TestLFSUploadByPullRequestAuthor covers huggingface_hub's
+// upload_file(..., create_pr=True) without Xet: the batch carries no sign
+// of the pull request, so a user who may open one but not write may
+// upload, while pushing stays refused.
+func TestLFSUploadByPullRequestAuthor(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	content, oid := randomContent(t, 3000)
+
+	resp, b := f.batch(t, publicID, tokBob, batchReq("upload", []string{"basic"}, obj(oid, len(content))))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	up, verify := b.Objects[0].Actions["upload"], b.Objects[0].Actions["verify"]
+	require.NotNil(t, up)
+	require.NotNil(t, verify)
+	require.Equal(t, http.StatusOK, call(t, http.MethodPut, up, content).StatusCode)
+	require.Equal(t, http.StatusOK, call(t, http.MethodPost, verify, verifyBody(oid, len(content))).StatusCode)
+
+	// Bob uploaded the bytes, so he may reference them: no second upload.
+	_, b = f.batch(t, publicID, tokBob, batchReq("upload", nil, obj(oid, len(content))))
+	require.Nil(t, b.Objects[0].Actions)
+
+	// Pushing still needs write.
+	resp = f.get(t, "/alice/tiny.git/info/refs?service=git-receive-pack", tokBob)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
 func TestLFSBasicUploadDownloadAndPush(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

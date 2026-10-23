@@ -117,7 +117,18 @@ func OllamaRequestURL(publicURL string, r *http.Request) string {
 	return base + r.URL.RequestURI()
 }
 
+// liveOllamaKey selects keys that still grant access: those added without
+// a Token, and those whose Token is neither revoked nor expired. It takes
+// the current time as its argument.
+const liveOllamaKey = "(?TableAlias.token_id IS NULL OR EXISTS (SELECT 1 FROM tokens AS lt WHERE lt.id = ?TableAlias.token_id" +
+	" AND lt.revoked_at IS NULL AND (lt.expires_at IS NULL OR lt.expires_at > ?)))"
+
 // Add registers a key for a User and records an ollama_key.changed event.
+// A key added with a Token is bound to it (docs/spec/05-auth.md "Ollama
+// keys"): its registry tokens get that Token's scope, restrictions and
+// expiry, and stop when the Token is revoked or expires, so a restricted
+// or expiring Token cannot use a key to read more, or for longer, than it
+// could itself. Keys added in a UI session have the user's read access.
 func (o *OllamaStore) Add(ctx context.Context, userID uuid.UUID, name, publicKey string, actor model.Principal) (*OllamaKey, error) {
 	norm, fp, err := ParseOllamaPublicKey(publicKey)
 	if err != nil {
@@ -133,7 +144,13 @@ func (o *OllamaStore) Add(ctx context.Context, userID uuid.UUID, name, publicKey
 			name = truncate(strings.Join(fields[2:], " "), 100)
 		}
 	}
-	n, err := o.s.db.NewSelect().Model((*db.OllamaKey)(nil)).Where("user_id = ?", userID).Count(ctx)
+	now := o.s.nowUTC()
+	// A key whose Token was revoked or has expired grants nothing; remove
+	// it, so the key can be registered again with a working credential.
+	if _, err := o.s.db.NewDelete().Model((*db.OllamaKey)(nil)).Where("fingerprint = ?", fp).Where("NOT "+liveOllamaKey, now).Exec(ctx); err != nil {
+		return nil, err
+	}
+	n, err := o.s.db.NewSelect().Model((*db.OllamaKey)(nil)).Where("user_id = ?", userID).Where(liveOllamaKey, now).Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -141,14 +158,20 @@ func (o *OllamaStore) Add(ctx context.Context, userID uuid.UUID, name, publicKey
 		return nil, fmt.Errorf("%w: at most %d Ollama keys per user", ErrInvalid, maxOllamaKeysByUser)
 	}
 	row := &db.OllamaKey{ID: db.NewID(), UserID: userID, Name: name, PublicKey: norm, Fingerprint: fp}
+	if actor.Token != nil {
+		row.TokenID = &actor.Token.ID
+	}
 	if _, err := o.s.db.NewInsert().Model(row).Exec(ctx); err != nil {
 		if db.IsUniqueViolation(err) {
 			return nil, fmt.Errorf("%w: this key is already registered", ErrConflict)
 		}
 		return nil, err
 	}
-	o.s.record(ctx, audit.Event{Action: audit.OllamaKeyChanged, Actor: actor, TargetType: "ollama_key", TargetID: row.ID.String(),
-		Data: map[string]any{"change": "added", "fingerprint": fp}})
+	data := map[string]any{"change": "added", "fingerprint": fp}
+	if row.TokenID != nil {
+		data["token_id"] = row.TokenID.String()
+	}
+	o.s.record(ctx, audit.Event{Action: audit.OllamaKeyChanged, Actor: actor, TargetType: "ollama_key", TargetID: row.ID.String(), Data: data})
 	return toOllamaKey(row), nil
 }
 
@@ -157,10 +180,13 @@ func toOllamaKey(r *db.OllamaKey) *OllamaKey {
 		CreatedAt: r.CreatedAt, LastUsedAt: r.LastUsedAt}
 }
 
-// List returns a User's keys, oldest first.
+// List returns a User's keys that still grant access, oldest first. Keys
+// whose Token was revoked or has expired are left out, so clients such as
+// `hangar ollama key register` register the key again.
 func (o *OllamaStore) List(ctx context.Context, userID uuid.UUID) ([]OllamaKey, error) {
 	var rows []db.OllamaKey
-	if err := o.s.db.NewSelect().Model(&rows).Where("user_id = ?", userID).OrderExpr("created_at ASC, id ASC").Scan(ctx); err != nil {
+	if err := o.s.db.NewSelect().Model(&rows).Where("user_id = ?", userID).Where(liveOllamaKey, o.s.nowUTC()).
+		OrderExpr("created_at ASC, id ASC").Scan(ctx); err != nil {
 		return nil, err
 	}
 	out := make([]OllamaKey, 0, len(rows))
@@ -191,7 +217,9 @@ func (o *OllamaStore) Delete(ctx context.Context, userID, id uuid.UUID, actor mo
 // IssueRegistryToken implements OllamaAuth. It verifies the ed25519
 // signature over the realm URL, rejects a ts more than 5 minutes away and
 // a nonce seen in the last 10 minutes, checks the key's owner can read the
-// Repo's files, and returns a JWT for that Repo valid for 5 minutes.
+// Repo's files (within the limits of the Token that registered the key, if
+// any), and returns a JWT for that Repo valid for 5 minutes, or until that
+// Token expires if sooner.
 // Errors wrap ErrInvalidCredentials (bad signature, unknown key, stale or
 // replayed request), ErrNotFound or ErrGated.
 func (o *OllamaStore) IssueRegistryToken(ctx context.Context, req OllamaTokenRequest) (string, time.Time, error) {
@@ -259,13 +287,29 @@ func (o *OllamaStore) issue(ctx context.Context, req OllamaTokenRequest) (string
 		return "", time.Time{}, err
 	}
 	p := user.Principal(model.AuthOllamaKey)
+	exp := now.Add(ollamaRegistryTTL)
+	if key.TokenID != nil {
+		// The key was registered with a Token: it reads only what that
+		// Token can read, and only while the Token works.
+		var tok db.Token
+		err := o.s.db.NewSelect().Model(&tok).Where("id = ?", *key.TokenID).Scan(ctx)
+		if err != nil && !db.IsNotFound(err) {
+			return "", time.Time{}, err
+		}
+		if err != nil || tok.RevokedAt != nil || (tok.ExpiresAt != nil && !now.Before(*tok.ExpiresAt)) {
+			return "", time.Time{}, fmt.Errorf("%w: the token that registered this Ollama key was revoked or has expired; register the key again", ErrInvalidCredentials)
+		}
+		p.Token = tokenInfo(&tok)
+		if tok.ExpiresAt != nil && tok.ExpiresAt.Before(exp) {
+			exp = tok.ExpiresAt.UTC()
+		}
+	}
 	if err := o.s.Authorizer.Can(ctx, p, ActionReadFiles, Target{Repo: target}); err != nil {
 		return "", time.Time{}, err
 	}
 	if _, err := o.s.db.NewUpdate().Model((*db.OllamaKey)(nil)).Where("id = ?", key.ID).Set("last_used_at = ?", now).Exec(ctx); err != nil {
 		o.s.log.WarnContext(ctx, "record Ollama key use", "error", err)
 	}
-	exp := now.Add(ollamaRegistryTTL)
 	tok, err := signJWT(o.s.jwtKey, registryClaims{Issuer: o.s.publicURL(), Audience: registryAudience, Subject: user.ID.String(),
 		IssuedAt: now.Unix(), ExpiresAt: exp.Unix(), ID: uuid.NewString(), Repo: repoKey(target.ID)})
 	if err != nil {

@@ -123,7 +123,7 @@ func (h *Upstreams) DetachMirror(w http.ResponseWriter, r *http.Request, pType g
 }
 
 // PullMoreIntoMirror implements gen.ServerInterface.
-func (h *Upstreams) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, pType gen.RepoType, ns gen.Ns, name gen.Name) {
+func (h *Upstreams) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, pType gen.RepoType, ns gen.Ns, name gen.Name, params gen.PullMoreIntoMirrorParams) {
 	rp, p, ok := h.upLoadRepo(w, r, pType, ns, name)
 	if !ok {
 		return
@@ -132,7 +132,11 @@ func (h *Upstreams) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, p
 	if !upDecode(w, r, &body) {
 		return
 	}
-	id, err := h.Service.PullMore(r.Context(), p, rp, upSelection(&body), false)
+	revision := ""
+	if params.Revision != nil {
+		revision = *params.Revision
+	}
+	id, err := h.Service.PullMore(r.Context(), p, rp, upSelection(&body), revision, false)
 	if err != nil {
 		h.upFail(w, r, err)
 		return

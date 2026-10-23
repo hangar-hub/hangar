@@ -118,8 +118,12 @@ func (s *Service) canPullInto(ctx context.Context, p model.Principal, r *repo.Re
 	return s.authorisePull(ctx, p, up, r.ID, m.UpstreamRepo)
 }
 
-// PullMore pulls more files into a Mirror (POST .../mirror/pull).
-func (s *Service) PullMore(ctx context.Context, p model.Principal, r *repo.Repo, sel Selection, now bool) (jobs.JobID, error) {
+// PullMore pulls more files into a Mirror (POST .../mirror/pull) at a
+// Revision of the upstream Repo, or at the Mirror's tracked branch when
+// revision is empty. hangar import passes the Commit it matched local
+// files against, so files that changed upstream since are not fetched
+// (issue #28).
+func (s *Service) PullMore(ctx context.Context, p model.Principal, r *repo.Repo, sel Selection, revision string, now bool) (jobs.JobID, error) {
 	m, up, err := s.Mirror(ctx, r)
 	if err != nil {
 		return uuid.Nil, err
@@ -127,7 +131,10 @@ func (s *Service) PullMore(ctx context.Context, p model.Principal, r *repo.Repo,
 	if m.DetachedAt != nil {
 		return uuid.Nil, ErrNotMirror
 	}
-	id, _, err := s.StartPull(ctx, PullRequest{Upstream: up.Name, Repo: m.UpstreamRepo, Revision: m.TrackRef, Selection: sel, Now: now, Actor: p})
+	if revision == "" {
+		revision = m.TrackRef
+	}
+	id, _, err := s.StartPull(ctx, PullRequest{Upstream: up.Name, Repo: m.UpstreamRepo, Revision: revision, Selection: sel, Now: now, Actor: p})
 	return id, err
 }
 

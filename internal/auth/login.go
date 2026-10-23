@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,7 +19,9 @@ import (
 // failures for a username or an IP address, each further attempt waits
 // twice as long as the last, from 1 second up to 15 minutes. Counters
 // reset an hour after the last failure, and a username's counter resets
-// on success. They live in the database so every replica sees them.
+// on success. They live in the database so every replica sees them. Each
+// attempt counts before its password is hashed (reserve), so parallel
+// guesses cannot outrun the count.
 const (
 	throttleFree     = 5
 	throttleBase     = time.Second
@@ -80,7 +83,8 @@ func backoff(n int) time.Duration {
 	return min(d, throttleMax)
 }
 
-// throttled returns how long the caller must wait, or zero.
+// throttled returns how long the caller must wait, or zero. It only reads,
+// so it refuses a locked caller cheaply; reserve checks again atomically.
 func (l *LoginService) throttled(ctx context.Context, keys []string) (time.Duration, error) {
 	var rows []db.LoginAttempt
 	if err := l.s.db.NewSelect().Model(&rows).Where("key IN (?)", bun.List(keys)).Scan(ctx); err != nil {
@@ -96,19 +100,77 @@ func (l *LoginService) throttled(ctx context.Context, keys []string) (time.Durat
 	return wait, nil
 }
 
-// fail counts a failure against each key.
-func (l *LoginService) fail(ctx context.Context, keys []string) error {
+// attempt is a password check that reserve counted as a failure before
+// it ran. release takes the count back when the password was right.
+type attempt struct {
+	keys []string
+	// at is when the attempt was counted.
+	at time.Time
+	// prev holds each key's row as it was before the attempt counted, so
+	// release can restore the lock and decay times this attempt set.
+	prev map[string]db.LoginAttempt
+	// set holds the lock time the attempt set on each key, if any.
+	set map[string]*time.Time
+}
+
+// lockAttemptRows returns the throttle rows for keys, creating missing
+// ones, locked for the rest of tx. SQLite transactions already hold the
+// write lock (BEGIN IMMEDIATE); on Postgres the rows are locked with FOR
+// UPDATE, in key order so two transactions cannot deadlock.
+func (l *LoginService) lockAttemptRows(ctx context.Context, tx bun.Tx, keys []string) (map[string]db.LoginAttempt, error) {
+	sorted := slices.Clone(keys)
+	slices.Sort(sorted)
+	for _, k := range sorted {
+		if _, err := tx.NewInsert().Model(&db.LoginAttempt{Key: k}).On("CONFLICT (key) DO NOTHING").Exec(ctx); err != nil {
+			return nil, err
+		}
+	}
+	var rows []db.LoginAttempt
+	q := tx.NewSelect().Model(&rows).Where("key IN (?)", bun.List(sorted)).Order("key")
+	if !l.s.db.IsSQLite() {
+		q = q.For("UPDATE")
+	}
+	if err := q.Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make(map[string]db.LoginAttempt, len(rows))
+	for _, r := range rows {
+		out[r.Key] = r
+	}
+	return out, nil
+}
+
+func saveAttemptRow(ctx context.Context, tx bun.Tx, row *db.LoginAttempt) error {
+	_, err := tx.NewUpdate().Model(row).Column("failures", "last_failure_at", "locked_until", "updated_at").WherePK().Exec(ctx)
+	return err
+}
+
+// reserve checks the throttle and, in the same transaction, counts the
+// attempt as a failure against every key before the password is checked,
+// so a burst of parallel guesses cannot all pass the check while the
+// first ones are still hashing: once five are counted, the next is
+// refused until the lock ends. It returns a ThrottledError while any key
+// is locked. A right password gives the count back with release.
+func (l *LoginService) reserve(ctx context.Context, keys []string) (*attempt, error) {
 	now := l.s.nowUTC()
-	return l.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
-		for _, k := range keys {
-			var row db.LoginAttempt
-			err := tx.NewSelect().Model(&row).Where("key = ?", k).Scan(ctx)
-			switch {
-			case db.IsNotFound(err):
-				row = db.LoginAttempt{Key: k}
-			case err != nil:
-				return err
+	a := &attempt{keys: keys, at: now, prev: map[string]db.LoginAttempt{}, set: map[string]*time.Time{}}
+	err := l.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		rows, err := l.lockAttemptRows(ctx, tx, keys)
+		if err != nil {
+			return err
+		}
+		var wait time.Duration
+		for _, r := range rows {
+			if r.LockedUntil != nil && now.Before(*r.LockedUntil) {
+				wait = max(wait, r.LockedUntil.Sub(now))
 			}
+		}
+		if wait > 0 {
+			return &ThrottledError{RetryAfter: wait}
+		}
+		for _, k := range keys {
+			row := rows[k]
+			a.prev[k] = row
 			if row.LastFailureAt != nil && now.Sub(*row.LastFailureAt) > throttleDecay {
 				row.Failures = 0
 			}
@@ -117,10 +179,80 @@ func (l *LoginService) fail(ctx context.Context, keys []string) error {
 			if d := backoff(row.Failures); d > 0 {
 				until := now.Add(d)
 				row.LockedUntil = &until
+				a.set[k] = &until
 			}
-			if _, err := tx.NewInsert().Model(&row).On("CONFLICT (key) DO UPDATE").
-				Set("failures = EXCLUDED.failures").Set("last_failure_at = EXCLUDED.last_failure_at").
-				Set("locked_until = EXCLUDED.locked_until").Set("updated_at = EXCLUDED.updated_at").Exec(ctx); err != nil {
+			if err := saveAttemptRow(ctx, tx, &row); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+// confirm records that a reserved attempt failed, after its password was
+// checked. reserve set any lock from when the attempt was counted, before
+// the hash, which takes long enough on a slow machine to use up the first
+// one-second lock, so the lock now runs from the failure instead, as long
+// as each key's count calls for. It never shortens a lock.
+func (l *LoginService) confirm(ctx context.Context, a *attempt) error {
+	now := l.s.nowUTC()
+	return l.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		rows, err := l.lockAttemptRows(ctx, tx, a.keys)
+		if err != nil {
+			return err
+		}
+		for _, k := range a.keys {
+			row := rows[k]
+			d := backoff(row.Failures)
+			if d == 0 {
+				continue
+			}
+			until := now.Add(d)
+			if row.LockedUntil != nil && !row.LockedUntil.Before(until) {
+				continue
+			}
+			row.LockedUntil = &until
+			row.UpdatedAt = now
+			if err := saveAttemptRow(ctx, tx, &row); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// release takes back the failure reserve counted, after a right password.
+// The lock and decay times go back to what they were, unless another
+// attempt has changed them since.
+func (l *LoginService) release(ctx context.Context, a *attempt) error {
+	return l.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
+		rows, err := l.lockAttemptRows(ctx, tx, a.keys)
+		if err != nil {
+			return err
+		}
+		for _, k := range a.keys {
+			row := rows[k]
+			row.Failures = max(row.Failures-1, 0)
+			prev := a.prev[k]
+			if row.LastFailureAt != nil && row.LastFailureAt.Equal(a.at) {
+				row.LastFailureAt = prev.LastFailureAt
+			}
+			if set := a.set[k]; set != nil && row.LockedUntil != nil && row.LockedUntil.Equal(*set) {
+				row.LockedUntil = prev.LockedUntil
+			}
+			if row.Failures == 0 && row.LastFailureAt == nil && row.LockedUntil == nil {
+				// The row only held this attempt: remove it, as Cleanup
+				// removes rows by their last failure and would miss it.
+				if _, err := tx.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", k).Exec(ctx); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := saveAttemptRow(ctx, tx, &row); err != nil {
 				return err
 			}
 		}
@@ -180,6 +312,12 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 	if !st.LocalLogin && !strings.EqualFold(a.Username, l.s.cfg.Security.BootstrapAdmin.Username) {
 		return nil, ErrLocalLoginDisabled
 	}
+	// The attempt counts as a failure before the hash, and only a right
+	// password takes it back: see reserve.
+	att, err := l.reserve(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
 	u, err := l.s.Users.GetByUsername(ctx, a.Username)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return nil, err
@@ -198,10 +336,13 @@ func (l *LoginService) password(ctx context.Context, a LoginAttempt) (*User, err
 		return nil, err
 	}
 	if !ok {
-		if err := l.fail(ctx, keys); err != nil {
+		if err := l.confirm(ctx, att); err != nil {
 			return nil, err
 		}
 		return nil, ErrLoginFailed
+	}
+	if err := l.release(ctx, att); err != nil {
+		return nil, err
 	}
 	if u.Disabled() {
 		return nil, ErrDisabled

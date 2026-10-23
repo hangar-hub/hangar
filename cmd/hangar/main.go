@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -17,11 +19,41 @@ import (
 )
 
 // Set at build time with -ldflags "-X main.version=... -X main.commit=... -X main.date=...".
+// A build without them, such as `go install ...@v1.2.3`, takes what it can
+// from the build information Go embeds instead (see fromBuildInfo).
 var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
 )
+
+// fromBuildInfo fills in the version, commit and date that -ldflags left at
+// their defaults, from the build information Go embeds in every binary.
+// `go install github.com/hangar-hub/hangar/cmd/hangar@v1.2.3` records the
+// module version, v1.2.3. A build in a git checkout records the commit and
+// its time (vcs.revision, vcs.time) and, from Go 1.24, a version derived
+// from the nearest tag. Values set with -ldflags always win, and "(devel)",
+// which test binaries and builds outside a module report, is ignored.
+func fromBuildInfo(v, c, d string, info *debug.BuildInfo) (string, string, string) {
+	if info == nil {
+		return v, c, d
+	}
+	if mv := info.Main.Version; v == "dev" && mv != "" && mv != "(devel)" {
+		// Release builds print the version without the v, as GoReleaser's
+		// {{ .Version }} does.
+		v = strings.TrimPrefix(mv, "v")
+	}
+	for _, s := range info.Settings {
+		switch {
+		case s.Key == "vcs.revision" && c == "none" && s.Value != "":
+			// Release builds print the short commit, as git rev-parse --short does.
+			c = s.Value[:min(len(s.Value), 7)]
+		case s.Key == "vcs.time" && d == "unknown" && s.Value != "":
+			d = s.Value
+		}
+	}
+	return v, c, d
+}
 
 // Exit codes from docs/spec/08-local-tools.md. Client commands (internal/cli)
 // add 3 for not found and 4 for auth errors.
@@ -33,6 +65,8 @@ const (
 type usageError struct{ error }
 
 func main() {
+	info, _ := debug.ReadBuildInfo()
+	version, commit, date = fromBuildInfo(version, commit, date, info)
 	os.Exit(run(os.Args[1:]))
 }
 

@@ -46,6 +46,7 @@ export function UploadPanel({
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [toBranch, setToBranch] = useState(branch);
+  const [shown, setShown] = useState({ folder, branch });
   const [createPr, setCreatePr] = useState(false);
   const [progress, setProgress] = useState<FileProgress[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -90,6 +91,15 @@ export function UploadPanel({
       onClose();
     },
   });
+
+  // The panel stays open while the user moves between folders and
+  // branches. Until they choose their own folder or branch, it follows
+  // them; a running upload keeps what it started with.
+  if (!run.isPending && (shown.folder !== folder || shown.branch !== branch)) {
+    if (shown.folder !== folder && target === shown.folder) setTarget(folder);
+    if (shown.branch !== branch && toBranch === shown.branch) setToBranch(branch);
+    setShown({ folder, branch });
+  }
 
   // Warn before leaving the page while an upload runs (09-web-ui.md).
   useEffect(() => {

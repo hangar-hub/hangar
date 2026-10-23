@@ -1,7 +1,7 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, setCsrfToken } from "@/api/client";
 import type { Me } from "@/api/types";
-import { ApiError, unwrap } from "./problem";
+import { ApiError, errorStatus, unwrap } from "./problem";
 
 export const meKey = ["me"] as const;
 
@@ -49,6 +49,47 @@ export function useSignedIn() {
     setCsrfToken(me.csrf_token);
     qc.setQueryData(meKey, me);
     qc.removeQueries({ predicate: (q) => q.queryKey[0] !== meKey[0] });
+  };
+}
+
+/** The page to come back to after signing in: the current path and query. */
+export function currentPage(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+/**
+ * Handles a 401 from any query or mutation. When the cache holds a
+ * signed-in user, a 401 can mean the session has ended: it expired, was
+ * revoked from another browser, or the password changed. GET /me says
+ * whether it has. If it has, the handler forgets the user and everything
+ * fetched as them, and calls `toSignIn` with the page to come back to.
+ * Signed-out visitors' 401s are left to the page, which asks them to sign
+ * in where it makes sense.
+ */
+export function onSessionEnded(
+  qc: QueryClient,
+  toSignIn: (redirect: string) => void,
+): (err: unknown) => Promise<void> {
+  let checking = false;
+  return async (err) => {
+    if (errorStatus(err) !== 401 || checking) return;
+    if (!qc.getQueryData<Me | null>(meKey)) return;
+    if (window.location.pathname.startsWith("/auth/")) return;
+    checking = true;
+    try {
+      const me = await fetchMe();
+      if (me) {
+        qc.setQueryData(meKey, me);
+        return;
+      }
+      qc.setQueryData(meKey, null);
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== meKey[0] });
+      toSignIn(currentPage());
+    } catch {
+      // GET /me failed, so the session may still be fine: leave it.
+    } finally {
+      checking = false;
+    }
   };
 }
 

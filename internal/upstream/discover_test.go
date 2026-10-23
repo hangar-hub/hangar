@@ -491,6 +491,9 @@ func TestPullThroughGitLFSURL(t *testing.T) {
 		_ = resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 		require.Equal(t, w, body)
+		require.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"), "the bytes are never rendered")
+		require.Equal(t, "application/octet-stream", resp.Header.Get("Content-Type"))
+		require.Equal(t, "attachment", resp.Header.Get("Content-Disposition"))
 
 		tampered := strings.Replace(u.RequestURI(), sha(w), strings.Repeat("0", 64), 1)
 		resp, err = http.Get(srv.URL + tampered)

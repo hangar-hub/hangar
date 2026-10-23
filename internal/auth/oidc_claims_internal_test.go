@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -50,17 +51,48 @@ func TestUsernameBase(t *testing.T) {
 	require.Len(t, usernameBase(identityClaims{Username: "a123456789b123456789c123456789d123456789e1234"}), 36)
 }
 
+// TestSafeRedirect covers the open redirect browsers allow by removing
+// tabs and newlines and reading a backslash as a slash: each of these
+// would otherwise become the scheme-relative "//evil.example".
 func TestSafeRedirect(t *testing.T) {
-	for in, want := range map[string]string{
-		"":                     "/",
-		"/ok/path?x=1":         "/ok/path?x=1",
-		"//evil.example":       "/",
-		"/\\evil.example":      "/",
-		"https://evil.example": "/",
-		"/a\r\nSet-Cookie: x":  "/",
-		"relative":             "/",
+	for _, c := range []struct{ in, want string }{
+		{"", "/"},
+		{"/", "/"},
+		{"/ok/path?x=1", "/ok/path?x=1"},
+		{"/alice/model/blob/main/README.md#usage", "/alice/model/blob/main/README.md#usage"},
+		{"/search?q=hello%20world", "/search?q=hello%20world"},
+		{"/a:b", "/a:b"},
+		{"relative", "/"},
+		{"https://evil.example", "/"},
+		{"javascript:alert(1)", "/"},
+		{"//evil", "/"},
+		{"//evil.example", "/"},
+		{"///evil.example", "/"},
+		{"/\\evil.example", "/"},
+		{"/\\\\evil.example", "/"},
+		{"\\/evil.example", "/"},
+		{"/ok\\..\\evil", "/"},
+		{"/\t/evil", "/"},
+		{"/\t/evil.example", "/"},
+		{"/\n/evil.example", "/"},
+		{"/\r/evil.example", "/"},
+		{"/\x0b/evil.example", "/"},
+		{"/\x00/evil.example", "/"},
+		{"/\x7f/evil.example", "/"},
+		{" //evil.example", "/"},
+		{"/ /evil.example", "/"},
+		{"/ /evil.example", "/"},
+		{"/ /evil.example", "/"},
+		{"/a\r\nSet-Cookie: x", "/"},
+		{"/%09/evil.example", "/"},
+		{"/%0a/evil.example", "/"},
+		{"/%5Cevil.example", "/"},
+		{"/%2F/evil.example", "/"},
+		{"/%2fevil.example", "/"},
+		{"/100%", "/"},
+		{"/" + strings.Repeat("a", 2000), "/"},
 	} {
-		require.Equal(t, want, SafeRedirect(in), in)
+		require.Equal(t, c.want, SafeRedirect(c.in), "%q", c.in)
 	}
 }
 

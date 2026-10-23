@@ -116,7 +116,7 @@ lint-style:
 	    --include='*.js' --include='*.sh' --include='*.json' --include='*.tpl' --include='*.txt' \
 	    --exclude-dir=node_modules --exclude-dir=.venv --exclude-dir=.fixtures --exclude-dir=dist --exclude-dir=gen \
 	    --exclude-dir=spec --exclude-dir=research \
-	    cmd internal ui/src api compat docs deploy loadtest scripts .github README.md CLAUDE.md CONTEXT.md CONTRIBUTING.md SECURITY.md 2>/dev/null; then \
+	    cmd internal ui/src api compat docs deploy loadtest scripts .github README.md CLAUDE.md CONTEXT.md CONTRIBUTING.md SECURITY.md SUPPORT.md CODE_OF_CONDUCT.md CITATION.cff 2>/dev/null; then \
 	  echo "House style: replace the em dashes above."; exit 1; fi
 	@./scripts/check-spelling.sh
 	@python3 scripts/check-doc-links.py

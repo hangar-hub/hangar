@@ -1,8 +1,9 @@
 apiVersion: v2
 name: hangar
-description: Hangar, a self-hosted home for your arsenal of models. A Hugging Face Hub-compatible model and dataset hub with git, Ollama and LM Studio support.
+description: Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
 type: application
-# The release workflow sets version and appVersion from the release tag.
+# The release workflow sets version and appVersion from the release tag, and
+# the image tag in artifacthub.io/images.
 version: 0.0.0
 appVersion: "0.0.0"
 kubeVersion: ">=1.29.0-0"
@@ -10,9 +11,39 @@ home: https://hangar.page/
 sources:
   - https://github.com/hangar-hub/hangar
 icon: https://hangar.page/latest/assets/icon.svg
-keywords: [huggingface, models, datasets, ml, ollama, git-lfs]
+keywords:
+  - huggingface
+  - hugging-face-hub
+  - model-registry
+  - models
+  - datasets
+  - mirror
+  - air-gapped
+  - self-hosted
+  - llm
+  - gguf
+  - ollama
+  - lm-studio
+  - git-lfs
 maintainers:
   - name: James Garside
     url: https://github.com/jamesagarside
+# Read by Artifact Hub (https://artifacthub.io/docs/topics/annotations/helm/).
 annotations:
-  licenses: Elastic-2.0
+  artifacthub.io/license: Elastic-2.0
+  artifacthub.io/category: ai-machine-learning
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://hangar.page/
+    - name: Helm guide
+      url: https://hangar.page/latest/get-started/helm/
+    - name: Demo
+      url: https://demo.hangar.page/
+    - name: support
+      url: https://github.com/hangar-hub/hangar/issues
+  artifacthub.io/images: |
+    - name: hangar
+      image: ghcr.io/hangar-hub/hangar:0.0.0
+      platforms:
+        - linux/amd64
+        - linux/arm64

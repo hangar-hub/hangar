@@ -91,17 +91,38 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          # GHCR reads a multi-arch image's description from the index's
+          # annotations, not from the labels in each image's config.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
           images: ${{ env.IMAGE }}
           tags: |
             type=semver,pattern={{version}},value=${{ env.TAG }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
             type=raw,value=latest
-          # metadata-action takes the licence label from the licence GitHub
-          # detects, and GitHub does not detect the Elastic License 2.0, so
-          # the label would read NOASSERTION and replace the Dockerfile's.
+          # metadata-action generates its labels and annotations from the
+          # repository: its name as the title, its description, its URL, and
+          # the licence GitHub detects, which reads NOASSERTION because GitHub
+          # does not detect the Elastic License 2.0. These lists replace
+          # them with the Dockerfile's labels, which the generated ones would
+          # otherwise override. TestImageMetadataMatchesDockerfile
+          # (deploy/release_test.go) keeps all three the same.
           labels: |
             org.opencontainers.image.title=Hangar
+            org.opencontainers.image.description=Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
+            org.opencontainers.image.url=https://hangar.page/
+            org.opencontainers.image.documentation=https://hangar.page/
+            org.opencontainers.image.source=https://github.com/hangar-hub/hangar
+            org.opencontainers.image.vendor=Hangar
+            org.opencontainers.image.licenses=Elastic-2.0
+          annotations: |
+            org.opencontainers.image.title=Hangar
+            org.opencontainers.image.description=Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
+            org.opencontainers.image.url=https://hangar.page/
+            org.opencontainers.image.documentation=https://hangar.page/
+            org.opencontainers.image.source=https://github.com/hangar-hub/hangar
+            org.opencontainers.image.vendor=Hangar
             org.opencontainers.image.licenses=Elastic-2.0
       - name: Build metadata
         id: vars
@@ -119,6 +140,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           build-args: |
             VERSION=${{ steps.vars.outputs.version }}
             COMMIT=${{ steps.vars.outputs.commit }}
@@ -206,7 +228,21 @@ jobs:
         run: |
           version="${TAG#v}"
           echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          # helm package sets version and appVersion but not annotations, so
+          # point Artifact Hub's image list at this release's image.
+          sed -i "s|image: $IMAGE:0.0.0|image: $IMAGE:$version|" deploy/helm/hangar/Chart.yaml
+          if ! grep -q "image: $IMAGE:$version\$" deploy/helm/hangar/Chart.yaml; then
+            echo "Chart.yaml has no artifacthub.io/images entry for $IMAGE:0.0.0 to set" >&2
+            exit 1
+          fi
           helm package deploy/helm/hangar --version "$version" --app-version "$version" --destination dist
+          # The package must carry the chart's README, for helm show readme
+          # and Artifact Hub. (grep without -q reads all of tar's output, so
+          # pipefail never sees tar killed by SIGPIPE.)
+          if ! tar -tzf "dist/hangar-$version.tgz" | grep -x 'hangar/README.md' >/dev/null; then
+            echo "the chart package has no README.md" >&2
+            exit 1
+          fi
           helm push "dist/hangar-$version.tgz" "$CHARTS" 2>&1 | tee push.log
           digest="$(grep -o 'sha256:[0-9a-f]\{64\}' push.log | head -1)"
           if [ -z "$digest" ]; then

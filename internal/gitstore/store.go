@@ -42,6 +42,9 @@ const (
 	PackLive     = "live"
 	PackRetired  = "retired"
 	PackOrphaned = "orphaned"
+	// PackDeleting is a pack a sweep has claimed and is deleting
+	// (DeletePack).
+	PackDeleting = "deleting"
 )
 
 // Options configure a Store.

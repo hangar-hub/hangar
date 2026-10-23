@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LogOut, Menu, Settings, Shield, User } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
@@ -13,6 +13,7 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
+import { useFocusOnNavigation } from "@/lib/page";
 import { errorMessage } from "@/lib/problem";
 import { useMe, useSignOut } from "@/lib/session";
 import { DemoBanner, isDemo } from "./DemoBanner";
@@ -33,11 +34,20 @@ function UserMenu() {
   const signOut = useSignOut();
   const navigate = useNavigate();
   const toast = useToast();
+  // Sign in returns to this page. On the sign-in pages themselves, keep the
+  // page they were already going to return to.
+  const here = useRouterState({ select: (s) => s.location });
+  const onAuthPage = here.pathname.startsWith("/auth/");
+  const redirect = onAuthPage
+    ? (here.search as { redirect?: string }).redirect
+    : `${here.pathname}${here.searchStr}`;
   if (me.isPending) return <div className="h-7 w-16" aria-hidden="true" />;
   if (!me.data) {
     return (
       <Button asChild size="sm" variant="primary">
-        <Link to="/auth/login">Sign in</Link>
+        <Link to="/auth/login" search={redirect && redirect !== "/" ? { redirect } : {}}>
+          Sign in
+        </Link>
       </Button>
     );
   }
@@ -133,6 +143,7 @@ function MobileNav() {
 /** The global layout: top bar with name, search, navigation, Jobs and user menu, then the page. */
 export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
+  useFocusOnNavigation();
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
       <a
@@ -175,7 +186,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main id="main" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 focus:outline-none"
+      >
         {children}
       </main>
       <footer className="border-t border-line py-4">

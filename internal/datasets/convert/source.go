@@ -127,11 +127,54 @@ func (m *multiCloser) Close() error {
 	return err
 }
 
+// Decompression limits. A zstd frame header chooses the window the decoder
+// must keep in memory, and the decoder holds twice that, so without a cap
+// a 67 KB file made the worker hold over 500 MiB. maxZstdWindow is 128
+// MiB, the zstd command line's own limit unless it is given --long=31 or
+// --memory. maxDecompressedBytes stops any decompressed stream, as
+// maxJSONDocument and maxTarMember stop single values, so a small gzip,
+// bzip2 or zstd bomb of blank lines cannot keep a worker busy without
+// end. It is a variable so tests can lower it.
+const maxZstdWindow = 128 << 20
+
+var maxDecompressedBytes int64 = 1 << 36
+
+// boundedReader fails with ErrUnsupported once more than limit bytes come
+// out of a decompressor, and turns zstd's window and size errors into
+// ErrUnsupported too.
+type boundedReader struct {
+	r     io.Reader
+	name  string
+	limit int64
+	read  int64
+}
+
+func (b *boundedReader) Read(p []byte) (int, error) {
+	if left := b.limit - b.read; int64(len(p)) > left {
+		// Read one byte past the limit, to tell a stream that ends exactly
+		// at it from one that goes on.
+		p = p[:left+1]
+	}
+	n, err := b.r.Read(p)
+	b.read += int64(n)
+	if b.read > b.limit {
+		return 0, fmt.Errorf("%w: %s decompresses to more than %d bytes", ErrUnsupported, b.name, b.limit)
+	}
+	if errors.Is(err, zstd.ErrWindowSizeExceeded) || errors.Is(err, zstd.ErrDecoderSizeExceeded) {
+		return n, fmt.Errorf("%w: %s needs a zstd window larger than %d MiB; compress it without --long", ErrUnsupported, b.name, maxZstdWindow>>20)
+	}
+	return n, err
+}
+
 // decompress wraps r according to the file name's last extension, as
-// `datasets` extracts compressed files on the fly.
+// `datasets` extracts compressed files on the fly. Decompressed streams
+// are bounded (maxZstdWindow, maxDecompressedBytes).
 func decompress(name string, rc io.ReadCloser) (io.ReadCloser, string, error) {
 	ext := strings.ToLower(path.Ext(name))
 	inner := strings.TrimSuffix(name, path.Ext(name))
+	bounded := func(r io.Reader) io.Reader {
+		return &boundedReader{r: r, name: name, limit: maxDecompressedBytes}
+	}
 	switch ext {
 	case ".gz", ".gzip":
 		z, err := gzip.NewReader(rc)
@@ -139,16 +182,16 @@ func decompress(name string, rc io.ReadCloser) (io.ReadCloser, string, error) {
 			_ = rc.Close()
 			return nil, "", fmt.Errorf("%s: %w", name, err)
 		}
-		return &multiCloser{Reader: z, closers: []io.Closer{rc, z}}, inner, nil
+		return &multiCloser{Reader: bounded(z), closers: []io.Closer{rc, z}}, inner, nil
 	case ".bz2":
-		return &multiCloser{Reader: bzip2.NewReader(rc), closers: []io.Closer{rc}}, inner, nil
+		return &multiCloser{Reader: bounded(bzip2.NewReader(rc)), closers: []io.Closer{rc}}, inner, nil
 	case ".zst", ".zstd":
-		z, err := zstd.NewReader(rc, zstd.WithDecoderMaxMemory(1<<31))
+		z, err := zstd.NewReader(rc, zstd.WithDecoderMaxWindow(maxZstdWindow), zstd.WithDecoderLowmem(true), zstd.WithDecoderConcurrency(1))
 		if err != nil {
 			_ = rc.Close()
 			return nil, "", err
 		}
-		return &multiCloser{Reader: z, closers: []io.Closer{rc, closerFunc(func() error { z.Close(); return nil })}}, inner, nil
+		return &multiCloser{Reader: bounded(z), closers: []io.Closer{rc, closerFunc(func() error { z.Close(); return nil })}}, inner, nil
 	case ".xz", ".lz4", ".7z", ".rar":
 		_ = rc.Close()
 		return nil, "", fmt.Errorf("%w: %s compression", ErrUnsupported, ext)
@@ -204,9 +247,18 @@ func innerName(name string) string {
 	return name
 }
 
+// maxValueBytes caps one value read whole: a line, a text document, a
+// paragraph or a JSON value. It keeps a worker's memory bounded whatever
+// the file, where `datasets` would read the value however long.
+const maxValueBytes = 64 << 20
+
+// errLineTooLong fails a file with a line longer than maxValueBytes.
+var errLineTooLong = fmt.Errorf("%w: a line longer than %d bytes", ErrUnsupported, maxValueBytes)
+
 // chunkReader yields chunks of about size bytes that end at a line break,
 // as the `datasets` JSON and text builders read files (f.read(chunksize)
-// followed by f.readline()).
+// followed by f.readline()). The rest of the line after size bytes is
+// capped at maxValueBytes.
 type chunkReader struct {
 	r    *bufio.Reader
 	size int
@@ -231,10 +283,18 @@ func (c *chunkReader) next() ([]byte, error) {
 		return nil, err
 	}
 	if n == c.size {
-		line, rerr := c.r.ReadBytes('\n')
-		buf = append(buf, line...)
-		if rerr != nil && !errors.Is(rerr, io.EOF) {
-			return nil, rerr
+		for {
+			frag, rerr := c.r.ReadSlice('\n')
+			if len(buf)-c.size+len(frag) > maxValueBytes {
+				return nil, errLineTooLong
+			}
+			buf = append(buf, frag...)
+			if rerr == nil || errors.Is(rerr, io.EOF) {
+				break
+			}
+			if !errors.Is(rerr, bufio.ErrBufferFull) {
+				return nil, rerr
+			}
 		}
 	}
 	return buf, nil

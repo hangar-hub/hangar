@@ -3,6 +3,7 @@ import { rawFetch } from "@/api/client";
 import { AppLink } from "@/components/AppLink";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/states";
+import { useDocumentTitle } from "@/lib/page";
 import { ApiError } from "@/lib/problem";
 import { meKey } from "@/lib/session";
 
@@ -12,6 +13,7 @@ import { meKey } from "@/lib/session";
  * mail scanner that opens the link changes nothing.
  */
 export function EmailConfirmPage({ code }: { code: string }) {
+  useDocumentTitle("Confirm your email");
   const qc = useQueryClient();
   const confirm = useMutation({
     mutationFn: async () => {

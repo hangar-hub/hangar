@@ -314,6 +314,17 @@ func (f *Fake) CompleteMultipart(_ context.Context, key, uploadID string, parts 
 	return nil
 }
 
+// ExpireUploads drops every incomplete multipart upload with its parts, as
+// a bucket lifecycle rule that aborts incomplete multipart uploads does.
+// It returns how many it dropped.
+func (f *Fake) ExpireUploads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := len(f.uploads)
+	clear(f.uploads)
+	return n
+}
+
 // AbortMultipart implements blob.Store.
 func (f *Fake) AbortMultipart(_ context.Context, key, uploadID string) error {
 	f.call("AbortMultipart")

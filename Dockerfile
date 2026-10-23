@@ -68,10 +68,15 @@ ARG VERSION=dev
 ARG COMMIT=none
 COPY --from=rootfs /rootfs/ /
 COPY --from=build /out/hangar /usr/bin/hangar
+# The release workflow sets the same labels, and index annotations for GHCR,
+# through docker/metadata-action (.github/workflows/release.yml); keep them in
+# step.
 LABEL org.opencontainers.image.title="Hangar" \
-      org.opencontainers.image.description="A self-hosted home for your arsenal of models: a Hugging Face Hub-compatible model and dataset hub." \
-      org.opencontainers.image.source="https://github.com/hangar-hub/hangar" \
+      org.opencontainers.image.description="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio." \
+      org.opencontainers.image.url="https://hangar.page/" \
       org.opencontainers.image.documentation="https://hangar.page/" \
+      org.opencontainers.image.source="https://github.com/hangar-hub/hangar" \
+      org.opencontainers.image.vendor="Hangar" \
       org.opencontainers.image.licenses="Elastic-2.0" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"

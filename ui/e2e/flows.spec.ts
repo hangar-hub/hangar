@@ -55,6 +55,39 @@ test.describe("sign-in", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Collections" })).toBeVisible();
   });
 
+  test("sends a user whose session ended to sign in, then back to the page", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/settings/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "Profile" })).toBeVisible();
+    // The session ends behind the page's back, as when it expires or is
+    // revoked from another browser.
+    await page.context().clearCookies();
+    await page
+      .getByRole("navigation", { name: "Settings" })
+      .getByRole("link", { name: "Tokens", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/auth\/login\?redirect=%2Fsettings%2Ftokens&ended=1$/);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Your session has ended." }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Account menu/ })).toHaveCount(0);
+    await page.getByLabel("Username").fill("ada");
+    await page.getByLabel("Password").fill("correct-horse-battery");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings\/tokens$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Tokens" })).toBeVisible();
+  });
+
+  test("the header's Sign in link returns to the page", async ({ page }) => {
+    await page.goto("/collections?sort=name");
+    await page.getByRole("banner").getByRole("link", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/auth\/login\?redirect=%2Fcollections%3Fsort%3Dname$/);
+    await page.getByLabel("Username").fill("ada");
+    await page.getByLabel("Password").fill("correct-horse-battery");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/collections\?sort=name$/);
+  });
+
   test("explains OIDC errors", async ({ page }) => {
     await page.goto("/auth/login?error=oidc_link_required");
     await expect(page.getByRole("alert")).toContainText("link the provider from Settings");
@@ -137,6 +170,36 @@ test("Discover a dataset and choose a Parquet-only Pull", async ({ page }) => {
   );
   await panel.getByRole("button", { name: "Pull into arsenal" }).click();
   await expect(panel.getByRole("button", { name: "Pull started" })).toBeDisabled();
+});
+
+test("loads no external images in cards when the Instance turns them off", async ({ page }) => {
+  const csrf = await signIn(page);
+  const off = await callApi(page, csrf, "PATCH", "/admin/settings", { ui_external_images: false });
+  expect(off.ok(), await off.text()).toBe(true);
+  const external: string[] = [];
+  await page.route(
+    (url) => url.host === "example.com",
+    (route) => {
+      external.push(route.request().url());
+      return route.abort();
+    },
+  );
+  await page.goto("/ada/bert-tiny-finetune");
+  await expect(
+    page.getByText(
+      "Image from example.com not loaded: this Instance does not load external images.",
+    ),
+  ).toBeVisible();
+  // Discover shows the Upstream's card, which uses a picture whose source
+  // would load its srcset in place of the img.
+  await page.goto("/discover?repo=ada/bert-tiny-finetune");
+  const panel = page.getByRole("dialog");
+  await panel.getByRole("tab", { name: "Model card" }).click();
+  await expect(
+    panel.getByRole("heading", { name: "bert-tiny-finetune", exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByText("Image from example.com not loaded")).toBeVisible();
+  expect(external).toEqual([]);
 });
 
 test.describe("upload", () => {
@@ -231,6 +294,40 @@ test.describe("upload", () => {
       files.getByRole("link", { name: "resume.safetensors", exact: true }),
     ).toBeVisible();
     expect(problems).toEqual([]);
+  });
+
+  test("adds files in the folder on screen, and only on branches", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/tree/main");
+    // Open both at the root first: they must follow the user into a folder.
+    await page.getByRole("button", { name: "New file" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "New file" }).getByLabel("File path"),
+    ).toHaveValue("");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Upload files" }).click();
+    await page
+      .getByRole("table", { name: "Files in the Repo root" })
+      .getByRole("link", { name: "onnx", exact: true })
+      .click();
+    await expect(page.getByRole("table", { name: "Files in onnx" })).toBeVisible();
+    await chooseFiles(page.getByLabel("Choose files"), [
+      { name: "notes.txt", buffer: Buffer.from("notes") },
+    ]);
+    await expect(page.getByLabel("Upload into folder")).toHaveValue("onnx");
+    await expect(page.getByRole("list", { name: "Files to upload" })).toContainText(
+      "onnx/notes.txt",
+    );
+    await page.getByRole("button", { name: "New file" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "New file" }).getByLabel("File path"),
+    ).toHaveValue("onnx/");
+    await page.keyboard.press("Escape");
+    // A tag names a fixed Commit: nothing can be added there.
+    await page.goto("/ada/bert-tiny-finetune/tree/v1.0");
+    await expect(page.getByRole("table", { name: "Files in the Repo root" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload files" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New file" })).toHaveCount(0);
   });
 
   test("opens a pull request from an upload", async ({ page }) => {
@@ -330,6 +427,41 @@ test.describe("browse files", () => {
     );
   });
 
+  test("refuses an edit when someone else committed first", async ({ page }) => {
+    const csrf = await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/blob/main/tokenizer_config.json");
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Edit tokenizer_config.json").fill('{\n  "mine": true\n}\n');
+    const other = await callApi(
+      page,
+      csrf,
+      "POST",
+      "/repos/models/ada/bert-tiny-finetune/commits",
+      {
+        summary: "Someone else's change",
+        branch: "main",
+        operations: [
+          {
+            op: "add",
+            path: "tokenizer_config.json",
+            content_base64: Buffer.from('{\n  "theirs": true\n}\n').toString("base64"),
+          },
+        ],
+      },
+    );
+    expect(other.status()).toBe(201);
+    const committed = commitResponse(page, "models/ada/bert-tiny-finetune");
+    await page.getByRole("button", { name: "Commit to main" }).click();
+    expect((await committed).status()).toBe(412);
+    await expect(page.getByRole("alert")).toContainText(
+      "Someone committed to main after you started editing, so Hangar did not save your change.",
+    );
+    const raw = await page.request.get(
+      "/ada/bert-tiny-finetune/resolve/main/tokenizer_config.json",
+    );
+    expect(await raw.text()).toContain('"theirs": true');
+  });
+
   test("shows the Use this model snippets", async ({ page }) => {
     await signIn(page);
     await page.goto("/ml-team/qwen-coder-remote");
@@ -340,6 +472,24 @@ test.describe("browse files", () => {
     );
     await panel.getByRole("tab", { name: "git" }).click();
     await expect(panel.getByRole("tabpanel")).toContainText("GIT_LFS_SKIP_SMUDGE=1 git clone");
+  });
+
+  test("fills the snippets in for the Instance and the Revision on screen", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/ada/bert-tiny-finetune/tree/v1.0");
+    await page.getByRole("button", { name: "Use this model" }).click();
+    const panel = page.getByRole("dialog", { name: "Use this model" });
+    await expect(panel).toContainText("Snippets for ada/bert-tiny-finetune at v1.0");
+    const origin = new URL(page.url()).origin;
+    const code = panel.getByRole("tabpanel").getByRole("region", { name: "Code" });
+    await expect(code).toContainText(`os.environ["HF_ENDPOINT"] = "${origin}"`);
+    await expect(code).toContainText(
+      'AutoModel.from_pretrained("ada/bert-tiny-finetune", revision="v1.0")',
+    );
+    await panel.getByRole("tab", { name: "huggingface_hub" }).click();
+    await expect(code).toContainText(
+      `snapshot_download("ada/bert-tiny-finetune", revision="v1.0", endpoint="${origin}")`,
+    );
   });
 });
 
@@ -358,6 +508,12 @@ test("creates a Token that is shown once, then revokes it", async ({ page }) => 
   const secret = (await shown.getByTestId("token-secret").textContent()) ?? "";
   // 05-auth.md: hgr_ and 40 base62 characters.
   expect(secret).toMatch(/^hgr_[0-9A-Za-z]{40}$/);
+  // The secret is shown once, so neither Escape nor a click outside closes
+  // the dialog: only the button that says it was copied.
+  await page.keyboard.press("Escape");
+  await page.mouse.click(5, 5);
+  await expect(shown).toBeVisible();
+  await expect(shown.getByRole("button", { name: "Close" })).toHaveCount(0);
   await shown.getByRole("button", { name: "I've copied it" }).click();
   const row = page.getByRole("row").filter({ hasText: name });
   await expect(row).toContainText("write");

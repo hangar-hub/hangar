@@ -99,7 +99,7 @@ export function AdminSettingsPage() {
         <Switch
           className="py-3"
           label="Allow webhooks to private addresses"
-          hint="Turn off on multi-tenant Instances so webhooks cannot reach internal services."
+          hint="Off by default. Turn on only if everyone who can add a webhook may reach your internal services through Hangar."
           checked={Boolean(s.webhooks_allow_private_targets)}
           onCheckedChange={(v) => set({ webhooks_allow_private_targets: v })}
         />

@@ -206,16 +206,17 @@ func TestOIDCKeycloak(t *testing.T) {
 		mustUser(t, s, "kc-bob", false)
 
 		login := func(username, password string, link uuid.UUID) (*auth.CallbackResult, error) {
-			authURL, err := s.OIDC.Start(ctx, "kc", "/after?x=1", link)
+			flow, err := s.OIDC.Start(ctx, "kc", "/after?x=1", link)
 			require.NoError(t, err)
-			u, err := url.Parse(authURL)
+			u, err := url.Parse(flow.AuthURL)
 			require.NoError(t, err)
 			q := u.Query()
 			require.Equal(t, "S256", q.Get("code_challenge_method"), "PKCE")
 			require.NotEmpty(t, q.Get("nonce"))
 			require.Equal(t, "http://hangar.test/auth/oidc/kc/callback", q.Get("redirect_uri"))
-			state, code := browserLogin(t, authURL, username, password)
-			return s.OIDC.Callback(ctx, "kc", state, code, "10.0.0.5", "browser")
+			state, code := browserLogin(t, flow.AuthURL, username, password)
+			return s.OIDC.Callback(ctx, auth.OIDCCallback{Provider: "kc", State: state, Code: code, Binding: flow.Binding,
+				SessionUser: link, IP: "10.0.0.5", UserAgent: "browser"})
 		}
 
 		// First login creates the User just in time, with admin_groups and
@@ -272,24 +273,39 @@ func TestOIDCKeycloak(t *testing.T) {
 		require.ErrorIs(t, err, auth.ErrOIDCIdentityTaken)
 
 		// State is single use and bound to the provider.
-		authURL, err := s.OIDC.Start(ctx, "kc", "", uuid.Nil)
+		flow, err := s.OIDC.Start(ctx, "kc", "", uuid.Nil)
 		require.NoError(t, err)
-		state, code := browserLogin(t, authURL, "kc-alice", "alice-password-1")
-		_, err = s.OIDC.Callback(ctx, "kc", state, code, "", "")
+		state, code := browserLogin(t, flow.AuthURL, "kc-alice", "alice-password-1")
+		cb := auth.OIDCCallback{Provider: "kc", State: state, Code: code, Binding: flow.Binding}
+		_, err = s.OIDC.Callback(ctx, cb)
 		require.NoError(t, err)
-		_, err = s.OIDC.Callback(ctx, "kc", state, code, "", "")
+		_, err = s.OIDC.Callback(ctx, cb)
 		require.ErrorIs(t, err, auth.ErrOIDCState)
-		_, err = s.OIDC.Callback(ctx, "kc", "made-up", code, "", "")
+		cb.State = "made-up"
+		_, err = s.OIDC.Callback(ctx, cb)
 		require.ErrorIs(t, err, auth.ErrOIDCState)
 		_, err = s.OIDC.Start(ctx, "nope", "", uuid.Nil)
 		require.ErrorIs(t, err, auth.ErrOIDCUnknownProvider)
 
+		// State is bound to the browser that started the sign-in, and a
+		// link to the session of the User who started it.
+		flow, err = s.OIDC.Start(ctx, "kc", "", uuid.Nil)
+		require.NoError(t, err)
+		state, code = browserLogin(t, flow.AuthURL, "kc-alice", "alice-password-1")
+		_, err = s.OIDC.Callback(ctx, auth.OIDCCallback{Provider: "kc", State: state, Code: code, Binding: "another-browser"})
+		require.ErrorIs(t, err, auth.ErrOIDCState)
+		flow, err = s.OIDC.Start(ctx, "kc", "", carol.ID)
+		require.NoError(t, err)
+		state, code = browserLogin(t, flow.AuthURL, "kc-alice", "alice-password-1")
+		_, err = s.OIDC.Callback(ctx, auth.OIDCCallback{Provider: "kc", State: state, Code: code, Binding: flow.Binding, SessionUser: alice.ID})
+		require.ErrorIs(t, err, auth.ErrOIDCState)
+
 		// A code from a flow without the PKCE verifier is refused by
 		// Keycloak: a tampered code fails the exchange.
-		authURL, err = s.OIDC.Start(ctx, "kc", "", uuid.Nil)
+		flow, err = s.OIDC.Start(ctx, "kc", "", uuid.Nil)
 		require.NoError(t, err)
-		state, _ = browserLogin(t, authURL, "kc-alice", "alice-password-1")
-		_, err = s.OIDC.Callback(ctx, "kc", state, "tampered-code", "", "")
+		state, _ = browserLogin(t, flow.AuthURL, "kc-alice", "alice-password-1")
+		_, err = s.OIDC.Callback(ctx, auth.OIDCCallback{Provider: "kc", State: state, Code: "tampered-code", Binding: flow.Binding})
 		require.Error(t, err)
 		require.Equal(t, audit.LoginFailed, rec.Actions()[len(rec.Actions())-1])
 
@@ -307,16 +323,37 @@ func TestOIDCKeycloak(t *testing.T) {
 				Scopes: []string{"openid", "profile", "email"}, AutoCreateUsers: true}}
 		}})
 		h := httpx.Authenticate(s, auth.WriteAuthError("http://hangar.test"))(s.Handler())
-		serve := func(target string) *httptest.ResponseRecorder {
+		serve := func(target string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, target, nil)
+			for _, c := range cookies {
+				req.AddCookie(c)
+			}
 			h.ServeHTTP(rec, req.WithContext(httpx.WithInfo(req.Context(), "r")))
 			return rec
 		}
+		bindingCookie := func(rec *httptest.ResponseRecorder) *http.Cookie {
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == auth.OIDCCookie {
+					return c
+				}
+			}
+			t.Fatal("no OIDC binding cookie")
+			return nil
+		}
+
+		// A callback URL finished in another browser, without the binding
+		// cookie, is refused: login CSRF.
 		start := serve("http://hangar.test/auth/oidc/kc?redirect=/bob/model")
 		require.Equal(t, http.StatusFound, start.Code)
 		state, code := browserLogin(t, start.Header().Get("Location"), "kc-bob", "bob-password-12")
 		done := serve("http://hangar.test/auth/oidc/kc/callback?" + url.Values{"state": {state}, "code": {code}}.Encode())
+		require.Equal(t, "/auth/login?error=oidc_state", done.Header().Get("Location"))
+
+		start = serve("http://hangar.test/auth/oidc/kc?redirect=/bob/model")
+		require.Equal(t, http.StatusFound, start.Code)
+		state, code = browserLogin(t, start.Header().Get("Location"), "kc-bob", "bob-password-12")
+		done = serve("http://hangar.test/auth/oidc/kc/callback?"+url.Values{"state": {state}, "code": {code}}.Encode(), bindingCookie(start))
 		require.Equal(t, http.StatusFound, done.Code)
 		require.Equal(t, "/bob/model", done.Header().Get("Location"))
 		var session *http.Cookie
@@ -337,10 +374,10 @@ func TestOIDCKeycloak(t *testing.T) {
 		s, _ := authtest.NewService(t, dbtest.SQLite(t), authtest.RealOptions{Config: func(c *config.Config) {
 			c.OIDC.Providers = []config.OIDCProvider{{ID: "kc", Issuer: kc.issuer(), ClientID: "hangar", ClientSecret: kcClientSecret}}
 		}})
-		authURL, err := s.OIDC.Start(context.Background(), "kc", "https://evil.example/", uuid.Nil)
+		flow, err := s.OIDC.Start(context.Background(), "kc", "https://evil.example/", uuid.Nil)
 		require.NoError(t, err)
-		state, code := browserLogin(t, authURL, "kc-bob", "bob-password-12")
-		_, err = s.OIDC.Callback(context.Background(), "kc", state, code, "", "")
+		state, code := browserLogin(t, flow.AuthURL, "kc-bob", "bob-password-12")
+		_, err = s.OIDC.Callback(context.Background(), auth.OIDCCallback{Provider: "kc", State: state, Code: code, Binding: flow.Binding})
 		require.True(t, errors.Is(err, auth.ErrOIDCNoAccount), "%v", err)
 	})
 }

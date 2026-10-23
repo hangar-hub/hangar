@@ -31,6 +31,52 @@ export function isExternal(src: string, origin: string = window.location.origin)
   }
 }
 
+const whitespace = /\s/;
+
+/**
+ * Rewrites a `srcset` list, following the HTML parsing rules: `map` gets
+ * each candidate's URL and returns the URL to use, or null to drop the
+ * candidate. Descriptors such as `2x` and `640w` are kept.
+ */
+export function rewriteSrcset(srcset: string, map: (url: string) => string | null): string {
+  const out: string[] = [];
+  const n = srcset.length;
+  let i = 0;
+  while (i < n) {
+    while (i < n && (whitespace.test(srcset.charAt(i)) || srcset.charAt(i) === ",")) i++;
+    if (i >= n) break;
+    let url = "";
+    while (i < n && !whitespace.test(srcset.charAt(i))) url += srcset.charAt(i++);
+    let descriptors = "";
+    if (url.endsWith(",")) {
+      url = url.replace(/,+$/, "");
+    } else {
+      // Descriptors run to the next comma outside parentheses.
+      let depth = 0;
+      for (; i < n; i++) {
+        const c = srcset.charAt(i);
+        if (c === "," && depth === 0) break;
+        if (c === "(") depth++;
+        else if (c === ")") depth = Math.max(0, depth - 1);
+        descriptors += c;
+      }
+      i++;
+    }
+    const mapped = url ? map(url) : null;
+    if (mapped) out.push([mapped, descriptors.trim()].filter(Boolean).join(" "));
+  }
+  return out.join(", ");
+}
+
+/** The host of a URL, for a message, or the URL itself when it does not parse. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 type HastNode = { type: string; value?: string; tagName?: string; children?: HastNode[] };
 
 function hastText(n: HastNode): string {
@@ -82,15 +128,21 @@ export function nestHeadings(top: number) {
 
 /**
  * Renders user Markdown (cards, discussions) safely. External images load
- * only when the Instance allows them (`ui.external_images`).
+ * only when the Instance allows them (`ui.external_images`), through `img`
+ * and through `srcset` on a `picture`'s `source`: the only attributes the
+ * sanitiser keeps that make the browser fetch something.
  */
 export default function Markdown({
   children,
-  externalImages = true,
+  externalImages,
   resolveRelative,
   headingLevel = 2,
 }: {
   children: string;
+  /**
+   * True when the Instance allows images from other hosts. False, or
+   * undefined while the setting is not known, blocks them.
+   */
   externalImages?: boolean;
   /**
    * The level the content's top heading takes: 2 under a page's h1, 3 under
@@ -100,27 +152,42 @@ export default function Markdown({
   /** Turns a relative link or image path into a URL in the Repo. */
   resolveRelative?: (path: string, kind: "link" | "image") => string;
 }) {
+  // Blocks an image URL on another host, or one that does not parse, unless
+  // the Instance allows external images.
+  const blocked = (url: string) => {
+    if (externalImages === true) return false;
+    try {
+      return new URL(url, window.location.origin).origin !== window.location.origin;
+    } catch {
+      return true;
+    }
+  };
+  const imageUrl = (url: string) =>
+    resolveRelative && url && !/^[a-z]+:|^\/|^#/i.test(url) ? resolveRelative(url, "image") : url;
   const components: Components = {
     img({ src, alt, width, height }) {
-      const url = typeof src === "string" ? src : "";
-      const full =
-        resolveRelative && url && !/^[a-z]+:|^\/|^#/i.test(url)
-          ? resolveRelative(url, "image")
-          : url;
-      if (!externalImages && isExternal(full)) {
-        let host = full;
-        try {
-          host = new URL(full).host;
-        } catch {
-          host = full;
-        }
+      const full = imageUrl(typeof src === "string" ? src : "");
+      if (blocked(full)) {
         return (
           <span className="inline-block rounded-sm border border-dashed border-line-strong px-2 py-1 text-xs text-muted">
-            Image from {host} not loaded: this Instance does not load external images.
+            {externalImages === false
+              ? `Image from ${hostOf(full)} not loaded: this Instance does not load external images.`
+              : `Image from ${hostOf(full)} not loaded.`}
           </span>
         );
       }
       return <img src={full} alt={alt ?? ""} width={width} height={height} loading="lazy" />;
+    },
+    source({ srcSet, media, type, width, height }) {
+      // A picture's source loads its srcset instead of the img inside it,
+      // so it follows the same rules as img: relative paths point into the
+      // Repo, and other hosts are dropped unless the Instance allows them.
+      const list = rewriteSrcset(typeof srcSet === "string" ? srcSet : "", (url) => {
+        const full = imageUrl(url);
+        return blocked(full) ? null : full;
+      });
+      if (!list) return null;
+      return <source srcSet={list} media={media} type={type} width={width} height={height} />;
     },
     a({ href, children }) {
       const url = href ?? "";

@@ -161,6 +161,17 @@ func (s *Store) pathGreater() string {
 	return `path COLLATE "C" > ?`
 }
 
+// pathUnder matches the paths below a directory as a byte range, from
+// "dir/" up to but not including "dir0", '0' being the byte after '/'.
+// Byte comparison holds for any UTF-8 name, where substr counts
+// characters but Go's len counts bytes.
+func (s *Store) pathUnder() string {
+	if s.db.IsSQLite() {
+		return "path >= ? AND path < ?"
+	}
+	return `path COLLATE "C" >= ? AND path COLLATE "C" < ?`
+}
+
 func (s *Store) treeRow(ctx context.Context, repoID uuid.UUID, commit model.CommitSHA, p string) (*db.TreeEntry, error) {
 	row := new(db.TreeEntry)
 	err := s.db.NewSelect().Model(row).Where("repo_id = ?", repoID).Where("commit_sha = ?", string(commit)).Where("path = ?", p).Scan(ctx)
@@ -371,7 +382,7 @@ func (s *Store) Tree(ctx context.Context, id model.RepoID, commit model.CommitSH
 	case !opts.Recursive:
 		q = q.Where("parent = ?", clean)
 	case clean != "":
-		q = q.Where("substr(path, 1, ?) = ?", len(clean)+1, clean+"/")
+		q = q.Where(s.pathUnder(), clean+"/", clean+"0")
 	}
 	if opts.After != "" {
 		afterType := string(model.EntryFile)

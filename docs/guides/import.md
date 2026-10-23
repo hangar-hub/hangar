@@ -14,9 +14,25 @@ hangar import --from-hf-cache                     # ~/.cache/huggingface/hub, or
 hangar import --from-hf-cache /mnt/models/hub
 ```
 
-For each Repo in the cache, Hangar creates a Mirror of the huggingface.co Repo with the same ID at the cached Commit: the Instance fetches the history, which is small, and the CLI uploads only the cached large files whose SHA-256 matches. Files you have not cached show as **Not in arsenal**, and you can pull them later.
+For each Repo in the cache, Hangar creates a Mirror of the huggingface.co Repo with the same ID at the cached Commit: the snapshot that `main` points at, or the newest snapshot if the cache does not record `main`. The Instance fetches the history, which is small, and the CLI uploads only the cached large files that the Mirror is missing. Files you have not cached show as **Not in arsenal**, and you can pull them later.
 
-With `--offline`, or for a Repo huggingface.co does not have, each Repo becomes a local Repo with one Commit of the cached files instead. Add `--namespace` to put those in a Namespace of your choice.
+The import reads every cached snapshot of a Repo, not only that one, and matches files by content rather than by name: the SHA-256 of large files and the git blob ID of the others. A file counts as matched when the Mirror has the same content at the cached Commit, the default branch or the Commit of any other cached snapshot, under any path.
+
+If the Repo is already a Mirror, the import fills in the files it is missing. When the cached Commit is newer than the Mirror's last sync, Hangar fetches its history first. The uploaded files are added to the Mirror at the Commit they matched, so files that have changed on huggingface.co since are not downloaded again.
+
+With `--offline`, or for a Repo huggingface.co does not have, each Repo becomes a local Repo with one Commit of the cached files instead, from the snapshot of `main` or else the newest. Add `--namespace` to put those in a Namespace of your choice. An import never commits to a Mirror, because Mirrors are read-only.
+
+### Files that do not match
+
+A file whose content matches nothing in the Mirror is not uploaded. The results count it as not matched, then name it with the reason:
+
+```text
+Not matched:
+  acme/model: notes.safetensors (snapshot 1a2b3c4d5e6f): no file in the Mirror at Commits 9f8e7d6c5b4a or 0c1d2e3f4a5b has this content
+  acme/model: model.safetensors: its content differs from model.safetensors at Commit 9f8e7d6c5b4a and from every other file checked
+```
+
+The snapshot is named when the Repo has more than one in the cache. With `--json`, each result lists these files under `not_matched`, with `path`, `reason` and `snapshot`.
 
 ## A folder
 
@@ -33,7 +49,7 @@ hangar import --from-lmstudio
 hangar import --from-lmstudio ~/lm-models
 ```
 
-Each `<publisher>/<repo>` folder that matches a huggingface.co Repo of the same name becomes a Partial mirror holding the files whose SHA-256 matches; files that differ are reported as not matched. Other folders become local Repos.
+Each `<publisher>/<repo>` folder that matches a huggingface.co Repo of the same name becomes a Partial mirror holding the files whose content matches a file of the Mirror's default branch, whatever their names. Files that match nothing are reported as not matched, with the reason. Other folders become local Repos.
 
 ## Ollama
 
