@@ -3845,6 +3845,12 @@
 <td>Times when Pull transfers may run, such as 01:00-07:00, in server.timezone. Empty means any time.</td>
 </tr>
 <tr>
+<td><code>pull.stall_timeout</code><br><code>HANGAR_PULL_STALL_TIMEOUT</code></td>
+<td>duration</td>
+<td><code>2m</code></td>
+<td>How long an Upstream may take to answer a request, or go without sending data during a download, before Hangar cuts the connection and retries. Raise it on slow or congested links.</td>
+</tr>
+<tr>
 <td><code>pull.pull_through.enabled</code><br><code>HANGAR_PULL_PULL_THROUGH_ENABLED</code></td>
 <td>bool</td>
 <td><code>false</code></td>
