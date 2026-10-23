@@ -37,7 +37,7 @@ var checkValues = map[string]map[string]string{
 	"namespaces":         {"kind": "org"},
 	"tokens":             {"scope": "write"},
 	"memberships":        {"role": "admin", "source": "oidc"},
-	"oauth_device_codes": {"status": "approved"},
+	"oauth_device_codes": {"status": "approved", "scope": "write"},
 	"repos":              {"type": "dataset", "visibility": "internal"},
 	"collaborators":      {"role": "write"},
 	"packs":              {"state": "live"},

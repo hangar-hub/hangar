@@ -488,6 +488,24 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     state.tokens = state.tokens.filter((t) => t.id !== params.id);
     return noContent;
   },
+  lookupDeviceLogin: ({ body }) => {
+    const d = body as S["DeviceLookup"];
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(d.user_code)) {
+      return problem(
+        404,
+        "That code does not exist or has expired. Run the login command again for a new one.",
+      );
+    }
+    const requested = new Date(Date.now() - 30_000);
+    return ok({
+      user_code: d.user_code,
+      client_id: "hangar-cli",
+      client_ip: "192.0.2.10",
+      requested_at: requested.toISOString(),
+      expires_at: new Date(requested.getTime() + 15 * 60_000).toISOString(),
+      token_lifetime_days: 30,
+    } satisfies S["DeviceRequest"]);
+  },
   decideDeviceLogin: ({ body }) => {
     const d = body as S["DeviceDecision"];
     if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(d.user_code)) {

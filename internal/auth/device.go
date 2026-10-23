@@ -19,6 +19,10 @@ import (
 const (
 	deviceCodeTTL      = 15 * time.Minute
 	devicePollInterval = 5 * time.Second
+	// DeviceTokenTTL is how long a Token from a device login lasts
+	// (05-auth.md "Device login"), so a login approved by mistake, or
+	// through a phishing link, does not give access for ever.
+	DeviceTokenTTL = 30 * 24 * time.Hour
 	// DeviceVerificationPath is the UI page where users enter the code.
 	DeviceVerificationPath = "/settings/device"
 )
@@ -59,8 +63,10 @@ func NormaliseUserCode(code string) string {
 	return c[:4] + "-" + c[4:]
 }
 
-// Start implements DeviceFlow.
-func (d *DeviceStore) Start(ctx context.Context, clientID string) (*DeviceCode, error) {
+// Start implements DeviceFlow. The verification URL carries no code:
+// the approval page asks the user to type the code their terminal shows,
+// so a link someone else sends cannot approve their login in one click.
+func (d *DeviceStore) Start(ctx context.Context, clientID, clientIP string) (*DeviceCode, error) {
 	if len(clientID) > 200 {
 		return nil, fmt.Errorf("%w: client_id is too long", ErrInvalid)
 	}
@@ -75,7 +81,9 @@ func (d *DeviceStore) Start(ctx context.Context, clientID string) (*DeviceCode, 
 			return nil, err
 		}
 		row := &db.OAuthDeviceCode{DeviceCodeHash: hashSecret(deviceCode), UserCode: userCode, ClientID: clientID,
-			Status: "pending", PollInterval: int(devicePollInterval / time.Second), ExpiresAt: now.Add(deviceCodeTTL)}
+			ClientIP: truncate(clientIP, 64), Status: "pending", Scope: string(model.ScopeRead),
+			PollInterval: int(devicePollInterval / time.Second), ExpiresAt: now.Add(deviceCodeTTL),
+			Timestamps: db.Timestamps{CreatedAt: now, UpdatedAt: now}}
 		if _, err := d.s.db.NewInsert().Model(row).Exec(ctx); err != nil {
 			if db.IsUniqueViolation(err) {
 				continue
@@ -84,7 +92,7 @@ func (d *DeviceStore) Start(ctx context.Context, clientID string) (*DeviceCode, 
 		}
 		uri := d.s.publicURL() + DeviceVerificationPath
 		return &DeviceCode{DeviceCode: deviceCode, UserCode: userCode, VerificationURI: uri,
-			VerificationURIComplete: uri + "?code=" + userCode, Interval: devicePollInterval, ExpiresIn: deviceCodeTTL}, nil
+			Interval: devicePollInterval, ExpiresIn: deviceCodeTTL}, nil
 	}
 	return nil, fmt.Errorf("could not allocate a unique user code")
 }
@@ -104,12 +112,34 @@ func (d *DeviceStore) pending(ctx context.Context, idb bun.IDB, userCode string)
 	return &row, nil
 }
 
-func (d *DeviceStore) decide(ctx context.Context, userCode string, p model.Principal, status string) error {
+// answerer checks that p may see and answer device logins: a signed-in
+// user in a UI session, never a Token.
+func answerer(p model.Principal) error {
 	if !p.IsUser() {
 		return fmt.Errorf("%w: sign in to answer a device login", ErrForbidden)
 	}
 	if p.Token != nil {
 		return fmt.Errorf("%w: answer device logins in the web UI, not with a token", ErrForbidden)
+	}
+	return nil
+}
+
+// Lookup implements DeviceFlow.
+func (d *DeviceStore) Lookup(ctx context.Context, userCode string, p model.Principal) (*DeviceRequest, error) {
+	if err := answerer(p); err != nil {
+		return nil, err
+	}
+	row, err := d.pending(ctx, d.s.db, userCode)
+	if err != nil {
+		return nil, err
+	}
+	return &DeviceRequest{UserCode: row.UserCode, ClientID: row.ClientID, ClientIP: row.ClientIP,
+		RequestedAt: row.CreatedAt.UTC(), ExpiresAt: row.ExpiresAt.UTC()}, nil
+}
+
+func (d *DeviceStore) decide(ctx context.Context, userCode string, p model.Principal, status string, scope model.Scope) error {
+	if err := answerer(p); err != nil {
+		return err
 	}
 	return d.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
 		row, err := d.pending(ctx, tx, userCode)
@@ -118,7 +148,7 @@ func (d *DeviceStore) decide(ctx context.Context, userCode string, p model.Princ
 		}
 		uid := p.UserID
 		res, err := tx.NewUpdate().Model((*db.OAuthDeviceCode)(nil)).Where("device_code_hash = ? AND status = ?", row.DeviceCodeHash, "pending").
-			Set("status = ?", status).Set("user_id = ?", uid).Set("updated_at = ?", d.s.nowUTC()).Exec(ctx)
+			Set("status = ?", status).Set("scope = ?", string(scope)).Set("user_id = ?", uid).Set("updated_at = ?", d.s.nowUTC()).Exec(ctx)
 		if err != nil {
 			return err
 		}
@@ -129,14 +159,18 @@ func (d *DeviceStore) decide(ctx context.Context, userCode string, p model.Princ
 	})
 }
 
-// Approve implements DeviceFlow.
-func (d *DeviceStore) Approve(ctx context.Context, userCode string, p model.Principal) error {
-	return d.decide(ctx, userCode, p, "approved")
+// Approve implements DeviceFlow. The scope is read or write: a device
+// login never gives the admin scope.
+func (d *DeviceStore) Approve(ctx context.Context, userCode string, scope model.Scope, p model.Principal) error {
+	if scope != model.ScopeRead && scope != model.ScopeWrite {
+		return fmt.Errorf("%w: a device login gets the read or write scope", ErrInvalid)
+	}
+	return d.decide(ctx, userCode, p, "approved", scope)
 }
 
 // Deny implements DeviceFlow.
 func (d *DeviceStore) Deny(ctx context.Context, userCode string, p model.Principal) error {
-	return d.decide(ctx, userCode, p, "denied")
+	return d.decide(ctx, userCode, p, "denied", model.ScopeRead)
 }
 
 func deviceTokenName(clientID string) string {
@@ -150,8 +184,9 @@ func deviceTokenName(clientID string) string {
 }
 
 // Poll implements DeviceFlow. Polling faster than the interval gives
-// ErrSlowDown. Once approved, the first poll creates a write Token for the
-// approving user and returns its secret; later polls give ErrExpiredToken.
+// ErrSlowDown. Once approved, the first poll creates a Token for the
+// approving user, with the scope they chose and an expiry DeviceTokenTTL
+// away, and returns its secret; later polls give ErrExpiredToken.
 func (d *DeviceStore) Poll(ctx context.Context, deviceCode string) (string, error) {
 	var row db.OAuthDeviceCode
 	err := d.s.db.NewSelect().Model(&row).Where("device_code_hash = ?", hashSecret(deviceCode)).Scan(ctx)
@@ -194,7 +229,12 @@ func (d *DeviceStore) Poll(ctx context.Context, deviceCode string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	tok, secret, err := d.s.TokenStore.CreateAs(ctx, NewToken{UserID: u.ID, Name: deviceTokenName(row.ClientID), Scope: model.ScopeWrite},
+	scope := model.Scope(row.Scope)
+	if scope != model.ScopeWrite {
+		scope = model.ScopeRead
+	}
+	expires := now.Add(DeviceTokenTTL)
+	tok, secret, err := d.s.TokenStore.CreateAs(ctx, NewToken{UserID: u.ID, Name: deviceTokenName(row.ClientID), Scope: scope, ExpiresAt: &expires},
 		u.Principal(model.AuthSession))
 	if err != nil {
 		return "", err

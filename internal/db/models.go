@@ -232,7 +232,9 @@ type OAuthDeviceCode struct {
 	DeviceCodeHash string     `bun:"device_code_hash,pk"`
 	UserCode       string     `bun:"user_code,notnull"`
 	ClientID       string     `bun:"client_id,notnull"`
+	ClientIP       string     `bun:"client_ip,notnull"`
 	Status         string     `bun:"status,notnull"`
+	Scope          string     `bun:"scope,notnull"`
 	UserID         *uuid.UUID `bun:"user_id,type:uuid"`
 	TokenID        *uuid.UUID `bun:"token_id,type:uuid"`
 	PollInterval   int        `bun:"poll_interval,notnull"`

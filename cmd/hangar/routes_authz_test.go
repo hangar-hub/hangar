@@ -267,6 +267,7 @@ var routeMatrix = []routeCase{
 	{method: "POST", route: "/api/hangar/v1/me/tokens", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/tokens", body: `{"name":"probe-{n}","scope":"read"}`},
 	{method: "DELETE", route: "/api/hangar/v1/me/tokens/{id}", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/tokens/{uuid}"},
 	{method: "POST", route: "/api/hangar/v1/me/device", rule: ruleSessionOnly, path: "/api/hangar/v1/me/device", body: `{"user_code":"ABCD-EFGH","approve":false}`},
+	{method: "POST", route: "/api/hangar/v1/me/device/lookup", rule: ruleSessionOnly, path: "/api/hangar/v1/me/device/lookup", body: `{"user_code":"ABCD-EFGH"}`},
 	{method: "GET", route: "/api/hangar/v1/me/ollama-keys", rule: ruleSignedIn, path: "/api/hangar/v1/me/ollama-keys"},
 	{method: "POST", route: "/api/hangar/v1/me/ollama-keys", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/ollama-keys", body: `{"public_key":"ssh-ed25519 nope"}`},
 	{method: "DELETE", route: "/api/hangar/v1/me/ollama-keys/{id}", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/ollama-keys/{uuid}"},

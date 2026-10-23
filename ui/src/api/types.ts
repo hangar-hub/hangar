@@ -22,6 +22,7 @@ export type Discussion = Schemas["Discussion"];
 export type DiscussionEvent = Schemas["DiscussionEvent"];
 export type Token = Schemas["Token"];
 export type TokenCreated = Schemas["TokenCreated"];
+export type DeviceRequest = Schemas["DeviceRequest"];
 export type Upstream = Schemas["Upstream"];
 export type DiscoverItem = Schemas["DiscoverItem"];
 export type DiscoverDetail = Schemas["DiscoverDetail"];

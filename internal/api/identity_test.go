@@ -303,8 +303,15 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		alice.do(http.MethodPut, "/api/hangar/v1/me/upstream-tokens/huggingface", map[string]any{"token": "hf_x"}, http.StatusNotFound, nil)
 
 		// Device login answers.
-		dc, err := e.svc.Device.Start(context.Background(), "hf")
+		dc, err := e.svc.Device.Start(context.Background(), "hf", "192.0.2.1")
 		require.NoError(t, err)
+		var dr gen.DeviceRequest
+		alice.do(http.MethodPost, "/api/hangar/v1/me/device/lookup", map[string]any{"user_code": dc.UserCode}, http.StatusOK, &dr)
+		require.Equal(t, "hf", dr.ClientId)
+		require.Equal(t, "192.0.2.1", dr.ClientIp)
+		require.Equal(t, 30, dr.TokenLifetimeDays)
+		anon.do(http.MethodPost, "/api/hangar/v1/me/device/lookup", map[string]any{"user_code": dc.UserCode}, http.StatusUnauthorized, nil)
+		alice.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": true, "scope": "admin"}, http.StatusBadRequest, nil)
 		alice.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": true}, http.StatusNoContent, nil)
 		alice.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": false}, http.StatusNotFound, nil)
 		anon.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": true}, http.StatusUnauthorized, nil)

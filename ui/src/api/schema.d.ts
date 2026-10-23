@@ -182,9 +182,35 @@ export interface paths {
         put?: never;
         /**
          * Approve or deny a device-code login
-         * @description Answers the code that `hf auth login` shows in a browser-based login.
+         * @description Answers the code that `hf auth login` or `hangar login` shows in a
+         *     browser-based login. Needs a UI session. Approving creates a Token
+         *     with the chosen scope (`read` unless the request says `write`) that
+         *     expires after `token_lifetime_days` days.
          */
         post: operations["decideDeviceLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/device/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Describe a pending device-code login
+         * @description Says which client started the login with this code, when and from
+         *     which IP address, so the user can check it is theirs before
+         *     answering it. Needs a UI session. The code travels in the body, not
+         *     the URL, so it stays out of access logs and traces.
+         */
+        post: operations["lookupDeviceLogin"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2035,6 +2061,30 @@ export interface components {
         DeviceDecision: {
             user_code: string;
             approve: boolean;
+            /**
+             * @description The scope of the Token an approval creates. Defaults to `read`.
+             * @enum {string}
+             */
+            scope?: "read" | "write";
+        };
+        DeviceLookup: {
+            user_code: string;
+        };
+        DeviceRequest: {
+            user_code: string;
+            /** @description The client_id the device sent */
+            client_id: string;
+            /** @description The IP address the login was started from. Empty if unknown. */
+            client_ip: string;
+            /** Format: date-time */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description When the code stops working if nobody answers it.
+             */
+            expires_at: string;
+            /** @description How many days the Token an approval creates lasts. */
+            token_lifetime_days: number;
         };
         OllamaKey: {
             /** Format: uuid */
@@ -3326,6 +3376,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    lookupDeviceLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceLookup"];
+            };
+        };
+        responses: {
+            /** @description The pending login. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRequest"];
+                };
             };
             default: components["responses"]["Problem"];
         };

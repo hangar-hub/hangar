@@ -62,7 +62,7 @@ func TestDeviceLogin(t *testing.T) {
 		return decode[map[string]any](t, e.Request(t, http.MethodPost, "/oauth/token", "", body.Encode(), "Content-Type", form))
 	}
 	require.Equal(t, "authorization_pending", poll()["error"])
-	require.NoError(t, e.Devices.Approve(context.Background(), dc["user_code"].(string), e.Users["alice"].Principal))
+	require.NoError(t, e.Devices.Approve(context.Background(), dc["user_code"].(string), model.ScopeWrite, e.Users["alice"].Principal))
 	got := poll()
 	secret := got["access_token"].(string)
 	require.Equal(t, "bearer", got["token_type"])

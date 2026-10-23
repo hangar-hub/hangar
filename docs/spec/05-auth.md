@@ -73,6 +73,16 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 - The Hub API's `whoami-v2` returns the token's name and role so `hf auth login` and `hf auth whoami` work ([03](03-hf-api.md)).
 - Instance admins can list and revoke any token.
 
+## Device login
+
+`hf auth login` and `hangar login` without a Token use the device-code flow (RFC 8628) at `/oauth/device` and `/oauth/token` ([03](03-hf-api.md)). Starting one needs no credential, so the approval step is where a phishing link would land (decided by the auth hardening agent after the security review of 2026-10-21):
+
+- The verification URL carries no code (`verification_uri_complete` is the plain page), and the **Connect a device** page never fills in a code from its URL. The user types the code their terminal shows.
+- Before approving, the page shows the client ID, when the login was requested and from which IP address (`POST /me/device/lookup`, which takes the code in the body), and warns that the Token acts as the user on everything their account can reach.
+- The user chooses the scope: `read` by default, or `write`. A device login never gets `admin`.
+- The Token expires 30 days after it is created, and the page says so. There is no refresh token; the user signs in again.
+- Looking up and answering a code needs a UI session; every Token is refused.
+
 ## Ollama keys
 
 Ollama signs registry requests with the user's Ollama key pair (`~/.ollama/id_ed25519`). Users paste their public key in **Settings > Ollama keys**, as on the Hub. The Ollama auth flow is specified in [08](08-local-tools.md).

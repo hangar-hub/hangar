@@ -190,12 +190,32 @@ paths:
       tags: [tokens]
       operationId: decideDeviceLogin
       summary: Approve or deny a device-code login
-      description: Answers the code that `hf auth login` shows in a browser-based login.
+      description: |
+        Answers the code that `hf auth login` or `hangar login` shows in a
+        browser-based login. Needs a UI session. Approving creates a Token
+        with the chosen scope (`read` unless the request says `write`) that
+        expires after `token_lifetime_days` days.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/DeviceDecision"}}}
       responses:
         "204": {description: Recorded.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/device/lookup:
+    post:
+      tags: [tokens]
+      operationId: lookupDeviceLogin
+      summary: Describe a pending device-code login
+      description: |
+        Says which client started the login with this code, when and from
+        which IP address, so the user can check it is theirs before
+        answering it. Needs a UI session. The code travels in the body, not
+        the URL, so it stays out of access logs and traces.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/DeviceLookup"}}}
+      responses:
+        "200": {description: The pending login., content: {application/json: {schema: {$ref: "#/components/schemas/DeviceRequest"}}}}
         default: {$ref: "#/components/responses/Problem"}
   /me/ollama-keys:
     get:
@@ -1527,6 +1547,25 @@ components:
       properties:
         user_code: {type: string}
         approve: {type: boolean}
+        scope:
+          type: string
+          enum: [read, write]
+          description: The scope of the Token an approval creates. Defaults to `read`.
+    DeviceLookup:
+      type: object
+      required: [user_code]
+      properties:
+        user_code: {type: string}
+    DeviceRequest:
+      type: object
+      required: [user_code, client_id, client_ip, requested_at, expires_at, token_lifetime_days]
+      properties:
+        user_code: {type: string}
+        client_id: {type: string, description: The client_id the device sent, such as `hangar-cli`.}
+        client_ip: {type: string, description: The IP address the login was started from. Empty if unknown.}
+        requested_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, description: When the code stops working if nobody answers it.}
+        token_lifetime_days: {type: integer, description: How many days the Token an approval creates lasts.}
     OllamaKey:
       type: object
       required: [id, fingerprint, created_at]

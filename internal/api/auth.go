@@ -73,6 +73,7 @@ type IdentityAPI interface {
 	CreateMyToken(w http.ResponseWriter, r *http.Request)
 	RevokeMyToken(w http.ResponseWriter, r *http.Request, id gen.ID)
 	DecideDeviceLogin(w http.ResponseWriter, r *http.Request)
+	LookupDeviceLogin(w http.ResponseWriter, r *http.Request)
 	ListMyOllamaKeys(w http.ResponseWriter, r *http.Request)
 	AddMyOllamaKey(w http.ResponseWriter, r *http.Request)
 	DeleteMyOllamaKey(w http.ResponseWriter, r *http.Request, id gen.ID)

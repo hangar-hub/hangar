@@ -18,7 +18,7 @@ hf upload acme/my-model ./weights
 
 ## Sign in
 
-Use `hf auth login --token`, or the `HF_TOKEN` variable. The browser sign-in that `hf auth login` starts without `--token` also works: it opens Hangar's device page, where you approve the code, and Hangar creates a write Token for the CLI.
+Use `hf auth login --token`, or the `HF_TOKEN` variable. The browser sign-in that `hf auth login` starts without `--token` also works: open Hangar's device page, type the code your terminal shows, check which client asked, when and from which IP address, and choose `read` or `write` access. Hangar then creates a Token for the CLI that expires in 30 days. Choose `write` if you will upload. Hangar never fills in the code from a link, so a link someone sends you cannot sign their device in as you.
 
 `hf` keeps one active Token in `~/.cache/huggingface/token`, whichever endpoint it came from. If you also use huggingface.co, set `HF_ENDPOINT` and `HF_TOKEN` in each shell instead of signing in to both:
 
