@@ -307,3 +307,82 @@ func TestDocsRootFiles(t *testing.T) {
 		t.Errorf("the second run committed %s", again)
 	}
 }
+
+// TestDocsOutdatedBanner checks that scripts/docs-outdated-banner.py fills
+// the empty banner placeholder that Material renders in docs versions built
+// before overrides/main.html, with that file's text and a link to the page's
+// canonical URL, leaves pages that already have the banner alone, and
+// refuses a version that is not published.
+func TestDocsOutdatedBanner(t *testing.T) {
+	site := t.TempDir()
+	const empty = `<div data-md-color-scheme="default" data-md-component="outdated" hidden>
+
+      </div>`
+	pages := map[string]string{
+		"1.0/index.html":               `<head><link rel="canonical" href="https://hangar.page/latest/"></head><body>` + empty + `</body>`,
+		"1.0/guides/ollama/index.html": `<head><link rel="canonical" href="https://hangar.page/latest/guides/ollama/"></head><body>` + empty + `</body>`,
+		"1.0/404.html":                 `<head></head><body>` + empty + `</body>`,
+	}
+	for name, body := range pages {
+		path := filepath.Join(site, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(versions ...string) (string, error) {
+		args := append([]string{"../scripts/docs-outdated-banner.py", site}, versions...)
+		out, err := exec.Command("python3", args...).CombinedOutput()
+		return string(out), err
+	}
+	read := func(name string) string {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(site, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+
+	out, err := run("1.0")
+	if err != nil {
+		t.Fatalf("the script failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "added the banner to 3 of 3 pages") {
+		t.Errorf("the script did not report three pages:\n%s", out)
+	}
+	template, err := os.ReadFile("../overrides/main.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sentence = "You're reading the documentation for an older version of Hangar."
+	if !strings.Contains(string(template), sentence) {
+		t.Fatalf("overrides/main.html no longer says %q; update this test", sentence)
+	}
+	for name, href := range map[string]string{
+		"1.0/guides/ollama/index.html": "https://hangar.page/latest/guides/ollama/",
+		"1.0/404.html":                 "https://hangar.page/latest/",
+	} {
+		got := read(name)
+		if !strings.Contains(got, `data-md-component="outdated" hidden><aside class="md-banner md-banner--warning">`) ||
+			!strings.Contains(got, sentence) || !strings.Contains(got, `<a href="`+href+`">`) {
+			t.Errorf("%s has no banner linking to %s:\n%s", name, href, got)
+		}
+		if strings.Contains(got, "{{") {
+			t.Errorf("%s has a template expression left in it:\n%s", name, got)
+		}
+	}
+
+	before := read("1.0/guides/ollama/index.html")
+	if out, err := run("1.0"); err != nil || !strings.Contains(out, "added the banner to 0 of 3 pages") {
+		t.Errorf("the second run changed pages, or failed: %v\n%s", err, out)
+	}
+	if read("1.0/guides/ollama/index.html") != before {
+		t.Error("the second run changed a page that already had the banner")
+	}
+	if out, err := run("0.9"); err == nil {
+		t.Errorf("the script accepted a version that is not published:\n%s", out)
+	}
+}

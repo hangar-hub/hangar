@@ -40,6 +40,8 @@ plugins:
 
 theme:
   name: material
+  # Theme overrides, such as the banner on older docs versions.
+  custom_dir: overrides
   language: en
   logo: assets/icon.svg
   favicon: assets/icon.svg
@@ -71,7 +73,12 @@ extra:
   homepage: https://hangar.page/
   version:
     provider: mike
-    default: latest
+    # Versions whose name or alias matches one of these are current, and
+    # their pages show no banner pointing to the latest version
+    # (overrides/main.html): the latest release, and dev, which is newer.
+    default:
+      - latest
+      - dev
 
 markdown_extensions:
   - admonition
