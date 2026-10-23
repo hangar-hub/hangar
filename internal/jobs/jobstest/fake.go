@@ -201,6 +201,16 @@ func (f *Fake) Retry(ctx context.Context, id jobs.JobID) (jobs.JobID, error) {
 		MaxAttempts: old.MaxAttempts, CreatedBy: old.CreatedBy, ParentID: old.ParentID, Repo: old.Repo})
 }
 
+// Postpone implements jobs.Queue.
+func (f *Fake) Postpone(_ context.Context, id jobs.JobID, until time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if j, ok := f.jobs[id]; ok && j.Status == jobs.StatusPending && j.RunAfter.Before(until) {
+		j.RunAfter, j.UpdatedAt = until, f.now()
+	}
+	return nil
+}
+
 // SetSchedule implements jobs.Queue.
 func (f *Fake) SetSchedule(_ context.Context, s jobs.Schedule) error {
 	if s.Kind == "" || s.Key == "" || s.Cron == "" {

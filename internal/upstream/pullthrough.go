@@ -263,7 +263,7 @@ func (pt *PullThrough) stream(ctx context.Context, r *repo.Repo, m *Mirror, up *
 	fp := filePayload{UpstreamID: up.ID, Upstream: up.Name, UpstreamRepo: m.UpstreamRepo.String(), Type: r.ID.Type, Repo: r.ID.String(),
 		RepoUUID: r.UUID, Commit: commit, Path: path, OID: oid, Size: size, RequestedBy: user, Now: true}
 	jobID, err := s.opts.Queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: oid, Payload: fp, Priority: jobs.PriorityHigh, Repo: r.UUID,
-		RunAfter: s.opts.Now().Add(time.Minute), CreatedBy: user})
+		RunAfter: s.opts.Now().Add(pullThroughBackupDelay), CreatedBy: user})
 	if err != nil {
 		return nil, err
 	}
@@ -293,14 +293,55 @@ func (pt *PullThrough) stream(ctx context.Context, r *repo.Repo, m *Mirror, up *
 		return nil, err
 	}
 	src := fileSource{up: up, cred: cred, id: m.UpstreamRepo, commit: commit, path: path, oid: oid, size: size}
-	go pt.transfer(context.WithoutCancel(ctx), r, src, t)
+	go pt.transfer(context.WithoutCancel(ctx), r, src, t, jobID)
 	return rd, nil
 }
 
-// transfer runs one spooled Pull-through transfer.
-func (pt *PullThrough) transfer(ctx context.Context, r *repo.Repo, src fileSource, t *transfer) {
+// pullThroughBackupDelay is how long the backup pull.file Job of a
+// Pull-through transfer waits before it starts, and how long after this
+// process stops holding it back (holdBackup).
+const pullThroughBackupDelay = time.Minute
+
+// holdBackup keeps the backup pull.file Job from starting while this
+// process transfers the object, by moving its start back every
+// PollInterval. Without it, a worker in another process, which cannot see
+// this transfer, starts the Job once the backup delay has passed and
+// downloads the object a second time. The Job starts at most the backup
+// delay after this process stops, so if the transfer fails or the process
+// dies, the Job transfers the object; if the transfer succeeds, the Job
+// finds the object stored.
+func (pt *PullThrough) holdBackup(ctx context.Context, jobID jobs.JobID) (stop func()) {
 	s := pt.s
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(s.opts.PollInterval)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+			if err := s.opts.Queue.Postpone(ctx, jobID, s.opts.Now().Add(pullThroughBackupDelay)); err != nil && ctx.Err() == nil {
+				s.log.WarnContext(ctx, "hold back the pull-through backup transfer", "error", err.Error())
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// transfer runs one spooled Pull-through transfer, holding back its
+// backup Job, backup, while it runs.
+func (pt *PullThrough) transfer(ctx context.Context, r *repo.Repo, src fileSource, t *transfer, backup jobs.JobID) {
+	s := pt.s
+	stop := pt.holdBackup(ctx, backup)
 	err := func() error {
+		defer stop()
 		rc, err := s.open(ctx, src, 0)
 		if err != nil {
 			return err
