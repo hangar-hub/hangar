@@ -22,6 +22,11 @@ Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their g
 - [LM Studio](https://hangar.page/latest/guides/lm-studio/): install models into LM Studio from Hangar
 - [vLLM](https://hangar.page/latest/guides/vllm/): serve models with vLLM from weights stored in Hangar
 - [Air-gapped Instances](https://hangar.page/latest/guides/air-gapped/): run Hangar with no internet access
+- [Run a private Ollama registry](https://hangar.page/latest/guides/ollama-registry/): serve GGUF models to every Ollama install on your network
+- [Share one Hugging Face model cache across a team](https://hangar.page/latest/guides/shared-cache/): a shared cache folder, Hangar, or both
+- [Hugging Face rate limits and slow downloads in CI](https://hangar.page/latest/guides/ci/): 429 Too Many Requests, caching, and GitHub Actions with `HF_ENDPOINT`
+- [Load models in Kubernetes](https://hangar.page/latest/guides/kubernetes/): keep models on a volume and download them from Hangar in an init container
+- [Hugging Face Hub on-premises](https://hangar.page/latest/concepts/on-premises/): what Hugging Face offers, and running a Hub-compatible server yourself
 - [Hub API compatibility](https://hangar.page/latest/reference/hub-api-compatibility/): every Hub API endpoint and whether Hangar serves it
 - [Tested versions and platforms](https://hangar.page/latest/reference/compatibility/): the client, database and platform versions CI tests against
 - [FAQ](https://hangar.page/latest/faq/): model registry or hub, running models, air-gapped use, licence and cost
