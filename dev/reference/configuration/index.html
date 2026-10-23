@@ -1842,6 +1842,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        webhooks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#telemetry" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2844,6 +2855,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        webhooks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#telemetry" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3363,6 +3385,17 @@
     <span class="md-ellipsis">
       
         ui
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        webhooks
       
     </span>
   </a>
@@ -4197,6 +4230,26 @@
 <td>string</td>
 <td><code>https://hangar.page/</code></td>
 <td>Where the web UI's links to the documentation go, such as a docs mirror on an air-gapped network. The mirror must serve the same paths as https://hangar.page/. Empty removes the links.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="webhooks"><code>webhooks</code><a class="headerlink" href="#webhooks" title="Permanent link">&para;</a></h2>
+<p>Webhook deliveries.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>webhooks.allow_private_targets</code><br><code>HANGAR_WEBHOOKS_ALLOW_PRIVATE_TARGETS</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Let webhooks reach private addresses: loopback, RFC 1918, carrier-grade NAT and unique local. Off by default, so users cannot make Hangar send requests into your network. Link-local and cloud metadata addresses are refused whatever this says. This is the default for the Instance setting of the same name, which an Instance admin can change under Admin, Settings.</td>
 </tr>
 </tbody>
 </table>

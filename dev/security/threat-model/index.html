@@ -3574,15 +3574,27 @@
 </tr>
 <tr>
 <td>S</td>
-<td>Password guessing.</td>
-<td>Throttling per username and per IP, stored in the database so it holds across replicas; a common-password list; argon2id hashing (<code>internal/auth/login.go</code>, <code>passwords.go</code>).</td>
-<td><code>TestPasswordLoginAndThrottling</code>, <code>TestPasswordPolicy</code> (<code>internal/auth/login_test.go</code>).</td>
+<td>Password guessing, including a burst of parallel guesses that all pass the throttle before the first failures are written.</td>
+<td>Throttling per username and per IP, stored in the database so it holds across replicas. Each attempt counts as a failure, in the same transaction as the throttle check, before its password is hashed, and only a right password takes it back. A common-password list; argon2id hashing (<code>internal/auth/login.go</code>, <code>passwords.go</code>).</td>
+<td><code>TestPasswordLoginAndThrottling</code>, <code>TestLoginThrottleHoldsUnderParallelAttempts</code>, <code>TestPasswordPolicy</code> (<code>internal/auth/login_test.go</code>).</td>
 </tr>
 <tr>
 <td>S</td>
 <td>OIDC sign-in is forged or replayed.</td>
 <td>Authorisation code flow with PKCE, <code>state</code> stored hashed and <code>nonce</code> checked (<code>internal/auth/oidc.go</code>); an existing account with the same email is linked only after its owner signs in locally (<code>ErrOIDCLinkRequired</code>).</td>
 <td><code>TestOIDCKeycloak</code> (<code>internal/auth/oidc_integration_test.go</code>), which also refuses a reused or made-up <code>state</code> and a tampered code, and checks the link rule.</td>
+</tr>
+<tr>
+<td>S</td>
+<td>OIDC login CSRF, or a forwarded link URL: a callback started in one browser is finished in another, signing the victim in to the attacker's account, or attaching the victim's identity, <code>admin_groups</code> and <code>org_mappings</code> to the attacker's account.</td>
+<td>Each flow is bound to the browser that started it by the <code>hangar_oidc</code> cookie, whose hash is stored with the <code>state</code>; a link also needs a session of the User who started it (<code>internal/auth/oidc.go</code>, <code>handler.go</code>).</td>
+<td><code>TestOIDCBrowserBinding</code> (<code>internal/auth/oidc_binding_test.go</code>), <code>TestOIDCKeycloak</code>.</td>
+</tr>
+<tr>
+<td>S</td>
+<td>An open redirect after OIDC sign-in sends the user to a look-alike site.</td>
+<td><code>SafeRedirect</code> keeps only local paths and refuses control characters, whitespace and backslashes, which browsers remove or read as <code>/</code> (<code>internal/auth/oidc.go</code>).</td>
+<td><code>TestSafeRedirect</code> (<code>internal/auth/oidc_claims_internal_test.go</code>).</td>
 </tr>
 <tr>
 <td>T</td>
@@ -3810,6 +3822,12 @@
 <td><code>TestPrivateReposUseTheOllamaKeyFlow</code> (<code>internal/ollama/registry_test.go</code>), <code>TestRouteAuthorisationMatrix</code>.</td>
 </tr>
 <tr>
+<td>E</td>
+<td>A restricted or expiring Token registers an Ollama key whose registry tokens read every Repo the user can, for as long as the account exists.</td>
+<td>A key added with a Token is bound to it: registry tokens get the Token's scope and restrictions, end no later than the Token, and are refused once it is revoked or has expired (<code>internal/auth/ollama.go</code>).</td>
+<td><code>TestOllamaKeysFollowTheirToken</code> (<code>internal/auth/keys_test.go</code>).</td>
+</tr>
+<tr>
 <td>I</td>
 <td>An unsafe file is pulled as a layer.</td>
 <td>Blob routes and their signed redirects call the download gate.</td>
@@ -3818,8 +3836,8 @@
 <tr>
 <td>T</td>
 <td>A browser renders a blob as a page.</td>
-<td>Blobs are <code>application/octet-stream</code>, which browsers do not render.</td>
-<td><strong>Residual risk:</strong> blob responses do not send <code>X-Content-Type-Options: nosniff</code> (<code>internal/ollama/registry.go</code>, <code>serve</code>), unlike every other route that serves file bytes.</td>
+<td>Blobs get the headers of every other download: <code>application/octet-stream</code>, an attachment <code>Content-Disposition</code> and <code>X-Content-Type-Options: nosniff</code> (<code>internal/ollama/registry.go</code>, <code>serve</code>; <code>blob.SetDownloadHeaders</code>). Pull-through links do the same (<code>internal/upstream/pullthrough.go</code>).</td>
+<td><code>TestBlobsStreamWithSignedRanges</code> (<code>internal/ollama/registry_test.go</code>), <code>TestPullThroughGitLFSURL</code> (<code>internal/upstream/discover_test.go</code>).</td>
 </tr>
 </tbody>
 </table>
@@ -3886,9 +3904,9 @@
 <tbody>
 <tr>
 <td>I, E</td>
-<td>SSRF: a Namespace admin (every user, for their own Namespace) points a webhook at the metadata service or the local host.</td>
-<td>Reserved addresses are always refused, checked on the dialled address; redirects are not followed (<code>internal/webhook/service.go</code>).</td>
-<td><code>TestReservedTargetsAreAlwaysRefused</code>, <code>TestTestDeliveryAndPrivateTargets</code> (<code>internal/webhook/service_test.go</code>). <strong>Residual risk:</strong> <code>webhooks.allow_private_targets</code> is on by default, so users can POST to LAN services. Turn it off on shared Instances.</td>
+<td>SSRF: a Namespace admin (every user, for their own Namespace) points a webhook at the metadata service, the local host or the LAN.</td>
+<td>Reserved addresses are always refused, checked on the dialled address; redirects are not followed (<code>internal/webhook/service.go</code>). Private addresses, loopback included, are refused unless an admin turns on <code>webhooks.allow_private_targets</code>, which is off by default (<code>internal/auth/settings.go</code>).</td>
+<td><code>TestReservedTargetsAreAlwaysRefused</code>, <code>TestTestDeliveryAndPrivateTargets</code> (<code>internal/webhook/service_test.go</code>); <code>TestSettings</code> (<code>internal/auth/users_test.go</code>) checks the default. <strong>Residual risk:</strong> with the setting on, users can POST to LAN services and read the status code.</td>
 </tr>
 <tr>
 <td>S</td>
@@ -4039,6 +4057,12 @@
 <td><code>FuzzRead</code> (<code>internal/index/gguf</code>, <code>internal/index/safetensors</code>), <code>FuzzOpenAndRead</code> (<code>internal/datasets/pq</code>), <code>FuzzCSV</code>, <code>FuzzJSONLines</code> (<code>internal/datasets/convert</code>), <code>FuzzZipEntries</code> (<code>internal/datasets/layout</code>), <code>TestConvertShardsAndLimits</code> (<code>internal/datasets/convert</code>), <code>TestScanLimitsMakeResultsPartial</code> (<code>internal/datasets/viewer</code>).</td>
 </tr>
 <tr>
+<td>D</td>
+<td>A compression bomb in a dataset file: a 67 KB <code>.zst</code> file whose frame asks for a 512 MiB window, or a small gzip, bzip2 or zstd file of blank lines that inflates without end.</td>
+<td>zstd windows over 128 MiB (the zstd command line's own limit) are refused before the decoder holds anything, in the converter and the scanner; every decompressed stream in the converter stops at 64 GiB with an error (<code>internal/datasets/convert/source.go</code>, <code>internal/scan/files.go</code>).</td>
+<td><code>TestDecompressRefusesLargeZstdWindows</code>, <code>TestDecompressStopsAtTheByteLimit</code> (<code>internal/datasets/convert/decompress_internal_test.go</code>).</td>
+</tr>
+<tr>
 <td>E</td>
 <td>A user keeps control of Jobs, or their results such as zip exports, after losing access to the Repo.</td>
 <td>Job routes check the caller's current access to the Job's Repo: a user demoted to <code>read</code> cannot cancel or retry, and a removed user gets 404 for the Job and its export.</td>
@@ -4079,8 +4103,8 @@
 <tr>
 <td>I</td>
 <td>Secrets appear in logs, spans or metrics.</td>
-<td>Access logs and spans record route templates, never raw paths or queries; outbound URLs are redacted.</td>
-<td><code>TestSecretsStayOutOfLogsAndTelemetry</code> (<code>cmd/hangar/secrets_telemetry_test.go</code>) runs a full server at debug level with OTLP export and checks that 16 kinds of secret never appear.</td>
+<td>Access logs and spans record route templates, never raw paths or queries; outbound URLs are redacted. Server spans carry the raw path as <code>url.path</code>, so invite, reset and email confirmation paths reach the tracing middleware with the code replaced by <code>{code}</code> (<code>httpx.HideSecretPaths</code>).</td>
+<td><code>TestSecretsStayOutOfLogsAndTelemetry</code> (<code>cmd/hangar/secrets_telemetry_test.go</code>) runs a full server at debug level with OTLP export and checks that 19 kinds of secret never appear, including the three path codes; <code>TestHideSecretPathsKeepsCodesOffSpans</code> (<code>internal/httpx/secretpaths_test.go</code>).</td>
 </tr>
 <tr>
 <td>T</td>
@@ -4229,7 +4253,7 @@ base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 <tr>
 <td>Private: loopback, RFC 1918, carrier-grade NAT, unique local</td>
 <td>The Upstream's own host, wherever it resolves; a redirect to another host only when the Upstream's own host is private</td>
-<td>Only when <code>webhooks.allow_private_targets</code> is on (the default)</td>
+<td>Only when <code>webhooks.allow_private_targets</code> is on (off by default)</td>
 </tr>
 <tr>
 <td>Public</td>

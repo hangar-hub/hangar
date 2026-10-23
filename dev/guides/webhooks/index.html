@@ -2873,7 +2873,8 @@
 <h2 id="retries">Retries<a class="headerlink" href="#retries" title="Permanent link">&para;</a></h2>
 <p>A delivery that does not answer 2xx within 10 seconds is retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, then marked failed.</p>
 <h2 id="private-addresses">Private addresses<a class="headerlink" href="#private-addresses" title="Permanent link">&para;</a></h2>
-<p>Webhooks may target private addresses (for example a service on your LAN) while the Instance setting <code>webhooks.allow_private_targets</code> is on, which is the default for self-hosting. Turn it off on Instances shared by people who should not reach your internal network through Hangar.</p>
+<p>By default, webhooks cannot target private addresses: loopback, RFC 1918, carrier-grade NAT and unique local addresses. A delivery to one fails with "webhook targets a private address, which this Instance does not allow". To deliver to a service on your LAN, an Instance admin turns on <strong>Allow webhooks to private addresses</strong> under <strong>Admin</strong>, <strong>Settings</strong>, or sets <code>webhooks.allow_private_targets: true</code> in the <a href="../../reference/configuration/#webhooks">configuration</a>. Only do this when everyone who can add a webhook may reach your internal network through Hangar: every user administers their own Namespace, so every user can add one.</p>
+<p>Earlier releases allowed private targets by default. If your webhooks deliver to private addresses, an admin must now turn the setting on.</p>
 <p>Whatever the setting, Hangar never delivers to link-local addresses (which include the cloud metadata service at 169.254.169.254), other cloud metadata addresses, <code>0.0.0.0</code> or multicast addresses. Hangar checks the address it connects to after resolving the host name, and does not follow redirects.</p>
 
 

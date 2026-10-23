@@ -2884,7 +2884,7 @@
 <p>Hangar serves GGUF Repos to Ollama the way huggingface.co does. Ollama signs its requests with the key pair in <code>~/.ollama</code>, and Hangar needs that key for every Repo unless the Repo is public and the Instance allows anonymous reads (<code>security.anonymous_read</code>, off by default). Register the key once:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>key<span class="w"> </span>register
 </code></pre></div>
-<p>or paste <code>~/.ollama/id_ed25519.pub</code> under <strong>Settings</strong>, <strong>Ollama keys</strong>. Then this works with no Modelfile:</p>
+<p>or paste <code>~/.ollama/id_ed25519.pub</code> under <strong>Settings</strong>, <strong>Ollama keys</strong>. A key you paste in Settings reads every Repo you can read. A key the CLI registers is tied to the CLI's token: it reads only what that token can read, and stops working when the token expires or is revoked. Run <code>hangar ollama key register</code> again after you sign the CLI in with a new token. Then this works with no Modelfile:</p>
 <div class="highlight"><pre><span></span><code>ollama<span class="w"> </span>pull<span class="w"> </span>hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 ollama<span class="w"> </span>run<span class="w"> </span>hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 </code></pre></div>
