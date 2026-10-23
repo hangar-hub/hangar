@@ -40,7 +40,7 @@ EOF
 
 | Variable | Used by |
 |---|---|
-| `HANGAR_ADMIN_PASSWORD` | Every example: the password of the first admin, `hangar-admin`. `quickstart.yaml`, `postgres-minio.yaml` and `oidc-keycloak.yaml` generate one and print it once if it is not set; `scale.yaml` needs it. |
+| `HANGAR_ADMIN_PASSWORD` | Every example: the password of the first admin, `hangar-admin`. `quickstart.yaml`, `postgres-minio.yaml` and `oidc-keycloak.yaml` generate one into `secrets.yaml` in their data volume if it is not set; `scale.yaml` needs it. |
 | `HANGAR_INSTANCE_KEY` | `scale.yaml`, where every replica needs the same key. The other examples generate one into their data volume. |
 | `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD` | `postgres-minio.yaml` and `scale.yaml`. |
 | `KEYCLOAK_ADMIN_PASSWORD`, `HANGAR_OIDC_CLIENT_SECRET` | `oidc-keycloak.yaml`. |
@@ -53,7 +53,8 @@ Only Hangar's port is published on every network interface. The MinIO console, t
 
 ```sh
 docker compose -f quickstart.yaml up -d
-docker compose -f quickstart.yaml logs hangar   # the generated admin password, if .env does not set one
+# The generated admin password, if .env does not set one:
+docker compose -f quickstart.yaml cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password
 ```
 
 ## Postgres and MinIO

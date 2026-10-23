@@ -15,10 +15,10 @@
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
   ghcr.io/hangar-hub/hangar:latest
-docker logs hangar   # prints the generated admin password and instance key once
+docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password
 ```
 
-With no `instance_key` and no bootstrap password, the first start generates both, writes them to `/var/lib/hangar/secrets.yaml` (mode 0600), and prints them once. Later starts read that file.
+With no `instance_key` and no bootstrap password, the first start generates both, writes them to `/var/lib/hangar/secrets.yaml` (mode 0600), and prints the file's path and the admin username, never the Instance key. It prints the admin password only when stderr is a terminal, because under Docker, Compose and Kubernetes stderr is the container log. Later starts read that file.
 
 ## Compose examples (`deploy/compose/`)
 

@@ -179,7 +179,12 @@ jobs:
             --tmpfs /var/cache/hangar:uid=65532,gid=65532 -v hangar:/var/lib/hangar \
             -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 hangar:ci
           ./scripts/smoke.sh --only health http://localhost:8080
-          docker logs hangar 2>&1 | grep -q "Admin password"
+          # The log names secrets.yaml and never holds the secrets; the
+          # documented docker cp recipe reads the password.
+          docker logs hangar 2>&1 | grep -q "Admin username: hangar-admin"
+          password=$(docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | sed -n 's/^bootstrap_admin_password: //p')
+          test -n "$password"
+          if docker logs hangar 2>&1 | grep -qF -- "$password"; then echo "the log holds the admin password"; exit 1; fi
       - name: The image reads /etc/hangar/hangar.yaml
         run: ./scripts/image-config-check.sh hangar:ci
       - name: The Docker backup recipe works
