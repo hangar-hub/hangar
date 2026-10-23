@@ -59,7 +59,7 @@ The two can work together: MLflow for experiment tracking and model lineage, and
 
 Hugging Face's paid plans add organisation features such as single sign-on, audit logs and a choice of US or EU storage regions. The plans page does not offer a self-hosted or on-premises option, so the files stay on huggingface.co.
 
-Choose Hangar when the files must stay on your own servers or network, including [air-gapped networks](../guides/air-gapped.md).
+Choose Hangar when the files must stay on your own servers or network, including [air-gapped networks](../guides/air-gapped.md). [Hugging Face Hub on-premises](on-premises.md) explains what Hugging Face offers and what a self-hosted Hub has to do.
 
 ## What Hangar does not do
 

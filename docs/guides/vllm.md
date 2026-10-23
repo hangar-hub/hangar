@@ -48,33 +48,7 @@ Mounting the cache means a restart loads from disk without asking Hangar again.
 
 ## On Kubernetes
 
-Keep the Token in a Secret, and give the Pods a volume for the Hugging Face cache, so a restarted Pod does not download the model again:
-
-```sh
-kubectl create secret generic hangar-token --from-literal=token=hgr_...
-```
-
-```yaml
-containers:
-  - name: vllm
-    image: vllm/vllm-openai:latest
-    args: ["--model", "Qwen/Qwen3-0.6B"]
-    env:
-      - name: HF_ENDPOINT
-        value: https://hangar.example.com
-      - name: HF_TOKEN
-        valueFrom:
-          secretKeyRef: {name: hangar-token, key: token}
-    volumeMounts:
-      - name: hf-cache
-        mountPath: /root/.cache/huggingface
-volumes:
-  - name: hf-cache
-    persistentVolumeClaim:
-      claimName: hf-cache
-```
-
-With Hangar in the same cluster, every node loads the weights over the cluster network, and huggingface.co sees one download per model, from Hangar's Pull.
+Keep the Token in a Secret and the Hugging Face cache on a volume, so a restarted Pod does not download the model again. [Load models in Kubernetes without downloading them on every Pod start](kubernetes.md) has a complete Deployment for vLLM, with an init container that downloads the model from Hangar before the server starts.
 
 ## Start with no network
 
