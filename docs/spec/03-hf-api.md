@@ -60,6 +60,10 @@ Info, trees and `HEAD /resolve` list such files as present, with their metadata.
 - With Pull-through on, `GET /resolve` starts the file's Pull and streams it. A ranged `GET` waits for the bytes before the range and answers a real 206.
 - Otherwise `GET /resolve` answers 409 with `X-Error-Code: EntryNotFound` and `X-Repo-Commit`, so `huggingface_hub` raises `RemoteEntryNotFoundError`. The message tells the user to pass `allow_patterns` to `snapshot_download` (`--include` to `hf download`), or to pull the file with `hangar pull`.
 
+## Mirrors with no history
+
+A Mirror exists before its Pull stores the history, and a Mirror of an empty upstream Repo never has any. With Pull-through on, reads wait for the history or answer 503 with `Retry-After`. Otherwise Repo info answers 404 `RevisionNotFound` with a message that says why, never info without `sha`: `snapshot_download` asserts that `sha` is set, and `repo_info` does not retry a 503, so `snapshot_download` would report it as a connection problem.
+
 ## transformers safetensors auto-conversion
 
 When a model has `.bin` weights and no safetensors weights, `transformers` (`safetensors_conversion.py`) lists the Repo's Commits and discussions, looking for an open pull request titled ``Adding `safetensors` variant of this model``. If it finds none, it posts the Repo ID, the private flag and any token passed explicitly to `https://safetensors-convert.hf.space`. Against Hangar, that would leak private Repo names, and possibly a Hangar token, to a third party.

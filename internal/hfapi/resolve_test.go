@@ -611,7 +611,11 @@ func TestPullThroughWaitsForTheHistoryOfAPlannedMirror(t *testing.T) {
 	// When Pull-through does not apply, the empty Mirror answers as it is.
 	pt.repoErr = repo.ErrNotFound
 	requireHubError(t, e.Request(t, http.MethodGet, "/alice/planned/resolve/main/config.json", "", ""), http.StatusNotFound, "RevisionNotFound")
-	require.Equal(t, http.StatusOK, e.Request(t, http.MethodGet, "/api/models/alice/planned", "", "").StatusCode)
+	// Info of the empty Mirror is RevisionNotFound too, never info without
+	// sha, which snapshot_download fails on with a bare AssertionError.
+	r = e.Request(t, http.MethodGet, "/api/models/alice/planned", "", "")
+	requireHubError(t, r, http.StatusNotFound, "RevisionNotFound")
+	require.Contains(t, r.Header.Get("X-Error-Message"), "has not stored its history")
 
 	// A policy refusal is a 403 with its message.
 	pt.repoErr = &repo.PolicyError{Message: "The Namespace is over its storage quota."}

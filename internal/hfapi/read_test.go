@@ -110,9 +110,21 @@ func TestDatasetInfoAndEmptyMirror(t *testing.T) {
 
 	_, err = e.Repos.Create(context.Background(), repo.CreateParams{ID: modelID("alice", "planning"), Mirror: true, Actor: e.Users["alice"].Principal})
 	require.NoError(t, err)
-	info = decode[map[string]any](t, e.Request(t, http.MethodGet, "/api/models/alice/planning", "", ""))
-	require.NotContains(t, info, "sha")
-	require.Equal(t, []any{}, info["siblings"])
+	// A Mirror with no history yet has no sha to give. huggingface_hub
+	// asserts that info has one (snapshot_download), so the answer is
+	// RevisionNotFound with a message, as for a Revision that names
+	// nothing. List items leave sha out instead.
+	r := e.Request(t, http.MethodGet, "/api/models/alice/planning", "", "")
+	requireHubError(t, r, http.StatusNotFound, "RevisionNotFound")
+	require.Contains(t, r.Header.Get("X-Error-Message"), "alice/planning has no Commits on main")
+	found := false
+	for _, item := range decode[[]map[string]any](t, e.Request(t, http.MethodGet, "/api/models?author=alice&full=true", "", "")) {
+		if item["id"] == "alice/planning" {
+			found = true
+			require.NotContains(t, item, "sha")
+		}
+	}
+	require.True(t, found, "the empty Mirror is listed")
 }
 
 func TestTree(t *testing.T) {
