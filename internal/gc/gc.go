@@ -238,8 +238,12 @@ func (c *Collector) collectLFSObjects(ctx context.Context, r *Report) error {
 // can stop a run from reaching an orphan. Deleting keys the listing has
 // already returned is safe on both backends: the filesystem walk reads each
 // directory before visiting it and skips entries that disappear, and an S3
-// listing continues after the last key it returned. It returns how many
-// keys it deleted and how many deletes failed.
+// listing continues after the last key it returned. Just before deleting a
+// key it reads the object's metadata again and keeps the object if it has
+// changed since the listing: an upload in between replaces the object,
+// which makes it young again, and its row may not have existed when
+// orphans looked. It returns how many keys it deleted and how many deletes
+// failed.
 func (c *Collector) sweepOld(ctx context.Context, prefix string, cutoff time.Time, orphans func([]blob.Info) ([]string, error)) (deleted, failed int, err error) {
 	var batch []blob.Info
 	flush := func() error {
@@ -247,8 +251,15 @@ func (c *Collector) sweepOld(ctx context.Context, prefix string, cutoff time.Tim
 		if err != nil {
 			return err
 		}
+		listed := make(map[string]blob.Info, len(batch))
+		for _, i := range batch {
+			listed[i.Key] = i
+		}
 		batch = batch[:0]
 		for _, k := range doomed {
+			if !c.unchanged(ctx, listed[k], cutoff) {
+				continue
+			}
 			if err := c.store.Delete(ctx, k); err != nil {
 				failed++
 				c.opts.Logger.WarnContext(ctx, "delete orphaned blob", "prefix", prefix, "error", err)
@@ -272,6 +283,23 @@ func (c *Collector) sweepOld(ctx context.Context, prefix string, cutoff time.Tim
 		err = flush()
 	}
 	return deleted, failed, err
+}
+
+// unchanged reports whether the object listed as was is still there, still
+// older than cutoff, and has the modification time and ETag it was listed
+// with. An object that cannot be read is kept for a later run.
+func (c *Collector) unchanged(ctx context.Context, was blob.Info, cutoff time.Time) bool {
+	if was.Key == "" {
+		return false
+	}
+	cur, err := c.store.Stat(ctx, was.Key)
+	if err != nil {
+		if !errors.Is(err, blob.ErrNotFound) {
+			c.opts.Logger.WarnContext(ctx, "check orphaned blob", "key", was.Key, "error", err)
+		}
+		return false
+	}
+	return cur.ModTime.Before(cutoff) && cur.ModTime.Equal(was.ModTime) && cur.ETag == was.ETag
 }
 
 // collectOrphanLFSBlobs deletes blobs under lfs/ that have no lfs_objects

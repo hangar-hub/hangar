@@ -471,6 +471,47 @@ func TestGCKeepsStagedObjectsOfLiveUploads(t *testing.T) {
 	})
 }
 
+// replacingStore replaces one object after a listing of prefix, as an
+// upload that lands between a sweep's listing and its delete would.
+type replacingStore struct {
+	*blobfs.Store
+	prefix  string
+	replace func()
+}
+
+func (s *replacingStore) List(ctx context.Context, prefix string, fn func(blob.Info) error) error {
+	err := s.Store.List(ctx, prefix, fn)
+	if prefix == s.prefix && s.replace != nil {
+		s.replace()
+		s.replace = nil
+	}
+	return err
+}
+
+// TestGCOrphanSweepRechecksBeforeDeleting: an orphaned LFS blob that is
+// stored again after the sweep listed it is not deleted, because the sweep
+// reads its metadata again just before deleting it.
+func TestGCOrphanSweepRechecksBeforeDeleting(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		f := newFixture(t, d)
+		old := f.now.Add(-30 * 24 * time.Hour)
+		replaced := model.LFSObjectKey(strings.Repeat("1", 64))
+		orphan := model.LFSObjectKey(strings.Repeat("2", 64))
+		f.blob(replaced, old)
+		f.blob(orphan, old)
+		s := &replacingStore{Store: f.store, prefix: blob.PrefixLFS, replace: func() {
+			require.NoError(t, f.store.Put(ctx, replaced, strings.NewReader("stored again"), 12))
+		}}
+		r, err := gc.New(d, s, gc.Options{Now: func() time.Time { return f.now }}).Run(ctx, gc.ScopeLFS, nil)
+		require.NoError(t, err)
+		require.Zero(t, r.Errors)
+		require.Equal(t, 1, r.OrphanLFSBlobsDeleted)
+		require.True(t, f.exists(replaced), "a blob stored again since the listing is kept")
+		require.False(t, f.exists(orphan))
+	})
+}
+
 func TestGCScopeAndErrors(t *testing.T) {
 	d := dbtest.SQLite(t)
 	ctx := context.Background()
