@@ -1,9 +1,12 @@
 package fs
 
 import (
+	"context"
 	"errors"
 	iofs "io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -32,6 +35,40 @@ func TestInstallErrorHasNoPaths(t *testing.T) {
 
 	other := errors.New("other")
 	require.ErrorIs(t, installError("lfs/x", other), other)
+}
+
+// TestInstallSyncsTheDirectory: a rename into place is only durable once
+// the directory that holds it is synced. A filesystem that cannot sync a
+// directory, such as an NFS or SMB mount, does not fail the write; any other
+// sync error does, without the absolute path.
+func TestInstallSyncsTheDirectory(t *testing.T) {
+	s, err := New(filepath.Join(t.TempDir(), "blobs"))
+	require.NoError(t, err)
+	ctx := context.Background()
+	realSync := syncDir
+	t.Cleanup(func() { syncDir = realSync })
+
+	var synced []string
+	var answer error
+	syncDir = func(dir string) error {
+		synced = append(synced, dir)
+		return answer
+	}
+	require.NoError(t, s.Put(ctx, "lfs/sha256/ab/cd/x", strings.NewReader("x"), 1))
+	require.Equal(t, []string{filepath.Join(s.Root(), "lfs", "sha256", "ab", "cd")}, synced)
+
+	for _, errno := range []syscall.Errno{syscall.EINVAL, syscall.ENOTSUP, syscall.EOPNOTSUPP} {
+		answer = &os.PathError{Op: "sync", Path: s.Root(), Err: errno}
+		require.NoError(t, s.Put(ctx, "a", strings.NewReader("a"), 1), "%v", errno)
+	}
+	answer = &os.PathError{Op: "sync", Path: s.Root(), Err: syscall.EIO}
+	err = s.Put(ctx, "b", strings.NewReader("b"), 1)
+	require.ErrorIs(t, err, syscall.EIO)
+	require.NotContains(t, err.Error(), s.Root())
+
+	// The real sync works on the test's filesystem.
+	syncDir = realSync
+	require.NoError(t, s.Put(ctx, "c/d", strings.NewReader("d"), 1))
 }
 
 func TestRelative(t *testing.T) {
