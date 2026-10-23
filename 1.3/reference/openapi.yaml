@@ -1,0 +1,2526 @@
+openapi: 3.1.0
+info:
+  title: Hangar native API
+  version: 1.0.0
+  summary: The API behind Hangar's web UI, CLI and automation.
+  description: |
+    The native API serves the web UI, the `hangar` CLI and automation. It is
+    separate from the Hugging Face Hub API that Hangar also serves.
+
+    Conventions:
+
+    - JSON in and out, `snake_case` field names, RFC 3339 UTC times, sizes in
+      bytes as integers.
+    - Errors are RFC 9457 problem details (`application/problem+json`).
+    - Lists use cursor pagination: `?cursor=&limit=` (default 50, maximum
+      500), answered with `{"items": [...], "next_cursor": "..."}`.
+    - Authenticate with the `hangar_session` cookie plus the `X-CSRF-Token`
+      header on state-changing calls, or with `Authorization: Bearer <token>`.
+    - Revisions and file paths in paths are percent-encoded, with `/` as `%2F`
+      (for example `refs%2Fpr%2F1`).
+  license:
+    name: Elastic License 2.0
+    identifier: Elastic-2.0
+servers:
+  - url: /api/hangar/v1
+security:
+  - session: []
+  - bearer: []
+tags:
+  - {name: session, description: Signing in and out, and the current user.}
+  - {name: tokens, description: API and git Tokens.}
+  - {name: keys, description: Ollama keys and Upstream tokens.}
+  - {name: search, description: Global search.}
+  - {name: repos, description: Repos, files, Commits and settings.}
+  - {name: uploads, description: Uploads and Commits from the browser and CLI.}
+  - {name: datasets, description: Dataset Configs, Splits and Parquet export status.}
+  - {name: mirrors, description: Mirror settings and syncs.}
+  - {name: discover, description: Searching Upstreams and starting Pulls.}
+  - {name: jobs, description: Background Jobs.}
+  - {name: namespaces, description: Users, Organisations and Members.}
+  - {name: collections, description: Collections.}
+  - {name: community, description: Discussions and pull requests.}
+  - {name: webhooks, description: Webhooks and deliveries.}
+  - {name: admin, description: Instance administration.}
+
+paths:
+  # Session -------------------------------------------------------------------
+  /me:
+    get:
+      tags: [session]
+      operationId: getMe
+      summary: Get the signed-in user
+      description: >-
+        Answers 204 with no body when nobody is signed in, so the web UI can
+        ask before sign-in without an error in the browser console. Bad or
+        expired credentials still get 401.
+      security: []
+      responses:
+        "200": {description: The signed-in user., content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        "204": {description: Nobody is signed in.}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [session]
+      operationId: updateMe
+      summary: Change my display name or email
+      description: >-
+        Changes the signed-in user's display name, with the same checks as
+        the admin user editor (at most 100 bytes), and asks for a new email
+        address. A new address must be valid and not another user's email
+        (409, the admin editor's error), and does not take effect at once:
+        it becomes `pending_email` until the single-use confirmation link
+        that an admin creates (`POST /admin/users/{id}/email-link`) and sends
+        to that address is used. A pending email matches no sign-in, invite
+        or other user's change. The current address cancels a pending
+        change, and an empty string removes the email at once. A field left
+        out is unchanged. Session callers need the `X-CSRF-Token` header,
+        and Token callers need the `write` scope. Users who sign in with
+        OIDC can change both fields too: Hangar copies them from the
+        provider only when it creates the account.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/MeUpdate"}}}
+      responses:
+        "200": {description: The updated user., content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/password:
+    post:
+      tags: [session]
+      operationId: changeMyPassword
+      summary: Change my password
+      description: >-
+        Changes the signed-in user's password. It needs a web UI session and
+        the `X-CSRF-Token` header; every Token is refused with 403. The
+        current password must be right (403, with an error on
+        `current_password`) and the new one must meet the password policy
+        (422, with an error on `new_password`). Wrong current passwords count
+        towards the same throttle as failed sign-ins for the username and
+        the client's IP address (429 with `Retry-After`). Users without a
+        Hangar password, who sign in with OIDC, get 403. On success every
+        other session of the user ends; the current session and the user's
+        Tokens stay.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PasswordChange"}}}
+      responses:
+        "204": {description: Changed. The user's other sessions have ended.}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/login:
+    post:
+      tags: [session]
+      operationId: login
+      summary: Sign in with a username and password
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/LoginRequest"}}}
+      responses:
+        "200":
+          description: Signed in. The response sets the session cookie.
+          headers:
+            Set-Cookie: {schema: {type: string}, description: The `hangar_session` cookie.}
+          content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/logout:
+    post:
+      tags: [session]
+      operationId: logout
+      summary: Sign out
+      responses:
+        "204": {description: Signed out.}
+        default: {$ref: "#/components/responses/Problem"}
+  /auth/providers:
+    get:
+      tags: [session]
+      operationId: listAuthProviders
+      summary: List sign-in methods
+      security: []
+      responses:
+        "200": {description: Sign-in methods., content: {application/json: {schema: {$ref: "#/components/schemas/AuthProviders"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/sessions:
+    get:
+      tags: [session]
+      operationId: listMySessions
+      summary: List my sessions
+      responses:
+        "200": {description: Sessions., content: {application/json: {schema: {$ref: "#/components/schemas/SessionList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/sessions/{id}:
+    delete:
+      tags: [session]
+      operationId: revokeMySession
+      summary: Revoke a session
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: Revoked.}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Tokens and keys -------------------------------------------------------------
+  /me/tokens:
+    get:
+      tags: [tokens]
+      operationId: listMyTokens
+      summary: List my Tokens
+      responses:
+        "200": {description: Tokens., content: {application/json: {schema: {$ref: "#/components/schemas/TokenList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [tokens]
+      operationId: createMyToken
+      summary: Create a Token
+      description: The secret is returned once and never again.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/TokenCreate"}}}
+      responses:
+        "201": {description: The Token and its secret., content: {application/json: {schema: {$ref: "#/components/schemas/TokenCreated"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/tokens/{id}:
+    delete:
+      tags: [tokens]
+      operationId: revokeMyToken
+      summary: Revoke a Token
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: Revoked.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/device:
+    post:
+      tags: [tokens]
+      operationId: decideDeviceLogin
+      summary: Approve or deny a device-code login
+      description: Answers the code that `hf auth login` shows in a browser-based login.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/DeviceDecision"}}}
+      responses:
+        "204": {description: Recorded.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/ollama-keys:
+    get:
+      tags: [keys]
+      operationId: listMyOllamaKeys
+      summary: List my Ollama keys
+      responses:
+        "200": {description: Keys., content: {application/json: {schema: {$ref: "#/components/schemas/OllamaKeyList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [keys]
+      operationId: addMyOllamaKey
+      summary: Register an Ollama public key
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OllamaKeyCreate"}}}
+      responses:
+        "201": {description: Registered., content: {application/json: {schema: {$ref: "#/components/schemas/OllamaKey"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/ollama-keys/{id}:
+    delete:
+      tags: [keys]
+      operationId: deleteMyOllamaKey
+      summary: Remove an Ollama key
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: Removed.}
+        default: {$ref: "#/components/responses/Problem"}
+  /me/upstream-tokens/{upstream}:
+    parameters: [{name: upstream, in: path, required: true, description: Upstream name, such as huggingface., schema: {type: string}}]
+    get:
+      tags: [keys]
+      operationId: getMyUpstreamToken
+      summary: Say whether I saved a token for an Upstream
+      description: The token itself is never returned.
+      responses:
+        "200": {description: Status., content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamTokenStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [keys]
+      operationId: setMyUpstreamToken
+      summary: Save my token for an Upstream
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamTokenSet"}}}
+      responses:
+        "200": {description: Saved., content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamTokenStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [keys]
+      operationId: deleteMyUpstreamToken
+      summary: Remove my token for an Upstream
+      responses:
+        "204": {description: Removed.}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Search and Arsenal ------------------------------------------------------------
+  /search:
+    get:
+      tags: [search]
+      operationId: search
+      summary: Search Repos, Namespaces and Collections
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string}}
+        - {name: types, in: query, description: Comma-separated result types., schema: {type: array, items: {type: string, enum: [repos, namespaces, collections]}}, style: form, explode: false}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: Results., content: {application/json: {schema: {$ref: "#/components/schemas/SearchResults"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos:
+    get:
+      tags: [repos]
+      operationId: listRepos
+      summary: List the Arsenal
+      description: Repos the caller can see, with filters and facet counts (BROWSE-1, DATA-11).
+      parameters:
+        - {name: type, in: query, schema: {$ref: "#/components/schemas/RepoTypePlural"}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: ns, in: query, schema: {type: string}}
+        - {name: format, in: query, schema: {type: array, items: {type: string}}, style: form, explode: false}
+        - {name: task, in: query, schema: {type: string}}
+        - {name: library, in: query, schema: {type: string}}
+        - {name: quant, in: query, schema: {type: string}}
+        - {name: params_min, in: query, schema: {type: integer, format: int64}}
+        - {name: params_max, in: query, schema: {type: integer, format: int64}}
+        - {name: context_min, in: query, schema: {type: integer, format: int64}}
+        - {name: size_max, in: query, schema: {type: integer, format: int64}}
+        - {name: licence, in: query, schema: {type: string}}
+        - {name: mirror, in: query, schema: {type: boolean}}
+        - {name: modality, in: query, schema: {type: string}}
+        - {name: language, in: query, schema: {type: string}}
+        - {name: size_category, in: query, schema: {type: string}}
+        - {name: rows_min, in: query, description: Datasets with at least this many rows. Rows are known once a dataset is converted to Parquet., schema: {type: integer, format: int64}}
+        - {name: rows_max, in: query, description: Datasets with at most this many rows. Datasets whose rows are not known yet do not match., schema: {type: integer, format: int64}}
+        - {name: sort, in: query, schema: {type: string, enum: [updated, name, size, parameters, downloads, likes]}}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: A page of Repos., content: {application/json: {schema: {$ref: "#/components/schemas/RepoList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [repos]
+      operationId: createRepo
+      summary: Create a Repo
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/RepoCreate"}}}
+      responses:
+        "201": {description: Created., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Repos -----------------------------------------------------------------------
+  /repos/{type}/{ns}/{name}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: getRepo
+      summary: Get a Repo
+      responses:
+        "200": {description: The Repo., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [repos]
+      operationId: updateRepo
+      summary: Change Repo settings
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/RepoUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [repos]
+      operationId: deleteRepo
+      summary: Delete a Repo
+      description: Soft delete; the Repo can be restored within `repos.restore_window`.
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/restore:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [repos]
+      operationId: restoreRepo
+      summary: Restore a deleted Repo
+      responses:
+        "200": {description: Restored., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/rename:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [repos]
+      operationId: renameRepo
+      summary: Rename a Repo
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/RenameRequest"}}}
+      responses:
+        "200": {description: Renamed., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/transfer:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [repos]
+      operationId: transferRepo
+      summary: Move a Repo to another Namespace
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/TransferRequest"}}}
+      responses:
+        "200": {description: Moved., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/refs:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: listRepoRefs
+      summary: List branches, tags, pull request refs and converts
+      responses:
+        "200": {description: Refs., content: {application/json: {schema: {$ref: "#/components/schemas/Refs"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/commits:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: listCommits
+      summary: List Commits
+      parameters:
+        - {$ref: "#/components/parameters/RevQuery"}
+        - {name: path, in: query, description: Only Commits that change this path., schema: {type: string}}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: Commits, newest first., content: {application/json: {schema: {$ref: "#/components/schemas/CommitList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [uploads]
+      operationId: createCommit
+      summary: Make a Commit
+      description: Adds, deletes and copies files, after any LFS uploads have completed.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CommitRequest"}}}
+      responses:
+        "201": {description: Committed., content: {application/json: {schema: {$ref: "#/components/schemas/CommitResponse"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/commits/{sha}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/SHA"}]
+    get:
+      tags: [repos]
+      operationId: getCommit
+      summary: Get a Commit with its diff summary
+      responses:
+        "200": {description: The Commit., content: {application/json: {schema: {$ref: "#/components/schemas/CommitDetail"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/commits/{sha}/diff:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/SHA"}]
+    get:
+      tags: [repos]
+      operationId: getCommitFileDiff
+      summary: Get the diff of one file in a Commit
+      parameters: [{name: path, in: query, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: The diff., content: {application/json: {schema: {$ref: "#/components/schemas/FileDiff"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/tree/{rev}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Rev"}]
+    get:
+      tags: [repos]
+      operationId: getTreeRoot
+      summary: List the root directory at a Revision
+      parameters: [{$ref: "#/components/parameters/Recursive"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Entries., content: {application/json: {schema: {$ref: "#/components/schemas/TreeListing"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/tree/{rev}/{path}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Rev"}, {$ref: "#/components/parameters/FilePath"}]
+    get:
+      tags: [repos]
+      operationId: getTree
+      summary: List a directory, or describe a file, at a Revision
+      description: Entries include presence (for Partial mirrors), scan status and the last Commit.
+      parameters: [{$ref: "#/components/parameters/Recursive"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Entries., content: {application/json: {schema: {$ref: "#/components/schemas/TreeListing"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/metadata:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: getRepoMetadata
+      summary: Get the index of a Revision
+      parameters: [{$ref: "#/components/parameters/RevQuery"}]
+      responses:
+        "200": {description: Index results, or status pending while indexing., content: {application/json: {schema: {$ref: "#/components/schemas/RepoMetadata"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/files/{rev}/{path}/header:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Rev"}, {$ref: "#/components/parameters/FilePath"}]
+    get:
+      tags: [repos]
+      operationId: getFileHeader
+      summary: Get a safetensors or GGUF header
+      description: Read with ranged reads, so the whole file is never downloaded.
+      responses:
+        "200": {description: The header as JSON., content: {application/json: {schema: {$ref: "#/components/schemas/FileHeader"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/files/{rev}/{path}/scan:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Rev"}, {$ref: "#/components/parameters/FilePath"}]
+    get:
+      tags: [repos]
+      operationId: getFileScan
+      summary: Get a file's security scan result
+      description: >-
+        The imports the pickle scanner found and the integrity problems the scan reported for one file. A file the
+        scan does not check is safe with no findings; a Commit that is not scanned yet is pending.
+      responses:
+        "200": {description: The scan result., content: {application/json: {schema: {$ref: "#/components/schemas/FileScan"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/quants:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: listQuants
+      summary: List GGUF quantisation groups
+      parameters: [{$ref: "#/components/parameters/RevQuery"}]
+      responses:
+        "200": {description: Quant groups., content: {application/json: {schema: {$ref: "#/components/schemas/QuantList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/dependencies:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: getDependencies
+      summary: Get Dependencies both ways
+      responses:
+        "200": {description: What the Repo needs and what needs it., content: {application/json: {schema: {$ref: "#/components/schemas/Dependencies"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/like:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [repos]
+      operationId: likeRepo
+      summary: Like a Repo
+      responses:
+        "200": {description: Liked., content: {application/json: {schema: {$ref: "#/components/schemas/LikeStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [repos]
+      operationId: unlikeRepo
+      summary: Remove a like
+      responses:
+        "200": {description: Unliked., content: {application/json: {schema: {$ref: "#/components/schemas/LikeStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/stats:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: getRepoStats
+      summary: Get downloads by day
+      parameters: [{name: days, in: query, schema: {type: integer, minimum: 1, maximum: 365, default: 30}}]
+      responses:
+        "200": {description: Daily downloads., content: {application/json: {schema: {$ref: "#/components/schemas/RepoStats"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/collaborators:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: listCollaborators
+      summary: List collaborators
+      responses:
+        "200": {description: Collaborators., content: {application/json: {schema: {$ref: "#/components/schemas/CollaboratorList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [repos]
+      operationId: setCollaborators
+      summary: Replace collaborators
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CollaboratorList"}}}
+      responses:
+        "200": {description: Collaborators., content: {application/json: {schema: {$ref: "#/components/schemas/CollaboratorList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/access-requests:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [repos]
+      operationId: listAccessRequests
+      summary: List access requests of a gated Repo
+      parameters: [{name: status, in: query, schema: {$ref: "#/components/schemas/AccessRequestStatus"}}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Requests., content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequestList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [repos]
+      operationId: requestAccess
+      summary: Ask for access to a gated Repo
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequestCreate"}}}
+      responses:
+        "201": {description: Requested., content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequest"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/access-requests/{id}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/ID"}]
+    patch:
+      tags: [repos]
+      operationId: decideAccessRequest
+      summary: Accept or reject an access request
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequestDecision"}}}
+      responses:
+        "200": {description: Decided., content: {application/json: {schema: {$ref: "#/components/schemas/AccessRequest"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Uploads ---------------------------------------------------------------------
+  /repos/{type}/{ns}/{name}/uploads:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [uploads]
+      operationId: planUploads
+      summary: Plan uploads for a set of files
+      description: For each file, says whether to send it inline in the Commit, skip it because the caller can already use the object, or upload it, with part URLs. An object that is stored but that the caller did not upload and cannot read in another Repo is planned as an upload, which stores no second copy.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/UploadPlanRequest"}}}
+      responses:
+        "200": {description: The plan., content: {application/json: {schema: {$ref: "#/components/schemas/UploadPlan"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/uploads/{id}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [uploads]
+      operationId: getUpload
+      summary: Get an upload's parts, to resume it
+      responses:
+        "200": {description: Upload state., content: {application/json: {schema: {$ref: "#/components/schemas/UploadStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/uploads/{id}/parts/{n}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/ID"}, {name: n, in: path, required: true, schema: {type: integer, minimum: 1, maximum: 10000}}]
+    put:
+      tags: [uploads]
+      operationId: putUploadPart
+      summary: Upload a part through Hangar
+      description: Used when the Blob store cannot presign part URLs.
+      requestBody:
+        required: true
+        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+      responses:
+        "200": {description: Stored., headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: "#/components/schemas/UploadedPart"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/uploads/{id}/complete:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [uploads]
+      operationId: completeUpload
+      summary: Finish an upload
+      description: >-
+        Assembles the parts and verifies the SHA-256 and size. A `503` with
+        `Retry-After` means the completion failed for a reason that may pass
+        and kept the upload and its parts; send the same request again.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/UploadComplete"}}}
+      responses:
+        "200": {description: Verified and stored., content: {application/json: {schema: {$ref: "#/components/schemas/UploadStatus"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/zip:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [repos]
+      operationId: startZipExport
+      summary: Start a zip download of a Revision
+      description: Starts a `zip.export` Job; poll `GET /jobs/{id}` for the download URL.
+      parameters: [{$ref: "#/components/parameters/RevQuery"}, {name: path, in: query, description: Only this folder., schema: {type: string}}]
+      responses:
+        "202": {description: Started., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Datasets ----------------------------------------------------------------------
+  /repos/datasets/{ns}/{name}/configs:
+    parameters: [{$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [datasets]
+      operationId: listDatasetConfigs
+      summary: List Configs and Splits with conversion status
+      parameters: [{$ref: "#/components/parameters/RevQuery"}]
+      responses:
+        "200": {description: Configs and Splits., content: {application/json: {schema: {$ref: "#/components/schemas/DatasetConfigs"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Mirrors -----------------------------------------------------------------------
+  /repos/{type}/{ns}/{name}/mirror:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [mirrors]
+      operationId: getMirror
+      summary: Get Mirror settings and state
+      responses:
+        "200": {description: The Mirror., content: {application/json: {schema: {$ref: "#/components/schemas/Mirror"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [mirrors]
+      operationId: updateMirror
+      summary: Change selection, tracking or schedule
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/MirrorUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/Mirror"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/mirror/sync:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [mirrors]
+      operationId: syncMirror
+      summary: Sync a Mirror now
+      responses:
+        "202": {description: Sync started., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/mirror/detach:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [mirrors]
+      operationId: detachMirror
+      summary: Turn a Mirror into an ordinary Repo
+      responses:
+        "200": {description: Detached., content: {application/json: {schema: {$ref: "#/components/schemas/Repo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/mirror/pull:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    post:
+      tags: [mirrors]
+      operationId: pullMoreIntoMirror
+      summary: Pull more files into a Mirror
+      description: Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+      parameters:
+        - {name: revision, in: query, description: "Branch, tag or Commit SHA on the Upstream; default: the Mirror's tracked branch.", schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/Selection"}}}
+      responses:
+        "202": {description: Pull started., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Discover and Pulls --------------------------------------------------------------
+  /upstreams:
+    get:
+      tags: [discover]
+      operationId: listUpstreams
+      summary: List enabled Upstreams
+      responses:
+        "200": {description: Upstreams., content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /discover/{type}:
+    get:
+      tags: [discover]
+      operationId: discover
+      summary: Search an Upstream
+      description: Results carry their state in the Arsenal (BROWSE-2, DATA-7).
+      parameters:
+        - {$ref: "#/components/parameters/RepoType"}
+        - {name: upstream, in: query, schema: {type: string}}
+        - {name: search, in: query, schema: {type: string}}
+        - {name: author, in: query, schema: {type: string}}
+        - {name: filter, in: query, schema: {type: array, items: {type: string}}, style: form, explode: true}
+        - {name: sort, in: query, schema: {type: string, enum: [trending, downloads, likes, lastModified]}}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: Results., content: {application/json: {schema: {$ref: "#/components/schemas/DiscoverList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /discover/{type}/{ns}/{name}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [discover]
+      operationId: getDiscoverDetail
+      summary: Get an upstream Repo's details
+      description: Files, quants, Configs and Splits, the Dependencies Hangar would pull, total size and Arsenal state.
+      parameters: [{name: upstream, in: query, schema: {type: string}}, {$ref: "#/components/parameters/RevQuery"}]
+      responses:
+        "200": {description: Details., content: {application/json: {schema: {$ref: "#/components/schemas/DiscoverDetail"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /pulls:
+    post:
+      tags: [discover]
+      operationId: startPull
+      summary: Pull a Repo, or some of its files, into the Arsenal
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/PullCreate"}}}
+      responses:
+        "202": {description: Pull started., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /pulls/{id}:
+    get:
+      tags: [discover]
+      operationId: getPull
+      summary: Get a Pull
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: The Pull Job with per-file progress., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Jobs ------------------------------------------------------------------------------
+  /jobs:
+    get:
+      tags: [jobs]
+      operationId: listJobs
+      summary: List Jobs
+      parameters:
+        - {name: mine, in: query, schema: {type: boolean}}
+        - {name: kind, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/JobStatus"}}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: Jobs., content: {application/json: {schema: {$ref: "#/components/schemas/JobList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /jobs/{id}:
+    get:
+      tags: [jobs]
+      operationId: getJob
+      summary: Get a Job
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: The Job., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /jobs/{id}/cancel:
+    post:
+      tags: [jobs]
+      operationId: cancelJob
+      summary: Cancel a Job
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: Cancelled., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /jobs/{id}/retry:
+    post:
+      tags: [jobs]
+      operationId: retryJob
+      summary: Retry a failed Job
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "202": {description: Retried., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Namespaces -------------------------------------------------------------------------
+  /namespaces/{ns}:
+    get:
+      tags: [namespaces]
+      operationId: getNamespace
+      summary: Get a user or Organisation profile
+      parameters: [{$ref: "#/components/parameters/Ns"}]
+      responses:
+        "200": {description: The Namespace., content: {application/json: {schema: {$ref: "#/components/schemas/Namespace"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /orgs:
+    post:
+      tags: [namespaces]
+      operationId: createOrg
+      summary: Create an Organisation
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OrgCreate"}}}
+      responses:
+        "201": {description: Created., content: {application/json: {schema: {$ref: "#/components/schemas/Namespace"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /orgs/{ns}:
+    parameters: [{$ref: "#/components/parameters/Ns"}]
+    patch:
+      tags: [namespaces]
+      operationId: updateOrg
+      summary: Change an Organisation
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/OrgUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/Namespace"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [namespaces]
+      operationId: deleteOrg
+      summary: Delete an empty Organisation
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /orgs/{ns}/members:
+    parameters: [{$ref: "#/components/parameters/Ns"}]
+    get:
+      tags: [namespaces]
+      operationId: listMembers
+      summary: List Members
+      responses:
+        "200": {description: Members., content: {application/json: {schema: {$ref: "#/components/schemas/MemberList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /orgs/{ns}/members/{user}:
+    parameters: [{$ref: "#/components/parameters/Ns"}, {name: user, in: path, required: true, description: Username., schema: {type: string}}]
+    get:
+      tags: [namespaces]
+      operationId: getMember
+      summary: Get a Member and their Role
+      responses:
+        "200": {description: The Member., content: {application/json: {schema: {$ref: "#/components/schemas/Member"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    put:
+      tags: [namespaces]
+      operationId: setMember
+      summary: Add a Member or change their Role
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/MemberSet"}}}
+      responses:
+        "200": {description: The Member., content: {application/json: {schema: {$ref: "#/components/schemas/Member"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [namespaces]
+      operationId: removeMember
+      summary: Remove a Member
+      responses:
+        "204": {description: Removed.}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Collections ------------------------------------------------------------------------
+  /collections:
+    get:
+      tags: [collections]
+      operationId: listCollections
+      summary: List Collections
+      parameters: [{name: owner, in: query, schema: {type: string}}, {name: item, in: query, description: Collections containing this item, such as models/ns/name., schema: {type: string}}, {name: q, in: query, schema: {type: string}}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Collections., content: {application/json: {schema: {$ref: "#/components/schemas/CollectionList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [collections]
+      operationId: createCollection
+      summary: Create a Collection
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CollectionCreate"}}}
+      responses:
+        "201": {description: Created., content: {application/json: {schema: {$ref: "#/components/schemas/Collection"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /collections/{ns}/{slug}:
+    parameters: [{$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Slug"}]
+    get:
+      tags: [collections]
+      operationId: getCollection
+      summary: Get a Collection
+      responses:
+        "200": {description: The Collection., content: {application/json: {schema: {$ref: "#/components/schemas/Collection"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [collections]
+      operationId: updateCollection
+      summary: Change a Collection
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CollectionUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/Collection"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [collections]
+      operationId: deleteCollection
+      summary: Delete a Collection
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /collections/{ns}/{slug}/items:
+    parameters: [{$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Slug"}]
+    post:
+      tags: [collections]
+      operationId: addCollectionItem
+      summary: Add an item
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CollectionItemCreate"}}}
+      responses:
+        "200": {description: The Collection., content: {application/json: {schema: {$ref: "#/components/schemas/Collection"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /collections/{ns}/{slug}/items/{id}:
+    parameters: [{$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Slug"}, {$ref: "#/components/parameters/ID"}]
+    patch:
+      tags: [collections]
+      operationId: updateCollectionItem
+      summary: Change an item's note or position
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CollectionItemUpdate"}}}
+      responses:
+        "200": {description: The Collection., content: {application/json: {schema: {$ref: "#/components/schemas/Collection"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [collections]
+      operationId: deleteCollectionItem
+      summary: Remove an item
+      responses:
+        "204": {description: Removed.}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Community ----------------------------------------------------------------------------
+  /repos/{type}/{ns}/{name}/discussions:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [community]
+      operationId: listDiscussions
+      summary: List discussions and pull requests
+      parameters:
+        - {name: kind, in: query, schema: {type: string, enum: [discussion, pull_request]}}
+        - {name: status, in: query, schema: {type: string, enum: [open, closed]}}
+        - {name: author, in: query, schema: {type: string}}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200": {description: Discussions., content: {application/json: {schema: {$ref: "#/components/schemas/DiscussionList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [community]
+      operationId: createDiscussion
+      summary: Open a discussion or pull request
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/DiscussionCreate"}}}
+      responses:
+        "201": {description: Opened., content: {application/json: {schema: {$ref: "#/components/schemas/Discussion"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/discussions/{num}:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
+    get:
+      tags: [community]
+      operationId: getDiscussion
+      summary: Get a discussion with its thread
+      responses:
+        "200": {description: The discussion., content: {application/json: {schema: {$ref: "#/components/schemas/Discussion"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [community]
+      operationId: updateDiscussion
+      summary: Change a discussion's title or status
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/DiscussionUpdate"}}}
+      responses:
+        "200": {description: The discussion., content: {application/json: {schema: {$ref: "#/components/schemas/Discussion"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/discussions/{num}/diff:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
+    get:
+      tags: [community]
+      operationId: getPullRequestFileDiff
+      summary: Get the diff of one file in a pull request
+      description: >-
+        The file from the point where the pull request's ref left its base branch to the head of the ref, so a pull
+        request with several Commits shows all of its changes, as the files listed in the pull request's changes are.
+      parameters: [{name: path, in: query, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: The diff., content: {application/json: {schema: {$ref: "#/components/schemas/FileDiff"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/discussions/{num}/comments:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
+    post:
+      tags: [community]
+      operationId: commentOnDiscussion
+      summary: Comment
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CommentCreate"}}}
+      responses:
+        "201": {description: The comment., content: {application/json: {schema: {$ref: "#/components/schemas/DiscussionEvent"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /repos/{type}/{ns}/{name}/discussions/{num}/merge:
+    parameters: [{$ref: "#/components/parameters/RepoType"}, {$ref: "#/components/parameters/Ns"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/Num"}]
+    post:
+      tags: [community]
+      operationId: mergePullRequest
+      summary: Merge a pull request
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/MergeRequest"}}}
+      responses:
+        "200": {description: Merged., content: {application/json: {schema: {$ref: "#/components/schemas/Discussion"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Webhooks -------------------------------------------------------------------------------
+  /webhooks:
+    get:
+      tags: [webhooks]
+      operationId: listWebhooks
+      summary: List webhooks I can manage
+      parameters: [{name: ns, in: query, schema: {type: string}}, {name: repo, in: query, description: Repo as type/ns/name., schema: {type: string}}]
+      responses:
+        "200": {description: Webhooks., content: {application/json: {schema: {$ref: "#/components/schemas/WebhookList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [webhooks]
+      operationId: createWebhook
+      summary: Create a webhook
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/WebhookCreate"}}}
+      responses:
+        "201": {description: Created., content: {application/json: {schema: {$ref: "#/components/schemas/Webhook"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /webhooks/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [webhooks]
+      operationId: getWebhook
+      summary: Get a webhook
+      responses:
+        "200": {description: The webhook., content: {application/json: {schema: {$ref: "#/components/schemas/Webhook"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [webhooks]
+      operationId: updateWebhook
+      summary: Change a webhook
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/WebhookUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/Webhook"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [webhooks]
+      operationId: deleteWebhook
+      summary: Delete a webhook
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Problem"}
+  /webhooks/{id}/deliveries:
+    get:
+      tags: [webhooks]
+      operationId: listWebhookDeliveries
+      summary: List deliveries
+      parameters: [{$ref: "#/components/parameters/ID"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Deliveries., content: {application/json: {schema: {$ref: "#/components/schemas/WebhookDeliveryList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /webhooks/{id}/deliveries/{delivery_id}/redeliver:
+    post:
+      tags: [webhooks]
+      operationId: redeliverWebhook
+      summary: Send a delivery again
+      parameters: [{$ref: "#/components/parameters/ID"}, {name: delivery_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        "202": {description: Queued., content: {application/json: {schema: {$ref: "#/components/schemas/WebhookDelivery"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /webhooks/{id}/test:
+    post:
+      tags: [webhooks]
+      operationId: testWebhook
+      summary: Send a test event
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "202": {description: Queued., content: {application/json: {schema: {$ref: "#/components/schemas/WebhookDelivery"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+
+  # Admin ---------------------------------------------------------------------------------
+  /admin/orgs:
+    get:
+      tags: [admin]
+      operationId: adminListOrgs
+      summary: List Organisations
+      description: Every Organisation of the Instance in name order, optionally filtered by name or display name. Instance admins only.
+      parameters: [{name: q, in: query, schema: {type: string}}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Organisations., content: {application/json: {schema: {$ref: "#/components/schemas/AdminOrgList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: adminListUsers
+      summary: List users
+      parameters: [{name: q, in: query, schema: {type: string}}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Users., content: {application/json: {schema: {$ref: "#/components/schemas/AdminUserList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [admin]
+      operationId: adminCreateUser
+      summary: Create a user
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AdminUserCreate"}}}
+      responses:
+        "201": {description: Created., content: {application/json: {schema: {$ref: "#/components/schemas/AdminUser"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/users/{id}:
+    patch:
+      tags: [admin]
+      operationId: adminUpdateUser
+      summary: Disable, enable or make a user admin
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AdminUserUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/AdminUser"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/users/{id}/email-link:
+    post:
+      tags: [admin]
+      operationId: adminCreateEmailLink
+      summary: Create a link that confirms a user's pending email
+      description: >-
+        Hangar sends no mail, so an admin sends this link to the user's
+        `pending_email`. Opening it and confirming makes that address the
+        user's verified email. The body names the pending email the admin
+        saw, and the link is bound to it: if the user has changed their
+        pending email since, the answer is 409 and no link is made. The
+        response repeats the bound address, to send the link to. It is
+        single use, expires in 72 hours and replaces any earlier link for
+        the user; a new pending email also ends every earlier link. A user
+        with no pending email gets 422.
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/EmailLinkCreate"}}}
+      responses:
+        "201": {description: A single-use link that expires in 72 hours., content: {application/json: {schema: {$ref: "#/components/schemas/EmailLink"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/users/{id}/reset-link:
+    post:
+      tags: [admin]
+      operationId: adminCreateResetLink
+      summary: Create a password reset link
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "201": {description: A single-use link that expires in 72 hours., content: {application/json: {schema: {$ref: "#/components/schemas/Link"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/invites:
+    post:
+      tags: [admin]
+      operationId: adminCreateInvite
+      summary: Create an invite link
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/InviteCreate"}}}
+      responses:
+        "201": {description: A single-use link that expires in 72 hours., content: {application/json: {schema: {$ref: "#/components/schemas/Link"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/upstreams:
+    get:
+      tags: [admin]
+      operationId: adminListUpstreams
+      summary: List every Upstream
+      responses:
+        "200": {description: Upstreams., content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [admin]
+      operationId: adminCreateUpstream
+      summary: Add an Upstream
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamCreate"}}}
+      responses:
+        "201": {description: Added., content: {application/json: {schema: {$ref: "#/components/schemas/Upstream"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/upstreams/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [admin]
+      operationId: adminGetUpstream
+      summary: Get an Upstream
+      responses:
+        "200": {description: The Upstream., content: {application/json: {schema: {$ref: "#/components/schemas/Upstream"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [admin]
+      operationId: adminUpdateUpstream
+      summary: Change an Upstream
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/UpstreamUpdate"}}}
+      responses:
+        "200": {description: Updated., content: {application/json: {schema: {$ref: "#/components/schemas/Upstream"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    delete:
+      tags: [admin]
+      operationId: adminDeleteUpstream
+      summary: Remove an Upstream
+      responses:
+        "204": {description: Removed.}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/upstreams/{id}/test:
+    post:
+      tags: [admin]
+      operationId: adminTestUpstream
+      summary: Test the connection to an Upstream
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "200": {description: The result., content: {application/json: {schema: {$ref: "#/components/schemas/CheckResult"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/settings:
+    get:
+      tags: [admin]
+      operationId: adminGetSettings
+      summary: Get Instance settings
+      responses:
+        "200": {description: Settings., content: {application/json: {schema: {$ref: "#/components/schemas/InstanceSettings"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+    patch:
+      tags: [admin]
+      operationId: adminUpdateSettings
+      summary: Change Instance settings
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/InstanceSettings"}}}
+      responses:
+        "200": {description: Settings., content: {application/json: {schema: {$ref: "#/components/schemas/InstanceSettings"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/storage:
+    get:
+      tags: [admin]
+      operationId: adminGetStorage
+      summary: Get storage usage by Namespace
+      responses:
+        "200": {description: Usage., content: {application/json: {schema: {$ref: "#/components/schemas/StorageUsage"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/quotas/{ns}:
+    put:
+      tags: [admin]
+      operationId: adminSetQuota
+      summary: Set a Namespace's storage quota
+      parameters: [{$ref: "#/components/parameters/Ns"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/Quota"}}}
+      responses:
+        "200": {description: The quota., content: {application/json: {schema: {$ref: "#/components/schemas/Quota"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/gc:
+    post:
+      tags: [admin]
+      operationId: adminRunGC
+      summary: Run garbage collection now
+      responses:
+        "202": {description: Started., content: {application/json: {schema: {$ref: "#/components/schemas/Job"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/audit:
+    get:
+      tags: [admin]
+      operationId: adminListAudit
+      summary: List audit events
+      parameters:
+        - {name: actor, in: query, schema: {type: string}}
+        - {name: action, in: query, schema: {type: string}}
+        - {name: since, in: query, schema: {type: string, format: date-time}}
+        - {name: until, in: query, schema: {type: string, format: date-time}}
+        - {name: format, in: query, schema: {type: string, enum: [json, csv]}}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: Events, as JSON or CSV.
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AuditEventList"}}
+            text/csv: {schema: {type: string}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/system:
+    get:
+      tags: [admin]
+      operationId: adminGetSystem
+      summary: Get version, backends, telemetry and doctor results
+      responses:
+        "200": {description: System information., content: {application/json: {schema: {$ref: "#/components/schemas/SystemInfo"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/tokens:
+    get:
+      tags: [admin]
+      operationId: adminListTokens
+      summary: List every Token
+      parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+      responses:
+        "200": {description: Tokens., content: {application/json: {schema: {$ref: "#/components/schemas/TokenList"}}}}
+        default: {$ref: "#/components/responses/Problem"}
+  /admin/tokens/{id}:
+    delete:
+      tags: [admin]
+      operationId: adminRevokeToken
+      summary: Revoke any Token
+      parameters: [{$ref: "#/components/parameters/ID"}]
+      responses:
+        "204": {description: Revoked.}
+        default: {$ref: "#/components/responses/Problem"}
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: hangar_session
+      description: The UI session. State-changing calls also need the `X-CSRF-Token` header.
+    bearer:
+      type: http
+      scheme: bearer
+      description: A Hangar Token (`hgr_...`).
+
+  parameters:
+    RepoType: {name: type, in: path, required: true, schema: {$ref: "#/components/schemas/RepoTypePlural"}}
+    Ns: {name: ns, in: path, required: true, description: Namespace name., schema: {type: string}}
+    Name: {name: name, in: path, required: true, description: Repo name., schema: {type: string}}
+    Rev: {name: rev, in: path, required: true, description: Revision, percent-encoded., schema: {type: string}}
+    RevQuery: {name: rev, in: query, description: Revision; the default branch when absent., schema: {type: string}}
+    FilePath: {name: path, in: path, required: true, description: Path in the Repo, percent-encoded with `/` as `%2F`., schema: {type: string}}
+    SHA: {name: sha, in: path, required: true, schema: {type: string, pattern: "^[0-9a-f]{40}$"}}
+    ID: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    Num: {name: num, in: path, required: true, schema: {type: integer, minimum: 1}}
+    Slug: {name: slug, in: path, required: true, schema: {type: string}}
+    Recursive: {name: recursive, in: query, schema: {type: boolean, default: false}}
+    Cursor: {name: cursor, in: query, description: Opaque cursor from a previous page., schema: {type: string}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
+
+  responses:
+    Problem:
+      description: An RFC 9457 problem detail.
+      content:
+        application/problem+json: {schema: {$ref: "#/components/schemas/Problem"}}
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        request_id: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [detail]
+            properties:
+              pointer: {type: string}
+              parameter: {type: string}
+              detail: {type: string}
+
+    RepoTypePlural: {type: string, enum: [models, datasets]}
+    RepoTypeSingular: {type: string, enum: [model, dataset]}
+    Visibility: {type: string, enum: [public, internal, private]}
+    Role: {type: string, enum: [read, write, admin]}
+    Scope: {type: string, enum: [read, write, admin]}
+
+    # Session and users
+    Me:
+      type: object
+      required: [id, username, display_name, is_admin, has_password, orgs]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string}
+        display_name: {type: string}
+        email: {type: string}
+        avatar_url: {type: string}
+        is_admin: {type: boolean}
+        orgs: {type: array, items: {$ref: "#/components/schemas/OrgMembership"}}
+        pending_email:
+          type: string
+          description: >-
+            An email address the user asked for that waits for its
+            confirmation link. It is not the user's email until then.
+        has_password:
+          type: boolean
+          description: >-
+            Whether the user has a Hangar password. Users who sign in only
+            with OIDC have none and cannot change it in Hangar.
+        csrf_token: {type: string, description: Send as X-CSRF-Token on state-changing calls.}
+    MeUpdate:
+      type: object
+      properties:
+        display_name: {type: string, description: "The name shown instead of the username, at most 100 bytes. An empty string clears it."}
+        email: {type: string, description: "The new email address, which waits for confirmation. The current address cancels a pending change; an empty string removes the email."}
+    PasswordChange:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: {type: string, format: password}
+        new_password: {type: string, format: password, description: At least 10 characters and not a common password.}
+    OrgMembership:
+      type: object
+      required: [name, role]
+      properties:
+        name: {type: string}
+        display_name: {type: string}
+        role: {$ref: "#/components/schemas/Role"}
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: {type: string}
+        password: {type: string, format: password}
+    AuthProviders:
+      type: object
+      required: [local_login, providers, registration, ui_external_images]
+      properties:
+        local_login: {type: boolean}
+        registration: {type: string, enum: [open, invite, closed]}
+        ui_external_images:
+          type: boolean
+          description: The Instance setting ui.external_images. When false, the UI loads no images from other hosts in Model cards.
+        providers:
+          type: array
+          items:
+            type: object
+            required: [id, name, login_url]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              login_url: {type: string}
+    Session:
+      type: object
+      required: [id, created_at, expires_at, current]
+      properties:
+        id: {type: string, format: uuid}
+        user_agent: {type: string}
+        ip: {type: string}
+        created_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        current: {type: boolean}
+    SessionList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Session"}}, next_cursor: {type: string}}
+
+    # Tokens and keys
+    TokenRestrictions:
+      type: object
+      properties:
+        namespaces: {type: array, items: {type: string}}
+        repos: {type: array, items: {type: string, description: "type:namespace/name"}}
+    Token:
+      type: object
+      required: [id, name, prefix, scope, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        prefix: {type: string}
+        scope: {$ref: "#/components/schemas/Scope"}
+        restrictions: {$ref: "#/components/schemas/TokenRestrictions"}
+        username: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+    TokenList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Token"}}, next_cursor: {type: string}}
+    TokenCreate:
+      type: object
+      required: [name, scope]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        scope: {$ref: "#/components/schemas/Scope"}
+        restrictions: {$ref: "#/components/schemas/TokenRestrictions"}
+        expires_at: {type: string, format: date-time}
+    TokenCreated:
+      allOf:
+        - {$ref: "#/components/schemas/Token"}
+        - type: object
+          required: [secret]
+          properties: {secret: {type: string, description: Shown once.}}
+    DeviceDecision:
+      type: object
+      required: [user_code, approve]
+      properties:
+        user_code: {type: string}
+        approve: {type: boolean}
+    OllamaKey:
+      type: object
+      required: [id, fingerprint, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        fingerprint: {type: string}
+        created_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+    OllamaKeyList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/OllamaKey"}}}
+    OllamaKeyCreate:
+      type: object
+      required: [public_key]
+      properties:
+        name: {type: string}
+        public_key: {type: string, description: The contents of ~/.ollama/id_ed25519.pub.}
+    UpstreamTokenStatus:
+      type: object
+      required: [upstream, saved]
+      properties:
+        upstream: {type: string}
+        saved: {type: boolean}
+        updated_at: {type: string, format: date-time}
+    UpstreamTokenSet:
+      type: object
+      required: [token]
+      properties: {token: {type: string, format: password}}
+
+    # Search
+    SearchResults:
+      type: object
+      required: [repos, namespaces, collections]
+      properties:
+        repos: {type: array, items: {$ref: "#/components/schemas/Repo"}}
+        namespaces: {type: array, items: {$ref: "#/components/schemas/Namespace"}}
+        collections: {type: array, items: {$ref: "#/components/schemas/Collection"}}
+
+    # Repos
+    Repo:
+      type: object
+      required: [id, type, namespace, name, visibility, default_branch, mirror, gated, created_at, updated_at, likes, downloads, size_bytes, lfs_bytes]
+      properties:
+        id: {type: string, description: namespace/name}
+        uuid: {type: string, format: uuid}
+        type: {$ref: "#/components/schemas/RepoTypeSingular"}
+        namespace: {type: string}
+        name: {type: string}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        description: {type: string}
+        default_branch: {type: string}
+        tags: {type: array, items: {type: string}}
+        licence: {type: string}
+        mirror: {type: boolean}
+        mirror_status: {$ref: "#/components/schemas/MirrorSummary"}
+        gated: {type: string, enum: ["", auto, manual]}
+        sha: {type: string, description: Head of the default branch.}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_modified: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+        likes: {type: integer, format: int64}
+        liked: {type: boolean}
+        downloads: {type: integer, format: int64, description: Downloads in the last 30 days.}
+        size_bytes: {type: integer, format: int64}
+        lfs_bytes: {type: integer, format: int64}
+        present_bytes: {type: integer, format: int64}
+        summary: {$ref: "#/components/schemas/RepoSummary"}
+        permissions: {$ref: "#/components/schemas/RepoPermissions"}
+    RepoSummary:
+      type: object
+      description: Index highlights for cards and filters.
+      properties:
+        formats: {type: array, items: {type: string}}
+        architecture: {type: string}
+        parameters: {type: integer, format: int64}
+        quants: {type: array, items: {type: string}}
+        context_length: {type: integer, format: int64}
+        pipeline_tag: {type: string}
+        library_name: {type: string}
+        scan_status: {type: string, enum: [safe, suspicious, unsafe, error, pending]}
+    RepoPermissions:
+      type: object
+      required: [read, write, admin, discuss]
+      properties:
+        read: {type: boolean}
+        write: {type: boolean}
+        admin: {type: boolean}
+        discuss: {type: boolean}
+        pull_mirror: {type: boolean}
+    RepoList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Repo"}}
+        next_cursor: {type: string}
+        facets:
+          type: object
+          additionalProperties: {type: object, additionalProperties: {type: integer}}
+    RepoCreate:
+      type: object
+      required: [type, namespace, name]
+      properties:
+        type: {$ref: "#/components/schemas/RepoTypeSingular"}
+        namespace: {type: string}
+        name: {type: string}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        description: {type: string}
+        licence: {type: string}
+        readme: {type: boolean, description: Add a starter README.md.}
+    RepoUpdate:
+      type: object
+      properties:
+        description: {type: string}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        default_branch: {type: string}
+        tags: {type: array, items: {type: string}}
+        licence: {type: string}
+        gating: {$ref: "#/components/schemas/Gating"}
+    Gating:
+      type: object
+      properties:
+        mode: {type: string, enum: ["", auto, manual]}
+        prompt: {type: string}
+        fields:
+          type: array
+          items:
+            type: object
+            required: [name, type]
+            properties:
+              name: {type: string}
+              type: {type: string, enum: [text, checkbox, country, date, select]}
+              required: {type: boolean}
+    RenameRequest:
+      type: object
+      required: [name]
+      properties: {name: {type: string}}
+    TransferRequest:
+      type: object
+      required: [namespace]
+      properties: {namespace: {type: string}}
+    Ref:
+      type: object
+      required: [name, ref, target_commit]
+      properties:
+        name: {type: string}
+        ref: {type: string}
+        target_commit: {type: string}
+    Refs:
+      type: object
+      required: [branches, tags, converts, pull_requests]
+      properties:
+        branches: {type: array, items: {$ref: "#/components/schemas/Ref"}}
+        tags: {type: array, items: {$ref: "#/components/schemas/Ref"}}
+        converts: {type: array, items: {$ref: "#/components/schemas/Ref"}}
+        pull_requests: {type: array, items: {$ref: "#/components/schemas/Ref"}}
+    Signature:
+      type: object
+      required: [name, email, date]
+      properties:
+        name: {type: string}
+        email: {type: string}
+        date: {type: string, format: date-time}
+        username: {type: string}
+    CommitInfo:
+      type: object
+      required: [sha, parents, author, committer, title, message]
+      properties:
+        sha: {type: string}
+        parents: {type: array, items: {type: string}}
+        author: {$ref: "#/components/schemas/Signature"}
+        committer: {$ref: "#/components/schemas/Signature"}
+        title: {type: string}
+        message: {type: string}
+    CommitList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/CommitInfo"}}, next_cursor: {type: string}}
+    FileChange:
+      type: object
+      required: [path, status, lfs, binary]
+      properties:
+        path: {type: string}
+        old_path: {type: string}
+        status: {type: string, enum: [added, modified, deleted, renamed]}
+        old_oid: {type: string}
+        new_oid: {type: string}
+        old_size: {type: integer, format: int64}
+        new_size: {type: integer, format: int64}
+        lfs: {type: boolean}
+        binary: {type: boolean}
+    CommitDetail:
+      allOf:
+        - {$ref: "#/components/schemas/CommitInfo"}
+        - type: object
+          required: [changes]
+          properties: {changes: {type: array, items: {$ref: "#/components/schemas/FileChange"}}}
+    FileDiff:
+      allOf:
+        - {$ref: "#/components/schemas/FileChange"}
+        - type: object
+          properties: {patch: {type: string, description: Unified diff; empty for LFS, binary and large files.}}
+    LastCommit:
+      type: object
+      required: [sha, title, date]
+      properties:
+        sha: {type: string}
+        title: {type: string}
+        date: {type: string, format: date-time}
+    TreeEntry:
+      type: object
+      required: [path, type, size, oid, present]
+      properties:
+        path: {type: string}
+        type: {type: string, enum: [file, directory]}
+        size: {type: integer, format: int64}
+        oid: {type: string}
+        lfs:
+          type: object
+          required: [oid, size, pointer_size]
+          properties:
+            oid: {type: string}
+            size: {type: integer, format: int64}
+            pointer_size: {type: integer}
+        present: {type: boolean, description: False for files not in the Arsenal.}
+        scan_status: {type: string, enum: [safe, suspicious, unsafe, error, pending]}
+        last_commit: {$ref: "#/components/schemas/LastCommit"}
+    TreeListing:
+      type: object
+      required: [commit, items]
+      properties:
+        commit: {type: string}
+        items: {type: array, items: {$ref: "#/components/schemas/TreeEntry"}}
+        next_cursor: {type: string}
+    RepoMetadata:
+      type: object
+      required: [commit, status]
+      properties:
+        commit: {type: string}
+        status: {type: string, enum: [ready, pending]}
+        summary: {type: object, additionalProperties: true, description: The index summary (07-indexing-and-scanning.md).}
+        indexed_at: {type: string, format: date-time}
+    FileHeader:
+      type: object
+      required: [format, header]
+      properties:
+        format: {type: string, enum: [safetensors, gguf]}
+        header: {type: object, additionalProperties: true}
+    FileScan:
+      type: object
+      required: [path, status, findings]
+      properties:
+        path: {type: string}
+        status: {type: string, enum: [safe, suspicious, unsafe, error, pending]}
+        findings: {type: array, items: {$ref: "#/components/schemas/ScanFinding"}}
+        error: {type: string, description: "Why the scan could not read the file, when status is error."}
+    ScanFinding:
+      type: object
+      required: [status]
+      properties:
+        module: {type: string, description: "The imported module, such as os."}
+        name: {type: string, description: "The imported name, such as system."}
+        opcode: {type: string, description: "The pickle opcode that imported it: GLOBAL, STACK_GLOBAL or INST."}
+        status: {type: string, enum: [safe, suspicious, unsafe, error]}
+        detail: {type: string, description: "An integrity problem, for findings that are not imports."}
+    QuantGroup:
+      type: object
+      required: [name, files, size, present]
+      properties:
+        name: {type: string}
+        files: {type: array, items: {type: string}}
+        projectors: {type: array, items: {type: string}}
+        size: {type: integer, format: int64}
+        present: {type: boolean}
+    QuantList:
+      type: object
+      required: [commit, items]
+      properties:
+        commit: {type: string}
+        items: {type: array, items: {$ref: "#/components/schemas/QuantGroup"}}
+    Dependency:
+      type: object
+      required: [repo, type, kind, required, arsenal]
+      properties:
+        repo: {type: string}
+        type: {$ref: "#/components/schemas/RepoTypeSingular"}
+        revision: {type: string}
+        kind: {type: string, enum: [code, base_model, adapter_base, card_base_model, dataset]}
+        required: {type: boolean}
+        source_path: {type: string}
+        source_key: {type: string}
+        arsenal: {$ref: "#/components/schemas/ArsenalState"}
+    Dependencies:
+      type: object
+      required: [needs, needed_by]
+      properties:
+        needs: {type: array, items: {$ref: "#/components/schemas/Dependency"}}
+        needed_by: {type: array, items: {$ref: "#/components/schemas/Dependency"}}
+    ArsenalState: {type: string, enum: [none, partial, full]}
+    LikeStatus:
+      type: object
+      required: [liked, likes]
+      properties:
+        liked: {type: boolean}
+        likes: {type: integer, format: int64}
+    RepoStats:
+      type: object
+      required: [days, total]
+      properties:
+        total: {type: integer, format: int64}
+        days:
+          type: array
+          items:
+            type: object
+            required: [day, count]
+            properties:
+              day: {type: string, format: date}
+              count: {type: integer, format: int64}
+    Collaborator:
+      type: object
+      required: [username, role]
+      properties:
+        username: {type: string}
+        role: {type: string, enum: [read, write]}
+    CollaboratorList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Collaborator"}}}
+    AccessRequestStatus: {type: string, enum: [pending, accepted, rejected]}
+    AccessRequest:
+      type: object
+      required: [id, username, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string}
+        status: {$ref: "#/components/schemas/AccessRequestStatus"}
+        fields: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+        decided_at: {type: string, format: date-time}
+        decided_by: {type: string}
+    AccessRequestList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/AccessRequest"}}, next_cursor: {type: string}}
+    AccessRequestCreate:
+      type: object
+      properties: {fields: {type: object, additionalProperties: true}}
+    AccessRequestDecision:
+      type: object
+      required: [status]
+      properties: {status: {type: string, enum: [accepted, rejected]}}
+
+    # Uploads
+    UploadFile:
+      type: object
+      required: [path, size, sha256]
+      properties:
+        path: {type: string}
+        size: {type: integer, format: int64}
+        sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
+    UploadPlanRequest:
+      type: object
+      required: [files]
+      properties:
+        revision: {type: string}
+        create_pr: {type: boolean}
+        files: {type: array, items: {$ref: "#/components/schemas/UploadFile"}, maxItems: 1000}
+    UploadPlanItem:
+      type: object
+      required: [path, action]
+      properties:
+        path: {type: string}
+        action: {type: string, enum: [inline, exists, upload], description: "inline: send the content in the Commit. exists: the object is stored and the caller uploaded it or can read it in a Repo. upload: upload it."}
+        upload_id: {type: string, format: uuid}
+        part_size: {type: integer, format: int64}
+        part_urls: {type: array, items: {type: string}, description: Presigned or Hangar part URLs, in part order.}
+        presigned: {type: boolean}
+    UploadPlan:
+      type: object
+      required: [files]
+      properties: {files: {type: array, items: {$ref: "#/components/schemas/UploadPlanItem"}}}
+    UploadedPart:
+      type: object
+      required: [number, etag]
+      properties:
+        number: {type: integer}
+        etag: {type: string}
+        size: {type: integer, format: int64}
+    UploadStatus:
+      type: object
+      required: [id, sha256, size, part_count, parts, state]
+      properties:
+        id: {type: string, format: uuid}
+        sha256: {type: string}
+        size: {type: integer, format: int64}
+        part_size: {type: integer, format: int64}
+        part_count: {type: integer}
+        parts: {type: array, items: {$ref: "#/components/schemas/UploadedPart"}}
+        state: {type: string, enum: [uploading, verified]}
+        expires_at: {type: string, format: date-time}
+    UploadComplete:
+      type: object
+      required: [parts]
+      properties: {parts: {type: array, items: {$ref: "#/components/schemas/UploadedPart"}}}
+    CommitOperation:
+      type: object
+      required: [op, path]
+      properties:
+        op: {type: string, enum: [add, add_lfs, delete, delete_folder, copy]}
+        path: {type: string}
+        content_base64: {type: string, description: For add.}
+        sha256: {type: string, description: For add_lfs.}
+        size: {type: integer, format: int64}
+        src_path: {type: string, description: For copy.}
+        src_revision: {type: string}
+    CommitRequest:
+      type: object
+      required: [summary, operations]
+      properties:
+        summary: {type: string, minLength: 1}
+        description: {type: string}
+        branch: {type: string}
+        parent_commit: {type: string}
+        create_pr: {type: boolean}
+        operations: {type: array, items: {$ref: "#/components/schemas/CommitOperation"}, minItems: 1}
+    CommitResponse:
+      type: object
+      required: [sha, ref]
+      properties:
+        sha: {type: string}
+        ref: {type: string}
+        pull_request: {type: integer}
+        no_op: {type: boolean}
+
+    # Datasets
+    DatasetSplit:
+      type: object
+      required: [split, status]
+      properties:
+        split: {type: string}
+        status: {type: string, enum: [pending, ready, partial, failed]}
+        num_rows: {type: integer, format: int64}
+        num_bytes_source: {type: integer, format: int64}
+        num_bytes_parquet: {type: integer, format: int64}
+        error: {type: string}
+        job_id: {type: string, format: uuid}
+    DatasetConfig:
+      type: object
+      required: [config, default, splits]
+      properties:
+        config: {type: string}
+        default: {type: boolean}
+        splits: {type: array, items: {$ref: "#/components/schemas/DatasetSplit"}}
+    DatasetConfigs:
+      type: object
+      required: [commit, from_card, configs]
+      properties:
+        commit: {type: string}
+        from_card: {type: boolean}
+        configs: {type: array, items: {$ref: "#/components/schemas/DatasetConfig"}}
+
+    # Mirrors, Upstreams, Discover, Pulls
+    Selection:
+      type: object
+      description: >-
+        Files to Pull. An absent or empty object means every file. An explicitly empty `paths` list
+        with nothing else selected means no files: the Pull fetches the history only.
+      properties:
+        include: {type: array, items: {type: string}}
+        exclude: {type: array, items: {type: string}}
+        paths: {type: array, items: {type: string}}
+        quants: {type: array, items: {type: string}}
+        configs: {type: array, items: {type: string}}
+        splits: {type: array, items: {type: string}}
+        parquet_only: {type: boolean}
+    MirrorSummary:
+      type: object
+      required: [upstream, upstream_repo, status]
+      properties:
+        upstream: {type: string}
+        upstream_repo: {type: string}
+        upstream_url: {type: string}
+        status: {type: string}
+        last_synced_at: {type: string, format: date-time}
+        update_available: {type: boolean}
+    Mirror:
+      allOf:
+        - {$ref: "#/components/schemas/MirrorSummary"}
+        - type: object
+          required: [selection, track]
+          properties:
+            selection: {$ref: "#/components/schemas/Selection"}
+            track: {type: boolean}
+            track_ref: {type: string}
+            schedule: {type: string}
+            last_synced_commit: {type: string}
+            last_error: {type: string}
+    MirrorUpdate:
+      type: object
+      properties:
+        selection: {$ref: "#/components/schemas/Selection"}
+        track: {type: boolean}
+        track_ref: {type: string}
+        schedule: {type: string}
+    Upstream:
+      type: object
+      required: [id, name, display_name, base_url, enabled]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        base_url: {type: string}
+        viewer_url: {type: string}
+        enabled: {type: boolean}
+        namespace_prefix: {type: string}
+        source: {type: string, enum: [config, admin]}
+        has_instance_token: {type: boolean}
+    UpstreamList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Upstream"}}}
+    UpstreamCreate:
+      type: object
+      required: [name, base_url]
+      properties:
+        name: {type: string}
+        display_name: {type: string}
+        base_url: {type: string}
+        viewer_url: {type: string}
+        enabled: {type: boolean}
+        namespace_prefix: {type: string}
+        instance_token: {type: string, format: password}
+    UpstreamUpdate:
+      type: object
+      properties:
+        display_name: {type: string}
+        base_url: {type: string}
+        viewer_url: {type: string}
+        enabled: {type: boolean}
+        namespace_prefix: {type: string}
+        instance_token: {type: string, format: password, description: An empty string removes the token.}
+    CheckResult:
+      type: object
+      required: [ok, message]
+      properties:
+        name: {type: string}
+        ok: {type: boolean}
+        message: {type: string}
+        latency_ms: {type: integer}
+    DiscoverItem:
+      type: object
+      required: [id, type, arsenal]
+      properties:
+        id: {type: string}
+        type: {$ref: "#/components/schemas/RepoTypeSingular"}
+        sha: {type: string}
+        tags: {type: array, items: {type: string}}
+        pipeline_tag: {type: string}
+        library_name: {type: string}
+        downloads: {type: integer, format: int64}
+        likes: {type: integer, format: int64}
+        last_modified: {type: string, format: date-time}
+        gated: {type: string}
+        private: {type: boolean}
+        arsenal: {$ref: "#/components/schemas/ArsenalState"}
+        local_sha: {type: string, description: Set when the Arsenal has an older Revision.}
+    DiscoverList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/DiscoverItem"}}, next_cursor: {type: string}}
+    DiscoverFile:
+      type: object
+      required: [path, size, lfs, present]
+      properties:
+        path: {type: string}
+        size: {type: integer, format: int64}
+        lfs: {type: boolean}
+        present: {type: boolean}
+    DiscoverDetail:
+      allOf:
+        - {$ref: "#/components/schemas/DiscoverItem"}
+        - type: object
+          required: [files, total_size, dependencies]
+          properties:
+            card: {type: string, description: The upstream README.md.}
+            card_data: {type: object, additionalProperties: true}
+            files: {type: array, items: {$ref: "#/components/schemas/DiscoverFile"}}
+            quants: {type: array, items: {$ref: "#/components/schemas/QuantGroup"}}
+            configs: {type: array, items: {$ref: "#/components/schemas/DatasetConfig"}}
+            preview: {type: object, additionalProperties: true, description: First rows from the Upstream's Dataset Viewer.}
+            dependencies: {type: array, items: {$ref: "#/components/schemas/Dependency"}}
+            total_size: {type: integer, format: int64}
+    PullCreate:
+      type: object
+      required: [upstream, repo, type]
+      properties:
+        upstream: {type: string}
+        repo: {type: string}
+        type: {$ref: "#/components/schemas/RepoTypeSingular"}
+        revision: {type: string}
+        selection: {$ref: "#/components/schemas/Selection"}
+        track: {type: boolean}
+        now: {type: boolean, description: Ignore pull windows, if the Instance allows it.}
+
+    # Jobs
+    JobStatus: {type: string, enum: [pending, running, succeeded, failed, cancelled]}
+    FileProgress:
+      type: object
+      required: [path, bytes_done, bytes_total, status]
+      properties:
+        path: {type: string}
+        bytes_done: {type: integer, format: int64}
+        bytes_total: {type: integer, format: int64}
+        status: {type: string}
+        error: {type: string}
+    JobProgress:
+      type: object
+      required: [bytes_done, bytes_total, files_done, files_total, rate]
+      properties:
+        bytes_done: {type: integer, format: int64}
+        bytes_total: {type: integer, format: int64}
+        files_done: {type: integer}
+        files_total: {type: integer}
+        rate: {type: number, description: Bytes per second.}
+        eta_seconds: {type: integer}
+        message: {type: string}
+        files: {type: array, items: {$ref: "#/components/schemas/FileProgress"}}
+    Job:
+      type: object
+      required: [id, kind, status, attempts, max_attempts, progress, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string}
+        status: {$ref: "#/components/schemas/JobStatus"}
+        attempts: {type: integer}
+        max_attempts: {type: integer}
+        progress: {$ref: "#/components/schemas/JobProgress"}
+        payload: {type: object, additionalProperties: true}
+        result: {type: object, additionalProperties: true}
+        error: {type: string}
+        created_by: {type: string}
+        parent_id: {type: string, format: uuid}
+        run_after: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+    JobList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Job"}}, next_cursor: {type: string}}
+
+    # Namespaces
+    Namespace:
+      type: object
+      required: [name, kind, display_name]
+      properties:
+        name: {type: string}
+        kind: {type: string, enum: [user, org]}
+        display_name: {type: string}
+        description: {type: string}
+        avatar_url: {type: string}
+        reserved_mirror: {type: boolean}
+        repo_count: {type: integer}
+        member_count: {type: integer}
+        created_at: {type: string, format: date-time}
+    OrgCreate:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        display_name: {type: string}
+        description: {type: string}
+    OrgUpdate:
+      type: object
+      properties:
+        display_name: {type: string}
+        description: {type: string}
+    Member:
+      type: object
+      required: [username, role, source]
+      properties:
+        username: {type: string}
+        display_name: {type: string}
+        role: {$ref: "#/components/schemas/Role"}
+        source: {type: string, enum: [manual, oidc]}
+    MemberList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Member"}}}
+    MemberSet:
+      type: object
+      required: [role]
+      properties: {role: {$ref: "#/components/schemas/Role"}}
+
+    # Collections
+    CollectionItem:
+      type: object
+      required: [id, type, item_id, position]
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string, enum: [model, dataset, collection]}
+        item_id: {type: string}
+        position: {type: integer}
+        note: {type: string}
+        repo: {$ref: "#/components/schemas/Repo"}
+    Collection:
+      type: object
+      required: [namespace, slug, title, visibility, items, updated_at]
+      properties:
+        namespace: {type: string}
+        slug: {type: string}
+        title: {type: string}
+        description: {type: string}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        theme: {type: string}
+        items: {type: array, items: {$ref: "#/components/schemas/CollectionItem"}}
+        updated_at: {type: string, format: date-time}
+    CollectionList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Collection"}}}
+    CollectionCreate:
+      type: object
+      required: [namespace, title]
+      properties:
+        namespace: {type: string}
+        title: {type: string}
+        description: {type: string}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+    CollectionUpdate:
+      type: object
+      properties:
+        title: {type: string}
+        description: {type: string}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        theme: {type: string}
+    CollectionItemCreate:
+      type: object
+      required: [type, item_id]
+      properties:
+        type: {type: string, enum: [model, dataset, collection]}
+        item_id: {type: string}
+        note: {type: string}
+    CollectionItemUpdate:
+      type: object
+      properties:
+        note: {type: string}
+        position: {type: integer, minimum: 0}
+
+    # Community
+    DiscussionEvent:
+      type: object
+      required: [id, type, author, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string, enum: [comment, status-change, title-change, commit]}
+        author: {type: string}
+        body: {type: string}
+        data: {type: object, additionalProperties: true}
+        hidden: {type: boolean}
+        created_at: {type: string, format: date-time}
+    Discussion:
+      type: object
+      required: [num, kind, title, status, author, created_at]
+      properties:
+        num: {type: integer}
+        kind: {type: string, enum: [discussion, pull_request]}
+        title: {type: string}
+        status: {type: string, enum: [draft, open, closed, merged]}
+        author: {type: string}
+        pr_ref: {type: string}
+        pr_base: {type: string}
+        events: {type: array, items: {$ref: "#/components/schemas/DiscussionEvent"}}
+        changes: {type: array, items: {$ref: "#/components/schemas/FileChange"}}
+        created_at: {type: string, format: date-time}
+    DiscussionList:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Discussion"}}
+        total: {type: integer}
+        next_cursor: {type: string}
+    DiscussionCreate:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1}
+        description: {type: string}
+        pull_request: {type: boolean}
+        base: {type: string}
+    DiscussionUpdate:
+      type: object
+      properties:
+        title: {type: string}
+        status: {type: string, enum: [open, closed]}
+        comment: {type: string}
+    CommentCreate:
+      type: object
+      required: [body]
+      properties: {body: {type: string, minLength: 1}}
+    MergeRequest:
+      type: object
+      properties: {comment: {type: string}}
+
+    # Webhooks
+    Webhook:
+      type: object
+      required: [id, url, events, enabled, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        namespace: {type: string}
+        repo: {type: string, description: type/ns/name}
+        url: {type: string}
+        events: {type: array, items: {type: string}}
+        enabled: {type: boolean}
+        created_at: {type: string, format: date-time}
+        last_delivery: {$ref: "#/components/schemas/WebhookDelivery"}
+    WebhookList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Webhook"}}}
+    WebhookCreate:
+      type: object
+      required: [url, events, secret]
+      properties:
+        namespace: {type: string}
+        repo: {type: string}
+        url: {type: string}
+        events: {type: array, items: {type: string}, minItems: 1}
+        secret: {type: string, format: password}
+        enabled: {type: boolean}
+    WebhookUpdate:
+      type: object
+      properties:
+        url: {type: string}
+        events: {type: array, items: {type: string}}
+        secret: {type: string, format: password}
+        enabled: {type: boolean}
+    WebhookDelivery:
+      type: object
+      required: [id, event, attempt, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        event: {type: string}
+        status_code: {type: integer}
+        attempt: {type: integer}
+        duration_ms: {type: integer}
+        error: {type: string}
+        next_attempt_at: {type: string, format: date-time}
+        delivered_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        payload: {type: string}
+    WebhookDeliveryList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/WebhookDelivery"}}, next_cursor: {type: string}}
+
+    # Admin
+    AdminUser:
+      type: object
+      required: [id, username, is_admin, disabled, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string}
+        display_name: {type: string}
+        email: {type: string}
+        pending_email: {type: string, description: An email address the user asked for that waits for its confirmation link.}
+        is_admin: {type: boolean}
+        disabled: {type: boolean}
+        oidc_providers: {type: array, items: {type: string}}
+        last_login_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    AdminOrgList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/Namespace"}}, next_cursor: {type: string}}
+    AdminUserList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/AdminUser"}}, next_cursor: {type: string}}
+    AdminUserCreate:
+      type: object
+      required: [username]
+      properties:
+        username: {type: string}
+        email: {type: string}
+        display_name: {type: string}
+        password: {type: string, format: password}
+        is_admin: {type: boolean}
+    AdminUserUpdate:
+      type: object
+      properties:
+        disabled: {type: boolean}
+        is_admin: {type: boolean}
+        email: {type: string}
+        display_name: {type: string}
+    InviteCreate:
+      type: object
+      properties:
+        email: {type: string}
+        org: {type: string}
+        role: {$ref: "#/components/schemas/Role"}
+        is_admin: {type: boolean}
+    Link:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url: {type: string}
+        expires_at: {type: string, format: date-time}
+    EmailLinkCreate:
+      type: object
+      required: [email]
+      properties:
+        email: {type: string, description: The pending email the admin saw and approves.}
+    EmailLink:
+      type: object
+      required: [url, expires_at, email]
+      properties:
+        url: {type: string}
+        expires_at: {type: string, format: date-time}
+        email: {type: string, description: The address the link confirms. Send the link there.}
+    InstanceSettings:
+      type: object
+      properties:
+        anonymous_read: {type: boolean}
+        registration: {type: string, enum: [open, invite, closed]}
+        local_login: {type: boolean}
+        ui_external_images: {type: boolean}
+        scan_block_unsafe_downloads: {type: boolean}
+        scan_block_level: {type: string, enum: [unsafe, suspicious], description: "How strict scan_block_unsafe_downloads is: unsafe refuses files with imports on the deny list; suspicious also refuses files with imports on neither list."}
+        webhooks_allow_private_targets: {type: boolean}
+        pull_bandwidth_limit: {type: integer, format: int64}
+        pull_concurrency: {type: integer}
+        pull_windows: {type: array, items: {type: string}}
+        pull_allow_override_windows: {type: boolean}
+        pull_through_enabled: {type: boolean}
+        pull_through_allow: {type: array, items: {type: string}}
+        pull_through_min_role: {type: string, enum: [anonymous, user]}
+        oidc_providers: {type: array, readOnly: true, items: {type: object, properties: {id: {type: string}, name: {type: string}, issuer: {type: string}}}}
+    NamespaceUsage:
+      type: object
+      required: [namespace, lfs_bytes, git_bytes, repo_count]
+      properties:
+        namespace: {type: string}
+        lfs_bytes: {type: integer, format: int64}
+        git_bytes: {type: integer, format: int64}
+        repo_count: {type: integer}
+        quota_bytes: {type: integer, format: int64}
+    StorageUsage:
+      type: object
+      required: [total_lfs_bytes, total_git_bytes, xet_cache_bytes, namespaces]
+      properties:
+        total_lfs_bytes: {type: integer, format: int64}
+        total_git_bytes: {type: integer, format: int64}
+        xet_cache_bytes: {type: integer, format: int64, description: The Xet upload cache.}
+        namespaces: {type: array, items: {$ref: "#/components/schemas/NamespaceUsage"}}
+        last_gc_at: {type: string, format: date-time}
+    Quota:
+      type: object
+      required: [bytes_limit]
+      properties: {bytes_limit: {type: integer, format: int64, minimum: 0, description: 0 removes the quota.}}
+    AuditEvent:
+      type: object
+      required: [id, action, created_at]
+      properties:
+        id: {type: string}
+        action: {type: string}
+        actor: {type: string}
+        target_type: {type: string}
+        target_id: {type: string}
+        ip: {type: string}
+        user_agent: {type: string}
+        data: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    AuditEventList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: "#/components/schemas/AuditEvent"}}, next_cursor: {type: string}}
+    SystemInfo:
+      type: object
+      required: [version, role, database, blob_store, telemetry, checks]
+      properties:
+        version: {type: string}
+        commit: {type: string}
+        role: {type: string}
+        database: {type: object, required: [driver, schema_version], properties: {driver: {type: string}, schema_version: {type: string}}}
+        blob_store:
+          type: object
+          required: [backend]
+          properties:
+            backend: {type: string, description: fs or s3.}
+            download_mode: {type: string, description: "storage.s3.download_mode: redirect or proxy. Absent on the filesystem backend."}
+            upload_mode: {type: string, description: "storage.s3.upload_mode: direct or proxy. Absent on the filesystem backend."}
+        telemetry: {type: object, additionalProperties: {type: string}, description: Exporter per signal.}
+        checks: {type: array, items: {$ref: "#/components/schemas/CheckResult"}}
