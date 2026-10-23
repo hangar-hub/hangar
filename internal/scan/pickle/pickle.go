@@ -908,7 +908,7 @@ func encoded(args value) (payload, bool) {
 			if r > 0xff {
 				return payload{}, false
 			}
-			b = append(b, byte(r))
+			b = append(b, byte(r)) //nolint:gosec // r is at most 0xff.
 		}
 		return payload{data: string(b)}, true
 	case "utf_8", "utf8", "u8", "utf":
