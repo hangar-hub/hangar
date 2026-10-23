@@ -342,7 +342,9 @@ func decompressed(open func() (io.ReadCloser, error), kind string) (func() (io.R
 		case "lz4":
 			r = lz4.NewReader(src)
 		case "zstd":
-			zr, err := zstd.NewReader(src, zstd.WithDecoderMaxMemory(256<<20))
+			// The frame header picks the window the decoder holds (twice over);
+			// 128 MiB is the zstd command line's own limit.
+			zr, err := zstd.NewReader(src, zstd.WithDecoderMaxMemory(256<<20), zstd.WithDecoderMaxWindow(128<<20), zstd.WithDecoderLowmem(true))
 			if err != nil {
 				_ = rc.Close()
 				return nil, decompressError{err}

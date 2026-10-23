@@ -20,9 +20,12 @@ import (
 //
 //	GET  /auth/oidc/{provider}?redirect=/path   start OIDC sign-in (302 to the provider)
 //	GET  /auth/oidc/{provider}/callback        finish it (302 to the redirect, or to
-//	                                           /auth/login?error=<code>)
+//	                                           /auth/login?error=<code>); needs the
+//	                                           OIDCCookie the start set, and for a
+//	                                           link the same User's session
 //	POST /auth/oidc/{provider}/link            signed-in users link a provider;
 //	                                           answers {"authorize_url": "..."}
+//	                                           and sets OIDCCookie
 //	DELETE /auth/oidc/{provider}/link          unlink a provider
 //	POST /auth/register                        {"username","password","email","display_name"}
 //	POST /auth/invite/{code}                   the same body; accepts an invite
@@ -60,24 +63,61 @@ func (s *Service) loginError(w http.ResponseWriter, r *http.Request, code string
 	http.Redirect(w, r, "/auth/login?error="+url.QueryEscape(code), http.StatusFound)
 }
 
+// OIDCCookie binds an OIDC sign-in or link to the browser that started it.
+// It holds a random value whose hash is stored with the state, is sent
+// only to /auth/oidc/, lasts as long as the state and is cleared by the
+// callback. SameSite=Lax lets it come back on the provider's top-level
+// redirect.
+const OIDCCookie = "hangar_oidc"
+
+const oidcCookiePath = "/auth/oidc/"
+
+// setOIDCCookie stores the browser binding of a sign-in that has started.
+func (s *Service) setOIDCCookie(w http.ResponseWriter, binding string) {
+	s.writeOIDCCookie(w, binding, int(oidcStateTTL.Seconds()), s.now().Add(oidcStateTTL))
+}
+
+// clearOIDCCookie removes the browser binding once the callback has used it.
+func (s *Service) clearOIDCCookie(w http.ResponseWriter) {
+	s.writeOIDCCookie(w, "", -1, time.Unix(0, 0))
+}
+
+func (s *Service) writeOIDCCookie(w http.ResponseWriter, value string, maxAge int, expires time.Time) {
+	c := &http.Cookie{Name: OIDCCookie, Value: value, Path: oidcCookiePath, MaxAge: maxAge, Expires: expires, HttpOnly: true, SameSite: http.SameSiteLaxMode} //nolint:gosec // Secure is set below.
+	// Secure follows public_url, as for the session cookie: a plain-HTTP
+	// LAN Instance cannot set Secure cookies.
+	c.Secure = s.secureCookies()
+	http.SetCookie(w, c)
+}
+
 func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
-	authURL, err := s.OIDC.Start(r.Context(), r.PathValue("provider"), r.URL.Query().Get("redirect"), uuid.Nil)
+	flow, err := s.OIDC.Start(r.Context(), r.PathValue("provider"), r.URL.Query().Get("redirect"), uuid.Nil)
 	if err != nil {
 		s.log.WarnContext(r.Context(), "start OIDC sign-in", "provider", r.PathValue("provider"), "error", err)
 		s.loginError(w, r, OIDCErrorCode(err))
 		return
 	}
-	http.Redirect(w, r, authURL, http.StatusFound) //nolint:gosec // The URL is the configured provider's authorisation endpoint; the user-supplied redirect is stored in oidc_states after SafeRedirect.
+	s.setOIDCCookie(w, flow.Binding)
+	http.Redirect(w, r, flow.AuthURL, http.StatusFound) //nolint:gosec // The URL is the configured provider's authorisation endpoint; the user-supplied redirect is stored in oidc_states after SafeRedirect.
 }
 
 func (s *Service) oidcCallback(w http.ResponseWriter, r *http.Request) {
+	s.clearOIDCCookie(w)
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
 		// The provider refused, for example when the user cancelled.
 		s.loginError(w, r, "oidc_denied")
 		return
 	}
-	res, err := s.OIDC.Callback(r.Context(), r.PathValue("provider"), q.Get("state"), q.Get("code"), httpx.ClientIP(r), r.UserAgent())
+	cb := OIDCCallback{Provider: r.PathValue("provider"), State: q.Get("state"), Code: q.Get("code"),
+		IP: httpx.ClientIP(r), UserAgent: r.UserAgent()}
+	if c, err := r.Cookie(OIDCCookie); err == nil {
+		cb.Binding = c.Value
+	}
+	if p := httpx.Principal(r.Context()); p.IsUser() && p.Method == model.AuthSession {
+		cb.SessionUser = p.UserID
+	}
+	res, err := s.OIDC.Callback(r.Context(), cb)
 	if err != nil {
 		s.log.WarnContext(r.Context(), "OIDC sign-in failed", "provider", r.PathValue("provider"), "reason", OIDCErrorCode(err), "error", err)
 		s.loginError(w, r, OIDCErrorCode(err))
@@ -114,12 +154,15 @@ func (s *Service) oidcLink(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	authURL, err := s.OIDC.Start(r.Context(), r.PathValue("provider"), "/settings", p.UserID)
+	flow, err := s.OIDC.Start(r.Context(), r.PathValue("provider"), "/settings", p.UserID)
 	if err != nil {
 		s.writeError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, r, http.StatusOK, map[string]string{"authorize_url": authURL})
+	// The binding goes to this browser only: the authorize_url is useless
+	// anywhere else, so it cannot be forwarded to another user.
+	s.setOIDCCookie(w, flow.Binding)
+	httpx.WriteJSON(w, r, http.StatusOK, map[string]string{"authorize_url": flow.AuthURL})
 }
 
 func (s *Service) oidcUnlink(w http.ResponseWriter, r *http.Request) {

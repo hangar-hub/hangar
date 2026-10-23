@@ -20,6 +20,7 @@ import (
 
 	"github.com/hangar-hub/hangar/internal/auth"
 	"github.com/hangar-hub/hangar/internal/config"
+	"github.com/hangar-hub/hangar/internal/httpx"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/telemetry"
 )
@@ -57,7 +58,8 @@ func (c *otlpCollector) all() []byte {
 // and every signal exported over OTLP to a local collector, drives the
 // flows that carry secrets (password sign-in, the session cookie and its
 // CSRF token, Bearer and Basic Tokens, wrong credentials, signed LFS
-// links, upstream tokens, webhook secrets and device codes), and checks
+// links, upstream tokens, webhook secrets, device codes, and invite, reset
+// and email confirmation codes in URL paths), and checks
 // that none of them reaches stdout or the collector (CLAUDE.md: never log
 // or record tokens, passwords, cookies, presigned URLs or Authorization
 // headers).
@@ -268,6 +270,35 @@ func TestSecretsStayOutOfLogsAndTelemetry(t *testing.T) {
 	})
 	require.Equal(t, http.StatusForbidden, status)
 
+	// Invite, reset and email confirmation links carry their code in the
+	// path. Open each page and post to each, as the UI does; the invite and
+	// reset posts fail the password rules, so those codes stay unused.
+	pathCode := func(link *auth.Link) string {
+		return link.URL[strings.LastIndex(link.URL, "/")+1:]
+	}
+	invite, err := in.auth.CreateInvite(ctx, auth.InviteParams{MakeAdmin: true}, model.System())
+	require.NoError(t, err)
+	secrets["invite code"] = pathCode(invite)
+	alice, err := in.auth.Users.GetByUsername(ctx, "alice")
+	require.NoError(t, err)
+	reset, err := in.auth.CreateResetLink(ctx, alice.ID, model.System())
+	require.NoError(t, err)
+	secrets["reset code"] = pathCode(reset)
+	email := "alice@example.com"
+	_, err = in.auth.UpdateProfile(ctx, alice.Principal(model.AuthSession), auth.ProfileUpdate{Email: &email}, "", "")
+	require.NoError(t, err)
+	confirm, err := in.auth.CreateEmailLink(ctx, alice.ID, email, model.System())
+	require.NoError(t, err)
+	secrets["email confirmation code"] = pathCode(confirm)
+	for _, path := range []string{auth.InvitePath + secrets["invite code"], auth.ResetPath + secrets["reset code"]} {
+		send(plain, http.MethodGet, path, "", nil)
+		status, raw = send(plain, http.MethodPost, path, `{"username":"newcomer","password":"short"}`, nil)
+		require.Equal(t, http.StatusUnprocessableEntity, status, string(raw))
+	}
+	send(plain, http.MethodGet, auth.EmailPath+secrets["email confirmation code"], "", nil)
+	status, raw = send(plain, http.MethodPost, auth.EmailPath+secrets["email confirmation code"], "", nil)
+	require.Equal(t, http.StatusNoContent, status, string(raw))
+
 	// A passing health probe is logged at DEBUG, which shows the level is on.
 	status, _ = send(plain, http.MethodGet, "/healthz", "", nil)
 	require.Equal(t, http.StatusOK, status)
@@ -283,6 +314,7 @@ func TestSecretsStayOutOfLogsAndTelemetry(t *testing.T) {
 	logs := stdout.Bytes()
 	require.Contains(t, string(logs), `"level":"DEBUG"`, "debug logging is on")
 	require.True(t, bytes.Contains(exported, []byte("/{ns}/{name}.git/info/lfs/objects/batch")), "the collector got the LFS spans")
+	require.True(t, bytes.Contains(exported, []byte(auth.ResetPath+httpx.RedactedSegment)), "the collector got the reset link spans")
 	for name, s := range secrets {
 		require.NotEmpty(t, s, name)
 		require.False(t, bytes.Contains(logs, []byte(s)), "stdout logs contain the %s", name)

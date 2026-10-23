@@ -74,7 +74,9 @@ func newEnv(t *testing.T, d *db.DB) *env {
 	reader := sdkmetric.NewManualReader()
 	inst, err := telemetry.NewInstruments(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"))
 	require.NoError(t, err)
-	e.svc = webhook.New(webhook.Options{DB: d, Queue: e.q, Sealer: sealer, Instruments: inst, Now: func() time.Time { return *e.clock }})
+	// The test receiver listens on loopback, a private address.
+	e.svc = webhook.New(webhook.Options{DB: d, Queue: e.q, Sealer: sealer, Instruments: inst, Now: func() time.Time { return *e.clock },
+		AllowPrivateTargets: func(context.Context) (bool, error) { return true, nil }})
 	require.NoError(t, e.svc.Register(reg))
 	e.srv = httptest.NewServer(e.recv)
 	t.Cleanup(e.srv.Close)
@@ -260,22 +262,28 @@ func TestTestDeliveryAndPrivateTargets(t *testing.T) {
 	_, err = e.svc.Test(ctx, uuid.New(), indextest.Owner("alice"))
 	require.ErrorIs(t, err, webhook.ErrNotFound)
 
-	// With private targets off, the loopback receiver is refused without retries.
-	sealer, _ := secrets.New([]byte("0123456789abcdef0123456789abcdef"))
-	reg := jobs.NewRegistry()
-	q := jobstest.NewFake(reg)
-	strict := webhook.New(webhook.Options{DB: d, Queue: q, Sealer: sealer, Now: func() time.Time { return *e.clock },
-		AllowPrivateTargets: func(context.Context) (bool, error) { return false, nil }})
-	require.NoError(t, strict.Register(reg))
-	del, err = strict.Test(ctx, hook.ID, indextest.Owner("alice"))
-	require.NoError(t, err)
-	q.RunPending(ctx)
-	list, _, err := strict.Deliveries(ctx, hook.ID, "", 1)
-	require.NoError(t, err)
-	require.Equal(t, del.ID, list[0].ID)
-	require.Equal(t, "failed", list[0].State())
-	require.Equal(t, webhook.ErrPrivateTarget.Error(), list[0].Error)
-	require.Len(t, e.recv.got, 1, "the private receiver was never contacted")
+	// With private targets off, and when the setting is not wired up at
+	// all (the default), the loopback receiver is refused without retries.
+	for name, allow := range map[string]func(context.Context) (bool, error){
+		"off":   func(context.Context) (bool, error) { return false, nil },
+		"unset": nil,
+	} {
+		sealer, _ := secrets.New([]byte("0123456789abcdef0123456789abcdef"))
+		reg := jobs.NewRegistry()
+		q := jobstest.NewFake(reg)
+		strict := webhook.New(webhook.Options{DB: d, Queue: q, Sealer: sealer, Now: func() time.Time { return *e.clock },
+			AllowPrivateTargets: allow})
+		require.NoError(t, strict.Register(reg))
+		del, err = strict.Test(ctx, hook.ID, indextest.Owner("alice"))
+		require.NoError(t, err)
+		q.RunPending(ctx)
+		list, _, err := strict.Deliveries(ctx, hook.ID, "", 1)
+		require.NoError(t, err)
+		require.Equal(t, del.ID, list[0].ID, name)
+		require.Equal(t, "failed", list[0].State(), name)
+		require.Equal(t, webhook.ErrPrivateTarget.Error(), list[0].Error, name)
+		require.Len(t, e.recv.got, 1, "%s: the private receiver was never contacted", name)
+	}
 
 	// A disabled webhook fails its pending deliveries without sending.
 	off := false
@@ -284,7 +292,7 @@ func TestTestDeliveryAndPrivateTargets(t *testing.T) {
 	_, err = e.svc.Test(ctx, hook.ID, indextest.Owner("alice"))
 	require.NoError(t, err)
 	e.q.RunPending(ctx)
-	list, _, err = e.svc.Deliveries(ctx, hook.ID, "", 1)
+	list, _, err := e.svc.Deliveries(ctx, hook.ID, "", 1)
 	require.NoError(t, err)
 	require.Equal(t, "the webhook is disabled", list[0].Error)
 }

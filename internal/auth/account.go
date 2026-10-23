@@ -293,6 +293,17 @@ func (s *Service) ChangePassword(ctx context.Context, p model.Principal, c Passw
 		failed("throttled")
 		return &ThrottledError{RetryAfter: wait}
 	}
+	// As for sign-in, the attempt counts before the hash, so parallel
+	// guesses cannot all pass the check, and a right password takes it back.
+	att, err := s.Login.reserve(ctx, keys)
+	var te *ThrottledError
+	if errors.As(err, &te) {
+		failed("throttled")
+		return err
+	}
+	if err != nil {
+		return err
+	}
 	ok := false
 	if c.Current != "" {
 		ok, err = VerifyPassword(ctx, u.passwordHash, c.Current)
@@ -305,11 +316,14 @@ func (s *Service) ChangePassword(ctx context.Context, p model.Principal, c Passw
 		}
 	}
 	if !ok {
-		if err := s.Login.fail(ctx, keys); err != nil {
+		failed("wrong_password")
+		if err := s.Login.confirm(ctx, att); err != nil {
 			return err
 		}
-		failed("wrong_password")
 		return ErrWrongPassword
+	}
+	if err := s.Login.release(ctx, att); err != nil {
+		return err
 	}
 	if err := CheckPasswordPolicy(c.New, u.Username); err != nil {
 		failed("weak_password")

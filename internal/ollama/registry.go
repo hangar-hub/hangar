@@ -737,11 +737,12 @@ func (h *Handler) blob(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 }
 
 // serve writes a blob with Content-Length, Docker-Content-Digest and
-// single-range support.
+// single-range support, and the headers of every other download
+// (blob.SetDownloadHeaders), so a browser never renders it.
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, rp *repo.Repo, digest string, size int64, open func(*blob.Range) (io.ReadCloser, error)) {
 	w.Header().Set("Docker-Content-Digest", digest)
 	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("Content-Type", "application/octet-stream")
+	blob.SetDownloadHeaders(w.Header(), "")
 	w.Header().Set("ETag", `"`+digest+`"`)
 	if r.URL.Query().Get(httpx.SigParam) == "" {
 		direct := h.base(r) + r.URL.EscapedPath()

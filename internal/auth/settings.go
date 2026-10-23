@@ -105,7 +105,7 @@ func (st *SettingsStore) Defaults() InstanceSettings {
 	c := st.s.cfg
 	return InstanceSettings{
 		AnonymousRead: c.Security.AnonymousRead, Registration: c.Security.Registration, LocalLogin: c.Security.LocalLogin,
-		UIExternalImages: true, ScanBlockUnsafeDownloads: false, ScanBlockLevel: ScanBlockLevelUnsafe, WebhooksAllowPrivateTargets: true,
+		UIExternalImages: true, ScanBlockUnsafeDownloads: false, ScanBlockLevel: ScanBlockLevelUnsafe, WebhooksAllowPrivateTargets: c.Webhooks.AllowPrivateTargets,
 		PullBandwidthLimit: c.Pull.BandwidthLimit.Int64(), PullConcurrency: c.Pull.Concurrency,
 		PullWindows: slices.Clone(c.Pull.Windows), PullAllowOverrideWindows: true,
 		PullThroughEnabled: c.Pull.PullThrough.Enabled, PullThroughAllow: slices.Clone(c.Pull.PullThrough.Allow),

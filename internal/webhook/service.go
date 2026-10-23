@@ -134,7 +134,7 @@ type Options struct {
 	Queue  jobs.Queue
 	Sealer *secrets.Sealer
 	// AllowPrivateTargets reads the Instance setting
-	// webhooks.allow_private_targets; nil means allowed, the default.
+	// webhooks.allow_private_targets; nil means refused, the default.
 	AllowPrivateTargets func(ctx context.Context) (bool, error)
 	// Transport sends deliveries; nil uses a transport that checks every
 	// address it connects to against AllowPrivateTargets.
@@ -641,14 +641,17 @@ func (s *Service) newTransport() http.RoundTripper {
 		if httpx.IsReservedAddr(ap.Addr()) {
 			return privateError{addr: ap.Addr(), reserved: true}
 		}
-		if s.o.AllowPrivateTargets == nil {
+		if !IsPrivate(ap.Addr()) {
 			return nil
 		}
-		allow, err := s.o.AllowPrivateTargets(context.Background())
-		if err != nil {
-			return err
+		allow := false
+		if s.o.AllowPrivateTargets != nil {
+			var err error
+			if allow, err = s.o.AllowPrivateTargets(context.Background()); err != nil {
+				return err
+			}
 		}
-		if !allow && IsPrivate(ap.Addr()) {
+		if !allow {
 			return privateError{addr: ap.Addr()}
 		}
 		return nil

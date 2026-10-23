@@ -238,8 +238,12 @@ func TestSettings(t *testing.T) {
 		require.Equal(t, 3, st.PullConcurrency)
 		require.Equal(t, "closed", st.Registration)
 		require.True(t, st.UIExternalImages)
-		require.True(t, st.WebhooksAllowPrivateTargets)
+		require.False(t, st.WebhooksAllowPrivateTargets, "webhooks cannot reach private addresses unless an admin allows them")
 		require.Equal(t, auth.ScanBlockLevelUnsafe, st.ScanBlockLevel, "unsafe is the default level")
+		allowing, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock, Config: func(c *config.Config) {
+			c.Webhooks.AllowPrivateTargets = true
+		}})
+		require.True(t, allowing.Settings.Defaults().WebhooksAllowPrivateTargets, "webhooks.allow_private_targets sets the default")
 
 		yes, conc, wins, mr, level := true, 8, []string{}, "anonymous", auth.ScanBlockLevelSuspicious
 		st, err = s.Settings.Update(ctx, auth.SettingsPatch{AnonymousRead: &yes, PullConcurrency: &conc, PullWindows: &wins, PullThroughMinRole: &mr,
