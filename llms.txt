@@ -1,6 +1,6 @@
 # Hangar
 
-> Hangar is a self-hosted model and dataset hub that serves the Hugging Face Hub API. huggingface_hub, the hf CLI, transformers, datasets, git and git-lfs, Ollama and LM Studio load files from it unchanged, and its web UI includes a Dataset Viewer. It is source-available under the Elastic License 2.0. It stores and serves model files; it does not run models.
+> Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. huggingface_hub, the hf CLI, transformers, datasets, git and git-lfs, Ollama and LM Studio load files from it unchanged, and its web UI includes a Dataset Viewer. It is source-available under the Elastic License 2.0. It stores and serves model files; it does not run models.
 
 Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their git history and Commit SHAs, and serves them from your own storage. Set `HF_ENDPOINT` to an Instance to use it in place of huggingface.co.
 
@@ -11,11 +11,25 @@ Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their g
 - [Point HF_ENDPOINT at Hangar](https://hangar.page/latest/get-started/hf-endpoint/): use Hangar in place of huggingface.co
 - [Repos and Revisions](https://hangar.page/latest/concepts/repos/): how models and datasets are stored
 - [Mirrors and Upstreams](https://hangar.page/latest/concepts/mirrors/): pulling from huggingface.co and other hubs
-- [How Hangar compares](https://hangar.page/latest/concepts/comparison/): Hangar beside olah, JFrog Artifactory, Sonatype Nexus, CSGHub, MLflow and Hugging Face Enterprise
+- [How Hangar compares](https://hangar.page/latest/concepts/comparison/): Hangar beside MatrixHub, KohakuHub, CSGHub, olah, JFrog Artifactory, Sonatype Nexus, MLflow and Hugging Face Enterprise
+- [Docker](https://hangar.page/latest/get-started/docker/) and [Helm](https://hangar.page/latest/get-started/helm/): run Hangar in one container or on Kubernetes
+- [Python libraries](https://hangar.page/latest/guides/python/): huggingface_hub, transformers, sentence-transformers and diffusers against Hangar
+- [The hf CLI](https://hangar.page/latest/guides/hf-cli/): sign in, download and upload with `hf`
+- [Uploading](https://hangar.page/latest/guides/uploading/): upload models and datasets that exist nowhere else
+- [Datasets](https://hangar.page/latest/guides/datasets/): `load_dataset`, `hf://` paths, Parquet exports and the Dataset Viewer
+- [git and git-lfs](https://hangar.page/latest/guides/git/): clone, fetch and push Repos over HTTPS
 - [Ollama](https://hangar.page/latest/guides/ollama/): `ollama pull` GGUF models from Hangar
 - [LM Studio](https://hangar.page/latest/guides/lm-studio/): install models into LM Studio from Hangar
+- [vLLM](https://hangar.page/latest/guides/vllm/): serve models with vLLM from weights stored in Hangar
 - [Air-gapped Instances](https://hangar.page/latest/guides/air-gapped/): run Hangar with no internet access
 - [Hub API compatibility](https://hangar.page/latest/reference/hub-api-compatibility/): every Hub API endpoint and whether Hangar serves it
+- [Tested versions and platforms](https://hangar.page/latest/reference/compatibility/): the client, database and platform versions CI tests against
+- [FAQ](https://hangar.page/latest/faq/): model registry or hub, running models, air-gapped use, licence and cost
+- [System requirements](https://hangar.page/latest/get-started/requirements/): CPU, memory, disk and network
+- [Where Hangar keeps data](https://hangar.page/latest/concepts/data/): the database, the Blob store layout and files on your machine
+- [Upgrades](https://hangar.page/latest/operate/upgrades/) and [Uninstall](https://hangar.page/latest/operate/uninstall/)
+- [Versioning and support](https://hangar.page/latest/project/versioning/): version numbers, supported versions and release artefacts
+- [Get help](https://hangar.page/latest/project/support/): where to ask and what to include
 - [Benchmarks](https://hangar.page/latest/benchmarks/): load test results for download latency and other scale targets
 
 ## Optional
