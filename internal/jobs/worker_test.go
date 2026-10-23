@@ -497,7 +497,11 @@ func TestWorkerCancelStopsRunningHandler(t *testing.T) {
 			cause.Store(context.Cause(ctx))
 			return ctx.Err()
 		}, jobs.HandlerOptions{}))
-		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Lease: 300 * time.Millisecond})
+		// The next renewal notices the cancel, a third of the lease after
+		// the last one. The lease is long enough that a slow renewal on a
+		// loaded machine can't bring the lease watchdog in first, which
+		// stops the run with ErrLeaseLost instead.
+		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Lease: 3 * time.Second})
 		id, _ := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPull})
 		w.Tick(ctx)
 		<-started
