@@ -442,6 +442,35 @@ func TestExpireUploads(t *testing.T) {
 	})
 }
 
+// TestGCKeepsStagedObjectsOfLiveUploads: a multipart upload's assembled
+// object and a presigned PUT's staged object live under tmp/uploads/ for
+// as long as their upload row does, which can be longer than the staging
+// age. The staging sweep leaves them to upload.expire, and still removes
+// old staging that no upload names.
+func TestGCKeepsStagedObjectsOfLiveUploads(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		f := newFixture(t, d)
+		old := f.now.Add(-48 * time.Hour)
+		assembled := "tmp/uploads/" + db.NewID().String()
+		staged := "tmp/uploads/" + db.NewID().String()
+		leftover := "tmp/uploads/" + db.NewID().String()
+		for _, k := range []string{assembled, staged, leftover} {
+			f.blob(k, old)
+		}
+		f.upload(strings.Repeat("a", 64), assembled, "multipart-1", f.now.Add(time.Hour))
+		f.upload(strings.Repeat("b", 64), staged, "", f.now.Add(time.Hour))
+
+		r, err := f.collector().Run(ctx, gc.ScopeAll, nil)
+		require.NoError(t, err)
+		require.Zero(t, r.Errors)
+		require.Equal(t, 1, r.StagingBlobsDeleted)
+		require.True(t, f.exists(assembled), "an assembled multipart upload a live upload still completes is kept")
+		require.True(t, f.exists(staged), "a presigned PUT's staged object is kept until it is verified")
+		require.False(t, f.exists(leftover), "staging that no upload names is swept")
+	})
+}
+
 func TestGCScopeAndErrors(t *testing.T) {
 	d := dbtest.SQLite(t)
 	ctx := context.Background()

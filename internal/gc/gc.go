@@ -448,18 +448,35 @@ func (c *Collector) collectOrphanGitBlobs(ctx context.Context, r *Report) error 
 // collectStaging deletes streaming staging (tmp/) and generated zips
 // (exports/) older than the staging age, and staging files outside the key
 // space that a crash or a killed process left behind, such as the
-// filesystem backend's partial writes.
+// filesystem backend's partial writes. A tmp/ key that an uploads row names
+// is kept, however old: it is a multipart upload's assembled object or a
+// presigned PUT's staged object, which a completion or a verification still
+// reads. Uploads can outlive the staging age, and on S3 an object completed
+// from a multipart upload may report when the upload started as its
+// modification time. upload.expire removes such an object with its row.
 func (c *Collector) collectStaging(ctx context.Context, r *Report) error {
 	cutoff := c.now().Add(-c.opts.StagingAge)
-	all := func(batch []blob.Info) ([]string, error) {
+	unclaimed := func(batch []blob.Info) ([]string, error) {
 		keys := make([]string, len(batch))
 		for i, info := range batch {
 			keys[i] = info.Key
 		}
-		return keys, nil
+		var live []string
+		if err := c.db.NewSelect().Model((*db.Upload)(nil)).Column("storage_key").
+			Where("storage_key IN (?)", bun.List(keys)).Scan(ctx, &live); err != nil {
+			return nil, err
+		}
+		keep := set(live)
+		var doomed []string
+		for _, k := range keys {
+			if !keep[k] {
+				doomed = append(doomed, k)
+			}
+		}
+		return doomed, nil
 	}
 	for _, prefix := range []string{blob.PrefixTmp, blob.PrefixExports} {
-		deleted, failed, err := c.sweepOld(ctx, prefix, cutoff, all)
+		deleted, failed, err := c.sweepOld(ctx, prefix, cutoff, unclaimed)
 		r.StagingBlobsDeleted += deleted
 		r.Errors += failed
 		if err != nil {
