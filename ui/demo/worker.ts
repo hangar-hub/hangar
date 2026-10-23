@@ -72,17 +72,36 @@ const common: Record<string, string> = {
  */
 export const indexedPage = "https://demo.hangar.page/";
 
+const indexedTitle = "Hangar live demo: a self-hosted model and dataset hub";
+const indexedDescription =
+  "Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Try it in your browser with sample data.";
+
 /**
  * The title, description, canonical URL and site name the indexed page gets
- * in place of the UI's title. Google names each host in its results with the
- * site name from WebSite structured data, and the demo is its own host. The
- * WebSite names hangar.page's as its parent and the same publisher.
+ * in place of the UI's title, and the Open Graph and Twitter tags that link
+ * previews on chat apps and social sites read, with hangar.page's share
+ * image. Google names each host in its results with the site name from
+ * WebSite structured data, and the demo is its own host. The WebSite names
+ * hangar.page's as its parent and the same publisher.
  */
 export const indexedHead =
-  "<title>Hangar live demo: the self-hosted model registry</title>" +
-  '<meta name="description" content="Try Hangar in your browser with sample data: browse models and datasets, read model cards and preview dataset rows in the self-hosted model registry." />' +
+  `<title>${indexedTitle}</title>` +
+  `<meta name="description" content="${indexedDescription}" />` +
   `<link rel="canonical" href="${indexedPage}" />` +
   '<meta property="og:site_name" content="Hangar demo" />' +
+  '<meta property="og:type" content="website" />' +
+  '<meta property="og:locale" content="en_GB" />' +
+  `<meta property="og:url" content="${indexedPage}" />` +
+  `<meta property="og:title" content="${indexedTitle}" />` +
+  `<meta property="og:description" content="${indexedDescription}" />` +
+  '<meta property="og:image" content="https://hangar.page/og.png" />' +
+  '<meta property="og:image:width" content="1200" />' +
+  '<meta property="og:image:height" content="630" />' +
+  '<meta property="og:image:alt" content="The Hangar logo and tagline: a self-hosted home for your arsenal of models" />' +
+  '<meta name="twitter:card" content="summary_large_image" />' +
+  `<meta name="twitter:title" content="${indexedTitle}" />` +
+  `<meta name="twitter:description" content="${indexedDescription}" />` +
+  '<meta name="twitter:image" content="https://hangar.page/og.png" />' +
   `<script type="application/ld+json">${JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebSite",

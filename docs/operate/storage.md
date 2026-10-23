@@ -1,4 +1,5 @@
 ---
+title: Store models on S3, MinIO or local disk
 description: "Choose where Hangar stores model files: the filesystem or any S3-compatible store, with multipart upload clean-up, garbage collection and quotas."
 ---
 

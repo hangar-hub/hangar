@@ -30,7 +30,7 @@ With **Block downloads of unsafe files** on (`scan_block_unsafe_downloads` in th
 
 Files that can run code when loaded are pickle, PyTorch, joblib and NumPy files, by name: `.bin`, `.pt`, `.pth`, `.ckpt`, `.pkl`, `.pickle`, `.joblib`, `.npy` and `.npz`, and those names with a compression or archive suffix (`.gz`, `.bz2`, `.xz`, `.lzma`, `.z`, `.zst`, `.lz4`, `.zip` and `.tar`), such as `model.joblib.gz` or `checkpoint.pth.tar`. The scan reads each of them by content, the way `torch.load`, `joblib.load`, `numpy.load` and `pandas.read_pickle` do: it decompresses compressed files, reads zip archives and `.npz` members, and follows the NumPy array data that joblib stores inside its pickles. A file that is not a pickle at all, such as OpenVINO weights in a `.bin` file, is safe. A file that is a pickle but ends part-way gets an error result and still downloads, because every loader stops at the same point.
 
-Hangar scans the Commit at the tip of every branch, tag and pull request. A Commit it has not scanned, such as an earlier Commit of a push, takes the result of the same file in a Commit it has. git-lfs, Pull-through links and the Ollama registry ask for objects rather than paths, so Hangar checks every file in the Repo's history that holds the object: an object is refused when a file that holds it is refused, when a file that can run code holds it and no Commit with that file is scanned, and when no Commit of the Repo holds it. In a Partial mirror, a pickle that is not in the arsenal has no scan result, so it is refused until a Pull brings it in and the scan reads it.
+Hangar scans the Commit at the tip of every branch, tag and pull request. A Commit it has not scanned, such as an earlier Commit of a push, takes the result of the same file in a Commit it has. git-lfs, Pull-through links and the Ollama registry ask for objects rather than paths, so Hangar checks every file in the Repo's history that holds the object: an object is refused when a file that holds it is refused, when a file that can run code holds it and no Commit with that file is scanned, and when no Commit of the Repo holds it. In a Partial mirror, a pickle that is not in the Arsenal has no scan result, so it is refused until a Pull brings it in and the scan reads it.
 
 The setting applies to every way a file leaves Hangar: `huggingface_hub` and other Hub API clients, the web UI, git-lfs, `git clone` and `git fetch`, Pull-through links, the Ollama registry and zip exports. Hub API and web UI downloads can go ahead with `accept_risk=1` in the URL; git-lfs and Ollama answer with a 403 and the reason, and a zip export of a folder with such a file is refused. A git clone or fetch sends every Commit, so it is refused while any Commit holds a file stored in git rather than LFS that would be refused; files in LFS download through git-lfs, which checks each one. The Hub's default `.gitattributes`, which Hangar applies to new Repos, stores every pickle format in LFS, so this only affects Repos that changed it. Hangar also refuses clones of a Repo whose history is too long to check (more than 20,000 Commits); use `huggingface_hub` for those.
 
@@ -57,14 +57,24 @@ Either way, a user who has reviewed a file can download it through the Hub API o
 
 Images are signed with cosign keyless signing from the release workflow, with an SPDX SBOM attestation and SLSA build provenance. The signing identity is the release workflow at the release tag, `refs/tags/v<version>`, because a tag push is the only thing that starts a release:
 
+Replace `1.2.3` with the version you run:
+
 ```sh
-cosign verify ghcr.io/hangar-hub/hangar:1.0.0 \
+cosign verify ghcr.io/hangar-hub/hangar:1.2.3 \
   --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-cosign verify-attestation --type spdxjson ghcr.io/hangar-hub/hangar:1.0.0 \
+cosign verify-attestation --type spdxjson ghcr.io/hangar-hub/hangar:1.2.3 \
   --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify oci://ghcr.io/hangar-hub/hangar:1.0.0 --owner hangar-hub
+gh attestation verify oci://ghcr.io/hangar-hub/hangar:1.2.3 --owner hangar-hub
+```
+
+The Helm chart is signed by the same workflow. Verify it the same way:
+
+```sh
+cosign verify ghcr.io/hangar-hub/charts/hangar:1.2.3 \
+  --certificate-identity-regexp '^https://github.com/hangar-hub/hangar/.github/workflows/release.yml@refs/tags/v.+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 Release archives come with `checksums.txt`, signed the same way into a Sigstore bundle (`checksums.txt.sigstore.json`), and an SPDX SBOM per archive (`<archive>.spdx.json`). Check the signature, then the archive you downloaded against `checksums.txt`:

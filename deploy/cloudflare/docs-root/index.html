@@ -11,10 +11,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hangar: a private, self-hosted Hugging Face Hub alternative</title>
+    <title>Hangar: a self-hosted model hub and Hugging Face alternative</title>
     <meta
       name="description"
-      content="Hangar is a private, self-hosted model registry and dataset store for ML models, LLMs and datasets, compatible with the Hugging Face Hub, git and Ollama."
+      content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio: a private model registry and dataset store."
     />
     <link rel="canonical" href="https://hangar.page/" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -30,7 +30,7 @@
     <meta property="og:site_name" content="Hangar" />
     <meta property="og:locale" content="en_GB" />
     <meta property="og:url" content="https://hangar.page/" />
-    <meta property="og:title" content="Hangar: a self-hosted home for your arsenal of models" />
+    <meta property="og:title" content="Hangar: a self-hosted model hub and Hugging Face alternative" />
     <meta
       property="og:description"
       content="Keep models and datasets on your own storage, with full version history, and serve them to huggingface_hub, transformers, git, Ollama and LM Studio."
@@ -44,10 +44,10 @@
       content="The Hangar logo and tagline: a self-hosted home for your arsenal of models"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Hangar: a self-hosted home for your arsenal of models" />
+    <meta name="twitter:title" content="Hangar: a self-hosted model hub and Hugging Face alternative" />
     <meta
       name="twitter:description"
-      content="A self-hosted, Hugging Face Hub-compatible server for models and datasets, with git, Ollama and LM Studio support."
+      content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio."
     />
     <meta name="twitter:image" content="https://hangar.page/og.png" />
 
@@ -60,7 +60,7 @@
             "@id": "https://hangar.page/#website",
             "url": "https://hangar.page/",
             "name": "Hangar",
-            "alternateName": "Hangar model registry",
+            "alternateName": "Hangar model hub",
             "inLanguage": "en-GB",
             "publisher": { "@id": "https://hangar.page/#organization" }
           },
@@ -77,7 +77,7 @@
             "@id": "https://hangar.page/#software",
             "name": "Hangar",
             "url": "https://hangar.page/",
-            "description": "A self-hosted model registry and dataset store, compatible with the Hugging Face Hub API, with git, Ollama, LM Studio and Dataset Viewer support.",
+            "description": "Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.",
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "Model registry",
             "operatingSystem": "Linux, macOS, Windows",
@@ -105,7 +105,7 @@
                 "name": "Is Hangar a model registry?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio."
+                  "text": "It covers the storage and serving side of one. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio. For experiment tracking and model lineage, pair it with MLflow: MLflow records runs and model versions, and Hangar stores and serves the files."
                 }
               },
               {
@@ -142,10 +142,10 @@
               },
               {
                 "@type": "Question",
-                "name": "Can Hangar run without internet access?",
+                "name": "Can Hangar run air-gapped, with no internet access?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Hangar runs as an air-gapped model and dataset store: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache."
+                  "text": "Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache."
                 }
               },
               {
@@ -1306,6 +1306,11 @@
       .faq details[open] p {
         animation: rise 240ms var(--ease-out);
       }
+      .faq-more {
+        max-width: 48rem;
+        margin-top: 20px;
+        color: var(--muted);
+      }
 
       /* Closing call to action */
       .cta {
@@ -1473,15 +1478,15 @@
                   <span class="dot" aria-hidden="true"></span>
                   <span id="release-label">Latest release</span>
                 </a>
-                <span>Private, self-hosted model and dataset store</span>
+                <span>Private, self-hosted model and dataset hub</span>
               </p>
               <h1 data-stagger style="--i: 1">
                 A self-hosted home for your <em>arsenal of models</em>.
               </h1>
               <p class="lead" data-stagger style="--i: 2">
-                Hangar is a private, self-hosted model registry and dataset store for your machine learning models, LLMs
-                and datasets, compatible with the Hugging Face Hub. Pull from huggingface.co once, keep full version history on your own
-                storage, and serve it to the tools you already use.
+                Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama
+                and LM Studio. Pull from huggingface.co once, keep full version history on your own storage, and
+                serve your models, LLMs and datasets to the tools you already use.
               </p>
               <div class="actions" data-stagger style="--i: 3">
                 <a class="btn btn-primary" href="/latest/get-started/">
@@ -1556,8 +1561,9 @@
             <li data-reveal style="--i: 1">
               <h3>Upstream is out of your hands</h3>
               <p>
-                Repos get deleted, gated or rewritten. A Mirror keeps the Commits you pulled, so
-                pinned Revisions keep working.
+                Repos get deleted, gated or rewritten. A
+                <a class="link" href="/latest/concepts/mirrors/">Mirror</a> keeps the Commits you
+                pulled, so pinned Revisions keep working.
               </p>
             </li>
             <li data-reveal style="--i: 2">
@@ -1571,7 +1577,7 @@
               <h3>Some networks can't reach the internet at all</h3>
               <p>
                 An <a class="link" href="/latest/guides/air-gapped/">air-gapped Instance</a> pulls
-                from another Hangar that can.
+                from another Hangar Instance that can.
               </p>
             </li>
           </ul>
@@ -1689,7 +1695,7 @@
             <a class="card" href="/latest/guides/python/" data-reveal style="--i: 0">
               <h3>Hugging Face libraries</h3>
               <p>
-                Set <code>HF_ENDPOINT</code> and huggingface_hub, the hf CLI, transformers,
+                Set <code>HF_ENDPOINT</code>, and huggingface_hub, the hf CLI, transformers,
                 diffusers, sentence-transformers, datasets and vLLM work unchanged.
               </p>
               <code>export HF_ENDPOINT=https://hangar.example.com</code>
@@ -1761,8 +1767,8 @@
             <li data-reveal style="--i: 2">
               <h3>Serve</h3>
               <p>
-                A Mirror keeps the upstream Repo ID and Commit SHAs, so pinned Revisions keep
-                working. Clients load from fast local storage, even on an
+                A <a class="link" href="/latest/concepts/mirrors/">Mirror</a> keeps the upstream
+                Repo ID and Commit SHAs, so pinned Revisions keep working. Clients load from fast local storage, even on an
                 <a class="link" href="/latest/guides/air-gapped/">air-gapped network</a>.
               </p>
             </li>
@@ -1804,7 +1810,7 @@
               <h3>Sign in with your identity provider</h3>
               <p>
                 Local accounts and OIDC, with guides for Keycloak, Authentik, Microsoft Entra ID,
-                Google, Okta and GitLab.
+                Google, Okta, GitLab and UniFi Identity.
               </p>
             </li>
             <li data-reveal style="--i: 1">
@@ -1817,8 +1823,8 @@
             <li data-reveal style="--i: 2">
               <h3>Security scans</h3>
               <p>
-                Every Commit is scanned for pickle files that run code when loaded, and you choose
-                what to block.
+                Hangar scans the tip of every branch, tag and pull request for pickle files that
+                run code when loaded, and you choose what to block.
               </p>
             </li>
             <li data-reveal style="--i: 0">
@@ -1829,7 +1835,7 @@
               <h3>Webhooks and Collections</h3>
               <p>
                 React to pushes and Pulls with webhooks, and curate ordered Collections of Repos
-                for your team.
+                for your Organisation.
               </p>
             </li>
             <li data-reveal style="--i: 2">
@@ -1871,7 +1877,7 @@ docker logs hangar</code></pre>
             <ol class="next-steps">
               <li><code>docker logs</code> prints the generated admin password and Instance key once.</li>
               <li>Open <code>http://localhost:8080</code>, sign in as <code>hangar-admin</code>, and pull a model from <strong>Discover</strong>.</li>
-              <li>Set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code>, and load it with the tools you already use.</li>
+              <li><a class="link" href="/latest/get-started/hf-endpoint/">Set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code></a>, and load it with the tools you already use.</li>
             </ol>
           </div>
         </div>
@@ -1886,7 +1892,7 @@ docker logs hangar</code></pre>
           <div class="faq" data-reveal>
             <details>
               <summary>Is Hangar a model registry?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>Yes. Hangar is a self-hosted model registry for model weights and datasets. Every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.</p>
+              <p>It covers the storage and serving side of one. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio. For experiment tracking and model lineage, pair it with MLflow: MLflow records runs and model versions, and Hangar stores and serves the files.</p>
             </details>
             <details>
               <summary>Is Hangar a private Hugging Face Hub?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
@@ -1905,8 +1911,8 @@ docker logs hangar</code></pre>
               <p>No. Set HF_ENDPOINT to your Instance and HF_TOKEN to a Token you create in Hangar. huggingface_hub, the hf CLI, transformers, diffusers, sentence-transformers, datasets and vLLM then work unchanged.</p>
             </details>
             <details>
-              <summary>Can Hangar run without internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>Yes. Hangar runs as an air-gapped model and dataset store: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache.</p>
+              <summary>Can Hangar run air-gapped, with no internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache.</p>
             </details>
             <details>
               <summary>Does it work with hf_xet?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
@@ -1921,6 +1927,10 @@ docker logs hangar</code></pre>
               <p>Nothing. Hangar is source-available under the Elastic License 2.0. You can use, change and self-host it, including inside your company. You can't offer it to others as a hosted or managed service, or remove licence notices.</p>
             </details>
           </div>
+          <p class="faq-more" data-reveal>
+            More answers, on upgrades, data, versions and getting help, are in the
+            <a class="link" href="/latest/faq/">FAQ</a>.
+          </p>
         </div>
       </section>
 
@@ -1947,6 +1957,7 @@ docker logs hangar</code></pre>
     <footer class="site-footer">
       <div class="wrap">
         <p>Hangar is source-available under the Elastic License 2.0.</p>
+        <p>Hugging Face, Ollama and LM Studio are trademarks of their owners. Hangar is an independent project, not affiliated with or endorsed by them.</p>
         <nav aria-label="Footer">
           <ul>
             <li><a href="/latest/">Documentation</a></li>
@@ -1954,6 +1965,8 @@ docker logs hangar</code></pre>
             <li><a href="https://github.com/hangar-hub/hangar">GitHub</a></li>
             <li><a href="https://github.com/hangar-hub/hangar/releases">Releases</a></li>
             <li><a href="/latest/concepts/comparison/">How Hangar compares</a></li>
+            <li><a href="/latest/faq/">FAQ</a></li>
+            <li><a href="/latest/project/support/">Get help</a></li>
             <li><a href="/latest/benchmarks/">Benchmarks</a></li>
             <li><a href="/latest/project/changelog/">Changelog</a></li>
             <li><a href="/latest/project/security/">Security</a></li>
@@ -1966,17 +1979,29 @@ docker logs hangar</code></pre>
 
     <script>
       (() => {
-        // The latest version, from the versions.json that mike keeps at the
-        // root. The pill stays hidden if it cannot be read.
-        fetch("/versions.json")
-          .then((r) => (r.ok ? r.json() : []))
-          .then((versions) => {
-            const latest = versions.find((v) => (v.aliases || []).includes("latest"));
-            if (!latest) return;
-            document.getElementById("release-label").textContent = "v" + latest.version + " is out";
-            document.getElementById("release").hidden = false;
+        // The latest release, such as v1.2.3, from the GitHub API, which the
+        // Content Security Policy allows (_headers). If GitHub cannot be
+        // reached or rate-limits the visitor, the docs version from the
+        // versions.json that mike keeps at the root, such as v1.2, stands in.
+        // The pill stays hidden if neither can be read.
+        const showRelease = (label) => {
+          document.getElementById("release-label").textContent = label + " is out";
+          document.getElementById("release").hidden = false;
+        };
+        const fromDocs = () =>
+          fetch("/versions.json")
+            .then((r) => (r.ok ? r.json() : []))
+            .then((versions) => {
+              const latest = versions.find((v) => (v.aliases || []).includes("latest"));
+              if (latest) showRelease("v" + latest.version);
+            });
+        fetch("https://api.github.com/repos/hangar-hub/hangar/releases/latest")
+          .then((r) => (r.ok ? r.json() : Promise.reject()))
+          .then((release) => {
+            if (!/^v\d+\.\d+\.\d+$/.test(release.tag_name || "")) return Promise.reject();
+            showRelease(release.tag_name);
           })
-          .catch(() => {});
+          .catch(() => fromDocs().catch(() => {}));
 
         // Sections rise in as they scroll into view, once.
         const reveal = document.querySelectorAll("[data-reveal]");

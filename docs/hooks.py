@@ -1,15 +1,35 @@
 """MkDocs hooks: publish api/openapi.yaml next to the native API page, give
-every page a description for search results, and give every page the
-metadata search engines and link previews read."""
+every page a description for search results, date every page from its git
+history, and give every page the metadata search engines and link previews
+read."""
 
+import datetime
 import html
 import json
+import logging
 import pathlib
+import re
+import subprocess
 
 from mkdocs.exceptions import PluginError
 from mkdocs.structure.files import File
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+log = logging.getLogger("mkdocs.hooks")
+
+# A page's date is the date of the last commit that changed its source or a
+# file it shows: files it includes with pymdownx.snippets (--8<-- "FILE"),
+# and those listed here. The sitemap's <lastmod> and the TechArticle's
+# dateModified use it, so search engines see when a page last changed, not
+# when the site was last built.
+EXTRA_SOURCES = {"reference/native-api.md": ["api/openapi.yaml"]}
+SNIPPET = re.compile(r'^--8<--\s+"([^":]+)', re.MULTILINE)
+# Paths outside docs/ that pages include or show.
+INCLUDED_PATHS = ["CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "api/openapi.yaml"]
+
+# Path, relative to ROOT, to the date of the last commit that changed it.
+# Filled by on_config for each build.
+COMMIT_DATES = {}
 
 # Search engines show a page's description under its title, so each page needs
 # its own: without one, every page gets site_description. Written pages set it
@@ -39,6 +59,63 @@ HOME = "https://hangar.page/"
 PUBLISHER = {"@type": "Organization", "@id": HOME + "#organization", "name": "Hangar", "url": HOME}
 
 
+def on_config(config, **kwargs):
+    COMMIT_DATES.clear()
+    COMMIT_DATES.update(commit_dates())
+    return config
+
+
+def commit_dates():
+    """Reads, from git, the date of the last commit that changed each file
+    under docs/ and each of INCLUDED_PATHS, as YYYY-MM-DD in UTC. Files with
+    uncommitted changes are left out, so they get the build date. Returns
+    nothing outside a git checkout, or in a shallow clone, where every file
+    would get the date of the one commit fetched: the docs workflows that
+    publish the site fetch the full history (.github/workflows/docs.yml and
+    release.yml)."""
+    paths = ["docs", *INCLUDED_PATHS]
+
+    def git(*args):
+        return subprocess.run(
+            ["git", "-C", str(ROOT), "-c", "core.quotepath=off", *args],
+            capture_output=True, text=True, check=True,
+        ).stdout
+
+    try:
+        if git("rev-parse", "--is-shallow-repository").strip() != "false":
+            log.info("Shallow git clone: pages are dated with the build date")
+            return {}
+        history = git("log", "--format=%x00%ct", "--name-only", "--", *paths)
+        changed = set(git("diff", "--name-only", "HEAD", "--", *paths).splitlines())
+    except (OSError, subprocess.CalledProcessError):
+        log.info("No git history: pages are dated with the build date")
+        return {}
+    dates = {}
+    for entry in history.split("\x00")[1:]:
+        lines = entry.strip().splitlines()
+        if not lines:
+            continue
+        day = datetime.datetime.fromtimestamp(int(lines[0]), datetime.timezone.utc).date().isoformat()
+        for path in lines[1:]:
+            if path and path not in changed:
+                # git log lists the newest commit first.
+                dates.setdefault(path, day)
+    return dates
+
+
+def page_date(page, markdown):
+    """The date of the last commit that changed the page or a file it shows,
+    or None if any of them has no committed date (a new or changed file),
+    in which case the page keeps the build date."""
+    sources = ["docs/" + page.file.src_uri]
+    sources += SNIPPET.findall(markdown)
+    sources += EXTRA_SOURCES.get(page.file.src_uri, [])
+    dates = [COMMIT_DATES.get(s) for s in sources]
+    if not COMMIT_DATES or None in dates:
+        return None
+    return max(dates)
+
+
 def on_files(files, config, **kwargs):
     files.append(File.generated(config, "reference/openapi.yaml", abs_src_path=str(ROOT / "api" / "openapi.yaml")))
     return files
@@ -55,6 +132,11 @@ def on_page_markdown(markdown, page, **kwargs):
     title = page.meta.get("title")
     if title and len(title + TITLE_SUFFIX) > TITLE_LENGTH:
         raise PluginError(f'{path}: the title "{title}{TITLE_SUFFIX}" is over {TITLE_LENGTH} characters')
+    # MkDocs sets update_date to the build date, and the sitemap's <lastmod>
+    # reads it.
+    date = page_date(page, markdown)
+    if date:
+        page.update_date = date
     return markdown
 
 
@@ -93,7 +175,10 @@ def structured_data(page, url):
         "url": url,
         "mainEntityOfPage": url,
         "inLanguage": "en-GB",
+        "dateModified": page.update_date,
+        "image": OG_IMAGE,
         "isPartOf": {"@type": "WebSite", "@id": HOME + "#website", "name": "Hangar", "url": HOME},
+        "author": PUBLISHER,
         "publisher": PUBLISHER,
     }
     graph = [article]

@@ -42,7 +42,7 @@ git packs live in the Blob store and are cached on local disk per replica. Large
 
 ## Background work
 
-Pulls, indexing, scans, garbage collection, dataset conversion and webhook deliveries run as Jobs from a queue in the database, with leases, deduplication and schedules. Pull bandwidth is limited by a token bucket shared through the database, so the cap holds across workers.
+Pulls, indexing, scans, garbage collection, Parquet exports and webhook deliveries run as Jobs from a queue in the database, with leases, deduplication and schedules. Pull bandwidth is limited by a token bucket shared through the database, so the cap holds across workers.
 
 ## Packages
 

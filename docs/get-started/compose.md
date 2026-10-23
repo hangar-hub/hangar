@@ -1,4 +1,5 @@
 ---
+title: Run Hangar with Docker Compose and Postgres
 description: "Run Hangar with Docker Compose: a quickstart, Postgres with MinIO, a scaled-out Instance, and OIDC sign-in with Keycloak."
 ---
 
@@ -44,6 +45,8 @@ EOF
 | `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD` | `postgres-minio.yaml` and `scale.yaml`. |
 | `KEYCLOAK_ADMIN_PASSWORD`, `HANGAR_OIDC_CLIENT_SECRET` | `oidc-keycloak.yaml`. |
 
+Docker Compose reads these names, not Hangar: the examples pass each value to Hangar under its own configuration variable, such as `HANGAR_SECURITY_INSTANCE_KEY` for `HANGAR_INSTANCE_KEY`. Do not load `.env` into a shell that runs `hangar` commands, or pass these names to `docker run -e`: Hangar refuses to start when it sees a `HANGAR_` variable that is not one of its configuration keys. See [Troubleshooting](../operate/troubleshooting.md#common-problems).
+
 Only Hangar's port is published on every network interface. The MinIO console, the Traefik dashboard and Keycloak are published on `127.0.0.1`, so you can open them on this machine and nobody else on your network can. Postgres and the MinIO API are not published at all.
 
 ## Quickstart
@@ -59,7 +62,7 @@ docker compose -f quickstart.yaml logs hangar   # the generated admin password, 
 docker compose -f postgres-minio.yaml up -d
 ```
 
-Sign in as `hangar-admin` with `HANGAR_ADMIN_PASSWORD`. The MinIO console is at <http://127.0.0.1:9001> (user `hangar`, password `MINIO_ROOT_PASSWORD`). MinIO's root user can read and change every Blob without going through Hangar's permissions, so do not publish the console on other interfaces.
+Sign in as `hangar-admin` with `HANGAR_ADMIN_PASSWORD`. The MinIO console is at <http://127.0.0.1:9001> (user `hangar`, password `MINIO_ROOT_PASSWORD`). MinIO's root user can read and change every LFS object and all git data without going through Hangar's permissions, so do not publish the console on other interfaces.
 
 Downloads and uploads go through Hangar in this example (`storage.s3.download_mode: proxy` and `storage.s3.upload_mode: proxy`), because your browser and your clients cannot reach `http://minio:9000`. If MinIO has a public address, set `HANGAR_STORAGE_S3_ENDPOINT` to it and remove `HANGAR_STORAGE_S3_DOWNLOAD_MODE` and `HANGAR_STORAGE_S3_UPLOAD_MODE`, so clients download from and upload to MinIO directly.
 
@@ -85,6 +88,8 @@ Open <http://localhost:8080> and choose **Sign in with Keycloak**. The realm has
 Every example takes `HANGAR_IMAGE`, `HANGAR_PORT` and `HANGAR_PUBLIC_URL`. `HANGAR_PUBLIC_URL` defaults to `http://localhost:` followed by `HANGAR_PORT`; set it when people reach Hangar at another address.
 
 ```sh
-HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.0.0 HANGAR_PORT=9090 \
+HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.2.3 HANGAR_PORT=9090 \
   docker compose -f quickstart.yaml up -d
 ```
+
+The examples run `ghcr.io/hangar-hub/hangar:latest` by default. On an Instance other people rely on, pin a version instead: `1.2.3` for one release, or `1.2` to get patch releases of 1.2 only. Put `HANGAR_IMAGE` in `.env` to keep the pin, and change it when you [upgrade](../operate/upgrades.md). The [releases page](https://github.com/hangar-hub/hangar/releases) lists every version.

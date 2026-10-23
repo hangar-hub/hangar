@@ -1,11 +1,11 @@
 ---
 title: Hugging Face models on an air-gapped network
-description: "Run Hangar as an air-gapped model and dataset store: feed an Instance with no internet access from another Instance, or carry a backup or cache across."
+description: "Run Hangar as an air-gapped model and dataset store: feed an offline Instance from another Instance, or carry a backup or a Hugging Face cache across."
 ---
 
 # Air-gapped Instances
 
-An Instance with no internet access can be fed from another Hangar that has it.
+An Instance with no internet access can be fed from another Hangar Instance that has internet access.
 
 1. Run an outer Instance with internet access, and pull what the inner network needs into it.
 2. On the inner Instance, add the outer one as an Upstream: **Admin**, **Upstreams**, **Add upstream**, with its URL and a read Token for it as the Instance token. Or in configuration:
@@ -32,12 +32,15 @@ Mirrors keep the Repo IDs and Commit SHAs from the outer Instance, which kept th
 
 The web UI links to the documentation at https://hangar.page/, for example from the explanation that opens when you hover over or click a badge such as **Unsafe imports**. On a network without internet access, point those links at a copy of the documentation, or turn them off, with `ui.docs_url` (`HANGAR_UI_DOCS_URL`).
 
-To use a copy, build the documentation from the Hangar source at your release tag and serve the `site` folder on the inside. The copy must serve the same paths as https://hangar.page/, such as `concepts/mirrors/`.
+To use a copy, build the documentation from the Hangar source at the release tag your Instance runs, on a machine with internet access, and serve the `site` folder on the inside. The copy must serve the same paths as https://hangar.page/, such as `concepts/mirrors/`. `hangar version` prints the version, and so does **Admin**, **System** in the web UI. For version 1.2.3:
 
 ```sh
-git checkout v1.1.0
+git clone --branch v1.2.3 https://github.com/hangar-hub/hangar.git
+cd hangar
 uv run --no-project --with-requirements docs/requirements.txt mkdocs build
 ```
+
+The build downloads the fonts, and the script that draws the native API reference, into `site`, so the copy loads nothing from the internet. Copies built from 1.2.3 and earlier releases load that script from `cdn.jsdelivr.net`, so their [Native API](../reference/native-api.md) page stays blank without internet access; the other pages work.
 
 Then set the URL of the copy:
 

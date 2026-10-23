@@ -1,10 +1,11 @@
 ---
+title: Model download benchmarks for a self-hosted hub
 description: "Load test results for Hangar's scale targets, such as download latency, large Repo listings, clones and memory use, with the setup and commands."
 ---
 
 # Benchmarks
 
-These are the load test results for Hangar's scale targets: the targets in the specification's architecture chapter ("Scale targets") and the scenarios in `loadtest/`, run as `loadtest/README.md` describes. They were measured on 17 October 2026, before the v1.0 release. The [Repo listings](#repo-listings) results, for 100,000 Repos per Instance, were measured on 21 and 22 October 2026 with an in-process load test.
+These are the load test results for Hangar's scale targets: the targets in the [specification's architecture chapter](https://github.com/hangar-hub/hangar/blob/main/docs/spec/02-architecture.md#scale-targets) and the scenarios in `loadtest/`, run as `loadtest/README.md` describes. They were measured on 17 October 2026 on a pre-release build of Hangar 1.0.0: the performance changes that were then merged into 1.0.0 as commit `40ad448`. The [Repo listings](#repo-listings) results, for 100,000 Repos per Instance, were measured on 21 and 22 October 2026 with an in-process load test. Releases since then have not been measured again.
 
 The numbers come from one shared laptop, not dedicated hardware, so read them as evidence that a target holds or fails on modest hardware rather than as capacity figures. [Deviations](#deviations) lists every way the setup differs from the reference setup.
 
@@ -27,7 +28,7 @@ The numbers come from one shared laptop, not dedicated hardware, so read them as
 
 | Item | Version or value |
 |---|---|
-| Hangar | `ws/p3-perf` (Phase 3 performance branch), built with `make image IMAGE=hangar:p3perf`; baseline runs used `382cc88` |
+| Hangar | A pre-release build of 1.0.0 with the performance changes merged as `40ad448`, built with `make image IMAGE=hangar:bench`; baseline runs used commit `382cc88` |
 | Host | Apple silicon laptop, 12 CPUs, 36 GiB of memory, macOS |
 | Containers | Docker Desktop 29.8.2 (a Linux VM with 6 vCPUs and 11.7 GiB), Docker Compose 5.6.0 |
 | Load generator | `grafana/k6:1.4.2` in a container limited to 2 CPUs (`--cpus 2`) |
@@ -62,11 +63,11 @@ services:
 
 ## Commands
 
-Start the stack with the override and the image built from the branch:
+Start the stack with the override and the image built from that commit:
 
 ```sh
-HANGAR_IMAGE=hangar:p3perf HANGAR_PUBLIC_URL=http://localhost:18480 \
-  docker compose -p hangar-p3perf --env-file .env -f deploy/compose/scale.yaml -f override.yaml up -d
+HANGAR_IMAGE=hangar:bench HANGAR_PUBLIC_URL=http://localhost:18480 \
+  docker compose -p hangar-bench --env-file .env -f deploy/compose/scale.yaml -f override.yaml up -d
 ```
 
 Seed as `loadtest/README.md` describes, with a write Token for a `loadtest` user:
@@ -78,11 +79,13 @@ HANGAR_URL=http://localhost:18480 HANGAR_TOKEN=hgr_... HANGAR_USERNAME=loadtest 
 Run each scenario with k6 in Traefik's network namespace, so `localhost:18480` is the same public URL inside and outside the container:
 
 ```sh
-docker run --rm -i --cpus 2 --network container:hangar-p3perf-traefik-1 \
+docker run --rm -i --cpus 2 --network container:hangar-bench-traefik-1 \
   -v "$PWD/loadtest:/lt:ro" -w /lt grafana/k6:1.4.2 run \
   -e HANGAR_URL=http://localhost:18480 -e HANGAR_TOKEN=hgr_... \
   -e HANGAR_NAMESPACE=loadtest -e HANGAR_USERNAME=loadtest -e REPLICAS=2 resolve.js
 ```
+
+`HANGAR_IMAGE` and `HANGAR_PUBLIC_URL` are read by Docker Compose, and `HANGAR_URL`, `HANGAR_TOKEN`, `HANGAR_USERNAME` and `HANGAR_NAMESPACE` by the load test scripts. They are not Hangar configuration keys, so do not set them where `hangar` runs: it refuses to start when it sees a `HANGAR_` variable it does not know.
 
 The same command ran `model_info.js`, `tree.js`, `git_clone.js`, `upload.js` (`VUS=4`, 1 GiB each), `download.js` (`VUS=4`, `DURATION=2m`, after `upload.js`) and `viewer_rows.js` (50 requests per second). Memory came from each replica's cgroup (`memory.current`, `memory.peak` and `memory.stat`), sampled every few seconds, and `docker stats`. CPU per request came from each container's cgroup `cpu.stat` before and after a run, divided by the requests k6 sent.
 

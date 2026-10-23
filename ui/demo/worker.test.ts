@@ -122,6 +122,22 @@ describe("demo Worker", () => {
     expect(me.headers.get("x-robots-tag")).toBe("noindex");
   });
 
+  it("gives the indexed home page a share card for link previews", () => {
+    const description = /<meta name="description" content="([^"]+)"/.exec(indexedHead)?.[1] ?? "";
+    expect(description.length).toBeGreaterThanOrEqual(70);
+    expect(description.length).toBeLessThanOrEqual(160);
+    for (const tag of [
+      '<meta property="og:type" content="website" />',
+      '<meta property="og:url" content="https://demo.hangar.page/" />',
+      '<meta property="og:title" content="Hangar live demo: a self-hosted model and dataset hub" />',
+      `<meta property="og:description" content="${description}" />`,
+      '<meta property="og:image" content="https://hangar.page/og.png" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+    ]) {
+      expect(indexedHead).toContain(tag);
+    }
+  });
+
   it("serves its root files, indexable, and links every page to the favicons", async () => {
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
     const files = {

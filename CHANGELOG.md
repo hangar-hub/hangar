@@ -380,9 +380,3 @@
 ### Dependencies
 
 * update github.com/getkin/kin-openapi to v0.151.0 ([c4668be](https://github.com/hangar-hub/hangar/commit/c4668bef24a47f4c9f6879c926ac2fcc5db770b7))
-
-## Changelog
-
-All notable changes to Hangar are recorded here, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style. release-please writes each entry from the Conventional Commits merged since the last release, and the project follows [semantic versioning](https://semver.org).
-
-Nothing has been released yet.

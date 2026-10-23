@@ -56,6 +56,6 @@ docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   ghcr.io/hangar-hub/hangar:latest
 ```
 
-Every key is listed in the [configuration reference](../reference/configuration.md).
+Every key is listed in the [configuration reference](../reference/configuration.md). Hangar refuses to start if a `HANGAR_` variable is not one of them, so a misspelt name shows up at once; see [Troubleshooting](../operate/troubleshooting.md#common-problems).
 
 Next: [First sign-in](first-login.md).

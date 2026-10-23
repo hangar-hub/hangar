@@ -33,7 +33,7 @@ describe("UI copy agrees with the docs", () => {
     expect(scopeHelp.admin).toMatch(/Organisation Members/);
     const permissions = doc("concepts/permissions.md");
     expect(permissions).toMatch(/through `huggingface_hub`/);
-    expect(permissions).toMatch(/`admin` is needed for everything else that administers a Repo/);
+    expect(permissions).toMatch(/\| `admin` \| Also everything else that administers a Repo/);
   });
 });
 

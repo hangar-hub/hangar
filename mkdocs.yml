@@ -1,10 +1,10 @@
 site_name: Hangar
-site_description: Hangar is a self-hosted model registry for your arsenal of models and datasets. Hugging Face Hub-compatible, with git, Ollama and LM Studio support.
+site_description: Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio.
 site_url: https://hangar.page/
 repo_url: https://github.com/hangar-hub/hangar
 repo_name: hangar-hub/hangar
 edit_uri: edit/main/docs/
-copyright: Hangar is source-available under the Elastic License 2.0.
+copyright: Hangar is source-available under the Elastic License 2.0. Hugging Face, Ollama and LM Studio are trademarks of their owners. Hangar is an independent project, not affiliated with or endorsed by them.
 
 # The spec, research notes and build notes live in docs/ for the build, not
 # for the site.
@@ -26,14 +26,17 @@ plugins:
   - search
   - mike:
       canonical_version: latest
-  # Serves the theme's Google Fonts from the site itself, downloaded at build
-  # time, so pages render without waiting on another host. The cache is in
-  # .cache/, which git ignores.
+  # Serves the theme's Google Fonts, and the Redoc script the native API page
+  # loads, from the site itself, downloaded at build time, so pages render
+  # without waiting on another host and a copy of the site works with no
+  # internet access (docs/guides/air-gapped.md). The cache is in .cache/,
+  # which git ignores.
   - privacy:
       links: false
       assets_include:
         - fonts.googleapis.com/*
         - fonts.gstatic.com/*
+        - cdn.jsdelivr.net/*
 
 theme:
   name: material
@@ -101,6 +104,7 @@ nav:
   - Home: index.md
   - Get started:
       - get-started/index.md
+      - System requirements: get-started/requirements.md
       - Docker: get-started/docker.md
       - Docker Compose: get-started/compose.md
       - Helm: get-started/helm.md
@@ -115,6 +119,7 @@ nav:
       - Pulls and Dependencies: concepts/pulls.md
       - Jobs: concepts/jobs.md
       - Permissions: concepts/permissions.md
+      - Where Hangar keeps data: concepts/data.md
       - How Hangar compares: concepts/comparison.md
   - Guides:
       - guides/index.md
@@ -135,7 +140,6 @@ nav:
       - Webhooks: guides/webhooks.md
   - Operate:
       - operate/index.md
-      - Configuration: reference/configuration.md
       - Storage backends: operate/storage.md
       - Databases: operate/databases.md
       - Scaling: operate/scaling.md
@@ -152,21 +156,26 @@ nav:
       - Observability: operate/observability.md
       - Backup and restore: operate/backup.md
       - Upgrades: operate/upgrades.md
+      - Uninstall: operate/uninstall.md
       - Security hardening: operate/security.md
       - Threat model: security/threat-model.md
       - Troubleshooting: operate/troubleshooting.md
   - Reference:
       - reference/index.md
       - Hub API compatibility: reference/hub-api-compatibility.md
+      - Tested versions and platforms: reference/compatibility.md
       - Native API: reference/native-api.md
       - CLI: reference/cli.md
       - Configuration: reference/configuration.md
       - Webhook events: reference/webhooks.md
       - Metrics: reference/metrics.md
   - Project:
+      - Get help: project/support.md
+      - Versioning and support: project/versioning.md
       - Architecture: project/architecture.md
       - Benchmarks: benchmarks.md
       - Contributing: project/contributing.md
       - Security policy: project/security.md
       - Changelog: project/changelog.md
       - Licence: project/licence.md
+  - FAQ: faq.md

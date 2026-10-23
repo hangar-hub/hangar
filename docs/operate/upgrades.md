@@ -1,31 +1,83 @@
 ---
-description: "Upgrade Hangar in one container or across several processes, with database migrations, and what to do if you need to downgrade."
+description: "Upgrade Hangar with Docker, Docker Compose, Helm, Homebrew or the binary, with database migrations, checks afterwards, and what to do to go back."
 ---
 
 # Upgrade Hangar
 
-Hangar follows semantic versioning. Read the [changelog](../project/changelog.md) before you upgrade, and back up first ([Backup and restore](backup.md)).
+Hangar follows [semantic versioning](../project/versioning.md). Each release's container image, Helm chart, archives and Homebrew cask carry the same version.
+
+## Before you upgrade
+
+1. Find the version you run: `hangar version`, or **Admin**, **System** in the web UI.
+2. Read the [changelog](../project/changelog.md) from your version to the new one. A major version lists what is not backward compatible under **BREAKING CHANGES**. [Notes per version](#notes-per-version) lists anything you need to do.
+3. Back up the database, the Blob store and the Instance key; see [Backup and restore](backup.md). A backup is the only way back to the old version.
+
+`hangar admin migrate` applies every pending migration, so you can upgrade from any earlier release of the same major version straight to the latest one.
+
+## Pin a version
+
+`latest` moves to every new release, so a container restart can upgrade an Instance without anyone choosing to. On an Instance other people rely on, run a version tag instead, and change it when you upgrade:
+
+- `ghcr.io/hangar-hub/hangar:1.2.3` stays on one release.
+- `ghcr.io/hangar-hub/hangar:1.2` follows patch releases of 1.2 only.
 
 ## One container
 
 ```sh
-docker pull ghcr.io/hangar-hub/hangar:latest
+docker pull ghcr.io/hangar-hub/hangar:1.2.3
 docker stop hangar && docker rm hangar
-docker run -d --name hangar ...   # the same options as before
+docker run -d --name hangar ... ghcr.io/hangar-hub/hangar:1.2.3   # the same options as before
 ```
 
-A process in role `all` applies migrations when it starts.
+The data is in the volume, so the new container starts with it. A process in role `all` applies migrations when it starts.
+
+## Docker Compose
+
+Set the new version in `.env` next to the Compose files, for example `HANGAR_IMAGE=ghcr.io/hangar-hub/hangar:1.2.3`, then pull it and recreate the containers:
+
+```sh
+docker compose -f postgres-minio.yaml pull
+docker compose -f postgres-minio.yaml up -d
+```
+
+Use the file you started with. In `scale.yaml`, the one-off `migrate` service runs `hangar admin migrate` with the new image, and Compose starts the new `web` and `worker` replicas once it has finished.
+
+## Binary
+
+Download the new archive and replace the binary, as [Run the hangar binary](../get-started/binary.md) shows, then restart the server. With Homebrew:
+
+```sh
+brew upgrade --cask hangar-hub/tap/hangar
+```
+
+Binaries built with `go install` report their version as `dev`, so use a release archive for a server you need to keep track of.
 
 ## Several processes
 
 1. Run the new version's `hangar admin migrate` once. Migrations only add to the schema within a major version, so processes of the previous version keep working while it runs.
 2. Roll the `worker` processes, then the `web` processes. New processes report ready once the schema matches.
 
-The Helm chart runs the migration in a pre-upgrade Job, or in an init container in each Pod with `migrations.mode: initContainer` (for Argo CD; see [Run with Argo CD](../get-started/helm.md#run-with-argo-cd)), and rolls the Deployments for you:
+## Helm
+
+The chart version is the Hangar version, so upgrading the chart upgrades Hangar:
 
 ```sh
-helm upgrade hangar oci://ghcr.io/hangar-hub/charts/hangar --namespace hangar -f values.yaml
+helm upgrade hangar oci://ghcr.io/hangar-hub/charts/hangar --version 1.2.3 --namespace hangar -f values.yaml
 ```
+
+The chart runs the migration in a pre-upgrade Job, or in an init container in each Pod with `migrations.mode: initContainer`, and rolls the Deployments for you. With Argo CD, change `targetRevision` in the Application; see [Run with Argo CD](../get-started/helm.md#run-with-argo-cd).
+
+## Check the upgrade
+
+- `hangar version`, or **Admin**, **System**, shows the new version.
+- `/readyz` answers 200. If it answers 503, the body names the check that failed, such as a pending migration.
+- `hangar admin doctor` checks the configuration, the database, the Blob store and git end to end; see [Troubleshooting](troubleshooting.md#run-the-doctor).
+
+## Notes per version
+
+| Upgrade | What to do |
+|---|---|
+| 1.1.x or 1.2.x, from any earlier 1.x | Nothing. No release since 1.0.0 has changed the database schema or the Helm chart's values. 1.2.0 added `ui.docs_url`, which defaults to https://hangar.page/; on an [air-gapped network](../guides/air-gapped.md#keep-the-web-ui-on-the-inside), point it at your copy of the docs. |
 
 ## Downgrades
 

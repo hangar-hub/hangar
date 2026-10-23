@@ -1,4 +1,5 @@
 ---
+title: Hugging Face Hub on Kubernetes with Helm
 description: "Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD."
 ---
 
@@ -73,7 +74,7 @@ Argo CD, Flux and other GitOps tools render the chart with `helm template` and a
 - **No cluster access while rendering.** `lookup` returns nothing, so the chart cannot keep generated secrets and stops with an error if `generateSecrets` would generate them. Create the Secret yourself and name it in `existingSecret`.
 - **The test Pod is a hook too.** The chart's `helm test` Pod carries `helm.sh/hook: test`. Argo CD skips it, but `helm template` renders it as an ordinary Pod. A tool that applies the render as it is, such as `kubectl apply` or Kustomize's `helmCharts`, starts it before Hangar is up, and it stays in `Error`. Pass `--skip-tests` to `helm template`, or set `skipTests: true` in Kustomize's `helmCharts` entry.
 
-Create the namespace and the Secret once, outside Git or with a secrets operator such as Sealed Secrets or External Secrets:
+Create the namespace and the Secret once, outside your git repository or with a secrets operator such as Sealed Secrets or External Secrets:
 
 ```sh
 kubectl create namespace hangar
@@ -103,7 +104,7 @@ spec:
   source:
     repoURL: ghcr.io/hangar-hub/charts
     chart: hangar
-    targetRevision: 1.0.0   # the chart version to deploy
+    targetRevision: 1.2.3   # the chart version to deploy, which is also the Hangar version
     helm:
       releaseName: hangar
       valuesObject:

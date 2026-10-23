@@ -18,7 +18,15 @@ A Repo can also have collaborators with `read` or `write`, for people outside it
 
 ## Tokens
 
-A Token has one scope, `read`, `write` or `admin`, which caps what it can do on top of the user's own permissions. `read` downloads. `write` also uploads, pushes and starts Pulls, and, on Repos the user administers, does what a write Token does on huggingface.co through `huggingface_hub`: `delete_repo`, `update_repo_settings` (visibility and gating) and `move_repo` within the same Namespace. `admin` is needed for everything else that administers a Repo, such as transfers to another Namespace, webhooks, collaborators, access requests and every setting in the native API and the UI, and for managing Organisation Members and, for Instance admins, the Instance. A Token can be limited to some Namespaces or Repos, and given an expiry. Clients send it as `Authorization: Bearer hgr_...` (HTTP), or as the password of HTTP Basic credentials, which only git and git-lfs routes accept. Hangar stores only a hash, and shows when each Token was last used.
+A Token has one scope, which caps what it can do on top of the user's own permissions:
+
+| Scope | Can |
+|---|---|
+| `read` | Download files and read metadata and history. |
+| `write` | Also upload, push and start Pulls. On Repos the user administers, also what a write Token does on huggingface.co through `huggingface_hub`: `delete_repo`, `update_repo_settings` (visibility and gating) and `move_repo` within the same Namespace. |
+| `admin` | Also everything else that administers a Repo, such as transfers to another Namespace, webhooks, collaborators, access requests and every setting in the native API and the UI; managing Organisation Members; and, for Instance admins, the Instance. |
+
+A Token can be limited to some Namespaces or Repos, and given an expiry. Clients send it as `Authorization: Bearer hgr_...` over HTTP, or as the password of HTTP Basic credentials, which only git and git-lfs routes accept. Hangar stores only a hash of each Token, and shows when it was last used.
 
 ## Private Repos stay hidden
 
@@ -30,7 +38,7 @@ Hangar stores each LFS object once, however many Repos hold it. A Commit can sti
 
 ## Gated Repos
 
-The owner of a Repo can require people to ask for access, with a form. Admins of the Repo accept or reject requests, automatically or by hand. See [Gated models](../guides/gated.md).
+An admin of a Repo can require people to ask for access, with a form. Admins of the Repo accept or reject requests, automatically or by hand. See [Gated models](../guides/gated.md).
 
 ## Ollama keys
 
@@ -42,4 +50,4 @@ Under **Settings**, **Profile** you can change your display name and email, and 
 
 ## Audit log
 
-Security-relevant actions, such as sign-ins, password and profile changes, Token changes, Membership changes and visibility changes, are recorded in the audit log under **Admin**, **Audit log**, and exported as OpenTelemetry log records.
+Hangar records security-relevant actions, such as sign-ins, password and profile changes, Token changes, Membership changes and visibility changes, in the audit log under **Admin**, **Audit log**, and exports them as OpenTelemetry log records.

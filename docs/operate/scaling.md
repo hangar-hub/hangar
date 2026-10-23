@@ -19,7 +19,7 @@ One binary runs in one of three roles (`server.role`, or `hangar server --role`)
 - Postgres and an S3-compatible bucket (or a shared filesystem path).
 - The same `security.instance_key` on every process.
 - `hangar admin migrate` before new versions start.
-- `jobs.workers` Jobs run concurrently per worker process (4 by default). Pull transfers are also capped across the Instance by `pull.concurrency`.
+- Each worker process runs up to `jobs.workers` Jobs at once (4 by default). `pull.concurrency` also caps Pull transfers across the Instance.
 
 The [scaled Compose example](../get-started/compose.md#scaled-out) and the [Helm chart](../get-started/helm.md#scaled-out-with-postgres-and-s3) show complete setups.
 

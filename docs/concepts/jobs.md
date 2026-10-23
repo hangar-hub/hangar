@@ -4,7 +4,7 @@ description: "How Hangar runs background work as Jobs in a database-backed queue
 
 # Jobs
 
-Background work runs as Jobs in the database-backed queue: Pulls (`pull`, `pull.file`), Mirror syncs, indexing and scanning, garbage collection, git compaction, dataset conversion and statistics, webhook deliveries, zip exports and purges.
+Background work runs as Jobs in the database-backed queue: Pulls (`pull`, `pull.file`), Mirror syncs, indexing and scanning, garbage collection, git compaction, Parquet exports and dataset statistics, webhook deliveries, zip exports and purges.
 
 - Workers claim Jobs with a lease, renewed while they run. If a worker dies, its Jobs go back to the queue when the lease expires, and they resume where they stopped.
 - The same work is never queued twice: pulling the same files twice joins the existing Job.

@@ -4,7 +4,7 @@ description: "Install Hangar in a few minutes with Docker, Docker Compose, Helm 
 
 # Get started
 
-Pick the way you want to run Hangar. Each takes a few minutes on a clean machine.
+Pick the way you want to run Hangar. Each takes a few minutes on a clean machine. [System requirements](requirements.md) says what each needs, and how much disk to plan for.
 
 | Option | Best for |
 |---|---|
