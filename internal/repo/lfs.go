@@ -744,7 +744,8 @@ func stagedPutKey(id uuid.UUID) string { return blob.PrefixTmp + "uploads/" + id
 // is stored gives ErrNotFound, as one that is not, so Verify never says
 // whether an object exists or how large it is; an object written straight
 // to its key, by a URL issued before uploads were staged, is re-hashed in
-// place, recorded if it matches and deleted if it does not.
+// place, recorded if it matches and deleted if it has the size but not the
+// SHA-256 (verifyInPlace).
 func (l *LFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UUID) (LFSObject, error) {
 	if !model.IsSHA256(oid) || size < 0 {
 		return LFSObject{}, fmt.Errorf("%w: invalid oid or size", ErrInvalid)
@@ -803,7 +804,12 @@ func (l *LFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UU
 }
 
 // verifyInPlace re-hashes an object stored at its own key and records it
-// if it matches, or deletes it if it does not.
+// if it matches. It deletes the object only when it has the size the
+// caller names and a different SHA-256: content stored at an object's key
+// is wrong only if it does not hash to the key. A size that differs is the
+// caller's mistake, or a lie, and says nothing about what is stored, which
+// may be a valid object that Ingest has copied into place and not yet
+// recorded. So the object is left alone, and not hashed.
 func (l *LFS) verifyInPlace(ctx context.Context, oid string, size int64) (LFSObject, error) {
 	key := model.LFSObjectKey(oid)
 	rc, info, err := openResuming(ctx, l.blobs, key, l.readRetries, l.readBackoff)
@@ -814,11 +820,14 @@ func (l *LFS) verifyInPlace(ctx context.Context, oid string, size int64) (LFSObj
 		return LFSObject{}, fmt.Errorf("repo: read lfs object: %w", err)
 	}
 	defer rc.Close()
+	if info.Size != size {
+		return LFSObject{}, fmt.Errorf("%w: %s", ErrChecksumMismatch, oid)
+	}
 	h := sha256.New()
 	if _, err := io.Copy(h, rc); err != nil {
 		return LFSObject{}, fmt.Errorf("repo: hash lfs object: %w", err)
 	}
-	if info.Size != size || hex.EncodeToString(h.Sum(nil)) != oid {
+	if hex.EncodeToString(h.Sum(nil)) != oid {
 		_ = l.blobs.Delete(ctx, key)
 		return LFSObject{}, fmt.Errorf("%w: %s", ErrChecksumMismatch, oid)
 	}
