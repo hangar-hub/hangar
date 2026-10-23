@@ -38,7 +38,7 @@ These come from the contract and are repeated here because breaking them breaks 
    - Use 307, not 302, for anything that is not a `GET` or `HEAD` (moved Repos).
 7. **Never emit Xet download data**: no `X-Xet-Hash`, `X-Xet-Refresh-Route`, `Link: rel="xet-auth"` or `xetHash`. Downloads then use plain HTTP whether or not `hf_xet` is installed.
 8. **Siblings** in Repo info are complete and recursive (diffusers plans downloads from them). Never include `transformersInfo` with keys the client does not know, `inferenceProviderMapping` or `evalResults`.
-9. **Pagination**: `Link: <absolute URL on server.public_url>; rel="next"`.
+9. **Pagination**: `Link: <absolute URL on server.public_url>; rel="next"`. The Commit listing's `Link` carries a `cursor` (the Commits where the walk stopped) rather than a page number, so a Commit pushed between pages repeats nothing, and no page walks the history of the pages before it. The Hub's `p` parameter is still accepted.
 10. **`POST /api/repos/create`**: accept `visibility` and legacy `private`; a 409 still returns `{"url": ...}`. Create the initial Commit on `main` with a `.gitattributes` that matches the Hub's default LFS rules.
 11. **`POST /api/validate-yaml`** always returns JSON.
 12. **Preupload** returns `shouldIgnore` for every file. Upload mode policy: `regular` for files under `hfapi.regular_upload_max` (default 10 MiB, matching the Hub) unless the path matches `.gitattributes` LFS rules; `lfs` otherwise.

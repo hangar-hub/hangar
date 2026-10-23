@@ -250,6 +250,12 @@ type LogOpts struct {
 	Path  string
 	Skip  int
 	Limit int
+	// From, when set, starts the walk at these Commits instead of the
+	// Revision, which is then ignored. Each must be a full SHA of a Commit
+	// in the Repo, or Log returns ErrRevisionNotFound. Listings pass the
+	// Commits a previous page's walk had reached but not shown, so the next
+	// page continues it without walking the earlier pages again.
+	From []model.CommitSHA
 }
 
 // ChangeStatus is how a file changed in a Commit.

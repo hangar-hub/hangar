@@ -253,6 +253,14 @@ func TestCommitReadsAndCaches(t *testing.T) {
 		log, err = e.svc.Log(e.ctx, id, "main", repo.LogOpts{Skip: 1, Limit: 1})
 		require.NoError(t, err)
 		require.Equal(t, []model.CommitSHA{second.SHA}, shas(log))
+		// From starts the walk at given Commits, ignoring the Revision.
+		log, err = e.svc.Log(e.ctx, id, "no-such-branch", repo.LogOpts{From: []model.CommitSHA{second.SHA}, Limit: 2})
+		require.NoError(t, err)
+		require.Equal(t, []model.CommitSHA{second.SHA, first.SHA}, shas(log))
+		for _, bad := range []model.CommitSHA{"abc", model.CommitSHA(strings.Repeat("0", 40)), model.CommitSHA(model.GitBlobID([]byte("d")))} {
+			_, err = e.svc.Log(e.ctx, id, "main", repo.LogOpts{From: []model.CommitSHA{first.SHA, bad}})
+			require.ErrorIs(t, err, repo.ErrRevisionNotFound, string(bad))
+		}
 		c, err := e.svc.GetCommit(e.ctx, id, second.SHA)
 		require.NoError(t, err)
 		require.Equal(t, "update", c.Title)

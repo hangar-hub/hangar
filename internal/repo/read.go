@@ -562,15 +562,31 @@ func (s *Store) Log(ctx context.Context, id model.RepoID, revision string, opts 
 	if err != nil {
 		return nil, err
 	}
-	sha, err := s.resolve(ctx, s.db, row, revision)
+	starts := opts.From
+	if len(starts) == 0 {
+		sha, err := s.resolve(ctx, s.db, row, revision)
+		if err != nil {
+			return nil, err
+		}
+		starts = []model.CommitSHA{sha}
+	}
+	objs, err := s.git.Acquire(ctx, row.ID)
 	if err != nil {
 		return nil, err
+	}
+	defer objs.Release()
+	if len(opts.From) > 0 {
+		if err := s.checkCommits(ctx, objs, starts); err != nil {
+			return nil, err
+		}
 	}
 	args := []string{"--literal-pathspecs", "log", logFormat, "--skip=" + strconv.Itoa(max(opts.Skip, 0))}
 	if opts.Limit > 0 {
 		args = append(args, "--max-count="+strconv.Itoa(opts.Limit))
 	}
-	args = append(args, string(sha))
+	for _, sha := range starts {
+		args = append(args, string(sha))
+	}
 	if opts.Path != "" {
 		clean, err := model.CleanRepoPath(opts.Path)
 		if err != nil {
@@ -580,16 +596,36 @@ func (s *Store) Log(ctx context.Context, id model.RepoID, revision string, opts 
 			args = append(args, "--", clean)
 		}
 	}
-	objs, err := s.git.Acquire(ctx, row.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer objs.Release()
 	out, err := s.git.Git().Run(ctx, objs.Dir, nil, nil, args...)
 	if err != nil {
 		return nil, err
 	}
 	return parseLog(out), nil
+}
+
+// checkCommits returns ErrRevisionNotFound unless every SHA is a full SHA
+// of a Commit in objs, checked with one git process.
+func (s *Store) checkCommits(ctx context.Context, objs *gitstore.Objects, shas []model.CommitSHA) error {
+	list := make([]string, 0, len(shas))
+	for _, sha := range shas {
+		if !model.IsFullSHA(string(sha)) {
+			return fmt.Errorf("%w: %s", ErrRevisionNotFound, sha)
+		}
+		list = append(list, string(sha))
+	}
+	info, err := s.git.Git().BatchCheck(ctx, objs.Dir, list)
+	if err != nil {
+		return err
+	}
+	if len(info) != len(list) {
+		return fmt.Errorf("%w: %s", ErrRevisionNotFound, strings.Join(list, ", "))
+	}
+	for i, in := range info {
+		if in.Missing || in.Type != "commit" {
+			return fmt.Errorf("%w: %s", ErrRevisionNotFound, list[i])
+		}
+	}
+	return nil
 }
 
 // GetCommit implements Service.

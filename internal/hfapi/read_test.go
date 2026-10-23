@@ -273,6 +273,67 @@ func TestRefsAndCommits(t *testing.T) {
 	requireHubError(t, e.Request(t, http.MethodGet, "/api/models/alice/hist/commits/nope", "", ""), http.StatusNotFound, "RevisionNotFound")
 }
 
+// TestCommitListingFollowsACursor: the Link header of the Commit listing
+// names where the walk stopped, so following it lists every Commit once
+// even when the branch moves between pages, and a page never walks the
+// history of the pages before it.
+func TestCommitListingFollowsACursor(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	id := modelID("alice", "pages")
+	seed(t, e, "alice", id, model.VisibilityPublic, map[string]string{"a.txt": "0"})
+	for i := range 6 {
+		commitFiles(t, e, "alice", id, "main", map[string]string{"a.txt": strings.Repeat("x", i+1)})
+	}
+	var want []string
+	for _, c := range decode[[]map[string]any](t, e.Request(t, http.MethodGet, "/api/models/alice/pages/commits/main", "", "")) {
+		want = append(want, c["id"].(string))
+	}
+	require.Len(t, want, 8) // initial .gitattributes Commit, the seed and six
+
+	linkRe := regexp.MustCompile(`^<([^>]+)>; rel="next"$`)
+	next := "/api/models/alice/pages/commits/main?limit=3&expand[]=formatted"
+	var got []string
+	for pages := 0; next != ""; pages++ {
+		require.Less(t, pages, 5)
+		r := e.Request(t, http.MethodGet, next, "", "")
+		require.Equal(t, http.StatusOK, r.StatusCode)
+		for _, c := range decode[[]map[string]any](t, r) {
+			got = append(got, c["id"].(string))
+			require.Contains(t, c, "formatted", "the Link keeps the query")
+		}
+		if pages == 0 {
+			// A Commit pushed after the first page does not shift the
+			// pages that follow.
+			commitFiles(t, e, "alice", id, "main", map[string]string{"a.txt": "late"})
+		}
+		next = ""
+		if link := r.Header.Get("Link"); link != "" {
+			m := linkRe.FindStringSubmatch(link)
+			require.NotNil(t, m, link)
+			require.True(t, strings.HasPrefix(m[1], e.URL+"/"), "Link must be absolute on public_url: %s", m[1])
+			u, err := url.Parse(m[1])
+			require.NoError(t, err)
+			require.NotEmpty(t, u.Query().Get("cursor"))
+			require.Empty(t, u.Query().Get("p"))
+			next = u.RequestURI()
+		}
+	}
+	require.Equal(t, want, got)
+
+	// The Hub's own page parameter still works.
+	page := decode[[]map[string]any](t, e.Request(t, http.MethodGet, "/api/models/alice/pages/commits/main?limit=3&p=1", "", ""))
+	require.Len(t, page, 3)
+	require.Equal(t, got[2], page[0]["id"], "p=1 starts after the newest three, which include the late Commit")
+
+	for _, bad := range []string{"nothex", strings.Repeat("a", 39), strings.Repeat(strings.Repeat("a", 40)+",", 65) + strings.Repeat("a", 40)} {
+		r := e.Request(t, http.MethodGet, "/api/models/alice/pages/commits/main?cursor="+bad, "", "")
+		require.Equal(t, http.StatusBadRequest, r.StatusCode, bad)
+	}
+	requireHubError(t, e.Request(t, http.MethodGet, "/api/models/alice/pages/commits/main?cursor="+strings.Repeat("a", 40), "", ""),
+		http.StatusNotFound, "RevisionNotFound")
+}
+
 func TestSafetensorsConversionGuard(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
