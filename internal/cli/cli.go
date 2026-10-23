@@ -85,7 +85,7 @@ func (a *app) clientFlags(cmd *cobra.Command) {
 	f := cmd.PersistentFlags()
 	f.StringVar(&a.url, "url", "", "Instance URL (default: from hangar login, or "+EnvURL+")")
 	f.StringVar(&a.token, "token", "", "Token to use instead of the saved login (or "+EnvToken+")")
-	f.BoolVar(&a.json, "json", false, "print JSON instead of a table")
+	f.BoolVar(&a.json, "json", false, "print JSON instead of text")
 }
 
 // args returns a cobra argument check whose errors exit with code 2.

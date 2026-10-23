@@ -56,7 +56,7 @@ func (a *app) importCommand() *cobra.Command {
 	var o importOptions
 	cmd := &cobra.Command{
 		Use:   "import",
-		Short: "Add models you already have on disk to the Arsenal without downloading them again",
+		Short: "Add models you already have on disk to the Arsenal without pulling them again",
 		Long: `Adds content that is already on this machine to the Arsenal. Choose one source:
 
   --from-hf-cache [path]   a Hugging Face cache (default ~/.cache/huggingface/hub).

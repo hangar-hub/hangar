@@ -57,7 +57,7 @@ func adminInstance(ctx context.Context, flags *configFlags, stderr io.Writer) (*
 	}
 	st, err := d.Schema(ctx)
 	if err == nil && !st.UpToDate() {
-		err = fmt.Errorf("the database schema is at %q and this binary expects %q: run hangar admin migrate first", st.Current, st.Expected)
+		err = fmt.Errorf("the database schema is at %q and this binary expects %q; run hangar admin migrate", st.Current, st.Expected)
 	}
 	if err != nil {
 		closeAll()
@@ -235,10 +235,11 @@ func newGCCommand() *cobra.Command {
 		Use:   "gc",
 		Short: "Collect garbage: unreferenced LFS objects and unused git data",
 		Long: `Deletes LFS objects no Repo has referenced for gc.grace_period, orphaned
-blobs, retired and orphaned packs, git data of purged Repos, stale
-temporary files and abandoned uploads, then reports what it freed. It runs
-in this process; with --queue it queues a gc Job for the Instance's workers
-instead, which needs a running Instance on Postgres.`,
+LFS objects in the Blob store, retired and orphaned packs, git data of
+purged Repos, stale temporary files and abandoned uploads, then reports
+what it freed. It runs in this process; with --queue it queues a gc Job
+for the Instance's workers instead, which needs a running Instance on
+Postgres.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if gitOnly && lfsOnly {
@@ -282,9 +283,9 @@ instead, which needs a running Instance on Postgres.`,
 			}
 			fmt.Fprintf(out, "Garbage collection (%s) finished.\n", rep.Scope)
 			fmt.Fprintf(out, "  LFS objects deleted:       %d (%d bytes)\n", rep.LFSObjectsDeleted, rep.LFSBytesFreed)
-			fmt.Fprintf(out, "  Orphaned LFS blobs:        %d\n", rep.OrphanLFSBlobsDeleted)
+			fmt.Fprintf(out, "  Orphaned LFS objects:      %d\n", rep.OrphanLFSBlobsDeleted)
 			fmt.Fprintf(out, "  Packs deleted:             %d (%d bytes)\n", rep.PacksDeleted, rep.PackBytesFreed)
-			fmt.Fprintf(out, "  Orphaned git blobs:        %d\n", rep.OrphanGitBlobsDeleted)
+			fmt.Fprintf(out, "  Orphaned git data:         %d\n", rep.OrphanGitBlobsDeleted)
 			fmt.Fprintf(out, "  Temporary objects deleted: %d\n", rep.StagingBlobsDeleted)
 			fmt.Fprintf(out, "  Uploads aborted:           %d\n", rep.UploadsAborted)
 			fmt.Fprintf(out, "  Stored now:                %d bytes of LFS objects, %d bytes of git data\n", rep.LFSBytes, rep.GitBytes)
@@ -361,7 +362,7 @@ Name a Repo as namespace/name, or datasets/namespace/name for a dataset.`,
 	}
 	flags.register(cmd)
 	addJSONFlag(cmd, &asJSON)
-	cmd.Flags().BoolVar(&stale, "stale", false, "only results from an older indexer or scanner version")
+	cmd.Flags().BoolVar(&stale, "stale", false, "queue Jobs only for results from an older indexer or scanner version")
 	cmd.Flags().StringVar(&repoType, "type", "", "the type of Repo IDs without a prefix: model (the default) or dataset")
 	return cmd
 }
