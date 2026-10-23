@@ -136,8 +136,15 @@ func (c *client) startPull(ctx context.Context, body gen.PullCreate) (*gen.Job, 
 	return r.JSON202, nil
 }
 
-func (c *client) pullIntoMirror(ctx context.Context, id model.RepoID, sel gen.Selection) (*gen.Job, error) {
-	r, err := c.api.PullMoreIntoMirrorWithResponse(ctx, plural(id), id.Namespace, id.Name, sel)
+// pullIntoMirror pulls files into a Mirror at a Revision of the upstream
+// Repo, or at the Mirror's tracked branch when revision is empty. An empty
+// Paths selection pulls history only.
+func (c *client) pullIntoMirror(ctx context.Context, id model.RepoID, revision string, sel gen.Selection) (*gen.Job, error) {
+	params := &gen.PullMoreIntoMirrorParams{}
+	if revision != "" {
+		params.Revision = &revision
+	}
+	r, err := c.api.PullMoreIntoMirrorWithResponse(ctx, plural(id), id.Namespace, id.Name, params, sel)
 	if err != nil {
 		return nil, c.reach(err)
 	}

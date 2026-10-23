@@ -70,7 +70,7 @@ func (f *fakeTarget) PullFiles(ctx context.Context, id model.RepoID, paths []str
 	if err != nil {
 		return err
 	}
-	jid, err := f.h.Service.PullMore(ctx, f.user, r, upstream.Selection{Paths: paths}, false)
+	jid, err := f.h.Service.PullMore(ctx, f.user, r, upstream.Selection{Paths: paths}, "", false)
 	if err != nil {
 		return err
 	}

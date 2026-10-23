@@ -110,7 +110,7 @@ func TestUpstreamsAPI(t *testing.T) {
 		e.authn.Add("ro", ro)
 
 		gguf := model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "api-GGUF"}
-		h.Seed(gguf, map[string][]byte{"README.md": []byte("# card"), "config.json": []byte(`{"auto_map":{"AutoModel":"acme/code--m.M"}}`)},
+		ggufCommit := h.Seed(gguf, map[string][]byte{"README.md": []byte("# card"), "config.json": []byte(`{"auto_map":{"AutoModel":"acme/code--m.M"}}`)},
 			map[string][]byte{"m-Q4_K_M.gguf": []byte("q4"), "m-Q8_0.gguf": []byte("q8")})
 		h.Seed(model.RepoID{Type: model.RepoTypeModel, Namespace: "acme", Name: "code"}, map[string][]byte{"m.py": []byte("class M: pass")}, nil)
 
@@ -186,6 +186,11 @@ func TestUpstreamsAPI(t *testing.T) {
 
 		code, body = e.do(t, "alice", http.MethodPost, "/repos/models/acme/api-GGUF/mirror/pull", map[string]any{"quants": []string{"Q8_0"}})
 		require.Equal(t, http.StatusAccepted, code, body)
+		// With a Revision, the Pull is of that Commit rather than the tracked
+		// branch (issue #28).
+		code, body = e.do(t, "alice", http.MethodPost, "/repos/models/acme/api-GGUF/mirror/pull?revision="+string(ggufCommit), map[string]any{"quants": []string{"Q8_0"}})
+		require.Equal(t, http.StatusAccepted, code, body)
+		require.Equal(t, string(ggufCommit), body["payload"].(map[string]any)["revision"])
 		code, body = e.do(t, "alice", http.MethodPost, "/repos/models/acme/api-GGUF/mirror/sync", nil)
 		require.Equal(t, http.StatusAccepted, code, body)
 		h.Run(10)

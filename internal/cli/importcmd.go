@@ -2,13 +2,17 @@ package cli
 
 import (
 	"context"
+	"crypto/sha1" // #nosec G505 -- git object IDs are SHA-1.
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -41,8 +45,11 @@ type importResult struct {
 	Mode     string   `json:"mode"` // mirror or local
 	Commit   string   `json:"commit,omitempty"`
 	Uploaded []string `json:"uploaded"`
-	Skipped  []string `json:"skipped,omitempty"`
-	Error    string   `json:"error,omitempty"`
+	// Skipped lists the paths of the files that matched nothing in the
+	// Mirror; NotMatched says why, file by file.
+	Skipped    []string         `json:"skipped,omitempty"`
+	NotMatched []notMatchedFile `json:"not_matched,omitempty"`
+	Error      string           `json:"error,omitempty"`
 }
 
 func (a *app) importCommand() *cobra.Command {
@@ -55,10 +62,11 @@ func (a *app) importCommand() *cobra.Command {
   --from-hf-cache [path]   a Hugging Face cache (default ~/.cache/huggingface/hub).
                            Each Repo becomes a Mirror of the Upstream Repo with
                            the same ID: the Instance fetches its history, and
-                           the CLI uploads the cached files whose SHA-256
-                           matches. With --offline, or when the Upstream does
-                           not have the Repo, each becomes a local Repo with
-                           one Commit instead.
+                           the CLI uploads the files of every cached snapshot
+                           whose content matches a file the Mirror is missing.
+                           With --offline, or when the Upstream does not have
+                           the Repo, each becomes a local Repo with one Commit
+                           of the snapshot of main, or else the newest.
   --from-dir <dir>         a folder, uploaded to --repo as one Commit, as
                            hangar push does.
   --from-lmstudio [path]   LM Studio's models folder (<publisher>/<repo>/<files>).
@@ -72,7 +80,8 @@ Uploads go through the Instance's API, so you need write access to the
 Namespaces involved. A file that fails to upload does not stop the other
 files or Repos: files that went up into a Mirror are added to it, and the
 results name what failed, so running the command again sends only that.
-Use --dry-run to see what would be imported.
+Files whose content matches nothing in a Mirror are named after the results,
+with the reason. Use --dry-run to see what would be imported.
 
 To import some models and not the rest, give --only once for each, as it
 appears in the source: a Repo ID such as bartowski/Qwen2.5-7B-Instruct-GGUF
@@ -236,10 +245,30 @@ func (a *app) reportImport(results []importResult, dryRun bool) error {
 	if err := a.table([]string{"REPO", "AS", "FROM", "RESULT"}, rows); err != nil {
 		return err
 	}
+	a.reportNotMatched(results)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d imports failed", failed, len(results))
 	}
 	return nil
+}
+
+// reportNotMatched names each file that matched nothing in its Mirror,
+// with the reason, after the results table.
+func (a *app) reportNotMatched(results []importResult) {
+	first := true
+	for _, r := range results {
+		for _, nm := range r.NotMatched {
+			if first {
+				a.printf("\nNot matched:\n")
+				first = false
+			}
+			name := nm.Path
+			if nm.Snapshot != "" {
+				name += " (snapshot " + shortSHA(nm.Snapshot) + ")"
+			}
+			a.printf("  %s: %s: %s\n", r.Repo, name, nm.Reason)
+		}
+	}
 }
 
 // importDir uploads a folder as one Commit.
@@ -283,8 +312,9 @@ func paths(files []localFile) []string {
 	return out
 }
 
-// importHFCache imports every snapshot in a Hugging Face cache: for each
-// Repo, the snapshot of `main` if cached, otherwise the newest.
+// importHFCache imports every Repo in a Hugging Face cache. A Mirror is
+// filled from the files of every cached snapshot of the Repo; a local Repo
+// gets the snapshot of `main` if cached, otherwise the newest.
 func (a *app) importHFCache(ctx context.Context, o importOptions) ([]importResult, error) {
 	root := o.FromHFCache
 	if root == "default" || root == "" {
@@ -295,22 +325,19 @@ func (a *app) importHFCache(ctx context.Context, o importOptions) ([]importResul
 		return nil, err
 	}
 	only := newImportFilter(o.Only)
-	best := map[string]cachedSnapshot{}
+	byRepo := map[string][]cachedSnapshot{}
 	for _, s := range snaps {
 		if !only.match(display(s.ID)) {
 			continue
 		}
 		k := s.ID.Path()
-		cur, ok := best[k]
-		if !ok || containsString(s.Refs, "main") && !containsString(cur.Refs, "main") {
-			best[k] = s
-		}
+		byRepo[k] = append(byRepo[k], s)
 	}
 	if err := only.unmatched(root); err != nil {
 		return nil, err
 	}
-	keys := make([]string, 0, len(best))
-	for k := range best {
+	keys := make([]string, 0, len(byRepo))
+	for k := range byRepo {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -322,25 +349,70 @@ func (a *app) importHFCache(ctx context.Context, o importOptions) ([]importResul
 	}
 	var out []importResult
 	for _, k := range keys {
-		s := best[k]
-		files := make([]localFile, 0, len(s.Files))
-		for p, disk := range s.Files {
-			st, err := os.Stat(disk)
-			if err != nil {
-				continue
-			}
-			lf := localFile{Path: p, Disk: disk, Size: st.Size()}
-			if name := filepath.Base(disk); model.IsSHA256(name) {
-				lf.SHA256 = name // blobs of LFS files are named by their SHA-256.
-			}
-			files = append(files, lf)
+		list := byRepo[k]
+		sortSnapshots(list)
+		s := list[0]
+		repoDir := filepath.Join(root, repoFolderName(s.ID))
+		src := importSource{id: s.ID, commit: s.Commit, files: snapshotFiles(s), src: repoDir}
+		if len(list) == 1 {
+			src.src = filepath.Join(repoDir, "snapshots", shortSHA(s.Commit))
 		}
-		sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-		src := filepath.Join(root, repoFolderName(s.ID), "snapshots", shortSHA(s.Commit))
-		a.warnOutside(filepath.Join(root, repoFolderName(s.ID)), s.Outside)
-		out = append(out, a.importSnapshot(ctx, c, s.ID, s.Commit, files, src, o))
+		outside := map[string]bool{}
+		for i, other := range list {
+			for _, p := range other.Outside {
+				outside[p] = true
+			}
+			if i > 0 {
+				src.others = append(src.others, cachedFiles{commit: other.Commit, files: snapshotFiles(other)})
+			}
+		}
+		a.warnOutside(repoDir, sortedKeys(outside))
+		out = append(out, a.importSnapshot(ctx, c, src, o))
 	}
 	return out, nil
+}
+
+// sortSnapshots puts the snapshot a Repo is imported at first: the one
+// `main` points at if it is cached, otherwise the newest, by when its
+// folder last changed. The rest follow, newest first.
+func sortSnapshots(list []cachedSnapshot) {
+	sort.SliceStable(list, func(i, j int) bool {
+		mi, mj := containsString(list[i].Refs, "main"), containsString(list[j].Refs, "main")
+		if mi != mj {
+			return mi
+		}
+		if !list[i].ModTime.Equal(list[j].ModTime) {
+			return list[i].ModTime.After(list[j].ModTime)
+		}
+		return list[i].Commit < list[j].Commit
+	})
+}
+
+// snapshotFiles lists the files of a cached snapshot, by path.
+func snapshotFiles(s cachedSnapshot) []localFile {
+	files := make([]localFile, 0, len(s.Files))
+	for p, disk := range s.Files {
+		st, err := os.Stat(disk)
+		if err != nil {
+			continue
+		}
+		lf := localFile{Path: p, Disk: disk, Size: st.Size()}
+		if name := filepath.Base(disk); model.IsSHA256(name) {
+			lf.SHA256 = name // blobs of LFS files are named by their SHA-256.
+		}
+		files = append(files, lf)
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func containsString(list []string, s string) bool {
@@ -352,37 +424,57 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
+// importSource is one Repo to import: the files of a cached snapshot or a
+// folder and, from a Hugging Face cache, the Repo's other cached
+// snapshots, whose files a Mirror is filled from too.
+type importSource struct {
+	id  model.RepoID
+	src string
+	// commit is the snapshot's Commit; empty for a folder, which is
+	// matched against the Mirror's default branch.
+	commit string
+	files  []localFile
+	others []cachedFiles
+}
+
+// cachedFiles are the files of one other cached snapshot.
+type cachedFiles struct {
+	commit string
+	files  []localFile
+}
+
 // importSnapshot imports one set of files, as a Mirror if the Upstream has
 // the Repo and --offline is not set, otherwise as a local Repo.
-func (a *app) importSnapshot(ctx context.Context, c *client, id model.RepoID, commit string, files []localFile, src string, o importOptions) importResult {
-	res := importResult{Repo: display(id), Source: src, Mode: "mirror"}
+func (a *app) importSnapshot(ctx context.Context, c *client, s importSource, o importOptions) importResult {
+	id := s.id
+	res := importResult{Repo: display(id), Source: s.src, Mode: "mirror"}
 	if o.Offline {
 		res.Mode = "local"
 	}
 	if o.DryRun {
-		res.Uploaded = paths(files)
+		res.Uploaded = paths(s.files)
 		return res
 	}
 	if !o.Offline {
-		r, err := a.importAsMirror(ctx, c, id, commit, files, o.Upstream)
-		var failed *uploadFailures
-		if err == nil || errors.As(err, &failed) {
+		r, err := a.importAsMirror(ctx, c, s, o.Upstream)
+		if !errors.Is(err, errNotOnUpstream) {
 			// Some files may have failed to upload while the rest were
-			// added to the Mirror: report both, and never fall back to a
-			// local Repo because a failed file's error was a 404.
-			r.Source = src
+			// added to the Mirror: report both. Only an Upstream without
+			// the Repo makes a local Repo: any other error, such as a 404
+			// for a Commit or an upload, is reported, because a Mirror
+			// is read-only (issue #28).
+			r.Source = s.src
 			if err != nil {
 				r.Error = err.Error()
 			}
 			return r
 		}
-		if !IsNotFound(err) {
-			res.Error = err.Error()
-			return res
-		}
 		a.logf("%s is not on %s; importing it as a local Repo.\n", display(id), o.Upstream)
 	}
 	res.Mode = "local"
+	if len(s.others) > 0 {
+		a.logf("%s has %d cached snapshots; the local Repo gets the files of %s.\n", display(id), len(s.others)+1, shortSHA(s.commit))
+	}
 	target := id
 	if o.Namespace != "" {
 		target.Namespace = o.Namespace
@@ -392,22 +484,31 @@ func (a *app) importSnapshot(ctx context.Context, c *client, id model.RepoID, co
 		res.Error = err.Error()
 		return res
 	}
-	pr, err := a.commitFiles(ctx, c, target, files, pushOptions{Message: "Import with hangar import"})
+	pr, err := a.commitFiles(ctx, c, target, s.files, pushOptions{Message: "Import with hangar import"})
 	if err != nil {
 		res.Error = err.Error()
 		return res
 	}
 	res.Commit = pr.Commit
-	res.Uploaded = paths(files)
+	res.Uploaded = paths(s.files)
 	return res
 }
 
+// errNotOnUpstream means the Upstream does not have a Repo, so the import
+// makes a local Repo instead of a Mirror.
+var errNotOnUpstream = errors.New("not on the Upstream")
+
 // importAsMirror plans a Mirror of the upstream Repo with history only,
-// then uploads the local files whose SHA-256 matches an LFS object the
-// Mirror references but does not hold. It returns a not-found error if
-// the Upstream does not have the Repo.
-func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, commit string, files []localFile, upstream string) (importResult, error) {
+// then uploads the local files whose content matches an LFS object the
+// Mirror references but does not hold, at the snapshot's Commit, the
+// default branch or another cached snapshot's Commit. Files are matched by
+// content, not path: the SHA-256 of LFS files and the git blob ID of the
+// others. It returns an error wrapping errNotOnUpstream if the Upstream
+// does not have the Repo.
+func (a *app) importAsMirror(ctx context.Context, c *client, s importSource, upstream string) (importResult, error) {
+	id, commit := s.id, s.commit
 	res := importResult{Repo: display(id), Mode: "mirror"}
+	pulled := false // whether this import has pulled the Mirror's history
 	repo, err := c.getRepo(ctx, id)
 	switch {
 	case IsNotFound(err):
@@ -417,6 +518,9 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		stop := a.waitStatus(fmt.Sprintf("Looking up %s on %s", display(id), upstream))
 		_, err := c.discoverDetail(ctx, id, upstream, commit)
 		stop()
+		if IsNotFound(err) {
+			return res, fmt.Errorf("%w: %w", errNotOnUpstream, err)
+		}
 		if err != nil {
 			return res, err
 		}
@@ -432,6 +536,10 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		if _, err := a.watchJob(ctx, c, job.Id, "Creating a Mirror of "+display(id)); err != nil {
 			return res, err
 		}
+		pulled = true
+		if repo, err = c.getRepo(ctx, id); err != nil {
+			return res, err
+		}
 	case err != nil:
 		return res, err
 	case !repo.Mirror:
@@ -439,59 +547,87 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 	}
 	rev := commit
 	if rev == "" {
-		if repo == nil {
-			if repo, err = c.getRepo(ctx, id); err != nil {
-				return res, err
-			}
-		}
 		rev = repo.DefaultBranch
 	}
 	gotCommit, entries, err := c.tree(ctx, id, rev)
+	if IsNotFound(err) && commit != "" && !pulled {
+		// The Mirror has not fetched this Commit yet, such as a snapshot
+		// cached after its last sync: pull its history, then look again.
+		if err := a.pullHistory(ctx, c, id, commit); err != nil {
+			return res, err
+		}
+		gotCommit, entries, err = c.tree(ctx, id, rev)
+	}
 	if err != nil {
 		return res, err
 	}
 	res.Commit = gotCommit
-	wanted := map[string]gen.TreeEntry{}
-	for _, e := range entries {
-		if e.Lfs != nil && !e.Present {
-			wanted[e.Path] = e
-		}
+	idx := newMirrorIndex()
+	idx.add(gotCommit, entries)
+	// Match against the default branch and the other cached snapshots
+	// too, so a file of an older snapshot whose content the Mirror has
+	// under another Commit or path counts as matched (issue #29). The
+	// files of a snapshot whose Commit the Mirror does not have are
+	// matched against the rest.
+	var revs []string
+	if commit != "" {
+		revs = append(revs, repo.DefaultBranch)
 	}
-	var candidates, unhashed []localFile
-	var hashBytes int64
-	for _, f := range files {
-		if _, ok := wanted[f.Path]; !ok {
+	for _, o := range s.others {
+		revs = append(revs, o.commit)
+	}
+	for _, r := range revs {
+		if idx.has(r) {
 			continue
 		}
-		if f.SHA256 == "" {
-			unhashed = append(unhashed, f)
-			hashBytes += f.Size
+		got, more, err := c.tree(ctx, id, r)
+		if IsNotFound(err) {
 			continue
 		}
-		candidates = append(candidates, f)
-	}
-	if len(unhashed) > 0 {
-		hp := newProgress(a.stderr, "Hashing "+display(id), hashBytes, a.json)
-		if err := hashFiles(ctx, unhashed, hp); err != nil {
+		if err != nil {
 			return res, err
 		}
-		hp.finish()
-		candidates = append(candidates, unhashed...)
-		sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
+		idx.add(got, more)
 	}
-	var upload []localFile
-	for _, f := range candidates {
-		e := wanted[f.Path]
-		if f.SHA256 != e.Lfs.Oid || f.Size != e.Lfs.Size {
-			res.Skipped = append(res.Skipped, f.Path)
+
+	cands := importCandidates(s)
+	if err := a.hashCandidates(ctx, id, cands, idx); err != nil {
+		return res, err
+	}
+	// send maps each object to upload to a local file that holds it;
+	// sentBy lists the local files each object stands for.
+	send := map[string]localFile{}
+	sentBy := map[string][]string{}
+	for _, f := range cands {
+		if o := idx.lfs[f.SHA256]; f.SHA256 != "" && o != nil && o.size == f.Size {
+			if o.present {
+				continue // already in the Mirror
+			}
+			if _, ok := send[f.SHA256]; !ok {
+				// Upload under the Mirror's path, so its .gitattributes
+				// rules apply.
+				send[f.SHA256] = localFile{Path: o.path, Disk: f.Disk, Size: f.Size, SHA256: f.SHA256}
+			}
+			sentBy[f.SHA256] = append(sentBy[f.SHA256], f.Path)
 			continue
 		}
-		upload = append(upload, f)
+		if f.gitOID != "" && idx.git[f.gitOID] {
+			continue // a regular file, which comes with the history
+		}
+		nm := notMatchedFile{Path: f.Path, Reason: idx.reason(f.Path)}
+		if len(s.others) > 0 {
+			nm.Snapshot = f.snapshot
+		}
+		res.Skipped = append(res.Skipped, f.Path)
+		res.NotMatched = append(res.NotMatched, nm)
 	}
+	upload := make([]localFile, 0, len(send))
 	var total int64
-	for _, f := range upload {
+	for _, f := range send {
+		upload = append(upload, f)
 		total += f.Size
 	}
+	sort.Slice(upload, func(i, j int) bool { return upload[i].Path < upload[j].Path })
 	if len(upload) > 0 && !a.json {
 		a.logf("Uploading %s to %s.\n", countFiles(len(upload), total), display(id))
 	}
@@ -518,13 +654,27 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		}
 		upload = sent
 	}
-	res.Uploaded = paths(upload)
-	if len(upload) > 0 {
-		// Pull the uploaded files into the Mirror: the Instance holds their
-		// objects now, so the Pull marks them present without a transfer,
-		// within the Namespace's quota.
-		sel := res.Uploaded
-		job, err := c.pullIntoMirror(ctx, id, gen.Selection{Paths: &sel})
+	// Pull the uploaded files into the Mirror at the Commit they were
+	// matched against: the Instance holds their objects now, so the Pull
+	// marks them present without a transfer, within the Namespace's quota.
+	// At another Commit, such as the tracked branch's newest, a file that
+	// changed since would be fetched from the Upstream, and one removed
+	// since would fail the Pull (issue #28).
+	byCommit := map[string][]string{}
+	var uploaded []string
+	for _, f := range upload {
+		o := idx.lfs[f.SHA256]
+		byCommit[o.commit] = append(byCommit[o.commit], o.path)
+		uploaded = append(uploaded, sentBy[f.SHA256]...)
+	}
+	sort.Strings(uploaded)
+	res.Uploaded = slices.Compact(uploaded)
+	for _, at := range idx.commits {
+		sel := byCommit[at]
+		if len(sel) == 0 {
+			continue
+		}
+		job, err := c.pullIntoMirror(ctx, id, at, gen.Selection{Paths: &sel})
 		if err != nil {
 			return res, err
 		}
@@ -536,6 +686,193 @@ func (a *app) importAsMirror(ctx context.Context, c *client, id model.RepoID, co
 		return res, failed
 	}
 	return res, nil
+}
+
+// importCandidate is a local file to match against a Mirror.
+type importCandidate struct {
+	localFile
+	// snapshot is the cached Commit the file came from; empty for a folder.
+	snapshot string
+	// gitOID is the file's git blob ID, if known.
+	gitOID string
+}
+
+// importCandidates lists the files of an import source: the snapshot's
+// first, then the other snapshots'. A file that several snapshots hold
+// unchanged, at the same path and with the same blob, is listed once.
+func importCandidates(s importSource) []*importCandidate {
+	var out []*importCandidate
+	seen := map[[2]string]bool{}
+	addAll := func(commit string, files []localFile) {
+		for _, f := range files {
+			k := [2]string{f.Path, f.Disk}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			c := &importCandidate{localFile: f, snapshot: commit}
+			// A Hugging Face cache names the blobs of regular files by
+			// their git blob ID.
+			if name := filepath.Base(f.Disk); commit != "" && f.SHA256 == "" && fullSHA.MatchString(name) {
+				c.gitOID = name
+			}
+			out = append(out, c)
+		}
+	}
+	addAll(s.commit, s.files)
+	for _, o := range s.others {
+		addAll(o.commit, o.files)
+	}
+	return out
+}
+
+// maxGitBlobHash is the largest file whose git blob ID the import works
+// out to match it against a Mirror's regular files.
+const maxGitBlobHash = 64 << 20
+
+// hashCandidates works out the hashes needed to match files against a
+// Mirror: the SHA-256 of a file the size of one of its LFS objects, and
+// the git blob ID of a file the size of one of its regular files. Other
+// files cannot match, so they are not read.
+func (a *app) hashCandidates(ctx context.Context, id model.RepoID, cands []*importCandidate, idx *mirrorIndex) error {
+	var unhashed []localFile
+	var at []int
+	var hashBytes int64
+	for i, f := range cands {
+		if f.SHA256 == "" && idx.lfsSizes[f.Size] {
+			unhashed = append(unhashed, f.localFile)
+			at = append(at, i)
+			hashBytes += f.Size
+		}
+		if f.gitOID == "" && f.Size <= maxGitBlobHash && idx.gitSizes[f.Size] {
+			oid, err := gitBlobIDOf(f.Disk, f.Size)
+			if err != nil {
+				return fmt.Errorf("%s: %w", f.Path, err)
+			}
+			f.gitOID = oid
+		}
+	}
+	if len(unhashed) == 0 {
+		return nil
+	}
+	hp := newProgress(a.stderr, "Hashing "+display(id), hashBytes, a.json)
+	if err := hashFiles(ctx, unhashed, hp); err != nil {
+		return err
+	}
+	hp.finish()
+	for k, i := range at {
+		cands[i].SHA256 = unhashed[k].SHA256
+	}
+	return nil
+}
+
+// gitBlobIDOf returns the git blob ID of a file of a known size.
+func gitBlobIDOf(disk string, size int64) (string, error) {
+	f, err := os.Open(disk) // #nosec G304 -- a file the user asked to import.
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha1.New() // #nosec G401 -- git object IDs are SHA-1.
+	fmt.Fprintf(h, "blob %d\x00", size)
+	n, err := io.Copy(h, io.LimitReader(f, size+1))
+	if err != nil {
+		return "", err
+	}
+	if n != size {
+		return "", fmt.Errorf("the file changed size while it was read")
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// notMatchedFile is a local file whose content is in no file of the
+// Mirror that the import checked.
+type notMatchedFile struct {
+	Path string `json:"path"`
+	// Snapshot is the cached Commit the file came from, when the Repo has
+	// more than one cached snapshot.
+	Snapshot string `json:"snapshot,omitempty"`
+	Reason   string `json:"reason"`
+}
+
+// mirrorObject is an LFS object a Mirror references.
+type mirrorObject struct {
+	size    int64
+	present bool
+	// commit and path are where the import first saw it.
+	commit, path string
+}
+
+// mirrorIndex holds the files of a Mirror at the Commits an import
+// checked, by content.
+type mirrorIndex struct {
+	commits  []string
+	lfs      map[string]*mirrorObject // by SHA-256
+	git      map[string]bool          // git blob IDs of regular files
+	paths    map[string]string        // path to the first Commit that has it
+	lfsSizes map[int64]bool
+	gitSizes map[int64]bool
+}
+
+func newMirrorIndex() *mirrorIndex {
+	return &mirrorIndex{lfs: map[string]*mirrorObject{}, git: map[string]bool{}, paths: map[string]string{},
+		lfsSizes: map[int64]bool{}, gitSizes: map[int64]bool{}}
+}
+
+// has reports whether the index holds a Commit.
+func (x *mirrorIndex) has(commit string) bool {
+	return slices.Contains(x.commits, commit)
+}
+
+// add records the files of a Commit.
+func (x *mirrorIndex) add(commit string, entries []gen.TreeEntry) {
+	if x.has(commit) {
+		return
+	}
+	x.commits = append(x.commits, commit)
+	for _, e := range entries {
+		if _, ok := x.paths[e.Path]; !ok {
+			x.paths[e.Path] = commit
+		}
+		if e.Lfs == nil {
+			x.git[e.Oid] = true
+			x.gitSizes[e.Size] = true
+			continue
+		}
+		o := x.lfs[e.Lfs.Oid]
+		if o == nil {
+			o = &mirrorObject{size: e.Lfs.Size, commit: commit, path: e.Path}
+			x.lfs[e.Lfs.Oid] = o
+			x.lfsSizes[e.Lfs.Size] = true
+		}
+		o.present = o.present || e.Present
+	}
+}
+
+// reason says why a file at path p matched nothing in the Mirror.
+func (x *mirrorIndex) reason(p string) string {
+	if c, ok := x.paths[p]; ok {
+		return fmt.Sprintf("its content differs from %s at Commit %s and from every other file checked", p, shortSHA(c))
+	}
+	short := make([]string, len(x.commits))
+	for i, c := range x.commits {
+		short[i] = shortSHA(c)
+	}
+	if len(short) == 1 {
+		return "no file in the Mirror at Commit " + short[0] + " has this content"
+	}
+	return fmt.Sprintf("no file in the Mirror at Commits %s or %s has this content", strings.Join(short[:len(short)-1], ", "), short[len(short)-1])
+}
+
+// pullHistory pulls a Commit's history into an existing Mirror, with no
+// files, and waits for it.
+func (a *app) pullHistory(ctx context.Context, c *client, id model.RepoID, commit string) error {
+	job, err := c.pullIntoMirror(ctx, id, commit, gen.Selection{Paths: &[]string{}})
+	if err != nil {
+		return err
+	}
+	_, err = a.watchJob(ctx, c, job.Id, fmt.Sprintf("Fetching Commit %s of %s", shortSHA(commit), display(id)))
+	return err
 }
 
 // countFiles describes a number of files and their size, such as
@@ -605,7 +942,7 @@ func (a *app) importLMStudio(ctx context.Context, o importOptions) ([]importResu
 		if len(files) == 0 {
 			continue
 		}
-		out = append(out, a.importSnapshot(ctx, c, id, "", files, m.dir, o))
+		out = append(out, a.importSnapshot(ctx, c, importSource{id: id, src: m.dir, files: files}, o))
 	}
 	return out, nil
 }

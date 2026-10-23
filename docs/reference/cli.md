@@ -464,10 +464,11 @@ Adds content that is already on this machine to the Arsenal. Choose one source:
   --from-hf-cache [path]   a Hugging Face cache (default ~/.cache/huggingface/hub).
                            Each Repo becomes a Mirror of the Upstream Repo with
                            the same ID: the Instance fetches its history, and
-                           the CLI uploads the cached files whose SHA-256
-                           matches. With --offline, or when the Upstream does
-                           not have the Repo, each becomes a local Repo with
-                           one Commit instead.
+                           the CLI uploads the files of every cached snapshot
+                           whose content matches a file the Mirror is missing.
+                           With --offline, or when the Upstream does not have
+                           the Repo, each becomes a local Repo with one Commit
+                           of the snapshot of main, or else the newest.
   --from-dir <dir>         a folder, uploaded to --repo as one Commit, as
                            hangar push does.
   --from-lmstudio [path]   LM Studio's models folder (<publisher>/<repo>/<files>).
@@ -481,7 +482,8 @@ Uploads go through the Instance's API, so you need write access to the
 Namespaces involved. A file that fails to upload does not stop the other
 files or Repos: files that went up into a Mirror are added to it, and the
 results name what failed, so running the command again sends only that.
-Use --dry-run to see what would be imported.
+Files whose content matches nothing in a Mirror are named after the results,
+with the reason. Use --dry-run to see what would be imported.
 
 To import some models and not the rest, give --only once for each, as it
 appears in the source: a Repo ID such as bartowski/Qwen2.5-7B-Instruct-GGUF

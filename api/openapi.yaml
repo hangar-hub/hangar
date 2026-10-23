@@ -691,6 +691,9 @@ paths:
       tags: [mirrors]
       operationId: pullMoreIntoMirror
       summary: Pull more files into a Mirror
+      description: Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+      parameters:
+        - {name: revision, in: query, description: "Branch, tag or Commit SHA on the Upstream; default: the Mirror's tracked branch.", schema: {type: string}}
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: "#/components/schemas/Selection"}}}
