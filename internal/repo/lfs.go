@@ -282,7 +282,7 @@ func (l *LFS) CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	if p.Resume && p.Multipart && p.UserID != uuid.Nil && p.RepoUUID != uuid.Nil {
+	if p.Resume && p.Multipart && (p.UserID != uuid.Nil) == (p.RepoUUID != uuid.Nil) {
 		if u, err := l.resumeUpload(ctx, p, ttl); err != nil || u != nil {
 			return u, err
 		}
@@ -324,11 +324,19 @@ func (l *LFS) CreateUpload(ctx context.Context, p UploadParams) (*Upload, error)
 
 // resumeUpload returns the newest unexpired multipart upload that matches
 // p, with its expiry extended to ttl from now, or nil when there is none.
+// A User's upload matches on the User and Repo; an upload Hangar makes
+// itself, with neither, matches only another upload with neither, such as
+// a Pull's transfer of the same object that failed or was retried.
 func (l *LFS) resumeUpload(ctx context.Context, p UploadParams, ttl time.Duration) (*Upload, error) {
 	row := new(db.Upload)
-	err := l.db.NewSelect().Model(row).Where("oid = ?", p.OID).Where("size = ?", p.Size).Where("kind = ?", uploadKindLFS).
-		Where("part_size = ?", p.PartSize).Where("upload_id <> ''").Where("user_id = ?", p.UserID).Where("repo_id = ?", p.RepoUUID).
-		Where("expires_at > ?", l.now()).OrderExpr("created_at DESC").Limit(1).Scan(ctx)
+	q := l.db.NewSelect().Model(row).Where("oid = ?", p.OID).Where("size = ?", p.Size).Where("kind = ?", uploadKindLFS).
+		Where("part_size = ?", p.PartSize).Where("upload_id <> ''")
+	if p.UserID == uuid.Nil {
+		q = q.Where("user_id IS NULL").Where("repo_id IS NULL")
+	} else {
+		q = q.Where("user_id = ?", p.UserID).Where("repo_id = ?", p.RepoUUID)
+	}
+	err := q.Where("expires_at > ?", l.now()).OrderExpr("created_at DESC").Limit(1).Scan(ctx)
 	if db.IsNotFound(err) {
 		return nil, nil
 	}

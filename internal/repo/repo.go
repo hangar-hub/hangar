@@ -514,7 +514,9 @@ type UploadParams struct {
 	// object, Repo and part size, if there is one, with its expiry moved to
 	// TTL from now, instead of starting another. The native API's upload
 	// plan sets it, so a client that plans again after a reload continues
-	// the upload that holds its parts.
+	// the upload that holds its parts. With no UserID and no RepoUUID it
+	// resumes an upload Hangar made itself of the same object and part
+	// size, so a retried Pull continues a transfer that failed part way.
 	Resume bool
 }
 
