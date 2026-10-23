@@ -84,10 +84,19 @@ func (h *Handler) listRepos(w http.ResponseWriter, r *http.Request, t model.Repo
 	needSHA := full || iopts.want("sha", false) || iopts.want("siblings", false) || iopts.want("cardData", iopts.cardData) ||
 		iopts.want("config", iopts.config) || iopts.want("tags", true) || iopts.want("library_name", t == model.RepoTypeModel) ||
 		iopts.want("pipeline_tag", t == model.RepoTypeModel) || iopts.want("safetensors", false) || iopts.want("gguf", false)
+	pg, err := h.loadListPage(r.Context(), res.Repos, needSHA, iopts)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	iopts.page = pg
 	out := make([]map[string]any, 0, len(res.Repos))
 	for _, rp := range res.Repos {
 		var sha model.CommitSHA
-		if needSHA {
+		switch {
+		case needSHA && pg.heads != nil:
+			sha = pg.heads[rp.UUID]
+		case needSHA:
 			s, err := h.d.Repos.Resolve(r.Context(), rp.ID, rp.DefaultBranch)
 			if err != nil && !errors.Is(err, repo.ErrRevisionNotFound) {
 				h.internalError(w, r, err)

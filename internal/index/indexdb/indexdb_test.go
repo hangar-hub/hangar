@@ -372,3 +372,85 @@ func TestHandleJobOfARepoDeletedWhileItRuns(t *testing.T) {
 	}})
 	require.NoError(t, hooked.HandleJob(ctx, &jobs.Job{Kind: jobs.KindIndex, Payload: raw}, nil))
 }
+
+// TestGetManyMatchesGet checks that GetMany gives each Commit what Get
+// gives it: the newest indexer version of that Commit's results, with the
+// Parquet export's Split sizes, whether the export's Splits are read in
+// one batch (DatasetSplitsOf) or a Repo at a time. Commits without results
+// and results of another Commit are left out.
+func TestGetManyMatchesGet(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := t.Context()
+		e := newEnv(t, d)
+		_, err := e.svc.Index(ctx, e.repo.UUID, e.id, e.sha)
+		require.NoError(t, err)
+
+		dsID := model.RepoID{Type: model.RepoTypeDataset, Namespace: "alice", Name: "reviews"}
+		ds := indextest.CreateRepo(t, e.repos, dsID, model.VisibilityPublic)
+		indextest.InsertRepoRow(t, d, ds)
+		dsSHA := indextest.Commit(t, e.repos, dsID, map[string][]byte{
+			"README.md":      []byte("---\nlanguage:\n- en\n---\n# Reviews\n"),
+			"data/train.csv": []byte("text,label\ngood,1\n"),
+		})
+		splits := []indexdb.DatasetSplit{{Config: "default", Split: "train", Converted: true, Rows: 2000, Bytes: 64000}}
+		hook := &splitsHook{splits: splits}
+		batches := 0
+		batch := func(_ context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID][]indexdb.DatasetSplit, error) {
+			batches++
+			out := map[uuid.UUID][]indexdb.DatasetSplit{}
+			for id := range commits {
+				out[id] = splits
+			}
+			return out, nil
+		}
+
+		// An unindexed Repo, and a Commit the index has no results for.
+		emptyID := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "empty"}
+		empty := indextest.CreateRepo(t, e.repos, emptyID, model.VisibilityPublic)
+		indextest.InsertRepoRow(t, d, empty)
+		commits := map[uuid.UUID]model.CommitSHA{
+			e.repo.UUID: e.sha,
+			ds.UUID:     dsSHA,
+			empty.UUID:  model.CommitSHA("0123456789abcdef0123456789abcdef01234567"),
+		}
+
+		for _, tc := range []struct {
+			name string
+			opts indexdb.Options
+		}{
+			{"one Repo at a time", indexdb.Options{DB: d, Repos: e.repos, DatasetSplits: hook.get}},
+			{"batched", indexdb.Options{DB: d, Repos: e.repos, DatasetSplits: hook.get, DatasetSplitsOf: batch}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				svc := indexdb.New(tc.opts)
+				_, err := svc.Index(ctx, ds.UUID, dsID, dsSHA)
+				require.NoError(t, err)
+				before := batches
+				got, err := svc.GetMany(ctx, commits)
+				require.NoError(t, err)
+				require.Len(t, got, 2, "only Commits with results")
+				for _, id := range []uuid.UUID{e.repo.UUID, ds.UUID} {
+					one, err := svc.Get(ctx, id, commits[id])
+					require.NoError(t, err)
+					require.Equal(t, one, got[id])
+				}
+				require.Equal(t, int64(2000), got[ds.UUID].Dataset.Rows)
+				if tc.opts.DatasetSplitsOf != nil {
+					require.Equal(t, before+1, batches, "one batch for every dataset")
+				}
+
+				other, err := svc.GetMany(ctx, map[uuid.UUID]model.CommitSHA{e.repo.UUID: dsSHA})
+				require.NoError(t, err)
+				require.Empty(t, other, "results of another Commit are not used")
+			})
+		}
+
+		hook.err = errors.New("database unavailable")
+		failing := indexdb.New(indexdb.Options{DB: d, Repos: e.repos, DatasetSplits: hook.get,
+			DatasetSplitsOf: func(context.Context, map[uuid.UUID]model.CommitSHA) (map[uuid.UUID][]indexdb.DatasetSplit, error) {
+				return nil, hook.err
+			}})
+		_, err = failing.GetMany(ctx, commits)
+		require.ErrorContains(t, err, "dataset splits")
+	})
+}

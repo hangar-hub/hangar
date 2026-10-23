@@ -240,6 +240,12 @@ func i64(n int64) *int64 { return &n }
 
 // toRepo converts a Repo, with the extras the caller is allowed to see.
 func (d *RepoDeps) toRepo(ctx context.Context, p model.Principal, r *repo.Repo) gen.Repo {
+	return d.toPageRepo(ctx, p, r, &repoPage{})
+}
+
+// toPageRepo is toRepo for a Repo of a page, reading what pg holds from pg
+// (loadPage).
+func (d *RepoDeps) toPageRepo(ctx context.Context, p model.Principal, r *repo.Repo, pg *repoPage) gen.Repo {
 	out := gen.Repo{
 		Id: r.ID.String(), Type: gen.RepoTypeSingular(r.ID.Type), Namespace: r.ID.Namespace, Name: r.ID.Name,
 		Visibility: gen.Visibility(r.Visibility), Description: str(r.Description), DefaultBranch: r.DefaultBranch,
@@ -259,17 +265,27 @@ func (d *RepoDeps) toRepo(ctx context.Context, p model.Principal, r *repo.Repo) 
 		out.DeletedAt = &del
 	}
 	if r.DeletedAt == nil {
-		if sha, err := d.Repos.Resolve(ctx, r.ID, ""); err == nil {
+		sha, ok := pg.heads[r.UUID]
+		if pg.heads == nil {
+			var err error
+			sha, err = d.Repos.Resolve(ctx, r.ID, "")
+			ok = err == nil
+		}
+		if ok {
 			s := string(sha)
 			out.Sha = &s
-			d.addSummary(ctx, r, sha, &out)
+			d.addSummary(ctx, r, sha, &out, pg)
 		}
 	}
 	if d.Community != nil {
-		if n, err := d.Community.Likes(ctx, r.UUID); err == nil {
+		if pg.likes != nil {
+			out.Likes = pg.likes[r.UUID]
+		} else if n, err := d.Community.Likes(ctx, r.UUID); err == nil {
 			out.Likes = n
 		}
-		if days, err := d.Community.Downloads(ctx, r.UUID, time.Now().UTC().AddDate(0, 0, -30).Truncate(24*time.Hour)); err == nil {
+		if pg.downloads != nil {
+			out.Downloads = pg.downloads[r.UUID]
+		} else if days, err := d.Community.Downloads(ctx, r.UUID, downloadsSince()); err == nil {
 			for _, day := range days {
 				out.Downloads += day.Count
 			}
@@ -296,12 +312,17 @@ func (d *RepoDeps) toRepo(ctx context.Context, p model.Principal, r *repo.Repo) 
 	return out
 }
 
-func (d *RepoDeps) addSummary(ctx context.Context, r *repo.Repo, sha model.CommitSHA, out *gen.Repo) {
+func (d *RepoDeps) addSummary(ctx context.Context, r *repo.Repo, sha model.CommitSHA, out *gen.Repo, pg *repoPage) {
 	if d.Index == nil {
 		return
 	}
-	sum, err := d.Index.Get(ctx, r.UUID, sha)
-	if err != nil {
+	sum := pg.summaries[r.UUID]
+	if pg.summaries == nil {
+		var err error
+		if sum, err = d.Index.Get(ctx, r.UUID, sha); err != nil {
+			return
+		}
+	} else if sum == nil {
 		return
 	}
 	s := gen.RepoSummary{Architecture: str(sum.Architecture), PipelineTag: str(sum.PipelineTag), LibraryName: str(sum.LibraryName)}
@@ -323,7 +344,13 @@ func (d *RepoDeps) addSummary(ctx context.Context, r *repo.Repo, sha model.Commi
 		s.Quants = &quants
 	}
 	if d.Scanner != nil {
-		if res, err := d.Scanner.Results(ctx, r.UUID, sha); err == nil {
+		if pg.scans != nil {
+			st := gen.RepoSummaryScanStatusPending
+			if status, ok := pg.scans[r.UUID]; ok {
+				st = gen.RepoSummaryScanStatus(status)
+			}
+			s.ScanStatus = &st
+		} else if res, err := d.Scanner.Results(ctx, r.UUID, sha); err == nil {
 			st := gen.RepoSummaryScanStatus(res.Status)
 			s.ScanStatus = &st
 		} else if errors.Is(err, scan.ErrNotScanned) {
@@ -405,8 +432,9 @@ func (a *ReposAPI) ListRepos(w http.ResponseWriter, r *http.Request, params gen.
 		return
 	}
 	out := gen.RepoList{Items: make([]gen.Repo, 0, len(res.Repos)), NextCursor: str(res.NextCursor)}
+	ctx, pg := a.d.loadPage(r.Context(), p, res.Repos)
 	for _, rp := range res.Repos {
-		out.Items = append(out.Items, a.d.toRepo(r.Context(), p, rp))
+		out.Items = append(out.Items, a.d.toPageRepo(ctx, p, rp, pg))
 	}
 	if res.Facets != nil {
 		out.Facets = &res.Facets

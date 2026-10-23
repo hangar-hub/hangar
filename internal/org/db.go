@@ -475,6 +475,10 @@ func (o *DBService) RoleIn(ctx context.Context, namespaceID, userID uuid.UUID) (
 	if userID == uuid.Nil {
 		return "", false, nil
 	}
+	if pr := preloaded(ctx, userID); pr != nil {
+		r, ok := pr.roleIn(namespaceID)
+		return r, ok, nil
+	}
 	var owner uuid.UUID
 	err := o.db.NewRaw("SELECT id FROM users WHERE namespace_id = ?", namespaceID).Scan(ctx, &owner)
 	switch {
@@ -502,6 +506,11 @@ func (o *DBService) RoleIn(ctx context.Context, namespaceID, userID uuid.UUID) (
 func (o *DBService) CollaboratorRole(ctx context.Context, repoUUID, userID uuid.UUID) (model.Role, bool, error) {
 	if userID == uuid.Nil {
 		return "", false, nil
+	}
+	if pr := preloaded(ctx, userID); pr != nil {
+		if r, ok, known := pr.collaboratorRole(repoUUID); known {
+			return r, ok, nil
+		}
 	}
 	var role string
 	err := o.db.NewSelect().Model((*db.Collaborator)(nil)).Column("role").

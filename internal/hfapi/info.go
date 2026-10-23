@@ -30,6 +30,9 @@ type infoOpts struct {
 	// list is true for /api/models and /api/datasets items, which carry
 	// fewer fields by default than Repo info.
 	list bool
+	// page holds data read for a whole page of list items; nil reads it
+	// for each Repo.
+	page *listPage
 }
 
 // want reports whether property name belongs in the object.
@@ -104,13 +107,17 @@ func (h *Handler) buildInfo(ctx context.Context, rp *repo.Repo, sha model.Commit
 		o.want("library_name", isModel) || o.want("pipeline_tag", isModel) || o.want("safetensors", isModel && !o.list) || o.want("gguf", isModel && !o.list) ||
 		o.want("baseModels", false) || o.want("model-index", false)
 	if sha != "" && needSummary {
-		s, err := h.d.Index.Get(ctx, rp.UUID, sha)
-		switch {
-		case err == nil:
-			summary = s
-		case errors.Is(err, index.ErrNotIndexed):
-		default:
-			return nil, err
+		if o.page != nil && o.page.summaries != nil {
+			summary = o.page.summaries[rp.UUID]
+		} else {
+			s, err := h.d.Index.Get(ctx, rp.UUID, sha)
+			switch {
+			case err == nil:
+				summary = s
+			case errors.Is(err, index.ErrNotIndexed):
+			default:
+				return nil, err
+			}
 		}
 	}
 	lastModified := rp.LastModified
@@ -139,9 +146,14 @@ func (h *Handler) buildInfo(ctx context.Context, rp *repo.Repo, sha model.Commit
 		out["disabled"] = false
 	}
 	if o.want("downloads", true) || o.want("downloadsAllTime", false) {
-		recent, all, err := h.downloads(ctx, rp, o.want("downloadsAllTime", false))
-		if err != nil {
-			return nil, err
+		var recent, all int64
+		if o.page != nil && o.page.recent != nil {
+			recent, all = o.page.recent[rp.UUID], o.page.all[rp.UUID]
+		} else {
+			var err error
+			if recent, all, err = h.downloads(ctx, rp, o.want("downloadsAllTime", false)); err != nil {
+				return nil, err
+			}
 		}
 		if o.want("downloads", true) {
 			out["downloads"] = recent
@@ -151,11 +163,15 @@ func (h *Handler) buildInfo(ctx context.Context, rp *repo.Repo, sha model.Commit
 		}
 	}
 	if o.want("likes", true) {
-		n, err := h.d.Community.Likes(ctx, rp.UUID)
-		if err != nil {
-			return nil, err
+		if o.page != nil && o.page.likes != nil {
+			out["likes"] = o.page.likes[rp.UUID]
+		} else {
+			n, err := h.d.Community.Likes(ctx, rp.UUID)
+			if err != nil {
+				return nil, err
+			}
+			out["likes"] = n
 		}
-		out["likes"] = n
 	}
 	if o.want("trendingScore", false) {
 		out["trendingScore"] = 0

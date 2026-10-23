@@ -15,7 +15,7 @@ What to back up:
 `hangar admin backup` reads the configuration like `hangar server` does and writes a folder with:
 
 - `manifest.json`: the Hangar version, schema version, database driver, row counts and object counts;
-- `db/<table>.jsonl`: every table, read in one transaction, so it is consistent;
+- `db/<table>.jsonl`: every table, read in one transaction, so it is consistent, except the Repo listing facts (`repo_facts`, `repo_facet_values` and `repo_facts_changes`), which Hangar rebuilds from the other tables after a restore;
 - `blobs/<key>`: every Blob store object, except staging areas.
 
 ```sh

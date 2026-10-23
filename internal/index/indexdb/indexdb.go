@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -52,6 +53,11 @@ type Options struct {
 	// its Parquet export, for rows, bytes and features per Split (DATA-9);
 	// optional. The datasets package provides it.
 	DatasetSplits func(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA) ([]DatasetSplit, error)
+	// DatasetSplitsOf returns the converted Splits of many dataset
+	// Commits at once, as DatasetSplits does for one, so GetMany reads
+	// them with one call; optional. Without it GetMany calls DatasetSplits
+	// for each dataset.
+	DatasetSplitsOf func(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID][]DatasetSplit, error)
 	// AfterIndex runs after a Job stores results, for example to enqueue
 	// dataset.convert; optional. Its error fails the Job so it is retried.
 	AfterIndex func(ctx context.Context, job index.CommitJob, s *index.Summary) error
@@ -81,7 +87,10 @@ type Service struct {
 	o Options
 }
 
-var _ index.Indexer = (*Service)(nil)
+var (
+	_ index.Indexer     = (*Service)(nil)
+	_ index.BatchGetter = (*Service)(nil)
+)
 
 // New returns a Service.
 func New(o Options) *Service {
@@ -177,26 +186,123 @@ func (s *Service) Get(ctx context.Context, repoUUID uuid.UUID, commit model.Comm
 	if err != nil {
 		return nil, err
 	}
+	return s.decode(ctx, &row)
+}
+
+// getManyBatch is how many Commits one GetMany query reads.
+const getManyBatch = 500
+
+// GetMany implements index.BatchGetter: Get for many Commits, reading the
+// stored results with one query per 500 Commits.
+func (s *Service) GetMany(ctx context.Context, commits map[uuid.UUID]model.CommitSHA) (map[uuid.UUID]*index.Summary, error) {
+	out := make(map[uuid.UUID]*index.Summary, len(commits))
+	ids := make([]uuid.UUID, 0, len(commits))
+	for id := range commits {
+		ids = append(ids, id)
+	}
+	for start := 0; start < len(ids); start += getManyBatch {
+		part := ids[start:min(start+getManyBatch, len(ids))]
+		shas := make([]string, 0, len(part))
+		for _, id := range part {
+			shas = append(shas, string(commits[id]))
+		}
+		var rows []db.Metadata
+		if err := s.o.DB.NewSelect().Model(&rows).Where("repo_id IN (?)", bun.List(part)).Where("commit_sha IN (?)", bun.List(shas)).
+			Scan(ctx); err != nil {
+			return nil, err
+		}
+		// The newest indexer version of each Repo's own Commit, as Get
+		// picks it.
+		newest := map[uuid.UUID]*db.Metadata{}
+		for i := range rows {
+			r := &rows[i]
+			if string(commits[r.RepoID]) != r.Commit {
+				continue
+			}
+			if cur := newest[r.RepoID]; cur == nil || r.IndexerVersion > cur.IndexerVersion {
+				newest[r.RepoID] = r
+			}
+		}
+		sums := map[uuid.UUID]*index.Summary{}
+		datasets := map[uuid.UUID]model.CommitSHA{}
+		for id, row := range newest {
+			var sum index.Summary
+			if err := json.Unmarshal(row.Summary, &sum); err != nil {
+				return nil, fmt.Errorf("decode index results: %w", err)
+			}
+			sums[id] = &sum
+			if sum.Dataset != nil {
+				datasets[id] = commits[id]
+			}
+		}
+		var splits map[uuid.UUID][]DatasetSplit
+		if len(datasets) > 0 && s.o.DatasetSplits != nil && s.o.DatasetSplitsOf != nil {
+			var err error
+			if splits, err = s.o.DatasetSplitsOf(ctx, datasets); err != nil {
+				return nil, fmt.Errorf("dataset splits: %w", err)
+			}
+		}
+		for id, sum := range sums {
+			var err error
+			if splits != nil {
+				err = s.storeSplits(ctx, newest[id], sum, splits[id])
+			} else {
+				err = s.addSplits(ctx, newest[id], sum)
+			}
+			if err != nil {
+				return nil, err
+			}
+			out[id] = sum
+		}
+	}
+	return out, nil
+}
+
+// decode reads a stored row's results and adds newer dataset sizes, storing
+// them when they changed.
+func (s *Service) decode(ctx context.Context, row *db.Metadata) (*index.Summary, error) {
 	var sum index.Summary
 	if err := json.Unmarshal(row.Summary, &sum); err != nil {
 		return nil, fmt.Errorf("decode index results: %w", err)
 	}
-	changed, err := s.applySplits(ctx, repoUUID, commit, &sum)
-	if err != nil {
+	if err := s.addSplits(ctx, row, &sum); err != nil {
 		return nil, err
 	}
-	if changed {
-		raw, err := json.Marshal(&sum)
-		if err != nil {
-			return nil, err
-		}
-		row.Summary, row.UpdatedAt = raw, db.Now()
-		_, err = s.o.DB.NewUpdate().Model(&row).Column("summary", "updated_at").WherePK().Exec(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("store dataset sizes: %w", err)
-		}
-	}
 	return &sum, nil
+}
+
+// addSplits adds a stored row's newer dataset sizes from DatasetSplits,
+// storing them when they changed.
+func (s *Service) addSplits(ctx context.Context, row *db.Metadata, sum *index.Summary) error {
+	if sum.Dataset == nil || s.o.DatasetSplits == nil {
+		return nil
+	}
+	splits, err := s.o.DatasetSplits(ctx, row.RepoID, model.CommitSHA(row.Commit))
+	if err != nil {
+		return fmt.Errorf("dataset splits: %w", err)
+	}
+	return s.storeSplits(ctx, row, sum, splits)
+}
+
+// storeSplits applies splits to a stored row's results and stores them
+// when they changed.
+func (s *Service) storeSplits(ctx context.Context, row *db.Metadata, sum *index.Summary, splits []DatasetSplit) error {
+	if sum.Dataset == nil {
+		return nil
+	}
+	changed, err := applySplitSizes(sum, splits)
+	if err != nil || !changed {
+		return err
+	}
+	raw, err := json.Marshal(sum)
+	if err != nil {
+		return err
+	}
+	row.Summary, row.UpdatedAt = raw, db.Now()
+	if _, err := s.o.DB.NewUpdate().Model(row).Column("summary", "updated_at").WherePK().Exec(ctx); err != nil {
+		return fmt.Errorf("store dataset sizes: %w", err)
+	}
+	return nil
 }
 
 // applySplits fills a dataset Summary's rows, bytes, features and size
@@ -204,14 +310,20 @@ func (s *Service) Get(ctx context.Context, repoUUID uuid.UUID, commit model.Comm
 // Commits the export has no Splits for keep what they have: the export
 // drops the rows of a Commit when it converts a newer one.
 func (s *Service) applySplits(ctx context.Context, repoUUID uuid.UUID, commit model.CommitSHA, sum *index.Summary) (bool, error) {
-	d := sum.Dataset
-	if d == nil || s.o.DatasetSplits == nil {
+	if sum.Dataset == nil || s.o.DatasetSplits == nil {
 		return false, nil
 	}
 	splits, err := s.o.DatasetSplits(ctx, repoUUID, commit)
 	if err != nil {
 		return false, fmt.Errorf("dataset splits: %w", err)
 	}
+	return applySplitSizes(sum, splits)
+}
+
+// applySplitSizes fills a dataset Summary's rows, bytes, features and size
+// category from its Splits, as applySplits describes.
+func applySplitSizes(sum *index.Summary, splits []DatasetSplit) (bool, error) {
+	d := sum.Dataset
 	var sizes []index.SplitSize
 	var rows, bytes int64
 	features := map[string][]index.FeatureColumn{}
