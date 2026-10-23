@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -73,6 +73,44 @@ describe("Dialog", () => {
     }
     render(<WithInitialFocus />);
     expect(screen.getByRole("textbox", { name: "Search Hangar" })).toHaveFocus();
+  });
+
+  it("closes a dialog that shows a secret once only with its button", async () => {
+    const change = vi.fn();
+    const done = vi.fn();
+    render(
+      <Dialog
+        open
+        persistent
+        onOpenChange={change}
+        title="Copy your new Token"
+        footer={
+          <button type="button" onClick={done}>
+            I've copied it
+          </button>
+        }
+      >
+        <code>hgr_secret</code>
+      </Dialog>,
+    );
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    fireEvent.pointerDown(document.body);
+    expect(change).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Copy your new Token" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "I've copied it" }));
+    expect(done).toHaveBeenCalledOnce();
+  });
+
+  it("closes an ordinary dialog with Escape", async () => {
+    const change = vi.fn();
+    render(
+      <Dialog open onOpenChange={change} title="Plain">
+        <input aria-label="Field" />
+      </Dialog>,
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(change).toHaveBeenCalledWith(false);
   });
 });
 

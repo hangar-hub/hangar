@@ -35,6 +35,7 @@ function LinkDialog({
       title={title}
       description="Hangar does not send email. Copy the link and send it yourself. It works once."
       footer={<Button onClick={onClose}>Done</Button>}
+      persistent
     >
       {link ? (
         <div className="space-y-2">

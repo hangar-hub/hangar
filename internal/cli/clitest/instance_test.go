@@ -210,7 +210,7 @@ func TestDiscoverPullsAndJobs(t *testing.T) {
 	deps, _ := c.GetDependenciesWithResponse(ctx, gen.Models, "org", "tiny-GGUF")
 	require.Empty(t, deps.JSON200.Needs)
 
-	more, _ := c.PullMoreIntoMirrorWithResponse(ctx, gen.Models, "org", "tiny-GGUF", gen.Selection{Paths: &[]string{"tiny-Q8_0.gguf"}})
+	more, _ := c.PullMoreIntoMirrorWithResponse(ctx, gen.Models, "org", "tiny-GGUF", &gen.PullMoreIntoMirrorParams{}, gen.Selection{Paths: &[]string{"tiny-Q8_0.gguf"}})
 	i.FailPulls = "boom"
 	for range 2 {
 		_, _ = c.GetJobWithResponse(ctx, more.JSON202.Id)
@@ -230,7 +230,7 @@ func TestDiscoverPullsAndJobs(t *testing.T) {
 
 	local := mustID(t, "acme/local")
 	i.AddRepo(local, clitest.File{Path: "a.txt", Content: []byte("a")})
-	notMirror, _ := c.PullMoreIntoMirrorWithResponse(ctx, gen.Models, "acme", "local", gen.Selection{})
+	notMirror, _ := c.PullMoreIntoMirrorWithResponse(ctx, gen.Models, "acme", "local", &gen.PullMoreIntoMirrorParams{}, gen.Selection{})
 	require.Equal(t, http.StatusConflict, notMirror.StatusCode())
 	require.NotNil(t, i.Repo(local))
 	require.Equal(t, []byte("a"), i.Files(local, "main")["a.txt"])

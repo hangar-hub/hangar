@@ -158,9 +158,18 @@ func indexV2Objects(b []byte) (oids []string, ok bool, err error) {
 
 const sha1Size = 20
 
-// StorePack uploads a pack written in the staging repository to the Blob
-// store and records it as pending. The caller marks it live in the same
+// StorePack records a pack written in the staging repository as pending
+// and uploads it to the Blob store. The caller marks it live in the same
 // transaction that moves refs, or orphaned if that fails.
+//
+// Packs are named by their checksum, so storing a pack again with the same
+// contents, as a push sent again after a failed attempt does, finds the row
+// of the earlier copy. An orphaned, retired or pending row becomes pending
+// again, newly updated, so no sweep selects it during the grace period and
+// a sweep that selected it before cannot claim it (DeletePack). StorePack
+// records the row before it uploads the files, and waits while a sweep is
+// deleting the earlier copy, so the files it uploads are never the ones a
+// sweep deletes.
 func (st *Staging) StorePack(ctx context.Context, sha string) (PackInfo, error) {
 	s := st.store
 	info := PackInfo{SHA: sha}
@@ -170,6 +179,14 @@ func (st *Staging) StorePack(ctx context.Context, sha string) (PackInfo, error) 
 	}
 	info.Objects = objs
 	info.ObjectCount = int64(len(objs))
+	fi, err := os.Stat(filepath.Join(st.PackDir(), "pack-"+sha+".pack"))
+	if err != nil {
+		return info, err
+	}
+	info.Size = fi.Size()
+	if err := s.recordPending(ctx, st.repoID, info); err != nil {
+		return info, err
+	}
 	for _, ext := range packExts {
 		path := filepath.Join(st.PackDir(), "pack-"+sha+"."+ext)
 		f, err := os.Open(path) //nolint:gosec // a pack in the staging directory.
@@ -189,23 +206,80 @@ func (st *Staging) StorePack(ctx context.Context, sha string) (PackInfo, error) 
 		if err != nil {
 			return info, fmt.Errorf("gitstore: upload pack: %w", err)
 		}
-		if ext == "pack" {
-			info.Size = fi.Size()
-		}
-	}
-	row := &db.Pack{RepoID: st.repoID, PackSHA1: sha, Size: info.Size, ObjectCount: info.ObjectCount, State: PackPending}
-	if _, err := s.db.NewInsert().Model(row).On("CONFLICT DO NOTHING").Exec(ctx); err != nil {
-		return info, fmt.Errorf("gitstore: record pack: %w", err)
 	}
 	s.addLocal(st.repoID, st.PackDir(), sha)
 	return info, nil
 }
 
-// MarkLive makes a pending pack live inside the transaction that moves refs.
+// ErrPackDeleting means a sweep is still deleting an earlier copy of a
+// pack being stored again. It is temporary: the store can be tried again.
+var ErrPackDeleting = errors.New("gitstore: an earlier copy of the pack is being deleted; try again")
+
+// ErrPackNotPending means MarkLive found the pack neither pending nor
+// live: it was marked orphaned or claimed by a sweep after StorePack
+// recorded it. Storing the pack again recovers.
+var ErrPackNotPending = errors.New("gitstore: the pack is no longer pending; store it again")
+
+// packDeletingWait bounds how long StorePack waits for a sweep that is
+// deleting an earlier copy of the pack. A sweep deletes a pack's few files
+// and then its row, so it is normally done well within this.
+const packDeletingWait = 30 * time.Second
+
+// recordPendingSQL inserts a pack row as pending or, when the pack is
+// already recorded, makes the row pending again unless it is live. A row
+// a sweep has claimed is left alone, so no row is affected.
+const recordPendingSQL = `INSERT INTO packs (repo_id, pack_sha1, size, object_count, state, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (repo_id, pack_sha1) DO UPDATE SET
+	state = CASE WHEN packs.state = ? THEN packs.state ELSE EXCLUDED.state END,
+	retired_at = NULL,
+	updated_at = EXCLUDED.updated_at
+WHERE packs.state <> ?`
+
+// recordPending records a pack as pending, waiting while a sweep deletes an
+// earlier copy of it (see StorePack).
+func (s *Store) recordPending(ctx context.Context, repoID uuid.UUID, info PackInfo) error {
+	deadline := time.Now().Add(packDeletingWait)
+	wait := 20 * time.Millisecond
+	for {
+		now := db.Now()
+		res, err := s.db.ExecContext(ctx, recordPendingSQL, repoID, info.SHA, info.Size, info.ObjectCount, PackPending, now, now,
+			PackLive, PackDeleting)
+		if err != nil {
+			return fmt.Errorf("gitstore: record pack: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return ErrPackDeleting
+		}
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+		wait = min(wait*2, time.Second)
+	}
+}
+
+// MarkLive makes a pending pack live inside the transaction that moves
+// refs. It returns ErrPackNotPending unless the pack is pending or already
+// live, so refs never move onto a pack a sweep may delete.
 func MarkLive(ctx context.Context, tx bun.IDB, repoID uuid.UUID, sha string) error {
-	_, err := tx.NewUpdate().Model((*db.Pack)(nil)).Set("state = ?", PackLive).Set("updated_at = ?", db.Now()).
+	res, err := tx.NewUpdate().Model((*db.Pack)(nil)).Set("state = ?", PackLive).Set("updated_at = ?", db.Now()).
 		Where("repo_id = ?", repoID).Where("pack_sha1 = ?", sha).Where("state IN (?)", bun.List([]string{PackPending, PackLive})).Exec(ctx)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n != 1 {
+		return fmt.Errorf("%w: %s", ErrPackNotPending, sha)
+	}
+	return nil
 }
 
 // MarkOrphaned records that a pending pack lost its ref update, so the
@@ -326,35 +400,67 @@ var packExts = []string{"pack", "rev", "bitmap", "idx"}
 // optionalExt reports whether a pack file may be absent.
 func optionalExt(ext string) bool { return ext == "rev" || ext == "bitmap" }
 
-// Sweep deletes retired and orphaned packs, and pending packs whose push
-// never finished, once they are older than grace (git.pack_grace_period,
-// longer than the longest request). It returns how many packs it deleted.
+// Sweep deletes retired and orphaned packs, pending packs whose push never
+// finished and packs an earlier sweep did not finish deleting, once they
+// are older than grace (git.pack_grace_period, longer than the longest
+// request). It returns how many packs it deleted.
 func (s *Store) Sweep(ctx context.Context, grace time.Duration) (int, error) {
 	cutoff := db.Now().Add(-grace)
+	const cond = `((state IN (?) AND retired_at < ?) OR (state IN (?) AND updated_at < ?))`
+	args := []any{bun.List([]string{PackRetired, PackOrphaned}), cutoff, bun.List([]string{PackPending, PackDeleting}), cutoff}
 	var packs []db.Pack
-	err := s.db.NewSelect().Model(&packs).WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.WhereGroup(" OR ", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.Where("state IN (?) AND retired_at < ?", bun.List([]string{PackRetired, PackOrphaned}), cutoff).
-				WhereOr("state = ? AND created_at < ?", PackPending, cutoff)
-		})
-	}).Scan(ctx)
-	if err != nil {
+	if err := s.db.NewSelect().Model(&packs).Column("repo_id", "pack_sha1").Where(cond, args...).Scan(ctx); err != nil {
 		return 0, err
 	}
 	n := 0
 	for _, p := range packs {
-		for _, ext := range packExts {
-			if err := s.blobs.Delete(ctx, PackKey(p.RepoID, p.PackSHA1, ext)); err != nil && !errors.Is(err, blob.ErrNotFound) {
-				return n, err
-			}
-		}
-		if _, err := s.db.NewDelete().Model((*db.Pack)(nil)).Where("repo_id = ?", p.RepoID).Where("pack_sha1 = ?", p.PackSHA1).
-			Where("state = ?", p.State).Exec(ctx); err != nil {
+		deleted, err := DeletePack(ctx, s.db, s.blobs, p.RepoID, p.PackSHA1, cond, args...)
+		if err != nil {
 			return n, err
 		}
-		n++
+		if deleted {
+			n++
+		}
 	}
 	return n, nil
+}
+
+// DeletePack deletes a pack a sweep selected because it met eligible, a
+// condition on its packs row with args. It claims the pack first, by
+// setting its state to deleting with an update that checks the row still
+// meets eligible, so a pack stored again since the sweep selected it is
+// left alone and deleted is false. StorePack waits while a pack is
+// deleting, so the files deleted here are never ones it uploaded. The row
+// goes once every file has. If a file delete fails, the error is returned
+// with deleted true, and the row stays deleting for a later sweep: eligible
+// should match a deleting row whose updated_at is older than the grace
+// period, which assumes no sweep takes that long to delete one pack.
+func DeletePack(ctx context.Context, d *db.DB, blobs blob.Store, repoID uuid.UUID, sha, eligible string, args ...any) (deleted bool, err error) {
+	res, err := d.NewUpdate().Model((*db.Pack)(nil)).Set("state = ?", PackDeleting).Set("updated_at = ?", db.Now()).
+		Where("repo_id = ? AND pack_sha1 = ?", repoID, sha).Where(eligible, args...).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return false, nil
+	}
+	var keys []string
+	if err := blobs.List(ctx, PackKey(repoID, sha, ""), func(i blob.Info) error {
+		keys = append(keys, i.Key)
+		return nil
+	}); err != nil {
+		return true, fmt.Errorf("gitstore: list pack files: %w", err)
+	}
+	for _, k := range keys {
+		if err := blobs.Delete(ctx, k); err != nil && !errors.Is(err, blob.ErrNotFound) {
+			return true, fmt.Errorf("gitstore: delete pack file: %w", err)
+		}
+	}
+	if _, err := d.NewDelete().Model((*db.Pack)(nil)).Where("repo_id = ? AND pack_sha1 = ? AND state = ?", repoID, sha, PackDeleting).
+		Exec(ctx); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 // DeleteRepo removes every pack of a Repo from the Blob store and the local

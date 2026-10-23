@@ -116,11 +116,26 @@ func (f *Fake) Cancel(_ context.Context, id jobs.JobID) error {
 	if !j.Status.Active() {
 		return fmt.Errorf("%w: %s is %s", jobs.ErrNotActive, id, j.Status)
 	}
-	if cancel, ok := f.cancels[id]; ok {
-		cancel()
-	}
+	// Active child Jobs are cancelled too, as jobs.DBQueue does.
 	now := f.now()
-	j.Status, j.FinishedAt, j.UpdatedAt = jobs.StatusCancelled, &now, now
+	ids := []jobs.JobID{id}
+	for len(ids) > 0 {
+		var children []jobs.JobID
+		for _, cid := range ids {
+			c := f.jobs[cid]
+			if cancel, ok := f.cancels[cid]; ok {
+				cancel()
+			}
+			c.Status, c.FinishedAt, c.UpdatedAt = jobs.StatusCancelled, &now, now
+		}
+		for _, o := range f.order {
+			c := f.jobs[o]
+			if c.Status.Active() && slices.Contains(ids, c.ParentID) {
+				children = append(children, o)
+			}
+		}
+		ids = children
+	}
 	return nil
 }
 

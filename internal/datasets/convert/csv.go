@@ -161,21 +161,38 @@ type csvReader struct {
 	names []string
 }
 
-func latin1ToUTF8(b []byte) []byte {
-	var out bytes.Buffer
-	for _, c := range b {
-		out.WriteRune(rune(c))
+// latin1Reader decodes Latin-1 to UTF-8 as it reads, so a large file is
+// never held in memory.
+type latin1Reader struct {
+	r            io.Reader
+	in, buf, out []byte
+	err          error
+}
+
+func (l *latin1Reader) Read(p []byte) (int, error) {
+	for len(l.out) == 0 {
+		if l.err != nil {
+			return 0, l.err
+		}
+		if l.in == nil {
+			l.in = make([]byte, 32<<10)
+		}
+		var n int
+		n, l.err = l.r.Read(l.in)
+		l.buf = l.buf[:0]
+		for _, c := range l.in[:n] {
+			l.buf = utf8.AppendRune(l.buf, rune(c))
+		}
+		l.out = l.buf
 	}
-	return out.Bytes()
+	n := copy(p, l.out)
+	l.out = l.out[n:]
+	return n, nil
 }
 
 func newCSVReader(r io.Reader, o *csvOptions) (*csvReader, error) {
 	if o.encodingLatin {
-		raw, err := readAllLimit(r, 1<<34)
-		if err != nil {
-			return nil, err
-		}
-		r = bytes.NewReader(latin1ToUTF8(raw))
+		r = &latin1Reader{r: r}
 	}
 	br := bytes.NewBuffer(nil)
 	// Strip a UTF-8 byte order mark, as pandas does.

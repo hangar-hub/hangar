@@ -237,7 +237,7 @@ func metadataTables(e *env, f File, ext string, fn func(cols []string, rows [][]
 			return err
 		}
 		for _, m := range ms {
-			err := jsonChunks(m, "", func(ex []any) error {
+			err := jsonChunks(m, "", func(ex []any, _ bool) error {
 				t := &itype{id: features.Struct}
 				for _, x := range ex {
 					t = merge(t, inferJSON(x, true, 0))

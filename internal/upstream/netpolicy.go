@@ -82,11 +82,13 @@ type guardedTransport struct {
 	lookup       func(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
-// newGuardedTransport returns the default Upstream transport.
-func newGuardedTransport() *guardedTransport {
+// newGuardedTransport returns the default Upstream transport, which waits
+// at most headerTimeout for response headers.
+func newGuardedTransport(headerTimeout time.Duration) *guardedTransport {
 	mk := func(allowPrivate bool) *http.Transport {
 		t := http.DefaultTransport.(*http.Transport).Clone()
 		t.DialContext = guardedDialer(allowPrivate).DialContext
+		t.ResponseHeaderTimeout = headerTimeout
 		return t
 	}
 	return &guardedTransport{open: mk(true), public: mk(false), lookup: lookupHost}

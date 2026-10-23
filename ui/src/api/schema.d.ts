@@ -1025,7 +1025,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pull more files into a Mirror */
+        /**
+         * Pull more files into a Mirror
+         * @description Pulls the selected files at a Revision of the upstream Repo. Without `revision`, the Mirror's tracked branch.
+         */
         post: operations["pullMoreIntoMirror"];
         delete?: never;
         options?: never;
@@ -4643,7 +4646,10 @@ export interface operations {
     };
     pullMoreIntoMirror: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Branch, tag or Commit SHA on the Upstream; default: the Mirror's tracked branch. */
+                revision?: string;
+            };
             header?: never;
             path: {
                 type: components["parameters"]["RepoType"];

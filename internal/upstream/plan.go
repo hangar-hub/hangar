@@ -627,6 +627,14 @@ func (s *Service) checkFiles(ctx context.Context, j *jobs.Job, p *pullPayload, r
 				f.Reason = reasonQuotaExceeded
 			}
 		case jobs.StatusCancelled:
+			queued, err := s.requeueCancelledTransfer(ctx, j, p, r, st, fj, f)
+			if err != nil {
+				return 0, err
+			}
+			if queued {
+				active++
+				continue
+			}
 			f.Status, f.Error = fileCancelled, "cancelled"
 		case jobs.StatusRunning:
 			f.Status, f.BytesDone = fileRunning, fj.Progress.BytesDone
@@ -702,19 +710,51 @@ func (s *Service) requeueRefusedTransfer(ctx context.Context, j *jobs.Job, p *pu
 	case err != nil && !errors.Is(err, repo.ErrNotFound):
 		return false, err
 	}
+	return true, s.requeueTransfer(ctx, j, p, r, st, f, ownTransferKey(f.OID, r.NamespaceID))
+}
+
+// requeueCancelledTransfer handles a transfer that was cancelled because
+// the Pull that started it was. Pulls of the same object share one
+// pull.file Job, whose parent is the Pull that queued it first, and
+// cancelling a Job cancels its children, so cancelling that Pull also
+// cancels the transfer for every Pull that joined it. This Pull still
+// wants the file: it queues the transfer again under the same dedupe key,
+// as its own child, or joins the one another Pull has queued meanwhile.
+// queued is false when the transfer was this Pull's own, or was cancelled
+// by itself rather than through its Pull; the file then counts as
+// cancelled.
+func (s *Service) requeueCancelledTransfer(ctx context.Context, j *jobs.Job, p *pullPayload, r *repo.Repo, st *pullState, fj *jobs.Job, f *fileState) (queued bool, err error) {
+	if fj.ParentID == uuid.Nil || fj.ParentID == j.ID {
+		return false, nil
+	}
+	parent, err := s.opts.Queue.Get(ctx, fj.ParentID)
+	if errors.Is(err, jobs.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if parent.Status != jobs.StatusCancelled {
+		return false, nil
+	}
+	return true, s.requeueTransfer(ctx, j, p, r, st, f, fj.DedupeKey)
+}
+
+// requeueTransfer queues the transfer of f again for this Pull under key.
+func (s *Service) requeueTransfer(ctx context.Context, j *jobs.Job, p *pullPayload, r *repo.Repo, st *pullState, f *fileState, key string) error {
 	upID, err := p.upstreamID()
 	if err != nil {
-		return false, jobs.Permanent(err)
+		return jobs.Permanent(err)
 	}
 	up, err := s.opts.Registry.Get(ctx, p.UpstreamID)
 	if err != nil {
-		return false, err
+		return err
 	}
-	if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, st.Commit, f, ownTransferKey(f.OID, r.NamespaceID)); err != nil {
-		return false, err
+	if err := s.queueTransfer(ctx, j.ID, p, up, upID, r, st.Commit, f, key); err != nil {
+		return err
 	}
 	f.Status, f.BytesDone, f.Error, f.Reason = fileQueued, 0, "", ""
-	return true, nil
+	return nil
 }
 
 // quotaFailure returns the error that fails a Pull whose files the

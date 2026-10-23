@@ -300,6 +300,44 @@ type localOptions struct {
 	beforeQuotaCheck func(ctx context.Context)
 	// logger receives the worker's log; nil discards it.
 	logger *slog.Logger
+	// transport sends the Upstream requests; nil means the client's
+	// default.
+	transport http.RoundTripper
+}
+
+// fixedReceiveBuffer is the receive buffer fixedBufferTransport asks for.
+// Linux caps it at net.core.rmem_max and doubles it, so it is 416 KiB
+// with Ubuntu's defaults: several loopback segments.
+const fixedReceiveBuffer = 1 << 20
+
+// fixedBufferTransport returns a transport whose connections have a fixed
+// receive buffer.
+//
+// On Linux 6.17, the kernel of GitHub's ubuntu-24.04 runners, a loopback
+// connection whose reader is slower than its sender, as a transfer under
+// the bandwidth cap is, drops segments when its receive queue is full
+// (TCPRcvQDrop, RcvPruned) and recovers each after a retransmission
+// timeout of at least 200 ms. The kernel can also shrink the connection's
+// receive buffer below one loopback segment (36800 bytes against segments
+// of up to 64 KiB), and then each recovery brings in about 16 KiB: the
+// transfer moves about 77 KiB/s however much of the cap it may use, and
+// the test fails at about 61% of the cap. A fixed buffer is not shrunk,
+// and it holds several segments, enough to keep the transfer at its share
+// of the cap while a loss is recovered. So the test measures the limiter,
+// not the kernel's receive buffer tuning.
+func fixedBufferTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	d := &net.Dialer{Timeout: 30 * time.Second, Control: func(_, _ string, c syscall.RawConn) error {
+		var serr error
+		if err := c.Control(func(fd uintptr) {
+			serr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, fixedReceiveBuffer)
+		}); err != nil {
+			return err
+		}
+		return serr
+	}}
+	t.DialContext = d.DialContext
+	return t
 }
 
 func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *localInstance {
@@ -340,7 +378,7 @@ func newLocal(t *testing.T, d *db.DB, upstreamURL string, o localOptions) *local
 	l.settings.Store(&upstream.Settings{AllowOverrideWindows: true, PullThroughAllow: []string{"*"}, PullThroughMinRole: "user"})
 	signer, err := httpx.NewSigner(instanceKey)
 	require.NoError(t, err)
-	l.svc, err = upstream.New(upstream.Options{DB: d, Registry: l.registry, Client: upstream.NewHTTPClient(upstream.HTTPOptions{Version: "compat"}),
+	l.svc, err = upstream.New(upstream.Options{DB: d, Registry: l.registry, Client: upstream.NewHTTPClient(upstream.HTTPOptions{Version: "compat", Transport: o.transport}),
 		Repos: l.real.Store, LFS: l.real.LFS, Orgs: l.orgs, Queue: l.queue, Limiter: lim, Authz: l.authz, Layout: datasetstest.NewLayout(),
 		Webhooks: &webhooktest.Fake{}, MirrorState: l.real.Store, Signer: signer, PublicURL: "http://unused.invalid",
 		Dependencies: config.DependencyConfig{AutoPullCode: true, MaxDepth: 5},
@@ -539,8 +577,10 @@ func TestRealBandwidthCapAcrossTwoWorkers(t *testing.T) {
 	shared := newCounting(nil, nil)
 	blobDir := t.TempDir()
 	outcomes := &jobOutcomes{}
-	a := newLocal(t, d, up.URL, localOptions{owner: "worker-a", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, logger: slog.New(outcomes)})
-	b := newLocal(t, d, up.URL, localOptions{owner: "worker-b", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, existing: a, logger: slog.New(outcomes)})
+	a := newLocal(t, d, up.URL, localOptions{owner: "worker-a", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, logger: slog.New(outcomes),
+		transport: fixedBufferTransport()})
+	b := newLocal(t, d, up.URL, localOptions{owner: "worker-b", rate: rate, shared: shared, blobDir: blobDir, partSize: 1 << 20, existing: a, logger: slog.New(outcomes),
+		transport: fixedBufferTransport()})
 	size := rate * seconds / 2
 	var ids []jobs.JobID
 	for i, l := range []*localInstance{a, b} {
@@ -560,7 +600,9 @@ func TestRealBandwidthCapAcrossTwoWorkers(t *testing.T) {
 	shared.logTimeline(t, a, outcomes, jobs.KindPull, jobs.KindPullFile)
 	require.GreaterOrEqual(t, elapsed, 0.9*float64(seconds))
 	require.Less(t, math.Abs(got-want)/want, 0.10)
-	// Both workers transferred.
+	// Both files were transferred. Either worker may run both:
+	// pull.concurrency caps pull.file Jobs across the Instance, not per
+	// worker.
 	files, _, err := a.queue.List(a.ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPullFile}})
 	require.NoError(t, err)
 	require.Len(t, files, 2)

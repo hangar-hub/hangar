@@ -142,6 +142,23 @@ func TestFakeCancelAndSchedules(t *testing.T) {
 	require.ErrorIs(t, q.Cancel(ctx, id), jobs.ErrNotActive)
 	require.ErrorIs(t, q.Cancel(ctx, uuid.New()), jobs.ErrNotFound)
 
+	// Cancelling a Job cancels its active children and theirs.
+	parent, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindGC})
+	require.NoError(t, err)
+	child, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindGC, DedupeKey: "child", ParentID: parent})
+	require.NoError(t, err)
+	grandchild, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindGC, DedupeKey: "grandchild", ParentID: child})
+	require.NoError(t, err)
+	other, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindGC, DedupeKey: "other"})
+	require.NoError(t, err)
+	require.NoError(t, q.Cancel(ctx, parent))
+	for _, c := range []jobs.JobID{parent, child, grandchild} {
+		j, _ := q.Get(ctx, c)
+		require.Equal(t, jobs.StatusCancelled, j.Status)
+	}
+	j, _ = q.Get(ctx, other)
+	require.Equal(t, jobs.StatusPending, j.Status)
+
 	require.NoError(t, q.SetSchedule(ctx, jobs.Schedule{Kind: jobs.KindMirrorSync, Key: "repo-1", Cron: "0 */6 * * *", Enabled: true}))
 	require.NoError(t, q.SetSchedule(ctx, jobs.Schedule{Kind: jobs.KindGC, Key: "gc", Cron: "0 3 * * *"}))
 	require.Error(t, q.SetSchedule(ctx, jobs.Schedule{Kind: jobs.KindGC}))

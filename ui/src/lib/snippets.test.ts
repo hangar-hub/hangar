@@ -14,7 +14,7 @@ describe("Use this model snippets", () => {
       formats: ["safetensors"],
     });
     const tf = s.find((x) => x.id === "transformers");
-    expect(tf?.code).toContain(`HF_ENDPOINT=${origin}`);
+    expect(tf?.code).toContain(`os.environ["HF_ENDPOINT"] = "${origin}"`);
     expect(tf?.code).toContain(
       'AutoModel.from_pretrained("ml-team/coder", trust_remote_code=True)',
     );
@@ -115,5 +115,92 @@ describe("Use this model snippets", () => {
     expect(s.some((x) => x.code.includes("load_dataset") || x.code.includes("parquet"))).toBe(
       false,
     );
+  });
+
+  it("points pasted Python at the Instance before any Hugging Face import", () => {
+    const all = [
+      ...snippets({
+        kind: "model",
+        id: "a/b",
+        origin,
+        library: "sentence-transformers",
+        remoteCode: true,
+      }),
+      ...snippets({ kind: "model", id: "a/b", origin, library: "diffusers" }),
+      ...snippets({ kind: "dataset", id: "ada/imdb", origin, defaultBranch: "main" }),
+    ].filter((x) => x.language === "python");
+    expect(all.map((x) => x.id).sort()).toEqual(
+      [
+        "datasets",
+        "diffusers",
+        "huggingface_hub",
+        "huggingface_hub",
+        "huggingface_hub",
+        "pandas",
+        "polars",
+        "sentence-transformers",
+        "transformers",
+        "transformers",
+      ].sort(),
+    );
+    for (const s of all) {
+      // A comment is lost on paste: the endpoint must be in the code itself.
+      expect(s.code, s.id).not.toMatch(/^#.*HF_ENDPOINT/m);
+      const set = s.code.indexOf(`os.environ["HF_ENDPOINT"] = "${origin}"`);
+      const endpointArg = s.code.includes(`endpoint="${origin}"`);
+      expect(set >= 0 || endpointArg, s.id).toBe(true);
+      if (set >= 0) {
+        const firstImport = s.code.search(/^(from|import) (?!os$)/m);
+        expect(set, s.id).toBeLessThan(firstImport);
+      }
+    }
+    const hub = all.find((x) => x.id === "huggingface_hub");
+    expect(hub?.code).toContain(`snapshot_download("a/b", endpoint="${origin}")`);
+    // Polars' own hf:// client ignores HF_ENDPOINT, so it reads through
+    // huggingface_hub with the Instance as the endpoint.
+    const polars = all.find((x) => x.id === "polars");
+    expect(polars?.code).toContain(`HfFileSystem(endpoint="${origin}")`);
+    expect(polars?.code).not.toContain("hf://");
+  });
+
+  it("uses the Revision being viewed in every client", () => {
+    const m = snippets({ kind: "model", id: "a/b", origin, revision: "refs/pr/3" });
+    expect(m.find((x) => x.id === "transformers")?.code).toContain(
+      'AutoModel.from_pretrained("a/b", revision="refs/pr/3")',
+    );
+    expect(m.find((x) => x.id === "huggingface_hub")?.code).toContain(
+      `snapshot_download("a/b", revision="refs/pr/3", endpoint="${origin}")`,
+    );
+    expect(m.find((x) => x.id === "hf")?.code).toContain("hf download a/b --revision refs/pr/3");
+    expect(m.find((x) => x.id === "vllm")?.code).toContain("vllm serve a/b --revision refs/pr/3");
+    // git clone --branch takes branches and tags only.
+    expect(m.find((x) => x.id === "git")?.code).toContain(
+      `git clone ${origin}/a/b && cd b && git fetch origin refs/pr/3 && git checkout FETCH_HEAD`,
+    );
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const atSha = snippets({ kind: "model", id: "a/b", origin, revision: sha });
+    expect(atSha.find((x) => x.id === "git")?.code).toContain(
+      `GIT_LFS_SKIP_SMUDGE=1 git clone ${origin}/a/b && cd b && GIT_LFS_SKIP_SMUDGE=1 git checkout ${sha}`,
+    );
+    const tag = snippets({ kind: "model", id: "a/b", origin, revision: "v1.0" });
+    expect(tag.find((x) => x.id === "git")?.code).toContain(
+      `git clone --branch v1.0 ${origin}/a/b`,
+    );
+    const d = snippets({
+      kind: "dataset",
+      id: "ada/imdb",
+      origin,
+      revision: "refs/convert/parquet",
+      dataFile: "default/train/0000.parquet",
+    });
+    expect(d.find((x) => x.id === "pandas")?.code).toContain(
+      '"hf://datasets/ada/imdb@refs%2Fconvert%2Fparquet/default/train/0000.parquet"',
+    );
+    expect(d.find((x) => x.id === "duckdb")?.code).toContain(
+      "/resolve/refs%2Fconvert%2Fparquet/default/train/0000.parquet",
+    );
+    // Shell metacharacters in a branch name are quoted.
+    const odd = snippets({ kind: "model", id: "a/b", origin, revision: "fix;rm" });
+    expect(odd.find((x) => x.id === "hf")?.code).toContain("--revision 'fix;rm'");
   });
 });

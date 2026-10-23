@@ -497,7 +497,11 @@ func TestWorkerCancelStopsRunningHandler(t *testing.T) {
 			cause.Store(context.Cause(ctx))
 			return ctx.Err()
 		}, jobs.HandlerOptions{}))
-		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Lease: 300 * time.Millisecond})
+		// The next renewal notices the cancel, a third of the lease after
+		// the last one. The lease is long enough that a slow renewal on a
+		// loaded machine can't bring the lease watchdog in first, which
+		// stops the run with ErrLeaseLost instead.
+		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Lease: 3 * time.Second})
 		id, _ := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPull})
 		w.Tick(ctx)
 		<-started
@@ -507,6 +511,69 @@ func TestWorkerCancelStopsRunningHandler(t *testing.T) {
 		j := mustGet(t, w.Queue(), id)
 		require.Equal(t, jobs.StatusCancelled, j.Status)
 		require.Equal(t, 1, j.Attempts)
+	})
+}
+
+// failLeaseRenewals makes every write that extends a running Job's lease
+// fail with a database error, as renewals do when the database is busy or
+// cannot be reached. Claims and the final write still work.
+func failLeaseRenewals(t *testing.T, d *db.DB) {
+	t.Helper()
+	ctx := context.Background()
+	stmts := []string{`CREATE TRIGGER fail_lease_renewal BEFORE UPDATE OF lease_expires_at ON jobs
+		WHEN OLD.status = 'running' AND NEW.status = 'running' AND NEW.lease_expires_at IS NOT NULL
+		BEGIN SELECT RAISE(ABORT, 'renewal refused'); END`}
+	if !d.IsSQLite() {
+		stmts = []string{
+			`CREATE FUNCTION fail_lease_renewal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'renewal refused'; END $$`,
+			`CREATE TRIGGER fail_lease_renewal BEFORE UPDATE OF lease_expires_at ON jobs FOR EACH ROW
+				WHEN (OLD.status = 'running' AND NEW.status = 'running' AND NEW.lease_expires_at IS NOT NULL)
+				EXECUTE FUNCTION fail_lease_renewal()`,
+		}
+	}
+	for _, s := range stmts {
+		_, err := d.ExecContext(ctx, s)
+		require.NoError(t, err)
+	}
+}
+
+// TestWorkerStopsHandlerWhenLeaseCannotBeRenewed checks that a run whose
+// lease renewals keep failing is stopped before the lease runs out, so it
+// never overlaps the run RecoverExpired then starts.
+func TestWorkerStopsHandlerWhenLeaseCannotBeRenewed(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		failLeaseRenewals(t, d)
+		started := make(chan struct{})
+		type stop struct {
+			cause error
+			at    time.Time
+		}
+		stopped := make(chan stop, 1)
+		reg := jobs.NewRegistry()
+		require.NoError(t, reg.Register(jobs.KindPull, func(ctx context.Context, _ *jobs.Job, _ jobs.Progress) error {
+			close(started)
+			select {
+			case <-ctx.Done():
+				stopped <- stop{cause: context.Cause(ctx), at: db.Now()}
+			case <-time.After(30 * time.Second):
+				stopped <- stop{}
+			}
+			return ctx.Err()
+		}, jobs.HandlerOptions{}))
+		w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Lease: 1200 * time.Millisecond})
+		id, err := w.Queue().Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPull})
+		require.NoError(t, err)
+		w.Tick(ctx)
+		<-started
+		var row db.Job
+		require.NoError(t, d.NewSelect().Model(&row).Where("id = ?", id).Scan(ctx))
+		require.NotNil(t, row.LeaseExpiresAt)
+
+		s := <-stopped
+		require.ErrorIs(t, s.cause, jobs.ErrLeaseLost, "the handler is stopped when its lease cannot be renewed")
+		require.True(t, s.at.Before(*row.LeaseExpiresAt), "stopped at %s, before the lease ran out at %s", s.at, row.LeaseExpiresAt)
+		w.Wait()
 	})
 }
 

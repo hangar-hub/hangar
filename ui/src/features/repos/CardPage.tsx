@@ -350,7 +350,9 @@ export function CardPage({ kind, ns, name }: { kind: RepoKind; ns: string; name:
   const repo = useRepo(ref);
   const r = repo.data;
   const rev = r?.default_branch ?? "main";
-  const readme = useTextFile(ref, rev, "README.md", Boolean(r));
+  // Read the card at the head Commit the Repo reports, so the text and the
+  // parent Commit the card editor sends always match.
+  const readme = useTextFile(ref, r?.sha || rev, "README.md", Boolean(r));
   const externalImages = useExternalImages();
   const [editing, setEditing] = useState(false);
   if (!r) return null;

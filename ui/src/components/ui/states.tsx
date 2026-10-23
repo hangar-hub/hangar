@@ -124,6 +124,24 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   );
 }
 
+/**
+ * The error under an editor that commits. A 412 means the branch moved
+ * after editing started, so the server refused the Commit rather than
+ * overwrite the other change: say so, and what to do.
+ */
+export function CommitError({ error, branch }: { error: unknown; branch: string }) {
+  if (!error) return null;
+  if (errorStatus(error) === 412) {
+    return (
+      <p role="alert" className="text-sm text-danger">
+        Someone committed to {branch} after you started editing, so Hangar did not save your change.
+        Copy your text, reload the page and make your change again.
+      </p>
+    );
+  }
+  return <InlineError error={error} />;
+}
+
 /** An inline error under a form or action. */
 export function InlineError({ error }: { error: unknown }) {
   if (!error) return null;

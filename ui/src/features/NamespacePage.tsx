@@ -189,6 +189,7 @@ export function NamespacePage({ ns }: { ns: string }) {
   return (
     <PageShell
       className="hg-enter"
+      documentTitle={x.display_name || x.name}
       title={
         <span className="flex items-center gap-2">
           {isOrg ? (
