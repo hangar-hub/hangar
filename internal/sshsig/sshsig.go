@@ -133,7 +133,7 @@ func signedData(namespace, hashAlg string, sum []byte) []byte {
 }
 
 func writeString(b *bytes.Buffer, s []byte) {
-	_ = binary.Write(b, binary.BigEndian, uint32(len(s)))
+	_ = binary.Write(b, binary.BigEndian, uint32(len(s))) //nolint:gosec // Keys, namespaces, hashes and signatures are far below 4 GiB.
 	b.Write(s)
 }
 
