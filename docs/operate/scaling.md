@@ -23,7 +23,7 @@ One binary runs in one of three roles (`server.role`, or `hangar server --role`)
 
 ## Shutting down
 
-On SIGTERM, a process answers 503 on `/readyz` at once, and its worker stops claiming Jobs and returns running ones to the queue. It keeps serving for `server.drain_delay` (0 by default), so a load balancer that checks `/readyz` stops sending requests before the listener closes. Then in-flight requests get up to `server.shutdown_timeout` (30 seconds) to finish, and the worker waits as long for its Jobs. A Job whose handler is still running after that goes back to the queue when its lease expires.
+On SIGTERM, a process answers 503 on `/readyz` at once, and its worker stops claiming new Jobs. It keeps serving for `server.drain_delay` (0 by default), so a load balancer that checks `/readyz` stops sending requests before the listener closes. Then in-flight requests get up to `server.shutdown_timeout` (30 seconds) to finish, and the worker waits as long for its Jobs. A Job whose handler is still running after that goes back to the queue when its lease expires.
 
 Behind a load balancer outside Kubernetes, set `server.drain_delay` to a little more than the load balancer's health check interval, such as `5s`. The Helm chart adds a 5-second `preStop` sleep (`drainDelaySeconds`), or sets `server.drain_delay` on Kubernetes 1.29, which has no sleep action.
 
