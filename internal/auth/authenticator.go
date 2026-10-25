@@ -117,15 +117,18 @@ func (s *Service) authenticate(r *http.Request) (model.Principal, error) {
 			return model.Principal{}, err
 		}
 	}
-	c, _ := r.Cookie(SessionCookie)
-	if c == nil || c.Value == "" {
+	secret, legacy := s.sessionSecret(r)
+	if legacy {
+		return staleSession(ctx), nil
+	}
+	if secret == "" {
 		return model.Anonymous(), nil
 	}
 	// The browser sends the session cookie on every request, so a stale one
 	// (unknown, expired, revoked, or for a missing or disabled User) makes
 	// the request anonymous instead of failing it. Otherwise the browser
 	// could not even load the sign-in page until the user cleared cookies.
-	sess, err := s.Sessions.lookup(ctx, c.Value)
+	sess, err := s.Sessions.lookup(ctx, secret)
 	if errors.Is(err, ErrInvalidCredentials) {
 		return staleSession(ctx), nil
 	}

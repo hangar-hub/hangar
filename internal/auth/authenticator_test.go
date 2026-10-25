@@ -265,6 +265,88 @@ func TestSecureCookiesOnHTTPS(t *testing.T) {
 	}
 }
 
+// TestHostPrefixedCookiesOnHTTPS covers security review finding 14: on an
+// HTTPS Instance the session and CSRF cookies are __Host- cookies (Secure,
+// Path=/, no Domain), so a sibling subdomain cannot set or overwrite them.
+// An unprefixed session cookie, from an Instance before the change or
+// planted by a sibling subdomain, is not accepted and is cleared, so the
+// user signs in once more.
+func TestHostPrefixedCookiesOnHTTPS(t *testing.T) {
+	d := dbtest.SQLite(t)
+	s, _ := authtest.NewService(t, d, authtest.RealOptions{Config: func(c *config.Config) { c.Server.PublicURL = "https://hangar.example.com" }})
+	u := mustUser(t, s, "alice", false)
+	rec := httptest.NewRecorder()
+	sess, err := s.StartSession(context.Background(), rec, httptest.NewRequest(http.MethodPost, "/", nil), u)
+	require.NoError(t, err)
+	require.Equal(t, "__Host-hangar_session", s.SessionCookieName())
+	require.Equal(t, "__Host-hangar_csrf", s.CSRFCookieName())
+	names := map[string]*http.Cookie{}
+	for _, c := range rec.Result().Cookies() {
+		names[c.Name] = c
+		require.True(t, c.Secure, c.Name)
+		require.Equal(t, "/", c.Path, c.Name)
+		require.Empty(t, c.Domain, c.Name)
+	}
+	require.Contains(t, names, "__Host-hangar_session")
+	require.Equal(t, sess.CSRFToken, names["__Host-hangar_csrf"].Value)
+	secret := names["__Host-hangar_session"].Value
+
+	p, err := authReq(t, s, http.MethodGet, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "__Host-hangar_session", Value: secret}) })
+	require.NoError(t, err)
+	require.Equal(t, u.ID, p.UserID)
+
+	// The same secret under the old name is not accepted, and the response
+	// clears the old cookies.
+	p, err = authReq(t, s, http.MethodGet, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: secret}) })
+	require.NoError(t, err)
+	require.True(t, p.IsAnonymous(), "an unprefixed session cookie is not accepted on HTTPS")
+	srv := s.Middleware(s, auth.WriteAuthError("https://hangar.example.com"))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	req := httptest.NewRequest(http.MethodGet, "https://hangar.example.com/api/hangar/v1/me", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: secret})
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	cleared := map[string]bool{}
+	for _, c := range rec.Result().Cookies() {
+		if c.MaxAge < 0 {
+			cleared[c.Name] = true
+		}
+	}
+	require.True(t, cleared[auth.SessionCookie] && cleared[auth.CSRFCookie], "the old cookies are cleared: %v", cleared)
+}
+
+// TestIdleSessionsExpire covers security review finding 14: a session
+// that goes unused for security.session_idle_timeout (7 days by default)
+// ends, though its 30-day lifetime has not, while one in use lives on.
+func TestIdleSessionsExpire(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		s, clock := newSvc(t, d)
+		u := mustUser(t, s, "alice", false)
+		_, idle, err := s.Sessions.Create(ctx, u.ID, "", "")
+		require.NoError(t, err)
+		_, used, err := s.Sessions.Create(ctx, u.ID, "", "")
+		require.NoError(t, err)
+		with := func(secret string) func(*http.Request) {
+			return func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: secret}) }
+		}
+		for range 3 {
+			clock.Advance(3 * 24 * time.Hour)
+			p, err := authReq(t, s, http.MethodGet, with(used))
+			require.NoError(t, err)
+			require.Equal(t, model.AuthSession, p.Method, "a session in use stays")
+		}
+		list, err := s.Sessions.List(ctx, u.ID)
+		require.NoError(t, err)
+		require.Len(t, list, 1, "the idle session is not listed")
+		n, err := s.Sessions.DeleteExpired(ctx)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n, "cleanup removes the idle session")
+		p, err := authReq(t, s, http.MethodGet, with(idle))
+		require.NoError(t, err)
+		require.True(t, p.IsAnonymous(), "after 9 days unused the session has ended")
+	})
+}
+
 func TestWriteAuthError(t *testing.T) {
 	write := auth.WriteAuthError("http://hangar.test")
 	cases := []struct {

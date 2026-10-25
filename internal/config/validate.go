@@ -157,6 +157,11 @@ func (c *Config) validate(requireInstanceKey bool) error {
 		e.addf("security.registration %q must be open, invite or closed", c.Security.Registration)
 	}
 	positiveDuration(&e, "security.session_ttl", c.Security.SessionTTL)
+	if c.Security.SessionIdle < 0 {
+		e.addf("security.session_idle_timeout must be 0 (off) or greater")
+	} else if c.Security.SessionIdle > 0 && c.Security.SessionIdle < 2*sessionTouch {
+		e.addf("security.session_idle_timeout must be at least %s, as Hangar records session use once a minute", 2*sessionTouch)
+	}
 	if c.Security.BootstrapAdmin.Username != "" {
 		// The bootstrap admin gets a personal Namespace, so a reserved name
 		// such as admin would be shadowed by Hangar's own routes.
@@ -393,6 +398,10 @@ func positiveSize(e *Errors, key string, v ByteSize) {
 		e.addf("%s must be greater than 0", key)
 	}
 }
+
+// sessionTouch is how often Hangar records that a session was used
+// (auth.sessionTouchInterval).
+const sessionTouch = time.Minute
 
 func positiveDuration(e *Errors, key string, v time.Duration) {
 	if v <= 0 {

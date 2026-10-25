@@ -13,14 +13,20 @@ export function setCsrfToken(token: string | undefined): void {
 
 /**
  * The CSRF token to send: the one from GET /me, or the readable
- * `hangar_csrf` cookie the server sets with the session (05-auth.md).
+ * `hangar_csrf` cookie the server sets with the session, `__Host-hangar_csrf`
+ * on HTTPS (05-auth.md).
  */
 export function currentCsrfToken(
   cookie: string = globalThis.document?.cookie ?? "",
 ): string | undefined {
   if (csrfToken) return csrfToken;
-  const match = cookie.split(/;\s*/).find((c) => c.startsWith("hangar_csrf="));
-  return match ? decodeURIComponent(match.slice("hangar_csrf=".length)) : undefined;
+  // On HTTPS the cookie is __Host-hangar_csrf, so no sibling subdomain can set it.
+  const pairs = cookie.split(/;\s*/);
+  for (const name of ["__Host-hangar_csrf=", "hangar_csrf="]) {
+    const match = pairs.find((c) => c.startsWith(name));
+    if (match) return decodeURIComponent(match.slice(name.length));
+  }
+  return undefined;
 }
 
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
