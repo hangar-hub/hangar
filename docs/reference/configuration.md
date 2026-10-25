@@ -21,6 +21,7 @@ HTTP server and process settings.
 | `server.trusted_proxies`<br>`HANGAR_SERVER_TRUSTED_PROXIES` | list of strings | `[]` | CIDR ranges of reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers Hangar trusts. |
 | `server.max_request_body`<br>`HANGAR_SERVER_MAX_REQUEST_BODY` | size | `64MiB` | Body size limit for endpoints that buffer the request body. Streaming endpoints have no limit apart from quotas. |
 | `server.shutdown_timeout`<br>`HANGAR_SERVER_SHUTDOWN_TIMEOUT` | duration | `30s` | How long to let in-flight requests finish on SIGTERM. Longer downloads are cut. |
+| `server.drain_delay`<br>`HANGAR_SERVER_DRAIN_DELAY` | duration | `0s` | How long to keep serving after SIGTERM while /readyz answers 503, so load balancers stop sending requests before the listener closes. 0 closes at once; the Helm chart uses a preStop hook instead. |
 | `server.timezone`<br>`HANGAR_SERVER_TIMEZONE` | string | `UTC` | IANA time zone for pull windows and schedules. |
 
 ## `database`

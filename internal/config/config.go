@@ -61,6 +61,7 @@ type ServerConfig struct {
 	TrustedProxies  []string      `koanf:"trusted_proxies" desc:"CIDR ranges of reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers Hangar trusts."`
 	MaxRequestBody  ByteSize      `koanf:"max_request_body" desc:"Body size limit for endpoints that buffer the request body. Streaming endpoints have no limit apart from quotas."`
 	ShutdownTimeout time.Duration `koanf:"shutdown_timeout" desc:"How long to let in-flight requests finish on SIGTERM. Longer downloads are cut."`
+	DrainDelay      time.Duration `koanf:"drain_delay" desc:"How long to keep serving after SIGTERM while /readyz answers 503, so load balancers stop sending requests before the listener closes. 0 closes at once; the Helm chart uses a preStop hook instead."`
 	Timezone        string        `koanf:"timezone" desc:"IANA time zone for pull windows and schedules."`
 }
 

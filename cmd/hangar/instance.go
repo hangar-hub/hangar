@@ -393,9 +393,11 @@ func (in *instance) afterIndex(ctx context.Context, job index.CommitJob, _ *inde
 }
 
 // newWorker returns the Job worker for roles all and worker.
-func (in *instance) newWorker() *jobs.Worker {
+// drain bounds how long the worker waits for running handlers once it is
+// stopped; zero waits for them.
+func (in *instance) newWorker(drain time.Duration) *jobs.Worker {
 	return jobs.NewWorker(in.db, in.reg, jobs.WorkerOptions{
-		Owner: in.owner, Concurrency: in.cfg.Jobs.Workers, Lease: in.cfg.Jobs.Lease, Location: in.loc,
+		Owner: in.owner, Concurrency: in.cfg.Jobs.Workers, Lease: in.cfg.Jobs.Lease, Location: in.loc, DrainTimeout: drain,
 		InstanceLimits: map[jobs.Kind]int{jobs.KindPullFile: in.cfg.Pull.Concurrency},
 		// Rebuilding Repo listing facts each minute keeps their change
 		// records few and spares listings the work.

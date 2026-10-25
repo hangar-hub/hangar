@@ -75,6 +75,12 @@ type WorkerOptions struct {
 	LeaderTasks []func(ctx context.Context) error
 	// LeaderInterval is how often leader tasks run. Zero means 60 seconds.
 	LeaderInterval time.Duration
+	// DrainTimeout bounds how long Run waits, once its context ends, for
+	// running handlers to return their Jobs. Zero waits however long they
+	// take. A handler that ignores its context past the deadline keeps its
+	// Job only until the lease expires, since nothing renews it, and then
+	// another worker takes the Job over.
+	DrainTimeout time.Duration
 	// Location is the time zone of schedules. Nil means UTC.
 	Location *time.Location
 	// Now is the clock. Nil means db.Now.
@@ -157,8 +163,14 @@ func (w *Worker) Wake() {
 	}
 }
 
-// Run works until ctx ends. Then it cancels running handlers, returns
-// their Jobs to the queue without using an attempt, and waits for them.
+// ErrDrainTimeout means handlers were still running when Run's
+// DrainTimeout passed.
+var ErrDrainTimeout = errors.New("jobs still running at the drain deadline")
+
+// Run works until ctx ends. Then it claims nothing more, cancels running
+// handlers, which return their Jobs to the queue without using an
+// attempt, and waits for them for at most DrainTimeout. It returns an
+// error wrapping ErrDrainTimeout when some are still running then.
 func (w *Worker) Run(ctx context.Context) error {
 	ticker := time.NewTicker(w.opts.PollInterval)
 	defer ticker.Stop()
@@ -166,12 +178,36 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.Tick(ctx)
 		select {
 		case <-ctx.Done():
-			w.wg.Wait()
+			err := w.drain()
 			w.leader.Release(context.WithoutCancel(ctx))
-			return nil
+			return err
 		case <-ticker.C:
 		case <-w.wake:
 		}
+	}
+}
+
+// drain waits for running handlers, for at most DrainTimeout.
+func (w *Worker) drain() error {
+	done := make(chan struct{})
+	go func() {
+		w.wg.Wait()
+		close(done)
+	}()
+	if w.opts.DrainTimeout <= 0 {
+		<-done
+		return nil
+	}
+	t := time.NewTimer(w.opts.DrainTimeout)
+	defer t.Stop()
+	select {
+	case <-done:
+		return nil
+	case <-t.C:
+		w.mu.Lock()
+		n := w.total
+		w.mu.Unlock()
+		return fmt.Errorf("%w: %d still running after %s; their leases expire and other workers take them over", ErrDrainTimeout, n, w.opts.DrainTimeout)
 	}
 }
 

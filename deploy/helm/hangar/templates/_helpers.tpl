@@ -164,8 +164,19 @@ helm upgrade.
 {{- end }}
 
 {{/* hangar.yaml: the user's config with the chart's keys on top. */}}
+{{/*
+Non-empty when the drain delay is a preStop sleep action, which Kubernetes
+runs by default from 1.30. On 1.29 Hangar waits itself (server.drain_delay).
+*/}}
+{{- define "hangar.preStopSleep" -}}
+{{- if and (gt (int .Values.drainDelaySeconds) 0) (semverCompare ">=1.30-0" .Capabilities.KubeVersion.Version) }}true{{ end }}
+{{- end }}
+
 {{- define "hangar.config" -}}
 {{- $server := dict "public_url" .Values.publicURL "listen" (printf ":%d" (int .Values.service.port)) }}
+{{- if and (gt (int .Values.drainDelaySeconds) 0) (not (include "hangar.preStopSleep" .)) }}
+{{- $_ := set $server "drain_delay" (printf "%ds" (int .Values.drainDelaySeconds)) }}
+{{- end }}
 {{- $telemetry := dict }}
 {{- if .Values.metrics.enabled }}
 {{- $_ := set $telemetry "metrics" "prometheus" }}
@@ -319,6 +330,14 @@ spec:
         periodSeconds: 5
         timeoutSeconds: 15
         failureThreshold: 3
+      {{- if include "hangar.preStopSleep" $ }}
+      lifecycle:
+        # Removing a Pod from its Service's endpoints races SIGTERM, so keep
+        # serving for a few seconds before Hangar closes its listener. The
+        # image has no shell, so this is the kubelet's sleep action.
+        preStop:
+          sleep: {seconds: {{ int $.Values.drainDelaySeconds }}}
+      {{- end }}
       resources:
         {{- toYaml $v.resources | nindent 8 }}
       securityContext:

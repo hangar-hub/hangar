@@ -73,6 +73,9 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	}
 	positiveSize(&e, "server.max_request_body", c.Server.MaxRequestBody)
 	positiveDuration(&e, "server.shutdown_timeout", c.Server.ShutdownTimeout)
+	if c.Server.DrainDelay < 0 || c.Server.DrainDelay > 5*time.Minute {
+		e.addf("server.drain_delay must be between 0s and 5m")
+	}
 	if _, err := time.LoadLocation(c.Server.Timezone); err != nil {
 		e.addf("server.timezone %q is not an IANA time zone", c.Server.Timezone)
 	}

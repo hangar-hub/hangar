@@ -21,6 +21,12 @@ One binary runs in one of three roles (`server.role`, or `hangar server --role`)
 - `hangar admin migrate` before new versions start.
 - Each worker process runs up to `jobs.workers` Jobs at once (4 by default). `pull.concurrency` also caps Pull transfers across the Instance.
 
+## Shutting down
+
+On SIGTERM, a process answers 503 on `/readyz` at once, and its worker stops claiming Jobs and returns running ones to the queue. It keeps serving for `server.drain_delay` (0 by default), so a load balancer that checks `/readyz` stops sending requests before the listener closes. Then in-flight requests get up to `server.shutdown_timeout` (30 seconds) to finish, and the worker waits as long for its Jobs. A Job whose handler is still running after that goes back to the queue when its lease expires.
+
+Behind a load balancer outside Kubernetes, set `server.drain_delay` to a little more than the load balancer's health check interval, such as `5s`. The Helm chart adds a 5-second `preStop` sleep (`drainDelaySeconds`), or sets `server.drain_delay` on Kubernetes 1.29, which has no sleep action.
+
 The [scaled Compose example](../get-started/compose.md#scaled-out) and the [Helm chart](../get-started/helm.md#scaled-out-with-postgres-and-s3) show complete setups.
 
 ## Targets

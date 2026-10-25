@@ -68,7 +68,7 @@ func TestUnsafeDownloadGateAfterAFailedScanJob(t *testing.T) {
 	jid, err := in.queue.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindScan, DedupeKey: job.DedupeKey() + ":once", Payload: job,
 		MaxAttempts: 1, Repo: r.UUID})
 	require.NoError(t, err)
-	w := in.newWorker()
+	w := in.newWorker(0)
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
 		j, err := in.queue.Get(ctx, jid)

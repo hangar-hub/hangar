@@ -126,8 +126,14 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	shutdown := func() error {
-		log.Info("shutting down", "timeout", cfg.Server.ShutdownTimeout.String())
+		log.Info("shutting down", "timeout", cfg.Server.ShutdownTimeout.String(), "drain_delay", cfg.Server.DrainDelay.String())
 		health.SetDraining()
+		// Keep serving while load balancers see /readyz fail and stop
+		// routing here; closing the listener at once refuses the requests
+		// they still send.
+		if cfg.Server.DrainDelay > 0 {
+			time.Sleep(cfg.Server.DrainDelay)
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Server.ShutdownTimeout)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -180,16 +186,19 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	}
 	current.Store(&handler)
 
-	// Jobs run in roles all and worker. On shutdown the worker returns
-	// running Jobs to the queue.
+	// Jobs run in roles all and worker. On shutdown the worker stops
+	// claiming at once and returns running Jobs to the queue, waiting for
+	// their handlers for at most server.shutdown_timeout.
 	workerCtx, stopWorker := context.WithCancel(context.WithoutCancel(ctx))
 	workerDone := make(chan struct{})
 	if cfg.Server.Role != config.RoleWeb {
-		w := in.newWorker()
+		w := in.newWorker(cfg.Server.ShutdownTimeout)
 		go func() {
 			defer close(workerDone)
 			in.refreshStale(workerCtx)
-			_ = w.Run(workerCtx)
+			if err := w.Run(workerCtx); err != nil {
+				log.Warn("stopping the worker", "error", err.Error())
+			}
 		}()
 	} else {
 		close(workerDone)
@@ -208,10 +217,19 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 			serveErr = err
 		}
 	case <-ctx.Done():
+		// Stop claiming Jobs as soon as the signal arrives, while the HTTP
+		// server drains.
+		stopWorker()
 		serveErr = shutdown()
 	}
 	stopWorker()
-	<-workerDone
+	// Run returns by its own drain deadline; this bound covers the start-up
+	// work before it.
+	select {
+	case <-workerDone:
+	case <-time.After(cfg.Server.ShutdownTimeout):
+		log.Warn("the worker did not stop within server.shutdown_timeout; its Jobs return to the queue when their leases expire")
+	}
 	return serveErr
 }
 

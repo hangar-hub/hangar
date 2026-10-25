@@ -46,6 +46,47 @@ func testConfig(t *testing.T) *config.Config {
 	return cfg
 }
 
+// TestServerKeepsServingDuringTheDrainDelay: after the signal, /readyz
+// answers 503 at once but the listener stays open for server.drain_delay,
+// so requests a load balancer still routes here succeed.
+func TestServerKeepsServingDuringTheDrainDelay(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Server.DrainDelay = 3 * time.Second
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, io.Discard, ready) }()
+	var addr string
+	select {
+	case addr = <-ready:
+	case err := <-done:
+		t.Fatalf("server exited: %v", err)
+	case <-time.After(60 * time.Second):
+		t.Fatal("server did not start")
+	}
+	stopped := time.Now()
+	cancel()
+	require.Eventually(t, func() bool {
+		resp, err := http.Get("http://" + addr + "/readyz")
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode == http.StatusServiceUnavailable
+	}, 2*time.Second, 20*time.Millisecond, "/readyz fails as soon as the signal arrives")
+	resp, err := http.Get("http://" + addr + "/api/hangar/v1/me")
+	require.NoError(t, err, "the listener is still open during the drain delay")
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "requests are still served")
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, time.Since(stopped), cfg.Server.DrainDelay)
+	case <-time.After(60 * time.Second):
+		t.Fatal("server did not stop")
+	}
+}
+
 func TestServerServesHealthAndShutsDown(t *testing.T) {
 	cfg := testConfig(t)
 	ctx, cancel := context.WithCancel(context.Background())

@@ -196,6 +196,13 @@ securityContext:
 tmpSizeLimit: 2Gi
 cacheSizeLimit: 16Gi
 
+# Seconds a terminating Pod keeps serving before Hangar closes its listener,
+# so requests routed to it while Kubernetes removes it from the Service's
+# endpoints still succeed. On Kubernetes 1.30 and later this is a preStop
+# sleep; on 1.29 the chart sets server.drain_delay instead. 0 turns it off.
+# terminationGracePeriodSeconds (45) covers this plus server.shutdown_timeout.
+drainDelaySeconds: 5
+
 extraEnv: []
 extraEnvFrom: []
 extraVolumes: []
