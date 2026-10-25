@@ -304,7 +304,8 @@ func newInstance(ctx context.Context, cfg *config.Config, tel *telemetry.Telemet
 	}
 	in.ollama, err = ollama.New(ollama.Options{DB: d, Repos: in.repos, LFS: in.lfs, Authz: in.auth.Authz(), OllamaAuth: in.auth.OllamaAuth(),
 		Signer: in.signer, PublicURL: cfg.Server.PublicURL, PullThrough: in.pulls.PullThrough(), Downloads: in.unsafeGate,
-		Community: in.community, Instruments: inst, Log: in.log})
+		Community: in.community, Instruments: inst, Log: in.log,
+		RedirectDownloads: cfg.Storage.Backend == config.BackendS3 && cfg.Storage.S3.DownloadMode == config.DownloadRedir, PresignTTL: cfg.Storage.S3.PresignTTL})
 	if err != nil {
 		return nil, err
 	}
