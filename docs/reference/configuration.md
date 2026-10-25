@@ -62,7 +62,7 @@ Secrets, sign-in and access defaults.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `security.instance_key`<br>`HANGAR_SECURITY_INSTANCE_KEY` | string | `""` | 32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. In role all, Hangar generates one in server.data_dir on first start if it is empty; roles web and worker need it set, to the same key on every process. |
+| `security.instance_key`<br>`HANGAR_SECURITY_INSTANCE_KEY` | string | `""` | 32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. In role all, Hangar generates one in server.data_dir on first start if it is empty; roles web and worker never generate one, so set the same key on every process, or share one server.data_dir that already holds it. |
 | `security.anonymous_read`<br>`HANGAR_SECURITY_ANONYMOUS_READ` | bool | `false` | Let anonymous users read public Repos and see user and Organisation profiles. |
 | `security.registration`<br>`HANGAR_SECURITY_REGISTRATION` | string | `closed` | Who can create an account: open, invite or closed. |
 | `security.local_login`<br>`HANGAR_SECURITY_LOCAL_LOGIN` | bool | `true` | Show the username and password form. The bootstrap admin can always sign in at /auth/login?local=1. |

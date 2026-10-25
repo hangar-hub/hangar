@@ -189,17 +189,32 @@ func TestCommitInlineMaxHoldsARegularFile(t *testing.T) {
 
 // TestWebAndWorkerRolesNeedAnExplicitInstanceKey: a web or worker process
 // with its own server.data_dir would otherwise generate a key of its own,
-// and could not read what the other processes sealed or signed.
+// and could not read what the other processes sealed or signed. Processes
+// that share a data_dir may use the key an earlier start saved there.
 func TestWebAndWorkerRolesNeedAnExplicitInstanceKey(t *testing.T) {
 	for _, role := range []string{"web", "worker"} {
 		cfg, err := config.Load(config.LoadOptions{Env: []string{"HANGAR_SERVER_PUBLIC_URL=http://localhost:8080",
 			"HANGAR_SERVER_ROLE=" + role, "HANGAR_DATABASE_DRIVER=postgres", "HANGAR_DATABASE_DSN=postgres://hangar@db/hangar"}})
 		require.NoError(t, err)
-		for _, validate := range []func() error{cfg.ValidateBeforeSecrets, cfg.Validate} {
-			err := validate()
-			require.ErrorContains(t, err, "security.instance_key is required when server.role is "+role, role)
-			require.NotContains(t, err.Error(), "leave it empty on first start", role)
-		}
+		err = cfg.Validate()
+		require.ErrorContains(t, err, "security.instance_key is required when server.role is "+role, role)
+		require.NotContains(t, err.Error(), "leave it empty on first start", role)
+
+		// Before secrets, the key may still come from a shared data_dir.
+		require.NoError(t, cfg.ValidateBeforeSecrets(), role)
+		cfg.Server.DataDir = t.TempDir()
+		_, err = config.EnsureSecrets(cfg)
+		require.ErrorContains(t, err, "security.instance_key is required when server.role is "+role, role)
+		require.NoFileExists(t, filepath.Join(cfg.Server.DataDir, config.SecretsFileName), role)
+
+		// Processes that share a data_dir share the key saved there.
+		require.NoError(t, os.WriteFile(filepath.Join(cfg.Server.DataDir, config.SecretsFileName),
+			[]byte("instance_key: "+testKey+"\nbootstrap_admin_password: stored-password\n"), 0o600))
+		_, err = config.EnsureSecrets(cfg)
+		require.NoError(t, err, role)
+		require.Equal(t, testKey, cfg.Security.InstanceKey, role)
+		require.NoError(t, cfg.Validate(), role)
+
 		cfg.Security.InstanceKey = testKey
 		require.NoError(t, cfg.ValidateBeforeSecrets(), role)
 		require.NoError(t, cfg.Validate(), role)

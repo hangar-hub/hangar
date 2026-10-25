@@ -17,7 +17,7 @@ One binary runs in one of three roles (`server.role`, or `hangar server --role`)
 ## What a scaled-out Instance needs
 
 - Postgres and an S3-compatible bucket (or a shared filesystem path).
-- The same `security.instance_key` on every process. Hangar generates a key only in role `all`, so a process in role `web` or `worker` refuses to start without one. Make a key with `openssl rand -base64 32` and give it to every process as `HANGAR_SECURITY_INSTANCE_KEY`. The Helm chart generates one into a Secret, or reads it from `existingSecret`.
+- The same `security.instance_key` on every process. Hangar generates a key only in role `all`. A process in role `web` or `worker` refuses to start without one, unless it shares a `server.data_dir` whose `secrets.yaml` already holds a key. Make a key with `openssl rand -base64 32` and give it to every process as `HANGAR_SECURITY_INSTANCE_KEY`. The Helm chart generates one into a Secret, or reads it from `existingSecret`.
 - `hangar admin migrate` before new versions start.
 - Each worker process runs up to `jobs.workers` Jobs at once (4 by default). `pull.concurrency` also caps Pull transfers across the Instance.
 

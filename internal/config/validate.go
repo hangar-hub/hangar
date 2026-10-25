@@ -45,7 +45,9 @@ func (c *Config) Validate() error { return c.validate(true) }
 // EnsureSecrets runs. It is Validate except that security.instance_key may be
 // empty, because EnsureSecrets reads or generates it in server.data_dir. The
 // server calls it before it creates anything, so a bad configuration reports
-// every problem instead of a file system error.
+// every problem instead of a file system error. In roles web and worker,
+// EnsureSecrets refuses to generate a key, but reads one that an earlier
+// start saved in a server.data_dir the processes share.
 func (c *Config) ValidateBeforeSecrets() error { return c.validate(false) }
 
 func (c *Config) validate(requireInstanceKey bool) error {
@@ -148,12 +150,8 @@ func (c *Config) validate(requireInstanceKey bool) error {
 
 	// security
 	if c.Security.InstanceKey == "" {
-		if c.Server.Role == RoleWeb || c.Server.Role == RoleWorker {
-			// Every process of an Instance must use the same key. A web or
-			// worker process that generated its own in server.data_dir could
-			// not read secrets or URLs the others sealed or signed.
-			e.addf("security.instance_key is required when server.role is %s: give every web and worker process the same base64-encoded 32-byte key "+
-				"(HANGAR_SECURITY_INSTANCE_KEY), for example one made with openssl rand -base64 32. Hangar generates a key only in role all", c.Server.Role)
+		if requireInstanceKey && c.Server.splitRole() {
+			e.addf("%s", c.Server.missingSplitRoleKey())
 		} else if requireInstanceKey {
 			e.addf("security.instance_key is required: set a base64-encoded 32-byte key, or leave it empty on first start so Hangar generates one in server.data_dir")
 		}
@@ -419,4 +417,17 @@ func oneOf(e *Errors, key, v string, allowed ...string) {
 		}
 	}
 	e.addf("%s %q must be one of %s", key, v, strings.Join(allowed, ", "))
+}
+
+// splitRole reports whether the process is one of several, in role web or
+// worker, that must all use the same Instance key.
+func (s ServerConfig) splitRole() bool { return s.Role == RoleWeb || s.Role == RoleWorker }
+
+// missingSplitRoleKey is the error for a web or worker process with no
+// Instance key. Every process of an Instance must use the same key: one that
+// generated its own could not read secrets or URLs the others sealed or
+// signed.
+func (s ServerConfig) missingSplitRoleKey() string {
+	return fmt.Sprintf("security.instance_key is required when server.role is %s: give every web and worker process the same base64-encoded 32-byte key "+
+		"(HANGAR_SECURITY_INSTANCE_KEY), for example one made with openssl rand -base64 32. Hangar generates a key only in role all", s.Role)
 }
