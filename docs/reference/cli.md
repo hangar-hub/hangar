@@ -957,6 +957,13 @@ Inherited flags:
 
 Register ~/.ollama/id_ed25519.pub with the Instance.
 
+```text
+Registers your Ollama key (~/.ollama/id_ed25519.pub) with the Instance, unless
+it is already registered. To prove the key is yours, the CLI signs a challenge
+from the Instance with the private key, ~/.ollama/id_ed25519, which never
+leaves this machine.
+```
+
 Usage:
 
 ```sh

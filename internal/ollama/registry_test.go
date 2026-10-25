@@ -362,6 +362,46 @@ func TestPrivateReposUseTheOllamaKeyFlow(t *testing.T) {
 	require.Contains(t, errCode(t, hidden), "NAME_UNKNOWN")
 }
 
+// TestGeneratedLayersStayWithTheirRepo covers security review finding 12:
+// generated layers were served by digest through any readable Repo, so a
+// user who once read a private Repo's manifest could keep reading its
+// layers, such as a GGUF file stored in git, through a public Repo after
+// losing access. A generated layer is now served only through a Repo it
+// was built from.
+func TestGeneratedLayersStayWithTheirRepo(t *testing.T) {
+	e := newEnv(t, false)
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "secret"}
+	indextest.CreateRepo(t, e.repos, id, model.VisibilityPrivate)
+	indextest.Commit(t, e.repos, id, map[string][]byte{
+		"secret-Q4_0.gguf": indextest.LlamaGGUF(t, 2, "Q4_0"),
+		"LICENSE":          []byte("Secret licence: do not share."),
+	})
+	const token = "alice-token"
+	e.auth.Authenticator.Add(token, e.alice)
+	aliceAuth := map[string]string{"Authorization": "Bearer " + token}
+	resp := e.get(t, "GET", "/v2/alice/secret/manifests/latest", aliceAuth)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var m ollama.Manifest
+	require.NoError(t, json.Unmarshal(body(t, resp), &m))
+	lic := layer(m, ollama.MediaTypeLicense)
+	require.NotNil(t, lic)
+
+	own := e.get(t, "GET", "/v2/alice/secret/blobs/"+lic.Digest, aliceAuth)
+	require.Equal(t, http.StatusOK, own.StatusCode)
+	require.Equal(t, "Secret licence: do not share.", string(body(t, own)))
+
+	for _, digest := range []string{lic.Digest, m.Config.Digest} {
+		through := e.get(t, "GET", "/v2/alice/tiny-gguf/blobs/"+digest, nil)
+		require.Equal(t, http.StatusNotFound, through.StatusCode, "a private Repo's layer is not served through a public Repo")
+		require.Contains(t, errCode(t, through), "BLOB_UNKNOWN")
+	}
+
+	// The public Repo's own generated layers still work.
+	pub := e.manifest(t, "Q8_0", nil)
+	r := e.get(t, "GET", "/v2/alice/tiny-gguf/blobs/"+layer(pub, ollama.MediaTypeLicense).Digest, nil)
+	require.Equal(t, http.StatusOK, r.StatusCode)
+}
+
 func TestMatchTemplateAndHumanNumber(t *testing.T) {
 	tmpl, ok, err := ollama.MatchTemplate(indextest.Llama3Template)
 	require.NoError(t, err)

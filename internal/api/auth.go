@@ -76,6 +76,7 @@ type IdentityAPI interface {
 	LookupDeviceLogin(w http.ResponseWriter, r *http.Request)
 	ListMyOllamaKeys(w http.ResponseWriter, r *http.Request)
 	AddMyOllamaKey(w http.ResponseWriter, r *http.Request)
+	CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request)
 	DeleteMyOllamaKey(w http.ResponseWriter, r *http.Request, id gen.ID)
 	GetMyUpstreamToken(w http.ResponseWriter, r *http.Request, upstream string)
 	SetMyUpstreamToken(w http.ResponseWriter, r *http.Request, upstream string)

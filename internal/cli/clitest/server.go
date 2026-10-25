@@ -23,6 +23,7 @@ import (
 	"github.com/hangar-hub/hangar/internal/api/gen"
 	"github.com/hangar-hub/hangar/internal/model"
 	hangarrepo "github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 // server implements the native API operations the CLI uses. The rest
@@ -1143,6 +1144,21 @@ func (s *server) ListMyOllamaKeys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, gen.OllamaKeyList{Items: s.i.OllamaKeys()})
 }
 
+// ollamaKeyNamespace is the signature namespace of Ollama key challenges,
+// as auth.OllamaKeyNamespace.
+const ollamaKeyNamespace = "hangar-ollama-key"
+
+func (s *server) CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request) {
+	if !s.authed(w, r) {
+		return
+	}
+	c := "hangar-ollama-key:clitest:" + uuid.NewString()
+	s.i.mu.Lock()
+	s.i.keyChallenges[c] = true
+	s.i.mu.Unlock()
+	writeJSON(w, http.StatusOK, gen.OllamaKeyChallenge{Challenge: c, Namespace: ollamaKeyNamespace, ExpiresAt: time.Now().Add(15 * time.Minute).UTC()})
+}
+
 func (s *server) AddMyOllamaKey(w http.ResponseWriter, r *http.Request) {
 	if !s.authed(w, r) {
 		return
@@ -1155,6 +1171,13 @@ func (s *server) AddMyOllamaKey(w http.ResponseWriter, r *http.Request) {
 	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(body.PublicKey))
 	if err != nil {
 		problem(w, http.StatusUnprocessableEntity, "Not an ssh-ed25519 public key.")
+		return
+	}
+	s.i.mu.Lock()
+	issued := s.i.keyChallenges[body.Challenge]
+	s.i.mu.Unlock()
+	if !issued || sshsig.Verify(body.Signature, pub, ollamaKeyNamespace, []byte(body.Challenge)) != nil {
+		problem(w, http.StatusUnprocessableEntity, "Sign a new challenge with the private key of this Ollama key.")
 		return
 	}
 	k := gen.OllamaKey{Id: uuid.New(), Name: body.Name, Fingerprint: ssh.FingerprintSHA256(pub), CreatedAt: time.Now().UTC()}

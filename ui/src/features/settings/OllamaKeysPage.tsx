@@ -5,10 +5,21 @@ import { api } from "@/api/client";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { EmptyState, ErrorState, InlineError, LoadingRows } from "@/components/ui/states";
 import { relativeTime } from "@/lib/format";
 import { fieldErrors, unwrap } from "@/lib/problem";
+
+/**
+ * The command that signs a key challenge with Ollama's private key, as
+ * `ssh-keygen -Y sign` (05-auth.md "Ollama keys"). The challenge holds
+ * only letters, digits, colons, dots, dashes and underscores, so single
+ * quotes keep it intact in any POSIX shell.
+ */
+export function signCommand(challenge: string, namespace: string): string {
+  return `printf '%s' '${challenge}' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n ${namespace}`;
+}
 
 /** Ollama public keys, so `ollama pull` works for private Repos (AUTH-7). */
 export function OllamaKeysPage() {
@@ -19,16 +30,31 @@ export function OllamaKeysPage() {
   });
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
+  const [signature, setSignature] = useState("");
+  // A key is added only with its signature over a fresh challenge, which
+  // proves the user holds its private half.
+  const challenge = useQuery({
+    queryKey: ["me", "ollama-keys", "challenge"],
+    queryFn: async () => unwrap(await api.POST("/me/ollama-keys/challenge")),
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+  });
   const add = useMutation({
     mutationFn: async () =>
       unwrap(
         await api.POST("/me/ollama-keys", {
-          body: { name: name || undefined, public_key: key.trim() },
+          body: {
+            name: name || undefined,
+            public_key: key.trim(),
+            challenge: challenge.data?.challenge ?? "",
+            signature: signature.trim(),
+          },
         }),
       ),
     onSuccess: () => {
       setName("");
       setKey("");
+      setSignature("");
       qc.invalidateQueries({ queryKey: ["me", "ollama-keys"] });
     },
   });
@@ -111,10 +137,67 @@ export function OllamaKeysPage() {
             />
           )}
         </Field>
-        {add.error && !errs.public_key ? <InlineError error={add.error} /> : null}
-        <Button type="submit" variant="primary" disabled={!key.trim() || add.isPending}>
-          Add key
-        </Button>
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Prove the key is yours</p>
+          <p className="text-xs text-muted">
+            Run this on the machine that has the key, then paste what it prints. The private key
+            never leaves that machine. Or run <code>hangar ollama key register</code> there, which
+            does all of this for you.
+          </p>
+          {challenge.isPending ? (
+            <LoadingRows rows={1} label="Loading a challenge" />
+          ) : challenge.isError ? (
+            <ErrorState error={challenge.error} onRetry={() => challenge.refetch()} />
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-line bg-raised px-3 py-2">
+              <code className="min-w-0 flex-1 break-all font-mono text-xs">
+                {signCommand(challenge.data.challenge, challenge.data.namespace)}
+              </code>
+              <CopyButton
+                value={signCommand(challenge.data.challenge, challenge.data.namespace)}
+                label="Copy the command"
+              />
+            </div>
+          )}
+        </div>
+        <Field
+          label="Signature"
+          hint="Everything from -----BEGIN SSH SIGNATURE----- to -----END SSH SIGNATURE-----."
+          error={errs.signature}
+        >
+          {(p) => (
+            <Textarea
+              {...p}
+              required
+              rows={6}
+              className="font-mono text-xs"
+              placeholder="-----BEGIN SSH SIGNATURE-----"
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+            />
+          )}
+        </Field>
+        {add.error && !errs.public_key && !errs.signature ? (
+          <InlineError error={add.error} />
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!key.trim() || !signature.trim() || !challenge.data || add.isPending}
+          >
+            Add key
+          </Button>
+          <Button
+            onClick={() => {
+              setSignature("");
+              challenge.refetch();
+            }}
+            disabled={challenge.isFetching}
+          >
+            New challenge
+          </Button>
+        </div>
       </form>
     </PageShell>
   );

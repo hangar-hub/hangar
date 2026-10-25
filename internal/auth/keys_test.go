@@ -28,6 +28,7 @@ import (
 	"github.com/hangar-hub/hangar/internal/db/dbtest"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/secrets"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 // ollamaKey is an Ollama client key pair, generated in the test.
@@ -54,6 +55,17 @@ func (k ollamaKey) sign(t *testing.T, fullURL string) string {
 	require.NoError(t, err)
 	parts := bytes.Split(ssh.MarshalAuthorizedKey(k.signer.PublicKey()), []byte(" "))
 	return fmt.Sprintf("%s:%s", bytes.TrimSpace(parts[1]), base64.StdEncoding.EncodeToString(sig.Blob))
+}
+
+// addKey registers k for userID the way the UI and CLI do: it asks for a
+// challenge and signs it with the key.
+func addKey(t *testing.T, s *auth.Service, userID uuid.UUID, name string, k ollamaKey, actor model.Principal) (*auth.OllamaKey, error) {
+	t.Helper()
+	c, err := s.Ollama.Challenge(context.Background(), userID)
+	require.NoError(t, err)
+	sig, err := sshsig.Sign(k.signer, c.Namespace, []byte(c.Challenge))
+	require.NoError(t, err)
+	return s.Ollama.Add(context.Background(), userID, name, k.pub, c.Challenge, sig, actor)
 }
 
 // realmURL builds the URL Ollama's registryChallenge.URL builds.
@@ -89,18 +101,18 @@ func TestOllamaKeysAndRegistryTokens(t *testing.T) {
 		s.Ollama.Repos = repoMap{"alice/secret-gguf": private}
 
 		key := newOllamaKey(t)
-		k, err := s.Ollama.Add(ctx, alice.ID, "", key.pub, alice.Principal(model.AuthSession))
+		k, err := addKey(t, s, alice.ID, "", key, alice.Principal(model.AuthSession))
 		require.NoError(t, err)
 		require.Equal(t, "me@laptop", k.Name, "the key comment names it")
 		require.True(t, strings.HasPrefix(k.Fingerprint, "SHA256:"))
 		require.False(t, strings.Contains(k.PublicKey, "me@laptop"))
-		_, err = s.Ollama.Add(ctx, bob.ID, "", key.pub, bob.Principal(model.AuthSession))
+		_, err = addKey(t, s, bob.ID, "", key, bob.Principal(model.AuthSession))
 		require.ErrorIs(t, err, auth.ErrConflict, "a key belongs to one user")
 		for name, bad := range map[string]string{
 			"garbage": "not a key",
 			"rsa":     "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDHu9g5sAtGyoUwZ0ZGXUdhWtjMm8w3/F9BfZz6S0XyFQ== x",
 		} {
-			_, err = s.Ollama.Add(ctx, alice.ID, "", bad, alice.Principal(model.AuthSession))
+			_, err = s.Ollama.Add(ctx, alice.ID, "", bad, "", "", alice.Principal(model.AuthSession))
 			require.ErrorIs(t, err, auth.ErrInvalid, name)
 		}
 		keys, err := s.Ollama.List(ctx, alice.ID)
@@ -149,7 +161,7 @@ func TestOllamaKeysAndRegistryTokens(t *testing.T) {
 
 		// bob's key cannot read alice's private Repo; unknown Repos are 404 too.
 		bobKey := newOllamaKey(t)
-		_, err = s.Ollama.Add(ctx, bob.ID, "bob's", bobKey.pub, bob.Principal(model.AuthSession))
+		_, err = addKey(t, s, bob.ID, "bob's", bobKey, bob.Principal(model.AuthSession))
 		require.NoError(t, err)
 		_, err = issue(bobKey, clock.Now(), "nonce-6", repo)
 		require.ErrorIs(t, err, auth.ErrNotFound)
@@ -223,7 +235,7 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 		_, ciP := tokenPrincipal(auth.NewToken{Name: "ci", ExpiresAt: &weekOut,
 			Restrictions: model.TokenRestrictions{Repos: []string{"model:alice/ci-model"}}})
 		key := newOllamaKey(t)
-		_, err = s.Ollama.Add(ctx, alice.ID, "stolen", key.pub, ciP)
+		_, err = addKey(t, s, alice.ID, "stolen", key, ciP)
 		require.NoError(t, err)
 		_, err = issue(key, ciRepo)
 		require.NoError(t, err, "the key reads what its Token can read")
@@ -247,7 +259,7 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 		laptop, laptopP := tokenPrincipal(auth.NewToken{Name: "laptop"})
 
 		key2 := newOllamaKey(t)
-		_, err = s.Ollama.Add(ctx, alice.ID, "", key2.pub, laptopP)
+		_, err = addKey(t, s, alice.ID, "", key2, laptopP)
 		require.NoError(t, err)
 		_, err = issue(key2, privateRepo)
 		require.NoError(t, err, "an unrestricted Token that does not expire reads everything the user can")
@@ -257,7 +269,7 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 
 		// The key can be registered again, here in a UI session, which
 		// gives the user's read access with no expiry.
-		k, err := s.Ollama.Add(ctx, alice.ID, "", key.pub, alice.Principal(model.AuthSession))
+		k, err := addKey(t, s, alice.ID, "", key, alice.Principal(model.AuthSession))
 		require.NoError(t, err)
 		_, err = issue(key, privateRepo)
 		require.NoError(t, err)
@@ -265,6 +277,73 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, keys, 1)
 		require.Equal(t, k.ID, keys[0].ID)
+	})
+}
+
+// TestOllamaKeysNeedProofOfPossession covers security review finding 12:
+// anyone who learnt someone's Ollama public key could register it first,
+// so that person's `ollama pull` authenticated as the squatter. Adding a
+// key now needs the key's signature over a challenge issued to the user
+// adding it, less than 15 minutes old.
+func TestOllamaKeysNeedProofOfPossession(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(time.Now().UTC().Truncate(time.Second))
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		alice := mustUser(t, s, "alice", false)
+		mallory := mustUser(t, s, "mallory", false)
+		aliceKey := newOllamaKey(t)
+		malloryP := mallory.Principal(model.AuthSession)
+
+		c, err := s.Ollama.Challenge(ctx, mallory.ID)
+		require.NoError(t, err)
+		require.Equal(t, auth.OllamaKeyNamespace, c.Namespace)
+		require.True(t, strings.HasPrefix(c.Challenge, "hangar-ollama-key:"+mallory.ID.String()+":"))
+		require.True(t, strings.HasSuffix(c.Challenge, ":hangar.test"), "it names the Instance: %s", c.Challenge)
+		require.Equal(t, clock.Now().Add(15*time.Minute), c.ExpiresAt)
+
+		// Mallory has alice's public key but not its private half.
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, c.Challenge, "", malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "no signature")
+		own := newOllamaKey(t)
+		sig, err := sshsig.Sign(own.signer, c.Namespace, []byte(c.Challenge))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, c.Challenge, sig, malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "signed by another key")
+
+		// A signature alice made for her own challenge does not work for
+		// mallory, and a challenge cannot be edited or made up.
+		ac, err := s.Ollama.Challenge(ctx, alice.ID)
+		require.NoError(t, err)
+		aliceSig, err := sshsig.Sign(aliceKey.signer, ac.Namespace, []byte(ac.Challenge))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, ac.Challenge, aliceSig, malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "a challenge is bound to its user")
+		forged := strings.Replace(ac.Challenge, alice.ID.String(), mallory.ID.String(), 1)
+		forgedSig, err := sshsig.Sign(aliceKey.signer, ac.Namespace, []byte(forged))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, forged, forgedSig, malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "the challenge's MAC covers the user")
+		wrongNS, err := sshsig.Sign(aliceKey.signer, "file", []byte(ac.Challenge))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", aliceKey.pub, ac.Challenge, wrongNS, alice.Principal(model.AuthSession))
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "another signature namespace")
+
+		// The holder of the key adds it; `echo` adds a newline, which is fine.
+		withNewline, err := sshsig.Sign(aliceKey.signer, ac.Namespace, []byte(ac.Challenge+"\n"))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", aliceKey.pub, ac.Challenge, withNewline, alice.Principal(model.AuthSession))
+		require.NoError(t, err)
+
+		// Challenges expire after 15 minutes.
+		late := newOllamaKey(t)
+		lc, err := s.Ollama.Challenge(ctx, alice.ID)
+		require.NoError(t, err)
+		lateSig, err := sshsig.Sign(late.signer, lc.Namespace, []byte(lc.Challenge))
+		require.NoError(t, err)
+		clock.Advance(15 * time.Minute)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", late.pub, lc.Challenge, lateSig, alice.Principal(model.AuthSession))
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof)
 	})
 }
 

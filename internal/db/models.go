@@ -148,6 +148,15 @@ type OllamaBlob struct {
 	Timestamps
 }
 
+// OllamaRepoBlob is a row of ollama_repo_blobs: a generated Ollama layer
+// built from a Repo, which the registry serves only through that Repo.
+type OllamaRepoBlob struct {
+	bun.BaseModel `bun:"table:ollama_repo_blobs"`
+	RepoID        uuid.UUID `bun:"repo_id,pk,type:uuid"`
+	Digest        string    `bun:"digest,pk"`
+	Timestamps
+}
+
 // Membership is a row of memberships.
 type Membership struct {
 	bun.BaseModel  `bun:"table:memberships"`
@@ -812,6 +821,6 @@ func AllModels() []any {
 		(*DownloadCount)(nil), (*AccessRequest)(nil), (*Webhook)(nil), (*WebhookDelivery)(nil),
 		(*AuditEvent)(nil), (*Quota)(nil), (*Setting)(nil), (*XetXorb)(nil), (*XetFile)(nil),
 		(*DatasetSplit)(nil), (*DatasetStat)(nil), (*RepoFacts)(nil), (*RepoFacetValue)(nil),
-		(*RepoFactsChange)(nil),
+		(*RepoFactsChange)(nil), (*OllamaRepoBlob)(nil),
 	}
 }

@@ -270,6 +270,7 @@ var routeMatrix = []routeCase{
 	{method: "POST", route: "/api/hangar/v1/me/device/lookup", rule: ruleSessionOnly, path: "/api/hangar/v1/me/device/lookup", body: `{"user_code":"ABCD-EFGH"}`},
 	{method: "GET", route: "/api/hangar/v1/me/ollama-keys", rule: ruleSignedIn, path: "/api/hangar/v1/me/ollama-keys"},
 	{method: "POST", route: "/api/hangar/v1/me/ollama-keys", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/ollama-keys", body: `{"public_key":"ssh-ed25519 nope"}`},
+	{method: "POST", route: "/api/hangar/v1/me/ollama-keys/challenge", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/ollama-keys/challenge"},
 	{method: "DELETE", route: "/api/hangar/v1/me/ollama-keys/{id}", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/ollama-keys/{uuid}"},
 	{method: "GET", route: "/api/hangar/v1/me/upstream-tokens/{upstream}", rule: ruleSignedIn, path: "/api/hangar/v1/me/upstream-tokens/huggingface"},
 	{method: "PUT", route: "/api/hangar/v1/me/upstream-tokens/{upstream}", rule: ruleSignedInWrite, path: "/api/hangar/v1/me/upstream-tokens/huggingface", body: `{"token":"hf_probe"}`},

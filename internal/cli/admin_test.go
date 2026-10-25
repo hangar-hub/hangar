@@ -38,6 +38,7 @@ var checkValues = map[string]map[string]string{
 	"tokens":             {"scope": "write"},
 	"memberships":        {"role": "admin", "source": "oidc"},
 	"oauth_device_codes": {"status": "approved", "scope": "write"},
+	"ollama_repo_blobs":  {"digest": "ollama_blobs.digest"},
 	"repos":              {"type": "dataset", "visibility": "internal"},
 	"collaborators":      {"role": "write"},
 	"packs":              {"state": "live"},

@@ -85,7 +85,7 @@ func (a *Authz) Can(ctx context.Context, p Principal, action Action, target Targ
 
 ## Ollama keys
 
-Ollama signs registry requests with the user's Ollama key pair (`~/.ollama/id_ed25519`). Users paste their public key in **Settings > Ollama keys**, as on the Hub. The Ollama auth flow is specified in [08](08-local-tools.md).
+Ollama signs registry requests with the user's Ollama key pair (`~/.ollama/id_ed25519`). Users paste their public key in **Settings > Ollama keys**, as on the Hub. Adding a key needs proof that the user holds its private half (decided by the auth hardening agent after the security review of 2026-10-21): `POST /me/ollama-keys/challenge` returns a challenge bound by a MAC to the user and valid for 15 minutes, and `POST /me/ollama-keys` needs the key's SSH signature over it in the `hangar-ollama-key` namespace, as `ssh-keygen -Y sign` writes it (a trailing newline on the challenge is allowed). `hangar ollama key register` signs with `~/.ollama/id_ed25519` itself. Otherwise anyone who learnt a user's public key could register it first, and that user's `ollama pull` would authenticate as them. The Ollama auth flow is specified in [08](08-local-tools.md).
 
 A key is a credential like a Token, so it can never give more than the credential that registered it. A key added in a UI session reads what the user can read. A key added with a Token (`hangar ollama key register` uses the CLI's Token) is bound to that Token: registry tokens for it get the Token's scope and restrictions, end no later than the Token expires, and are refused once the Token is revoked or has expired. Such a key is no longer listed and can be registered again. Keys added before this rule have no Token and keep the user's read access.
 

@@ -93,8 +93,9 @@ type target interface {
 	// createRepo creates a model Repo owned by owner and commits files.
 	createRepo(t *testing.T, id model.RepoID, vis model.Visibility, files map[string][]byte)
 	// registerKey registers an Ollama public key, in authorized_keys
-	// form, for owner.
-	registerKey(t *testing.T, authorizedKey string)
+	// form, for owner. privateKey is the key's OpenSSH private key, which
+	// signs the challenge that proves owner holds it.
+	registerKey(t *testing.T, authorizedKey string, privateKey []byte)
 	// log returns a line per request Ollama sent: the status, method,
 	// path, whether the URL was signed, and the Range header.
 	log() []string
@@ -225,6 +226,8 @@ type runner interface {
 	api() string
 	// publicKey returns the Ollama key in authorized_keys form.
 	publicKey(t *testing.T) string
+	// privateKey returns Ollama's private key file, id_ed25519.
+	privateKey(t *testing.T) []byte
 	// host is how Ollama reaches the Instance listening on port.
 	host(port string) string
 }
@@ -250,6 +253,12 @@ func (l *localRunner) publicKey(t *testing.T) string {
 	b, err := os.ReadFile(filepath.Join(l.home, ".ollama", "id_ed25519.pub"))
 	require.NoError(t, err)
 	return strings.TrimSpace(string(b))
+}
+
+func (l *localRunner) privateKey(t *testing.T) []byte {
+	b, err := os.ReadFile(filepath.Join(l.home, ".ollama", "id_ed25519"))
+	require.NoError(t, err)
+	return b
 }
 
 func (l *localRunner) host(port string) string { return "127.0.0.1:" + port }
@@ -294,6 +303,12 @@ func (d *dockerRunner) publicKey(t *testing.T) string {
 	out, err := exec.Command("docker", "exec", d.id, "cat", "/root/.ollama/id_ed25519.pub").Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(out))
+}
+
+func (d *dockerRunner) privateKey(t *testing.T) []byte {
+	out, err := exec.Command("docker", "exec", d.id, "cat", "/root/.ollama/id_ed25519").Output()
+	require.NoError(t, err)
+	return out
 }
 
 func (d *dockerRunner) host(port string) string { return "host.docker.internal:" + port }
@@ -468,7 +483,7 @@ func scenarios(t *testing.T, r runner, in target, model260K []byte) {
 		name := host + "/alice/private-stories:q8_0"
 		out, err := r.cli(ctx, "pull", "--insecure", name)
 		require.Error(t, err, "an unregistered key is refused: %s", out)
-		in.registerKey(t, r.publicKey(t))
+		in.registerKey(t, r.publicKey(t), r.privateKey(t))
 		out, err = r.cli(ctx, "pull", "--insecure", name)
 		require.NoError(t, err, out)
 		require.Contains(t, out, "success")

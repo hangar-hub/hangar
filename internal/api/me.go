@@ -312,12 +312,29 @@ func (h *Identity) AddMyOllamaKey(w http.ResponseWriter, r *http.Request) {
 	if !h.decode(w, r, &body) {
 		return
 	}
-	k, err := h.auth.Ollama.Add(r.Context(), p.UserID, idStr(body.Name), body.PublicKey, p)
+	k, err := h.auth.Ollama.Add(r.Context(), p.UserID, idStr(body.Name), body.PublicKey, body.Challenge, body.Signature, p)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, r, http.StatusCreated, idOllamaKeyOut(*k))
+}
+
+// CreateOllamaKeyChallenge implements POST /me/ollama-keys/challenge: a
+// challenge the user signs with the Ollama key they are about to add, to
+// prove they hold it.
+func (h *Identity) CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.signedIn(w, r)
+	if !ok || !h.needScope(w, r, p, model.ScopeWrite) {
+		return
+	}
+	c, err := h.auth.Ollama.Challenge(r.Context(), p.UserID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, r, http.StatusOK, gen.OllamaKeyChallenge{Challenge: c.Challenge, Namespace: c.Namespace, ExpiresAt: c.ExpiresAt})
 }
 
 // DeleteMyOllamaKey implements DELETE /me/ollama-keys/{id}.

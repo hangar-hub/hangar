@@ -517,6 +517,12 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     return noContent;
   },
   listMyOllamaKeys: ({ state }) => ok({ items: state.ollamaKeys }),
+  createOllamaKeyChallenge: () =>
+    ok({
+      challenge: `hangar-ollama-key:${randomUUID()}:${Math.floor(Date.now() / 1000) + 900}:mock-nonce:mock-mac:localhost`,
+      namespace: "hangar-ollama-key",
+      expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+    } satisfies S["OllamaKeyChallenge"]),
   addMyOllamaKey: ({ state, body }) => {
     const k = body as S["OllamaKeyCreate"];
     if (!k.public_key.startsWith("ssh-ed25519 ")) {
@@ -524,6 +530,13 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
         400,
         "That is not an Ollama public key. Paste the contents of ~/.ollama/id_ed25519.pub.",
         [{ pointer: "/public_key", detail: "Expected a line starting with ssh-ed25519." }],
+      );
+    }
+    if (!k.signature?.trim().startsWith("-----BEGIN SSH SIGNATURE-----")) {
+      return problem(
+        422,
+        "Sign a new challenge with the private key of this Ollama key (ssh-keygen -Y sign -n hangar-ollama-key, or hangar ollama key register).",
+        [{ pointer: "/signature", detail: "Paste the output of the ssh-keygen command." }],
       );
     }
     const key: S["OllamaKey"] = {

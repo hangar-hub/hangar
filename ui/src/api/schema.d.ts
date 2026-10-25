@@ -227,8 +227,38 @@ export interface paths {
         /** List my Ollama keys */
         get: operations["listMyOllamaKeys"];
         put?: never;
-        /** Register an Ollama public key */
+        /**
+         * Register an Ollama public key
+         * @description Registers a key after checking that you hold it: `signature` must be
+         *     the key's SSH signature over a challenge from
+         *     `POST /me/ollama-keys/challenge`.
+         */
         post: operations["addMyOllamaKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/ollama-keys/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get a challenge to sign with an Ollama key
+         * @description Returns a challenge to sign with the private key of the Ollama key
+         *     you are about to register, to prove you hold it:
+         *     `printf '%s' '<challenge>' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n hangar-ollama-key`.
+         *     Send the challenge and the signature with the key to
+         *     `POST /me/ollama-keys` within 15 minutes. `hangar ollama key
+         *     register` does all of this.
+         */
+        post: operations["createOllamaKeyChallenge"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2103,6 +2133,22 @@ export interface components {
             name?: string;
             /** @description The contents of ~/.ollama/id_ed25519.pub. */
             public_key: string;
+            /** @description A challenge from `POST /me/ollama-keys/challenge` */
+            challenge: string;
+            /**
+             * @description The SSH signature of the challenge by this key in the
+             *     `hangar-ollama-key` namespace, as `ssh-keygen -Y sign` writes it
+             *     (`-----BEGIN SSH SIGNATURE-----` and the lines after it).
+             */
+            signature: string;
+        };
+        OllamaKeyChallenge: {
+            /** @description The text to sign. */
+            challenge: string;
+            /** @description The signature namespace to pass to `ssh-keygen -Y sign -n`. */
+            namespace: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         UpstreamTokenStatus: {
             upstream: string;
@@ -3446,6 +3492,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OllamaKey"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createOllamaKeyChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The challenge. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OllamaKeyChallenge"];
                 };
             };
             default: components["responses"]["Problem"];
