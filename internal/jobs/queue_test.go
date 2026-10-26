@@ -195,6 +195,35 @@ func TestQueueListCancelRetry(t *testing.T) {
 	})
 }
 
+func TestQueuePostpone(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clk := newClock()
+		q := jobs.NewQueue(d, nil, jobs.QueueOptions{Now: clk.Now})
+		later := clk.Now().Add(time.Hour)
+		soon, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: "soon", RunAfter: clk.Now().Add(time.Minute)})
+		require.NoError(t, err)
+		snoozed, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: "snoozed", RunAfter: clk.Now().Add(2 * time.Hour)})
+		require.NoError(t, err)
+		cancelled, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindPullFile, DedupeKey: "cancelled"})
+		require.NoError(t, err)
+		require.NoError(t, q.Cancel(ctx, cancelled))
+
+		for _, id := range []jobs.JobID{soon, snoozed, cancelled, uuid.New()} {
+			require.NoError(t, q.Postpone(ctx, id, later))
+		}
+		j, err := q.Get(ctx, soon)
+		require.NoError(t, err)
+		require.Equal(t, later, j.RunAfter, "a pending Job due sooner waits until then")
+		j, err = q.Get(ctx, snoozed)
+		require.NoError(t, err)
+		require.Equal(t, clk.Now().Add(2*time.Hour), j.RunAfter, "a Job due later is never brought forward")
+		j, err = q.Get(ctx, cancelled)
+		require.NoError(t, err)
+		require.Equal(t, clk.Now(), j.RunAfter, "a finished Job is left alone")
+	})
+}
+
 func TestQueueSchedules(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()

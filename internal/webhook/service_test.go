@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -295,6 +296,54 @@ func TestTestDeliveryAndPrivateTargets(t *testing.T) {
 	list, _, err := e.svc.Deliveries(ctx, hook.ID, "", 1)
 	require.NoError(t, err)
 	require.Equal(t, "the webhook is disabled", list[0].Error)
+}
+
+// TestDeliveriesReuseConnectionsWithinAPolicy: deliveries share one
+// transport per private-target policy, so they reuse kept-alive
+// connections instead of opening a new one each time, and a connection
+// kept alive while private targets were allowed is not reused once they
+// are turned off.
+func TestDeliveriesReuseConnectionsWithinAPolicy(t *testing.T) {
+	d := dbtest.SQLite(t)
+	e := newEnv(t, d)
+	ctx := t.Context()
+	var allow atomic.Bool
+	allow.Store(true)
+	sealer, err := secrets.New([]byte("0123456789abcdef0123456789abcdef"))
+	require.NoError(t, err)
+	reg := jobs.NewRegistry()
+	q := jobstest.NewFake(reg)
+	svc := webhook.New(webhook.Options{DB: d, Queue: q, Sealer: sealer, Now: func() time.Time { return *e.clock },
+		AllowPrivateTargets: func(context.Context) (bool, error) { return allow.Load(), nil }})
+	require.NoError(t, svc.Register(reg))
+	hook, err := svc.Create(ctx, webhook.CreateParams{NamespaceID: &e.nsID, URL: e.srv.URL, Secret: "keep-alive-secret",
+		Events: []string{"repo.created"}, Enabled: true})
+	require.NoError(t, err)
+
+	for range 3 {
+		_, err := svc.Test(ctx, hook.ID, indextest.Owner("alice"))
+		require.NoError(t, err)
+		q.RunPending(ctx)
+	}
+	e.recv.mu.Lock()
+	require.Len(t, e.recv.got, 3)
+	for _, r := range e.recv.got[1:] {
+		require.Equal(t, e.recv.got[0].RemoteAddr, r.RemoteAddr, "every delivery uses the same kept-alive connection")
+	}
+	e.recv.mu.Unlock()
+
+	allow.Store(false)
+	del, err := svc.Test(ctx, hook.ID, indextest.Owner("alice"))
+	require.NoError(t, err)
+	q.RunPending(ctx)
+	list, _, err := svc.Deliveries(ctx, hook.ID, "", 1)
+	require.NoError(t, err)
+	require.Equal(t, del.ID, list[0].ID)
+	require.Equal(t, "failed", list[0].State())
+	require.Equal(t, webhook.ErrPrivateTarget.Error(), list[0].Error)
+	e.recv.mu.Lock()
+	require.Len(t, e.recv.got, 3, "the kept-alive connection to the private receiver is not reused")
+	e.recv.mu.Unlock()
 }
 
 func TestUnreachableReceiverErrorsHideTheURL(t *testing.T) {

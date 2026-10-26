@@ -17,6 +17,8 @@ Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face 
 - **LM Studio.** `hangar lmstudio install org/model:Q4_K_M`.
 - **Datasets.** `load_dataset`, pandas and Polars over `hf://`, DuckDB over HTTPS, and a Dataset Viewer in the browser.
 
+Teams use it as a [private Ollama registry](guides/ollama-registry.md), as [one model cache for everyone](guides/shared-cache.md), to [avoid Hugging Face rate limits in CI](guides/ci.md) and to [load models in Kubernetes](guides/kubernetes.md) without downloading them on every Pod start. Hugging Face does not sell an on-premises Hub; [Hugging Face Hub on-premises](concepts/on-premises.md) explains how Hangar fills that gap.
+
 Pull models and datasets from huggingface.co once, including only the quantisation, Config or Split you want and any code they depend on, then load them from fast local storage as often as you like. Each Pull keeps a [Mirror](concepts/mirrors.md) with the upstream Repo ID and Commit SHAs, so code pinned to a Revision keeps working. Upload models that exist nowhere else. Browse everything you have, and everything you could pull, in one place.
 
 ![Hangar in 30 seconds in a terminal: check the sign-in, pull a model from huggingface.co, download it with the hf CLI and show its details](assets/demo.gif){ width="979" height="650" }
@@ -29,7 +31,7 @@ To try the web UI without installing anything, open the [demo](https://demo.hang
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
   ghcr.io/hangar-hub/hangar:latest
-docker logs hangar   # prints the generated admin password and Instance key once
+docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password
 ```
 
 Open <http://localhost:8080>, sign in as `hangar-admin`, and pull `hf-internal-testing/tiny-random-bert` from **Discover**. Then [point your Python tools at Hangar](get-started/hf-endpoint.md), with `transformers` and `torch` installed:

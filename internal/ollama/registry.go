@@ -102,6 +102,13 @@ type Options struct {
 	Log         *slog.Logger
 	// Window is the ranged read size for GGUF headers; zero means 1 MiB.
 	Window int64
+	// RedirectDownloads is true when downloads redirect to presigned Blob
+	// store URLs (storage.backend s3 with download_mode redirect). A GET of
+	// a layer stored as an LFS object then answers 307 to its presigned
+	// URL, so the bytes do not pass through Hangar.
+	RedirectDownloads bool
+	// PresignTTL is the lifetime of those URLs; zero means 1 hour.
+	PresignTTL time.Duration
 }
 
 // Handler serves /v2/...
@@ -730,10 +737,48 @@ func (h *Handler) blob(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 		registryError(w, r, http.StatusNotFound, "BLOB_UNKNOWN", "The layer's LFS object is missing.")
 		return
 	}
+	if h.redirect(w, r, rp, digest, oid, obj.Size) {
+		return
+	}
 	h.serve(w, r, rp, digest, obj.Size, func(rng *blob.Range) (io.ReadCloser, error) {
 		rc, _, err := h.o.LFS.Open(ctx, oid, rng)
 		return rc, err
 	})
+}
+
+// redirect answers a GET of a layer stored as an LFS object with a 307 to
+// a presigned Blob store URL when downloads redirect, and reports whether
+// it did. Ollama takes the Location of its first GET as the URL of its
+// parallel ranged downloads, so the layer's bytes then go straight from
+// the bucket. HEAD is never redirected: Ollama reads the size from it and
+// follows redirects, and a presigned GET URL does not answer HEAD. A Blob
+// store that cannot presign falls back to serving the bytes.
+func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, rp *repo.Repo, digest, oid string, size int64) bool {
+	if !h.o.RedirectDownloads || r.Method != http.MethodGet {
+		return false
+	}
+	ttl := h.o.PresignTTL
+	if ttl <= 0 {
+		ttl = time.Hour
+	}
+	u, err := h.o.LFS.PresignGet(r.Context(), oid, ttl, "")
+	if errors.Is(err, blob.ErrNotSupported) {
+		return false
+	}
+	if err != nil {
+		h.internal(w, r, err)
+		return true
+	}
+	w.Header().Set("Docker-Content-Digest", digest)
+	w.Header().Set("Location", u)
+	w.Header().Set("Content-Length", "0")
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	if h.o.Instruments != nil && h.o.Instruments.DownloadBytes != nil {
+		h.o.Instruments.DownloadBytes.Add(r.Context(), size, metric.WithAttributes(
+			attribute.String(telemetry.MetricProtocol, string(telemetry.ProtocolOllama)),
+			attribute.String(telemetry.MetricMode, "redirect"), attribute.String(telemetry.MetricRepoType, string(rp.ID.Type))))
+	}
+	return true
 }
 
 // serve writes a blob with Content-Length, Docker-Content-Digest and

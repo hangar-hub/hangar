@@ -42,7 +42,7 @@ To try the web UI without installing anything, open the demo at <https://demo.ha
 docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
   ghcr.io/hangar-hub/hangar:latest
-docker logs hangar   # prints the generated admin password and Instance key once
+docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password
 ```
 
 Open <http://localhost:8080>, sign in as `hangar-admin`, and pull `hf-internal-testing/tiny-random-bert` from **Discover**. Create a Token under **Settings**, **Tokens**. Then, with `transformers` and `torch` installed:

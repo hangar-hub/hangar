@@ -15,7 +15,7 @@ For experiment tracking and model lineage, pair it with MLflow: MLflow records r
 
 ### Is Hangar a private Hugging Face Hub alternative?
 
-Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set `HF_ENDPOINT` to your Instance, and `huggingface_hub`, `transformers` and `datasets` use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access. See [Point `HF_ENDPOINT` at Hangar](get-started/hf-endpoint.md).
+Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set `HF_ENDPOINT` to your Instance, and `huggingface_hub`, `transformers` and `datasets` use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access. See [Point `HF_ENDPOINT` at Hangar](get-started/hf-endpoint.md). For what Hugging Face itself offers, see [Hugging Face Hub on-premises](concepts/on-premises.md).
 
 ### Is Hangar a cache for Hugging Face models?
 
@@ -43,7 +43,7 @@ No. Set `HF_ENDPOINT` to your Instance and `HF_TOKEN` to a Token you create in H
 
 ### Does it work with Ollama and LM Studio?
 
-Yes. `ollama pull hangar.example.com/org/model:Q4_K_M` pulls a GGUF quantisation straight from your Instance, and `hangar lmstudio install org/model:Q4_K_M` puts one into LM Studio's models folder. See [Ollama](guides/ollama.md) and [LM Studio](guides/lm-studio.md).
+Yes. `ollama pull hangar.example.com/org/model:Q4_K_M` pulls a GGUF quantisation straight from your Instance, and `hangar lmstudio install org/model:Q4_K_M` puts one into LM Studio's models folder. See [Ollama](guides/ollama.md) and [LM Studio](guides/lm-studio.md). To serve GGUF models to every Ollama install on your network, see [Run a private Ollama registry](guides/ollama-registry.md).
 
 ### Does it work with hf_xet?
 

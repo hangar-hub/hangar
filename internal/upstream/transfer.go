@@ -347,7 +347,7 @@ func (s *Service) ingestMultipart(ctx context.Context, j *jobs.Job, prog jobs.Pr
 		}
 	}
 	if up == nil {
-		u, err := s.opts.LFS.CreateUpload(ctx, repo.UploadParams{OID: src.oid, Size: src.size, Multipart: true, PartSize: s.opts.PartSize, TTL: 7 * 24 * time.Hour})
+		u, err := s.startUpload(ctx, src)
 		if err != nil {
 			return err
 		}
@@ -399,6 +399,29 @@ func (s *Service) ingestMultipart(ctx context.Context, j *jobs.Job, prog jobs.Pr
 		return err
 	}
 	return nil
+}
+
+// startUpload starts the multipart upload of src, or resumes Hangar's own
+// upload of the same object and part size, with the parts it already
+// holds. That is how a Job with no upload in its result, such as one that
+// "Retry the Pull" queued, carries on from where an earlier transfer
+// stopped. An upload whose parts the Blob store has lost is replaced.
+func (s *Service) startUpload(ctx context.Context, src fileSource) (*repo.Upload, error) {
+	params := repo.UploadParams{OID: src.oid, Size: src.size, Multipart: true, PartSize: s.opts.PartSize, TTL: 7 * 24 * time.Hour, Resume: true}
+	u, err := s.opts.LFS.CreateUpload(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	got, err := s.opts.LFS.GetUpload(ctx, u.ID)
+	switch {
+	case err == nil:
+		return got, nil
+	case errors.Is(err, repo.ErrNotFound):
+		params.Resume = false
+		return s.opts.LFS.CreateUpload(ctx, params)
+	default:
+		return nil, err
+	}
 }
 
 // progressReporter throttles progress reports to one a second and keeps

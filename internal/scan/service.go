@@ -31,7 +31,10 @@ import (
 
 // Version is the scanner version; results are keyed by it. Version 2
 // reads files by content, follows joblib's reading and records Partial.
-const Version = 2
+// Version 3 denies the SymPy, torch byte and PyYAML loaders and scans
+// pickles held in byte strings that a callable not on the allow list is
+// given.
+const Version = 3
 
 // partialSince is the first scanner version that records Partial. An
 // error in an older result may hide code the scan did not read, so the

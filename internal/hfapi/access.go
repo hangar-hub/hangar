@@ -179,6 +179,19 @@ func pullPending(w http.ResponseWriter, r *http.Request, id model.RepoID) {
 	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusServiceUnavailable, Message: "Hangar is pulling " + id.Path() + " into the Arsenal. Try again shortly."})
 }
 
+// noHistory answers Repo info for a Repo whose default branch has no
+// Commit, which only a Mirror whose history is not stored yet can be:
+// 404 RevisionNotFound, which huggingface_hub raises at once with the
+// message, instead of info without sha.
+func noHistory(w http.ResponseWriter, r *http.Request, rp *repo.Repo) {
+	msg := rp.ID.Path() + " has no Commits on " + rp.DefaultBranch + " yet."
+	if rp.Mirror {
+		msg = rp.ID.Path() + " has no Commits on " + rp.DefaultBranch + ": Hangar has not stored its history from the Upstream yet, " +
+			"or the upstream Repo is empty. Try again when the Pull finishes."
+	}
+	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusNotFound, Code: httpx.CodeRevisionNotFound, Message: msg})
+}
+
 // serviceError maps a repo.Service error to the Hub's response.
 func (h *Handler) serviceError(w http.ResponseWriter, r *http.Request, id model.RepoID, err error) {
 	var pe *repo.PolicyError

@@ -250,6 +250,12 @@ type LogOpts struct {
 	Path  string
 	Skip  int
 	Limit int
+	// From, when set, starts the walk at these Commits instead of the
+	// Revision, which is then ignored. Each must be a full SHA of a Commit
+	// in the Repo, or Log returns ErrRevisionNotFound. Listings pass the
+	// Commits a previous page's walk had reached but not shown, so the next
+	// page continues it without walking the earlier pages again.
+	From []model.CommitSHA
 }
 
 // ChangeStatus is how a file changed in a Commit.
@@ -514,7 +520,9 @@ type UploadParams struct {
 	// object, Repo and part size, if there is one, with its expiry moved to
 	// TTL from now, instead of starting another. The native API's upload
 	// plan sets it, so a client that plans again after a reload continues
-	// the upload that holds its parts.
+	// the upload that holds its parts. With no UserID and no RepoUUID it
+	// resumes an upload Hangar made itself of the same object and part
+	// size, so a retried Pull continues a transfer that failed part way.
 	Resume bool
 }
 

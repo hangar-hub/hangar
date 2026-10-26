@@ -172,7 +172,7 @@ func (f *FakeLFS) CreateUpload(ctx context.Context, p repo.UploadParams) (*repo.
 	if ttl == 0 {
 		ttl = 24 * time.Hour
 	}
-	if p.Resume && p.Multipart && p.UserID != uuid.Nil && p.RepoUUID != uuid.Nil {
+	if p.Resume && p.Multipart && (p.UserID != uuid.Nil) == (p.RepoUUID != uuid.Nil) {
 		f.mu.Lock()
 		var found *fakeUpload
 		for _, u := range f.uploads {

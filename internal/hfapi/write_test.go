@@ -284,6 +284,26 @@ func TestCommitLineLimit(t *testing.T) {
 	require.Equal(t, http.StatusRequestEntityTooLarge, r.StatusCode)
 }
 
+// TestCommitInlineLimit: regular file content past 32 MiB is spooled to
+// the temporary directory, so hfapi.commit_inline_max caps what one commit
+// may carry, and a larger commit gets 413 and changes nothing.
+func TestCommitInlineLimit(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, func(o *hfapitest.Options) {
+		o.Settings = func(s *hfapi.Settings) { s.CommitInlineMax = 4096 }
+	})
+	_, before := seed(t, e, "alice", modelID("alice", "inline"), model.VisibilityPublic, nil)
+	body := ndjson(t, header("x"), fileLine("a.txt", strings.Repeat("a", 3000)), fileLine("b.txt", strings.Repeat("b", 3000)))
+	r := e.Request(t, http.MethodPost, "/api/models/alice/inline/commit/main", "alice", body)
+	require.Equal(t, http.StatusRequestEntityTooLarge, r.StatusCode)
+	require.Contains(t, r.Header.Get("X-Error-Message"), "more than 4KiB (hfapi.commit_inline_max)")
+	info := decode[map[string]any](t, e.Request(t, http.MethodGet, "/api/models/alice/inline", "", ""))
+	require.Equal(t, string(before), info["sha"], "the refused commit changed nothing")
+
+	r = e.Request(t, http.MethodPost, "/api/models/alice/inline/commit/main", "alice", ndjson(t, header("x"), fileLine("a.txt", strings.Repeat("a", 4096))))
+	require.Equal(t, http.StatusOK, r.StatusCode, "a commit at the limit is accepted")
+}
+
 func TestCreatePR(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

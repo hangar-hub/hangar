@@ -136,6 +136,41 @@ func TestPresignedPutCannotReplaceAVerifiedObject(t *testing.T) {
 
 // TestPresignedPutVerifyRejectsWrongContent covers a PUT of other bytes, or
 // none: Verify discards a wrong staged object and never records it.
+// TestVerifyInPlaceDeletesOnlyWrongContent: an object stored at its own key
+// with no row, such as one Ingest has copied into place and not yet
+// recorded, survives a Verify that names the wrong size. Only content of
+// the named size that does not hash to the OID is deleted.
+func TestVerifyInPlaceDeletesOnlyWrongContent(t *testing.T) {
+	forEach(t, func(t *testing.T, e *env) {
+		content := []byte("a valid object in place")
+		oid := sha256Hex(content)
+		size := int64(len(content))
+		key := model.LFSObjectKey(oid)
+		require.NoError(t, e.blobs.Put(e.ctx, key, bytes.NewReader(content), size))
+
+		for _, wrong := range []int64{size - 1, size + 1, 0} {
+			_, err := e.lfs.Verify(e.ctx, oid, wrong, uuid.Nil)
+			require.ErrorIs(t, err, repo.ErrChecksumMismatch, "size %d", wrong)
+			stored, ok := e.blobs.Bytes(key)
+			require.True(t, ok, "a Verify that names size %d leaves the object alone", wrong)
+			require.Equal(t, content, stored)
+		}
+		obj, err := e.lfs.Verify(e.ctx, oid, size, uuid.Nil)
+		require.NoError(t, err)
+		require.True(t, obj.Verified)
+
+		// Content of the named size that does not hash to the OID is deleted.
+		other := []byte("wrong content, same size")[:size]
+		otherOID := sha256Hex([]byte("the bytes the OID names"))
+		otherKey := model.LFSObjectKey(otherOID)
+		require.NoError(t, e.blobs.Put(e.ctx, otherKey, bytes.NewReader(other), size))
+		_, err = e.lfs.Verify(e.ctx, otherOID, size, uuid.Nil)
+		require.ErrorIs(t, err, repo.ErrChecksumMismatch)
+		_, ok := e.blobs.Bytes(otherKey)
+		require.False(t, ok)
+	})
+}
+
 func TestPresignedPutVerifyRejectsWrongContent(t *testing.T) {
 	forEach(t, func(t *testing.T, e *env) {
 		servePresigned(t, e)

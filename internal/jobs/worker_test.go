@@ -917,3 +917,45 @@ func TestWorkerKeepsPanicStacksOutOfJobs(t *testing.T) {
 	require.Equal(t, "cannot read https://bucket.s3.example.com/lfs/sha256/ab/cd?redacted", panicked["panic"])
 	require.Empty(t, leaksSecret(logs.String()), "the log holds a secret")
 }
+
+// TestRunDrainIsBounded: once its context ends, Run claims nothing more
+// and waits for running handlers for at most DrainTimeout, so a handler
+// that ignores its context cannot keep the process alive until SIGKILL.
+func TestRunDrainIsBounded(t *testing.T) {
+	d := dbtest.SQLite(t)
+	ctx := context.Background()
+	reg := jobs.NewRegistry()
+	started := make(chan struct{}, 4)
+	release := make(chan struct{})
+	defer close(release)
+	require.NoError(t, reg.Register(jobs.KindIndex, func(context.Context, *jobs.Job, jobs.Progress) error {
+		started <- struct{}{}
+		<-release // ignores its context
+		return nil
+	}, jobs.HandlerOptions{}))
+	w := jobs.NewWorker(d, reg, jobs.WorkerOptions{Concurrency: 2, PollInterval: 10 * time.Millisecond, DrainTimeout: 200 * time.Millisecond})
+	q := w.Queue()
+	first, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: "first"})
+	require.NoError(t, err)
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- w.Run(runCtx) }()
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the handler did not start")
+	}
+	cancel()
+	second, err := q.Enqueue(ctx, jobs.NewJob{Kind: jobs.KindIndex, DedupeKey: "second"})
+	require.NoError(t, err)
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, jobs.ErrDrainTimeout)
+		require.Contains(t, err.Error(), "1 still running")
+	case <-time.After(30 * time.Second):
+		t.Fatal("Run did not return at the drain deadline")
+	}
+	require.Equal(t, jobs.StatusRunning, mustGet(t, q, first).Status, "its lease expires and another worker takes it over")
+	require.Equal(t, jobs.StatusPending, mustGet(t, q, second).Status, "nothing is claimed after the context ends")
+	require.Empty(t, started)
+}

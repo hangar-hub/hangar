@@ -64,6 +64,8 @@ kubectl create secret generic hangar-secrets --namespace hangar \
 helm install hangar oci://ghcr.io/hangar-hub/charts/hangar --namespace hangar -f values.yaml
 ```
 
+Every `web` and `worker` Pod must have the same Instance key, and Hangar refuses to start in those roles without one. Give it through `existingSecret` as above, through `secrets`, or let the chart generate it (`generateSecrets`, the default, which needs `helm install` or `helm upgrade`). A render that gives the Pods no key stops with an error.
+
 A pre-install and pre-upgrade Job runs `hangar admin migrate`, and `web` and `worker` Pods report ready only when the schema is at the version they expect. With `migrations.mode: initContainer`, each `web` and `worker` Pod runs the migration in an init container instead, with no Helm hooks; see [Run with Argo CD](#run-with-argo-cd). A fuller example is [`deploy/helm/examples/scale-values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/examples/scale-values.yaml).
 
 ## Run with Argo CD
@@ -155,8 +157,13 @@ With persistence on (SQLite in one Pod), you can instead set `generateSecrets: f
 | `metrics.*` | A Prometheus port and an optional ServiceMonitor. |
 | `networkPolicy.*` | An optional NetworkPolicy. |
 | `cacheSizeLimit`, `tmpSizeLimit` | Sizes of the emptyDir volumes for the git pack cache (default 16Gi) and `/tmp`. The pack cache goes over `git.cache_size` (10GiB by default) while Repos are in use, so the chart requires `cacheSizeLimit` to be at least a quarter larger; the kubelet evicts a Pod whose emptyDir passes its limit. |
+| `drainDelaySeconds` | Seconds a terminating Pod keeps serving before Hangar closes its listener, so requests routed to it during a rolling update still succeed (default 5). A `preStop` sleep on Kubernetes 1.30 and later, `server.drain_delay` on 1.29. 0 turns it off. |
 | `extraEnv`, `extraEnvFrom`, `extraVolumes`, `extraVolumeMounts` | Anything else. |
 
 Every Pod runs as non-root with a read-only root filesystem, no privilege escalation, every capability dropped and the `RuntimeDefault` seccomp profile. `helm test` checks `/readyz` from inside the cluster.
 
 The full list is in the chart's [`values.yaml`](https://github.com/hangar-hub/hangar/blob/main/deploy/helm/hangar/values.yaml).
+
+## Next steps
+
+To load models into other Pods in the cluster from Hangar, without downloading them on every Pod start, see [Load models in Kubernetes](../guides/kubernetes.md).

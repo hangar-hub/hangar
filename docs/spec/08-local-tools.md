@@ -37,7 +37,14 @@ The config blob (`application/vnd.docker.container.image.v1+json`) is JSON with 
 
 `GET|HEAD /v2/{ns}/{name}/blobs/{digest}` serves the layer, with `Content-Length`, `Docker-Content-Digest` and range support.
 
-**Always stream blobs through Hangar, never redirect to a presigned S3 URL.** Ollama's client only follows redirects to the same host, or to a short list of Ollama's own CDN hosts, unless the user passes `--insecure` (`server/images.go`, `makeRequest` and `isAllowedHost`). A cross-host redirect fails the pull.
+**Redirect layer `GET`s in S3 `redirect` mode; serve everything else.** The general policy in Ollama's `makeRequest` (`server/images.go`, `isAllowedHost`) follows redirects only to the same host or Ollama's own CDN hosts, unless the user passes `--insecure`. The blob download does not use it. Ollama first sends `HEAD` for the size, under that policy, then one `GET` whose redirect policy stops at the first cross-host redirect and takes its `Location` as the URL of the parallel ranged part downloads (`server/download.go`, `blobDownload.run`, in 0.31.1 and in 0.40). So:
+
+- `GET` of a layer stored as an LFS object answers 307 to a presigned URL (`storage.s3.presign_ttl`) in `redirect` mode, and the parts go straight to the bucket.
+- `HEAD` is always answered by Hangar: following a redirect there would fail the policy above, and a presigned `GET` URL does not answer `HEAD`.
+- Otherwise the `GET` answers 200 with the bytes and a `Location` of a signed Hangar URL for the parts, which carry no `Authorization` header.
+- Ollama 0.40 also checks the `Location` it takes and refuses a private address unless the user passes `--insecure` (`transfer/redirect.go`, `ValidateRedirectTarget`). A bucket on a private network therefore needs `--insecure` or `download_mode: proxy`, and the docs say so.
+
+Checked against the Ollama v0.31.1 and v0.40.9 source on 2026-10-23, after the technical review of 2026-10-21. This replaces the earlier rule to always stream blobs through Hangar.
 
 ### HTTP and TLS
 

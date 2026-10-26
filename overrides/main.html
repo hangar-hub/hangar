@@ -1,0 +1,18 @@
+{#-
+  Theme overrides for the documentation site (mkdocs.yml, theme.custom_dir).
+-#}
+{% extends "base.html" %}
+
+{#-
+  The banner on docs versions that are not current. Material's script shows
+  it when neither the version's name nor its aliases in versions.json match
+  extra.version.default, so the latest release and dev never show it. It
+  links to the same page in the latest version: the page's canonical URL,
+  which names /latest/ (the mike plugin's canonical_version in mkdocs.yml).
+  scripts/docs-outdated-banner.py adds the same banner to versions published
+  before this file existed.
+-#}
+{% block outdated %}
+  You're reading the documentation for an older version of Hangar.
+  <a href="{{ (page and page.canonical_url) or config.site_url }}"><strong>Read this page in the latest version.</strong></a>
+{% endblock %}

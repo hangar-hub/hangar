@@ -85,9 +85,13 @@ func (h *Handler) commits(w http.ResponseWriter, r *http.Request, ref repoRef, r
 		}
 	}
 	q := r.URL.Query()
-	page := httpx.QueryInt(q, "p", 0, 0, 1<<30)
 	limit := httpx.QueryInt(q, "limit", commitsPageSize, 1, 1000)
-	log, err := h.d.Repos.Log(r.Context(), rp.ID, string(sha), repo.LogOpts{Skip: page * limit, Limit: limit + 1})
+	walk, ok := parseCommitCursor(q, sha, limit)
+	if !ok {
+		h.writeBadRequest(w, r, "The cursor is not valid. Start again from the first page.")
+		return
+	}
+	log, err := h.d.Repos.Log(r.Context(), rp.ID, string(sha), repo.LogOpts{From: walk.from, Skip: walk.skip, Limit: limit + 1})
 	if err != nil {
 		h.serviceError(w, r, rp.ID, err)
 		return
@@ -98,7 +102,8 @@ func (h *Handler) commits(w http.ResponseWriter, r *http.Request, ref repoRef, r
 		for k, v := range q {
 			next[k] = v
 		}
-		next.Set("p", strconv.Itoa(page+1))
+		next.Del("p")
+		walk.next(log).set(next)
 		next.Set("limit", strconv.Itoa(limit))
 		httpx.SetLinkNext(w, httpx.AbsoluteURL(h.d.Settings.PublicURL, r.URL.EscapedPath(), next))
 	}
@@ -124,6 +129,89 @@ func (h *Handler) commits(w http.ResponseWriter, r *http.Request, ref repoRef, r
 		out = append(out, item)
 	}
 	httpx.WriteJSON(w, r, http.StatusOK, out)
+}
+
+// maxCursorCommits bounds the Commits a Commit listing cursor names, which
+// keeps the Link URL short.
+const maxCursorCommits = 64
+
+// commitWalk is where a page of the Commit listing starts: a walk from
+// the Commits in from, newest first, that skips skip Commits.
+type commitWalk struct {
+	from []model.CommitSHA
+	skip int
+}
+
+// parseCommitCursor reads where a page starts. The `cursor` and `skip`
+// parameters come from the Link header of the page before, so every page
+// continues the walk the first page began, and a Commit pushed in the
+// meantime neither repeats nor hides one. Without them, the walk starts at
+// the resolved Revision and skips `p` pages, the Hub's own parameter.
+func parseCommitCursor(q url.Values, head model.CommitSHA, limit int) (commitWalk, bool) {
+	cursor := q.Get("cursor")
+	if cursor == "" {
+		return commitWalk{from: []model.CommitSHA{head}, skip: httpx.QueryInt(q, "p", 0, 0, 1<<30) * limit}, true
+	}
+	var w commitWalk
+	for _, s := range strings.Split(cursor, ",") {
+		s = strings.ToLower(s)
+		if !model.IsFullSHA(s) || len(w.from) == maxCursorCommits {
+			return commitWalk{}, false
+		}
+		w.from = append(w.from, model.CommitSHA(s))
+	}
+	w.skip = httpx.QueryInt(q, "skip", 0, 0, 1<<30)
+	return w, true
+}
+
+// next returns where the page after shown starts. When this page skipped
+// nothing, git's walk had queued, but not shown, the start Commits and the
+// parents of shown Commits that it did not show, so the next page walks
+// from those and never walks the history of earlier pages again. git
+// orders the walk by commit date, so only a Commit dated after one of its
+// descendants (a skewed clock) can appear on two pages. When the queue is
+// longer than a cursor holds, the next page keeps the start and skips what
+// was shown.
+func (w commitWalk) next(shown []repo.CommitInfo) commitWalk {
+	if w.skip == 0 {
+		seen := make(map[model.CommitSHA]bool, len(shown))
+		for _, c := range shown {
+			seen[c.SHA] = true
+		}
+		var queue []model.CommitSHA
+		add := func(sha model.CommitSHA) {
+			if !seen[sha] {
+				seen[sha] = true
+				queue = append(queue, sha)
+			}
+		}
+		for _, sha := range w.from {
+			add(sha)
+		}
+		for _, c := range shown {
+			for _, p := range c.Parents {
+				add(p)
+			}
+		}
+		if len(queue) > 0 && len(queue) <= maxCursorCommits {
+			return commitWalk{from: queue}
+		}
+	}
+	return commitWalk{from: w.from, skip: w.skip + len(shown)}
+}
+
+// set writes the walk into the query of a Link URL.
+func (w commitWalk) set(q url.Values) {
+	shas := make([]string, 0, len(w.from))
+	for _, sha := range w.from {
+		shas = append(shas, string(sha))
+	}
+	q.Set("cursor", strings.Join(shas, ","))
+	if w.skip > 0 {
+		q.Set("skip", strconv.Itoa(w.skip))
+	} else {
+		q.Del("skip")
+	}
 }
 
 // hasSafetensors reports whether the root of a Commit has safetensors

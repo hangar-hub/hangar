@@ -215,6 +215,10 @@ type Queue interface {
 	List(ctx context.Context, f Filter) ([]*Job, string, error)
 	// Retry enqueues a failed or cancelled Job again and returns the new ID.
 	Retry(ctx context.Context, id JobID) (JobID, error)
+	// Postpone moves a pending Job's earliest start to until, when it is
+	// due before then. A Job that is running, has finished or is already
+	// due later is left alone.
+	Postpone(ctx context.Context, id JobID, until time.Time) error
 	// SetSchedule creates or replaces a recurring Job.
 	SetSchedule(ctx context.Context, s Schedule) error
 	// DeleteSchedule removes a recurring Job.

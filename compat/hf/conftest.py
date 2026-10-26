@@ -341,6 +341,7 @@ def pytest_sessionfinish(session, exitstatus):
 NOT_SUPPORTED = {
     "GET /api/{type}s/{repo}/xet-read-token/{rev}": "Hangar never offers Xet downloads; downloads use plain HTTP.",
     "POST /api/{type}s/{repo}/lfs-files/duplicate": "Cross-Repo LFS copy needs Xet hashes. Copies within a Repo work.",
+    "POST /api/{type}s/{repo}/super-squash/{branch}": "Squashing history is not implemented yet.",
     "/api/spaces/...": "Spaces are out of scope.",
     "/api/jobs/... and /api/inference/...": "Jobs and the Inference API are out of scope.",
 }

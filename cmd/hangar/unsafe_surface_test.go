@@ -60,6 +60,7 @@ var fileByteReaders = map[string]byteUse{
 	"internal/gitserver.(*Server).download":            {routes: []string{routeLFSObject}},
 	"internal/ollama.(*Handler).blob":                  {routes: []string{routeOllamaBlob}},
 	"internal/ollama.(*Handler).fileLayer":             {routes: []string{routeOllamaBlob}},
+	"internal/ollama.(*Handler).redirect":              {routes: []string{routeOllamaBlob}},
 	"internal/api.ExportURL":                           {routes: []string{routeZipStart}},
 	"internal/api.ExportHandler":                       {routes: []string{routeZipDownload}},
 	"internal/upstream.(*PullThrough).stream":          {routes: []string{routePullThrough, routeResolve}},

@@ -503,9 +503,20 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 	r := e.Request(t, http.MethodHead, "/alice/mirror/resolve/main/model.gguf", "", "")
 	require.Equal(t, http.StatusOK, r.StatusCode)
 	require.Equal(t, "64", r.Header.Get("Content-Length"))
-	r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "")
-	require.Equal(t, http.StatusConflict, r.StatusCode)
-	require.Contains(t, r.Header.Get("X-Error-Message"), "not in the Arsenal")
+	// A GET of a file that is not held has a code huggingface_hub maps
+	// (RemoteEntryNotFoundError) and says how to download only what is
+	// held, or how to pull the file. A ranged GET, as a resumed download
+	// sends, answers the same.
+	for _, rng := range []string{"", "bytes=10-"} {
+		r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "", "Range", rng)
+		require.Equal(t, http.StatusConflict, r.StatusCode, rng)
+		require.Equal(t, "EntryNotFound", r.Header.Get("X-Error-Code"), rng)
+		require.NotEmpty(t, r.Header.Get("X-Repo-Commit"), rng)
+		msg := r.Header.Get("X-Error-Message")
+		require.Contains(t, msg, "not in the Arsenal", rng)
+		require.Contains(t, msg, "allow_patterns", rng)
+		require.Contains(t, msg, "hangar pull alice/mirror --include 'model.gguf'", rng)
+	}
 
 	// A policy refusal, such as the Namespace's storage quota, is a 403
 	// with the message.
@@ -518,6 +529,29 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 	r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "")
 	require.Equal(t, http.StatusOK, r.StatusCode)
 	require.Equal(t, weights, string(readBody(t, r)))
+
+	// Ranged requests through Pull-through get a real 206 (huggingface_hub
+	// resumes interrupted downloads with Range, and reads safetensors
+	// headers with it), and 416 past the end.
+	pt.content = strings.Repeat("a", 10) + strings.Repeat("b", 54)
+	for rng, want := range map[string]struct {
+		body, contentRange string
+	}{
+		"bytes=10-":   {strings.Repeat("b", 54), "bytes 10-63/64"},
+		"bytes=0-9":   {strings.Repeat("a", 10), "bytes 0-9/64"},
+		"bytes=-4":    {"bbbb", "bytes 60-63/64"},
+		"bytes=8-200": {"aa" + strings.Repeat("b", 54), "bytes 8-63/64"},
+	} {
+		r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "", "Range", rng)
+		require.Equal(t, http.StatusPartialContent, r.StatusCode, rng)
+		require.Equal(t, want.contentRange, r.Header.Get("Content-Range"), rng)
+		require.Equal(t, strconv.Itoa(len(want.body)), r.Header.Get("Content-Length"), rng)
+		require.Equal(t, want.body, string(readBody(t, r)), rng)
+	}
+	r = e.Request(t, http.MethodGet, "/alice/mirror/resolve/main/model.gguf", "", "", "Range", "bytes=64-")
+	require.Equal(t, http.StatusRequestedRangeNotSatisfiable, r.StatusCode)
+	require.Equal(t, "bytes */64", r.Header.Get("Content-Range"))
+	pt.content = weights
 
 	// A missing Repo asks Pull-through, which may still be planning.
 	r = e.Request(t, http.MethodGet, "/api/models/upstream/thing", "", "")
@@ -577,7 +611,11 @@ func TestPullThroughWaitsForTheHistoryOfAPlannedMirror(t *testing.T) {
 	// When Pull-through does not apply, the empty Mirror answers as it is.
 	pt.repoErr = repo.ErrNotFound
 	requireHubError(t, e.Request(t, http.MethodGet, "/alice/planned/resolve/main/config.json", "", ""), http.StatusNotFound, "RevisionNotFound")
-	require.Equal(t, http.StatusOK, e.Request(t, http.MethodGet, "/api/models/alice/planned", "", "").StatusCode)
+	// Info of the empty Mirror is RevisionNotFound too, never info without
+	// sha, which snapshot_download fails on with a bare AssertionError.
+	r = e.Request(t, http.MethodGet, "/api/models/alice/planned", "", "")
+	requireHubError(t, r, http.StatusNotFound, "RevisionNotFound")
+	require.Contains(t, r.Header.Get("X-Error-Message"), "has not stored its history")
 
 	// A policy refusal is a 403 with its message.
 	pt.repoErr = &repo.PolicyError{Message: "The Namespace is over its storage quota."}

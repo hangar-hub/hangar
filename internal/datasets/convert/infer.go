@@ -18,6 +18,10 @@ import (
 // ErrCast means a value cannot be stored as the column's type.
 var ErrCast = errors.New("value does not fit the column type")
 
+// maxExactInt64 bounds the float64 values cast converts to int64: below
+// 2^63, so the conversion is defined.
+const maxExactInt64 = 9.2e18
+
 // itype is a type inferred from decoded JSON-like values, as pyarrow
 // infers types when it builds a table from Python objects or JSON. json
 // marks a path whose values have conflicting types, which `datasets` 4
@@ -670,7 +674,8 @@ func cast(v any, a *features.Arrow, depth int) (any, error) {
 				i = 1
 			}
 		case float64:
-			if x != math.Trunc(x) || math.IsInf(x, 0) || math.IsNaN(x) || math.Abs(x) > 9.2e18 {
+			// The comparisons also refuse NaN and the infinities.
+			if x != math.Trunc(x) || !(x >= -maxExactInt64 && x <= maxExactInt64) {
 				return bad()
 			}
 			i = int64(x)
@@ -791,7 +796,9 @@ func cast(v any, a *features.Arrow, depth int) (any, error) {
 		case int64:
 			return x, nil
 		case float64:
-			if x == math.Trunc(x) {
+			// int64 of a float64 outside its range is not defined, so a value
+			// such as 1e300 or an infinity must fail instead of wrapping.
+			if x == math.Trunc(x) && x >= -maxExactInt64 && x <= maxExactInt64 {
 				return int64(x), nil
 			}
 		}

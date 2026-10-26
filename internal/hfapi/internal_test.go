@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -197,4 +198,51 @@ func TestInternalErrorHidesDetails(t *testing.T) {
 	require.Contains(t, w.Body.String(), "req-1")
 	require.Equal(t, "/api/models/{ns}/{name}", routeOf(r))
 	require.Equal(t, "", routeOf(httptest.NewRequest(http.MethodGet, "/", nil)))
+}
+
+// TestCommitWalkNext checks the cursor of the Commit listing: after a page
+// that skipped nothing, the next page starts at what git's walk had queued
+// but not shown (start Commits and parents of shown Commits, including the
+// second parents of merges); otherwise, or when that queue is longer than
+// a cursor holds, it keeps the start and skips what was shown.
+func TestCommitWalkNext(t *testing.T) {
+	sha := func(c byte) model.CommitSHA { return model.CommitSHA(strings.Repeat(string(c), 40)) }
+	commit := func(c byte, parents ...byte) repo.CommitInfo {
+		ci := repo.CommitInfo{SHA: sha(c)}
+		for _, p := range parents {
+			ci.Parents = append(ci.Parents, sha(p))
+		}
+		return ci
+	}
+	// f merges a and b; the parent of a and of b is c.
+	w := commitWalk{from: []model.CommitSHA{sha('f')}}
+	next := w.next([]repo.CommitInfo{commit('f', 'a', 'b'), commit('a', 'c')})
+	require.Equal(t, commitWalk{from: []model.CommitSHA{sha('b'), sha('c')}}, next)
+
+	// A start Commit the page did not reach stays in the cursor.
+	w = commitWalk{from: []model.CommitSHA{sha('b'), sha('c')}}
+	require.Equal(t, commitWalk{from: []model.CommitSHA{sha('c'), sha('d')}}, w.next([]repo.CommitInfo{commit('b', 'd')}))
+
+	// After a skipping page, the walk keeps its start.
+	w = commitWalk{from: []model.CommitSHA{sha('f')}, skip: 3}
+	require.Equal(t, commitWalk{from: []model.CommitSHA{sha('f')}, skip: 5}, w.next([]repo.CommitInfo{commit('a', 'c'), commit('c', 'd')}))
+
+	// A queue longer than a cursor holds falls back to skipping.
+	octopus := repo.CommitInfo{SHA: sha('f')}
+	for i := range maxCursorCommits + 1 {
+		octopus.Parents = append(octopus.Parents, model.CommitSHA(fmt.Sprintf("%040x", i+1)))
+	}
+	w = commitWalk{from: []model.CommitSHA{sha('f')}}
+	require.Equal(t, commitWalk{from: []model.CommitSHA{sha('f')}, skip: 1}, w.next([]repo.CommitInfo{octopus}))
+
+	q := url.Values{"limit": {"3"}}
+	commitWalk{from: []model.CommitSHA{sha('b'), sha('c')}}.set(q)
+	require.Equal(t, sha('b')+","+sha('c'), model.CommitSHA(q.Get("cursor")))
+	require.Empty(t, q.Get("skip"))
+	got, ok := parseCommitCursor(q, sha('f'), 3)
+	require.True(t, ok)
+	require.Equal(t, commitWalk{from: []model.CommitSHA{sha('b'), sha('c')}}, got)
+	got, ok = parseCommitCursor(url.Values{"p": {"2"}}, sha('f'), 3)
+	require.True(t, ok)
+	require.Equal(t, commitWalk{from: []model.CommitSHA{sha('f')}, skip: 6}, got)
 }

@@ -59,6 +59,9 @@ type Settings struct {
 	// CommitLineMax caps one line of an NDJSON commit body. Zero means
 	// twice RegularUploadMax plus 1 MiB, enough for a base64 regular file.
 	CommitLineMax int64
+	// CommitInlineMax is hfapi.commit_inline_max: the most bytes of regular
+	// file content one NDJSON commit may carry. Zero means 1 GiB.
+	CommitInlineMax int64
 	// BodyMax caps buffered JSON request bodies (server.max_request_body).
 	BodyMax int64
 	// VerifyWait is lfs.verify_wait: how long a create_pr=1 commit waits
@@ -72,6 +75,7 @@ func FromConfig(c *config.Config) Settings {
 	return Settings{
 		PublicURL:         strings.TrimRight(c.Server.PublicURL, "/"),
 		RegularUploadMax:  c.HFAPI.RegularUploadMax.Int64(),
+		CommitInlineMax:   c.HFAPI.CommitInlineMax.Int64(),
 		XetReject:         c.HFAPI.Xet == config.XetReject,
 		DefaultNamespace:  c.HFAPI.DefaultNamespace,
 		RedirectDownloads: c.Storage.Backend == config.BackendS3 && c.Storage.S3.DownloadMode == config.DownloadRedir,
@@ -177,6 +181,9 @@ func New(d Deps) (*Handler, error) {
 	}
 	if d.Settings.CommitLineMax <= 0 {
 		d.Settings.CommitLineMax = 2*d.Settings.RegularUploadMax + 1<<20
+	}
+	if d.Settings.CommitInlineMax <= 0 {
+		d.Settings.CommitInlineMax = defaultCommitInlineMax
 	}
 	if d.Settings.BodyMax <= 0 {
 		d.Settings.BodyMax = 64 << 20
