@@ -90,7 +90,7 @@ test.describe("sign-in", () => {
 
   test("explains OIDC errors", async ({ page }) => {
     await page.goto("/auth/login?error=oidc_link_required");
-    await expect(page.getByRole("alert")).toContainText("link the provider from Settings");
+    await expect(page.getByRole("alert")).toContainText("link the provider under Settings, Profile");
   });
 
   test("accepts an invite", async ({ page }) => {
