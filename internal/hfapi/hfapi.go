@@ -304,7 +304,7 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, msg st
 
 func (h *Handler) writeForbidden(w http.ResponseWriter, r *http.Request, msg string) {
 	if httpx.Principal(r.Context()).IsAnonymous() {
-		httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusUnauthorized, Message: "You must be authenticated to do this. Pass a token with HF_TOKEN or `hf auth login`."})
+		httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusUnauthorized, Message: "You must be authenticated to do this. Pass a Token with HF_TOKEN or `hf auth login`."})
 		return
 	}
 	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusForbidden, Message: msg})

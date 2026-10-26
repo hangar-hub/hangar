@@ -279,7 +279,7 @@ func (s *Store) Purge(ctx context.Context, repoUUID uuid.UUID) error {
 		return err
 	}
 	if row.DeletedAt == nil {
-		return fmt.Errorf("%w: delete the repo before purging it", ErrInvalid)
+		return fmt.Errorf("%w: delete the Repo before purging it", ErrInvalid)
 	}
 	var oids []string
 	if err := s.db.NewSelect().Model((*db.RepoLFS)(nil)).Column("oid").Where("repo_id = ?", repoUUID).Scan(ctx, &oids); err != nil {

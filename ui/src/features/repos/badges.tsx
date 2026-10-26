@@ -285,7 +285,9 @@ export function UpdateAvailableBadge() {
 const arsenalExplanations: Record<"full" | "partial", Explanation> = {
   full: {
     title: "In arsenal",
-    body: <p>This Instance already holds every file of this Repo, so it downloads from here.</p>,
+    body: (
+      <p>This Instance already holds every file of this Repo, so clients download it from here.</p>
+    ),
     docs: mirrorDocs,
   },
   partial: {
@@ -402,7 +404,7 @@ const dependencyExplanations: Record<Dependency["kind"], Explanation> = {
     title: "Base model",
     body: (
       <p>
-        The model card names this as the model it was built from. Suggested, not pulled
+        The Model card names this as the model it was built from. Suggested, not pulled
         automatically.
       </p>
     ),
@@ -410,7 +412,7 @@ const dependencyExplanations: Record<Dependency["kind"], Explanation> = {
   },
   dataset: {
     title: "Dataset",
-    body: <p>The model card lists this dataset. It is shown for reference and not pulled.</p>,
+    body: <p>The Model card lists this dataset. It is shown for reference and not pulled.</p>,
     docs: dependencyDocs,
   },
 };

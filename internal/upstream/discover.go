@@ -538,7 +538,7 @@ func (s *Service) ResolveDependencies(ctx context.Context, repoUUID uuid.UUID, c
 			continue
 		}
 		if !s.opts.Dependencies.AutoPullCode {
-			warnings = append(warnings, fmt.Sprintf("%s needs %s, which is not in the arsenal", r.ID, d.Target))
+			warnings = append(warnings, fmt.Sprintf("%s needs %s, which is not in the Arsenal", r.ID, d.Target))
 			continue
 		}
 		up, err := s.opts.Registry.Enabled(ctx, "")

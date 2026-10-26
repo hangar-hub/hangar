@@ -69,7 +69,7 @@ function UpstreamDialog({ upstream, onDone }: { upstream?: Upstream; onDone: () 
       open={open}
       onOpenChange={setOpen}
       title={upstream ? `Edit ${upstream.display_name}` : "Add an Upstream"}
-      description="Any hub that speaks the Hugging Face Hub API, such as another Hangar."
+      description="Any hub that speaks the Hugging Face Hub API, such as another Hangar Instance."
       trigger={
         upstream ? (
           <Button size="sm" variant="ghost">
@@ -135,7 +135,7 @@ function UpstreamDialog({ upstream, onDone }: { upstream?: Upstream; onDone: () 
         </Field>
         <Field
           label="Dataset Viewer URL"
-          hint="Optional. Defaults to the base URL with datasets-server. in front of the host."
+          hint='Optional. Defaults to the base URL with the host prefixed by "datasets-server.", such as https://datasets-server.huggingface.co.'
         >
           {(p) => (
             <Input

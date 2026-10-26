@@ -91,7 +91,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
         <div>
           <p className="font-medium">Sign in to see this</p>
           <p className="mt-1 text-sm text-muted">
-            This Instance only shows its arsenal to people who are signed in.
+            This Instance only shows its Arsenal to people who are signed in.
           </p>
           <Button asChild variant="primary" size="sm" className="mt-3">
             <a

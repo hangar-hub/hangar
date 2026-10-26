@@ -146,7 +146,7 @@ export function DiscoverDetailPanel({
           <InfoBadge
             tone="warn"
             explanation={{
-              title: "Gated upstream",
+              title: "Gated on the Upstream",
               body: (
                 <p>
                   The Upstream asks people to request access to this Repo. Accept its conditions
@@ -157,7 +157,7 @@ export function DiscoverDetailPanel({
               docs: "guides/gated/",
             }}
           >
-            Gated upstream
+            Gated on the Upstream
           </InfoBadge>
         ) : null}
         {d.pipeline_tag ? <Badge>{d.pipeline_tag}</Badge> : null}

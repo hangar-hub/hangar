@@ -253,8 +253,7 @@ export function RepoLayout({ kind, ns, name }: { kind: RepoKind; ns: string; nam
               )
             }
           >
-            Check the ID. Private Repos are only visible to members of their Namespace and
-            collaborators.
+            Check the ID. Only Members of their Namespace and collaborators can see private Repos.
           </EmptyState>
         </section>
       );

@@ -50,7 +50,7 @@ func repoTypeParam(s string) (model.RepoType, error) {
 	}
 	t, err := model.ParseRepoType(s)
 	if err != nil {
-		return "", userError("Unknown repo type " + s + ". Use model or dataset.")
+		return "", userError("Unknown Repo type " + s + ". Use model or dataset.")
 	}
 	return t, nil
 }

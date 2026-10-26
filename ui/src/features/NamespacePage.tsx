@@ -50,7 +50,7 @@ function Members({ ns, canAdmin }: { ns: string; canAdmin: boolean }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
     onError: (e) => toast(errorMessage(e), "danger"),
   });
-  if (list.isPending) return <LoadingRows rows={3} label="Loading members" />;
+  if (list.isPending) return <LoadingRows rows={3} label="Loading Members" />;
   if (list.isError) return <ErrorState error={list.error} onRetry={() => list.refetch()} />;
   return (
     <div className="space-y-3">
@@ -104,7 +104,7 @@ function Members({ ns, canAdmin }: { ns: string; canAdmin: boolean }) {
             if (user.trim()) set.mutate({ username: user.trim(), role });
           }}
         >
-          <Field label="Add a member" className="min-w-48 flex-1">
+          <Field label="Add a Member" className="min-w-48 flex-1">
             {(p) => (
               <Input
                 {...p}
@@ -129,7 +129,7 @@ function Members({ ns, canAdmin }: { ns: string; canAdmin: boolean }) {
             )}
           </Field>
           <Button type="submit" disabled={!user.trim() || set.isPending}>
-            Add member
+            Add Member
           </Button>
         </form>
       ) : null}

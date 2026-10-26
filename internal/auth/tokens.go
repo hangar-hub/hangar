@@ -92,7 +92,7 @@ func (ts *TokenStore) CreateAs(ctx context.Context, nt NewToken, actor model.Pri
 func (ts *TokenStore) create(ctx context.Context, nt NewToken, actor model.Principal) (*Token, string, error) {
 	nt.Name = strings.TrimSpace(nt.Name)
 	if nt.Name == "" || len(nt.Name) > maxTokenNameLength {
-		return nil, "", fmt.Errorf("%w: a token needs a name of 1 to %d characters", ErrInvalid, maxTokenNameLength)
+		return nil, "", fmt.Errorf("%w: a Token needs a name of 1 to %d characters", ErrInvalid, maxTokenNameLength)
 	}
 	if !nt.Scope.Valid() {
 		return nil, "", fmt.Errorf("%w: scope must be read, write or admin", ErrInvalid)

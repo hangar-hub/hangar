@@ -34,7 +34,7 @@ var (
 	ErrEntryNotFound = errors.New("entry not found")
 	// ErrNotPresent means the file's LFS object is not in the Arsenal, as in
 	// a Partial mirror.
-	ErrNotPresent = errors.New("file not in arsenal")
+	ErrNotPresent = errors.New("file not in the Arsenal")
 	// ErrRefConflict means a compare-and-swap on a ref failed because the
 	// ref moved (04-git.md "Ref updates").
 	ErrRefConflict = errors.New("reference has changed concurrently, fetch first")
@@ -44,13 +44,13 @@ var (
 	// ErrRefExists means a branch or tag with that name already exists.
 	ErrRefExists = errors.New("reference already exists")
 	// ErrReadOnly means the Repo is a Mirror and refuses direct writes.
-	ErrReadOnly = errors.New("repo is a mirror and is read-only; detach it to write to it")
+	ErrReadOnly = errors.New("the Repo is a Mirror and is read-only; detach it to write to it")
 	// ErrProtectedRef means the change would delete or rewrite a protected
 	// ref, such as the default branch.
 	ErrProtectedRef = errors.New("reference is protected")
 	// ErrLFSObjectMissing means a Commit refers to an LFS object that is not
 	// stored and verified.
-	ErrLFSObjectMissing = errors.New("lfs object is missing or not verified")
+	ErrLFSObjectMissing = errors.New("the LFS object is missing or not verified")
 	// ErrInvalid wraps validation failures such as bad paths or names.
 	ErrInvalid = errors.New("invalid request")
 )

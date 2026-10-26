@@ -44,11 +44,11 @@ gguf, mlx or text-generation.`,
 	}
 	a.clientFlags(cmd)
 	f := cmd.Flags()
-	f.StringVar(&upstream, "upstream", "", "search this Upstream instead of the Arsenal (default huggingface)")
+	f.StringVar(&upstream, "upstream", "", "search this Upstream instead of the Arsenal (default: huggingface)")
 	f.Lookup("upstream").NoOptDefVal = "huggingface"
 	f.StringVar(&typ, "type", "model", "Repo type: model or dataset")
 	f.StringArrayVar(&filters, "filter", nil, "filter results (repeatable); see above")
-	f.StringVar(&sort, "sort", "", "sort order: for the Arsenal updated, name, size, parameters, downloads or likes; for an Upstream trending, downloads, likes or lastModified")
+	f.StringVar(&sort, "sort", "", "sort order. For the Arsenal: updated, name, size, parameters, downloads or likes. For an Upstream: trending, downloads, likes or lastModified")
 	f.IntVar(&limit, "limit", 50, "maximum number of results, up to 500")
 	return cmd
 }

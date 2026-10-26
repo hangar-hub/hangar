@@ -18,7 +18,7 @@ import (
 // ErrBlockedAddress means the Upstream client refused to connect to an
 // address its network policy does not allow (06-upstreams-and-pulls.md
 // "Network policy").
-var ErrBlockedAddress = errors.New("the upstream request was refused by Hangar's network policy")
+var ErrBlockedAddress = errors.New("the Instance's network policy refused the request to the Upstream")
 
 // blockedAddressError names the refused address. It never names the URL,
 // which can be a presigned redirect target.

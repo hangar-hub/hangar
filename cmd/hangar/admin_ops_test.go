@@ -226,7 +226,7 @@ func TestAdminCommandsRefuseBadSetups(t *testing.T) {
 		"--set", "server.public_url=http://localhost:8080"}
 	out, code := execute(t, append([]string{"admin", "gc"}, set...)...)
 	require.Equal(t, 1, code)
-	require.Contains(t, out, "run hangar admin migrate first")
+	require.Contains(t, out, "; run hangar admin migrate")
 
 	// So is a configuration that does not validate, as a usage error.
 	out, code = execute(t, "admin", "gc", "--set", "storage.backend=tape", "--set", "server.data_dir="+t.TempDir())

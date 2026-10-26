@@ -47,7 +47,7 @@ func (a *app) pullCommand() *cobra.Command {
 		Use:   "pull <repo>[:<quant>]",
 		Short: "Pull a Repo into the Arsenal and download it to the local cache",
 		Long: `Makes sure the Repo, or the files you choose, are in the Arsenal: if they are
-not, asks the Instance to Pull them from an Upstream and shows the progress.
+not, asks the Instance to pull them from an Upstream and shows the progress.
 Then downloads them into the local Hugging Face cache, where Python libraries
 pointed at the same Instance find them, or into a folder with --to.
 
@@ -90,12 +90,12 @@ patterns, or, for datasets, --config, --split and --parquet-only. With
 	f.StringArrayVar(&o.Include, "include", nil, "only files matching this pattern, such as '*.safetensors' (repeatable)")
 	f.StringArrayVar(&o.Exclude, "exclude", nil, "skip files matching this pattern (repeatable)")
 	f.StringVar(&o.To, "to", "", "download into this folder instead of the Hugging Face cache")
-	f.BoolVar(&o.ServerOnly, "server-only", false, "only Pull into the Arsenal; download nothing")
-	f.StringVar(&o.Upstream, "upstream", "huggingface", "Upstream to Pull from when the Repo is not in the Arsenal")
+	f.BoolVar(&o.ServerOnly, "server-only", false, "only pull into the Arsenal; download nothing")
+	f.StringVar(&o.Upstream, "upstream", "huggingface", "Upstream to pull from when the Repo is not in the Arsenal")
 	f.StringVar(&o.Type, "type", "", "Repo type for IDs without a prefix: model or dataset")
-	f.StringArrayVar(&o.Configs, "config", nil, "dataset Config to Pull (repeatable)")
-	f.StringArrayVar(&o.Splits, "split", nil, "dataset Split to Pull (repeatable)")
-	f.BoolVar(&o.ParquetOnly, "parquet-only", false, "Pull and download only the dataset's Parquet export")
+	f.StringArrayVar(&o.Configs, "config", nil, "dataset Config to pull (repeatable)")
+	f.StringArrayVar(&o.Splits, "split", nil, "dataset Split to pull (repeatable)")
+	f.BoolVar(&o.ParquetOnly, "parquet-only", false, "pull and download only the dataset's Parquet export")
 	f.BoolVar(&o.Track, "track", false, "make a new Mirror follow its upstream branch")
 	f.BoolVar(&o.Now, "now", false, "start the Pull now, outside the Instance's pull windows, if allowed")
 	f.StringVar(&o.CacheDir, "cache-dir", "", "Hugging Face cache folder (default: $HF_HUB_CACHE or ~/.cache/huggingface/hub)")

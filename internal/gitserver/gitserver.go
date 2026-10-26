@@ -269,7 +269,7 @@ type accessError struct {
 func (e *accessError) Error() string { return e.message }
 
 func notFoundMessage(id model.RepoID) string {
-	return "Repository " + id.Path() + " not found. If it is private, check that your token can read it."
+	return "Repo " + id.Path() + " not found. If it is private, check that your Token can read it."
 }
 
 // lookup finds a Repo and checks that the caller may perform action on it.
@@ -290,7 +290,7 @@ func (s *Server) lookup(ctx context.Context, id model.RepoID, action auth.Action
 	}
 	httpx.SetRepo(ctx, r.ID)
 	if action == auth.ActionWrite && p.IsAnonymous() {
-		return nil, &accessError{status: http.StatusUnauthorized, message: "Authentication required to push. Use a Hangar token with write scope as the password."}
+		return nil, &accessError{status: http.StatusUnauthorized, message: "Authentication required to push. Use a Hangar Token with write scope as the password."}
 	}
 	if err := s.deps.Authz.Can(ctx, p, action, target(r)); err != nil {
 		switch {
@@ -306,7 +306,7 @@ func (s *Server) lookup(ctx context.Context, id model.RepoID, action auth.Action
 			return nil, &accessError{status: http.StatusForbidden, message: "Access to " + r.ID.Path() + " is restricted. Request access on the Repo page."}
 		case errors.Is(err, auth.ErrForbidden):
 			if action == auth.ActionWrite {
-				return nil, &accessError{status: http.StatusForbidden, message: "You do not have write access to " + r.ID.Path() + ". Check that your token has write scope and covers this Repo."}
+				return nil, &accessError{status: http.StatusForbidden, message: "You do not have write access to " + r.ID.Path() + ". Check that your Token has write scope and covers this Repo."}
 			}
 			return nil, &accessError{status: http.StatusForbidden, message: "You do not have access to " + r.ID.Path() + "."}
 		}

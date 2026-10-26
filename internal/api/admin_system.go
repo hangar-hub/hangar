@@ -189,7 +189,7 @@ func DoctorChecks(d *db.DB, opts DoctorOptions) []SystemCheck {
 				return "", err
 			}
 			if !st.UpToDate() {
-				return "", fmt.Errorf("%d migrations are pending; this binary expects %s. Run hangar admin migrate", len(st.Pending), st.Expected)
+				return "", fmt.Errorf("the database schema is at %q and this binary expects %q; run hangar admin migrate", st.Current, st.Expected)
 			}
 			return "The schema is at " + st.Current + ".", nil
 		}},

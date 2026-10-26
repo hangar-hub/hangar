@@ -90,7 +90,9 @@ test.describe("sign-in", () => {
 
   test("explains OIDC errors", async ({ page }) => {
     await page.goto("/auth/login?error=oidc_link_required");
-    await expect(page.getByRole("alert")).toContainText("link the provider from Settings");
+    await expect(page.getByRole("alert")).toContainText(
+      "link the provider under Settings, Profile",
+    );
   });
 
   test("accepts an invite", async ({ page }) => {
@@ -375,7 +377,7 @@ test.describe("browse files", () => {
       .getByRole("link", { name: "TinyLlama-1.1B-Chat-GGUF" })
       .click();
     await files.getByRole("link", { name: "tinyllama-1.1b-chat.Q8_0.gguf" }).click();
-    await expect(page.getByText("This file is not in the arsenal")).toBeVisible();
+    await expect(page.getByText("This file is not in the Arsenal")).toBeVisible();
     expect(problems).toEqual([]);
   });
 
@@ -795,7 +797,7 @@ test.describe("datasets", () => {
     });
     await page.goto("/datasets/ada/cifar-mini/viewer/default/train");
     await expect(
-      page.getByText("Preparing preview. Hangar is converting this dataset to Parquet."),
+      page.getByText("Preparing preview. Hangar is building this dataset's Parquet export."),
     ).toBeVisible();
     // The Viewer polls while a Split is pending and shows the rows once the
     // export is ready.
@@ -889,7 +891,7 @@ test("creates a Repo and a Collection in an Organisation's Namespace", async ({ 
   await page.getByLabel("Namespace", { exact: true }).selectOption("ml-team");
   await page.getByLabel("Model name").fill(`laptop-classifier-${id}`);
   await page.getByRole("radio", { name: /^Private/ }).check();
-  await expect(page.getByText("Only members of the Namespace and collaborators.")).toBeVisible();
+  await expect(page.getByText("Only Members of the Namespace and collaborators.")).toBeVisible();
   await page.getByRole("button", { name: "Create model" }).click();
   await expect(page).toHaveURL(new RegExp(`/ml-team/laptop-classifier-${id}$`));
 
@@ -905,7 +907,7 @@ test("creates a Repo and a Collection in an Organisation's Namespace", async ({ 
   await expect(
     page.getByRole("heading", { level: 1, name: `Runs on a laptop ${id}` }),
   ).toBeVisible();
-  await expect(page.getByText("Choose Edit to add Repos.")).toBeVisible();
+  await expect(page.getByText("Select Edit to add Repos.")).toBeVisible();
   expect(problems).toEqual([]);
 });
 

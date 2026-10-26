@@ -242,7 +242,7 @@ func (s *Service) credentials(ctx context.Context, up *Upstream, user uuid.UUID)
 var (
 	// ErrConflict means the Repo ID is taken: by a local Repo or
 	// Namespace, or by a Mirror of another Upstream.
-	ErrConflict = errors.New("repo id is taken")
+	ErrConflict = errors.New("the Repo ID is taken")
 	// ErrOverrideNotAllowed means "Pull now" is turned off on this Instance.
 	ErrOverrideNotAllowed = errors.New("pulling outside the pull windows is turned off on this instance")
 )
@@ -366,10 +366,10 @@ func (s *Service) authorisePull(ctx context.Context, p model.Principal, up *Upst
 		return nil
 	}
 	if p.IsAnonymous() {
-		return fmt.Errorf("%w: sign in to pull into the arsenal", auth.ErrForbidden)
+		return fmt.Errorf("%w: sign in to pull into the Arsenal", auth.ErrForbidden)
 	}
 	if !p.MaxScope().Includes(model.ScopeWrite) {
-		return fmt.Errorf("%w: pulling needs a token with write scope", auth.ErrForbidden)
+		return fmt.Errorf("%w: pulling needs a Token with write scope", auth.ErrForbidden)
 	}
 	r, err := s.opts.Repos.Get(ctx, local)
 	switch {

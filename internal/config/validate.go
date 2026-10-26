@@ -186,7 +186,7 @@ func (c *Config) validate(requireInstanceKey bool) error {
 		case p.ID == "":
 			e.addf("%s.id is required", where)
 		case !regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`).MatchString(p.ID):
-			e.addf("%s.id %q may only contain lower-case letters, digits and '-'", where, p.ID)
+			e.addf("%s.id %q may only contain lowercase letters, digits and '-'", where, p.ID)
 		case seen[p.ID]:
 			e.addf("%s.id %q is used twice", where, p.ID)
 		}
@@ -216,7 +216,7 @@ func (c *Config) validate(requireInstanceKey bool) error {
 	for id, u := range c.Upstreams {
 		where := "upstreams." + id
 		if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`).MatchString(id) {
-			e.addf("%s: upstream IDs may only contain lower-case letters, digits and '-'", where)
+			e.addf("%s: upstream IDs may only contain lowercase letters, digits and '-'", where)
 		}
 		checkURL(&e, where+".base_url", u.BaseURL, true)
 		checkURL(&e, where+".viewer_url", u.ViewerURL, false)
@@ -361,7 +361,7 @@ func (c *Config) InstanceKeyBytes() ([]byte, error) {
 		return nil, fmt.Errorf("not valid base64")
 	}
 	if len(b) != InstanceKeyBytes {
-		return nil, fmt.Errorf("decodes to %d bytes, want %d", len(b), InstanceKeyBytes)
+		return nil, fmt.Errorf("decodes to %d bytes, but it must be %d", len(b), InstanceKeyBytes)
 	}
 	return b, nil
 }

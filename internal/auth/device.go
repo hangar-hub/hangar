@@ -109,7 +109,7 @@ func (d *DeviceStore) decide(ctx context.Context, userCode string, p model.Princ
 		return fmt.Errorf("%w: sign in to answer a device login", ErrForbidden)
 	}
 	if p.Token != nil {
-		return fmt.Errorf("%w: answer device logins in the web UI, not with a token", ErrForbidden)
+		return fmt.Errorf("%w: answer device logins in the web UI, not with a Token", ErrForbidden)
 	}
 	return d.s.db.InTx(ctx, func(ctx context.Context, tx bun.Tx) error {
 		row, err := d.pending(ctx, tx, userCode)

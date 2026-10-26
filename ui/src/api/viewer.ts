@@ -82,7 +82,9 @@ async function get<T>(
     const notReady = code === "ResponseNotReady" || /not ready/i.test(body.error ?? "");
     throw new ViewerError(
       res.status,
-      notReady ? "Preparing preview. Hangar is converting this dataset to Parquet." : body.error,
+      notReady
+        ? "Preparing preview. Hangar is building this dataset's Parquet export."
+        : body.error,
       notReady,
     );
   }

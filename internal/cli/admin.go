@@ -26,7 +26,7 @@ type AdminDeps struct {
 }
 
 // errNoBlobStore is returned when a build has no Blob store opener.
-var errNoBlobStore = errors.New("this hangar build cannot open the Blob store (cli.AdminDeps.OpenBlobStore is not set)")
+var errNoBlobStore = errors.New("this Hangar build cannot open the Blob store (cli.AdminDeps.OpenBlobStore is not set)")
 
 // adminFlags are the configuration flags of the admin commands, the same as
 // `hangar server` takes.
@@ -85,7 +85,8 @@ func (a *app) rotateKeyCommand() *cobra.Command {
 		Short: "Replace the Instance key and re-encrypt every stored secret",
 		Long: `Generates a new security.instance_key (or uses --new-key) and, in one
 database transaction, re-encrypts every secret sealed with the old key:
-users' upstream tokens, Upstream Instance tokens and webhook secrets.
+users' Upstream tokens, the Instance's token for each Upstream, and webhook
+secrets.
 
 Stop every Hangar process first: a process still running with the old key
 cannot read the re-encrypted secrets. If the key came from secrets.yaml in

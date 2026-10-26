@@ -43,7 +43,7 @@ func TestFetchPackBoundsAdvertisedRefs(t *testing.T) {
 		c := NewHTTPClient(HTTPOptions{Version: "test", MaxAttempts: 1})
 		id := model.RepoID{Type: model.RepoTypeModel, Namespace: "a", Name: "b"}
 		_, err := c.FetchPack(context.Background(), Upstream{Name: "x", BaseURL: srv.URL}, Credentials{}, id, nil)
-		require.ErrorContains(t, err, "the upstream advertises more than 10 refs", "v2=%v", v2)
+		require.ErrorContains(t, err, "the Upstream advertises more than 10 refs", "v2=%v", v2)
 		srv.Close()
 	}
 }

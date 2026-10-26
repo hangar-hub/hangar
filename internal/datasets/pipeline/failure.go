@@ -29,7 +29,7 @@ const (
 )
 
 // errNotPulled means a file of a mirrored Parquet export is not present.
-var errNotPulled = errors.New("the Parquet export is not in the arsenal")
+var errNotPulled = errors.New("the Parquet export is not in the Arsenal")
 
 // failureMessages are the Hub's messages for each failure code.
 var failureMessages = map[string]string{
@@ -38,7 +38,7 @@ var failureMessages = map[string]string{
 	FailureFormatMismatch: "Couldn't infer the same data file format for all splits.",
 	FailureConfigNames:    "Cannot get the config names for the dataset.",
 	FailureStatistics:     "Unexpected error.",
-	FailureNotPulled:      "The Parquet export of this split is not in the arsenal. Pull it to preview the split.",
+	FailureNotPulled:      "The Parquet export of this Split is not in the Arsenal. Pull it to preview the split.",
 }
 
 // Failure is a stored failure: the Hub's error code and message.

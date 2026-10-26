@@ -70,7 +70,7 @@ func (h *Identity) CreateOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p.Token != nil && !p.Token.Restrictions.IsZero() {
-		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden, Detail: "A restricted token cannot create Organisations."})
+		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden, Detail: "A restricted Token cannot create Organisations."})
 		return
 	}
 	var body gen.OrgCreate

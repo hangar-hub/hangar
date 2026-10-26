@@ -802,7 +802,7 @@ func (l *LFS) Verify(ctx context.Context, oid string, size int64, userID uuid.UU
 		if mismatch {
 			return LFSObject{}, fmt.Errorf("%w: %s", ErrChecksumMismatch, oid)
 		}
-		return LFSObject{}, fmt.Errorf("%w: no upload of lfs object %s to verify", ErrNotFound, oid)
+		return LFSObject{}, fmt.Errorf("%w: no upload of LFS object %s to verify", ErrNotFound, oid)
 	}
 	obj, err := l.verifyInPlace(ctx, oid, size)
 	if errors.Is(err, ErrNotFound) && mismatch {

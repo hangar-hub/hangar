@@ -117,7 +117,7 @@ func validateFields(form []GatingField, fields map[string]any) (map[string]any, 
 		switch tv := v.(type) {
 		case string:
 			if len(tv) > 2000 {
-				return nil, fmt.Errorf("%w: field %q is longer than 2000 characters", ErrInvalid, k)
+				return nil, fmt.Errorf("%w: field %q is longer than 2,000 characters", ErrInvalid, k)
 			}
 		case bool, float64, nil:
 		default:

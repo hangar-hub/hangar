@@ -176,7 +176,7 @@ func (h *Identity) SetCollaborators(w http.ResponseWriter, r *http.Request, typ 
 		return
 	}
 	if len(body.Items) > 1000 {
-		h.fail(w, r, fmt.Errorf("%w: at most 1000 collaborators", auth.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("%w: at most 1,000 collaborators", auth.ErrInvalid))
 		return
 	}
 	cs := make([]org.Collaborator, 0, len(body.Items))

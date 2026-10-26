@@ -513,7 +513,7 @@ func TestResolvePartialMirrorAndPullThrough(t *testing.T) {
 		require.Equal(t, "EntryNotFound", r.Header.Get("X-Error-Code"), rng)
 		require.NotEmpty(t, r.Header.Get("X-Repo-Commit"), rng)
 		msg := r.Header.Get("X-Error-Message")
-		require.Contains(t, msg, "not in the arsenal", rng)
+		require.Contains(t, msg, "not in the Arsenal", rng)
 		require.Contains(t, msg, "allow_patterns", rng)
 		require.Contains(t, msg, "hangar pull alice/mirror --include 'model.gguf'", rng)
 	}

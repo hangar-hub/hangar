@@ -274,7 +274,7 @@ function AdminTokens() {
         <li key={t.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm">
           <span className="font-mono">{t.username}</span>
           <span>{t.name}</span>
-          <span className="font-mono text-xs text-muted">{t.prefix}...</span>
+          <span className="font-mono text-xs text-muted">{t.prefix}…</span>
           <Badge mono>{t.scope}</Badge>
           <span className="tabular text-xs text-muted">
             {t.last_used_at ? `Used ${relativeTime(t.last_used_at)}` : "Never used"}

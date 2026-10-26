@@ -134,7 +134,7 @@ func (a *app) backup(ctx context.Context, cfg *config.Config, out string, skipBl
 		return nil, err
 	}
 	if !st.UpToDate() {
-		return nil, fmt.Errorf("the database schema is at %q but this hangar expects %q; run hangar admin migrate or use the matching hangar version", st.Current, st.Expected)
+		return nil, fmt.Errorf("the database schema is at %q and this binary expects %q; run hangar admin migrate, or use the matching Hangar version", st.Current, st.Expected)
 	}
 	if err := os.MkdirAll(filepath.Join(out, "db"), 0o700); err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func copyBlobsOut(ctx context.Context, store blob.Store, dir string, prog *progr
 			return fmt.Errorf("copy %s: %w", info.Key, err)
 		}
 		if info.Size >= 0 && n != info.Size {
-			return fmt.Errorf("copy %s: got %d bytes, want %d", info.Key, n, info.Size)
+			return fmt.Errorf("copy %s: received %d bytes, expected %d", info.Key, n, info.Size)
 		}
 		count++
 		bytes += n
@@ -268,7 +268,7 @@ func (a *app) restoreCommand() *cobra.Command {
 		Short: "Restore a backup made by hangar admin backup",
 		Long: `Restores a backup folder into the configured database and Blob store. The
 database is migrated first, and must then be at the same schema version as
-the backup: restore with the hangar version that made the backup, then
+the backup: restore with the Hangar version that made the backup, then
 upgrade. The database must be empty unless --force is given, which deletes
 every row first.
 
@@ -322,7 +322,7 @@ func (a *app) restore(ctx context.Context, cfg *config.Config, dir string, skipB
 		return nil, fmt.Errorf("read manifest.json: %w", err)
 	}
 	if m.Format != backupFormat {
-		return nil, fmt.Errorf("backup format %d is not supported; this hangar reads format %d", m.Format, backupFormat)
+		return nil, fmt.Errorf("backup format %d is not supported; this version of Hangar reads format %d", m.Format, backupFormat)
 	}
 	var store blob.Store
 	if !skipBlobs && !m.SkippedBlobs {
@@ -343,7 +343,7 @@ func (a *app) restore(ctx context.Context, cfg *config.Config, dir string, skipB
 		return nil, err
 	}
 	if st.Current != m.Schema {
-		return nil, fmt.Errorf("the backup is at schema %q but this hangar is at %q; restore with hangar %s, then upgrade", m.Schema, st.Current, m.HangarVersion)
+		return nil, fmt.Errorf("the backup is at schema %q but this database is at %q; restore with Hangar %s, then upgrade", m.Schema, st.Current, m.HangarVersion)
 	}
 	prog := newProgress(a.stderr, "Restoring rows", 0, a.json)
 	if err := loadTables(ctx, d, filepath.Join(dir, "db"), force, prog); err != nil {

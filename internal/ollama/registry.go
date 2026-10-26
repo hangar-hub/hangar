@@ -224,7 +224,7 @@ func (h *Handler) load(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 	case errors.Is(err, auth.ErrGated):
 		registryError(w, r, http.StatusForbidden, "DENIED", "This Repo is gated. Request access to it in Hangar first.")
 	case errors.Is(err, repo.ErrNotFound), errors.Is(err, auth.ErrNotFound), errors.Is(err, auth.ErrForbidden):
-		registryError(w, r, http.StatusNotFound, "NAME_UNKNOWN", "Repository not found. If it is private, make sure your Ollama key is registered and you have access to it.")
+		registryError(w, r, http.StatusNotFound, "NAME_UNKNOWN", "Repo not found. If it is private, make sure your Ollama key is registered and you have access to it.")
 	default:
 		h.internal(w, r, err)
 	}
@@ -277,7 +277,7 @@ func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
 		registryError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "The Ollama key is not registered in Hangar, or the signature is invalid or stale.")
 		return
 	case errors.Is(err, auth.ErrNotFound), errors.Is(err, auth.ErrForbidden):
-		registryError(w, r, http.StatusNotFound, "NAME_UNKNOWN", "Repository not found, or your account cannot read it.")
+		registryError(w, r, http.StatusNotFound, "NAME_UNKNOWN", "Repo not found, or you cannot read it.")
 		return
 	case errors.Is(err, auth.ErrGated):
 		registryError(w, r, http.StatusForbidden, "DENIED", "This Repo is gated. Request access to it in Hangar first.")
@@ -580,7 +580,7 @@ func sortedKeys(m map[string]model.Entry) []string {
 }
 
 var (
-	errNotPresent = errors.New("the quant is not in the arsenal")
+	errNotPresent = errors.New("the quant is not in the Arsenal")
 	errBadModel   = errors.New("the GGUF file cannot be served")
 )
 
@@ -650,14 +650,14 @@ func (h *Handler) notPresent(w http.ResponseWriter, r *http.Request, rp *repo.Re
 		if err := h.o.PullThrough.PullFiles(r.Context(), rp, commit, missing); err == nil {
 			w.Header().Set("Retry-After", "30")
 			registryError(w, r, http.StatusServiceUnavailable, "UNAVAILABLE",
-				fmt.Sprintf("Hangar is pulling %s:%s into the arsenal. Run ollama pull again when the Pull finishes.", rp.ID.String(), tag))
+				fmt.Sprintf("Hangar is pulling %s:%s into the Arsenal. Run ollama pull again when the Pull finishes.", rp.ID.String(), tag))
 			return
 		} else {
 			h.o.Log.WarnContext(r.Context(), "start pull-through for ollama", "repo.id", rp.ID.String(), "error", err.Error())
 		}
 	}
 	registryError(w, r, http.StatusNotFound, "MANIFEST_UNKNOWN",
-		fmt.Sprintf("%s:%s is not in the arsenal. Pull it first: hangar pull %s:%s --server-only (missing: %s).",
+		fmt.Sprintf("%s:%s is not in the Arsenal. Pull it first: hangar pull %s:%s --server-only (missing: %s).",
 			rp.ID.String(), tag, rp.ID.String(), tag, strings.Join(missing, ", ")))
 }
 
@@ -729,7 +729,7 @@ func (h *Handler) blob(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 		return
 	}
 	if !ref.Present {
-		registryError(w, r, http.StatusNotFound, "BLOB_UNKNOWN", "This file is not in the arsenal. Pull it into Hangar first.")
+		registryError(w, r, http.StatusNotFound, "BLOB_UNKNOWN", "This file is not in the Arsenal. Pull it into Hangar first.")
 		return
 	}
 	obj, err := h.o.LFS.Stat(ctx, oid)

@@ -163,7 +163,7 @@ export function DiscoverPage() {
   return (
     <PageShell
       title="Discover"
-      subtitle="Search an Upstream and pull what you need into your arsenal."
+      subtitle="Search an Upstream and pull what you need into your Arsenal."
     >
       <div role="tablist" aria-label="Repo type" className="flex gap-1 border-b border-line">
         {tab("models", "Models")}

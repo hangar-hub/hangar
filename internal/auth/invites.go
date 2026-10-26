@@ -68,7 +68,7 @@ func (s *Service) CreateInvite(ctx context.Context, p InviteParams, actor model.
 	if p.Org != "" {
 		ns, err := s.orgs.Get(ctx, p.Org)
 		if err != nil || ns.Kind != org.KindOrg {
-			return nil, fmt.Errorf("%w: organisation %q does not exist", ErrInvalid, p.Org)
+			return nil, fmt.Errorf("%w: Organisation %q does not exist", ErrInvalid, p.Org)
 		}
 		role := p.Role
 		if role == "" {
@@ -80,7 +80,7 @@ func (s *Service) CreateInvite(ctx context.Context, p InviteParams, actor model.
 		r := string(role)
 		row.OrgNamespaceID, row.Role = &ns.ID, &r
 	} else if p.Role != "" {
-		return nil, fmt.Errorf("%w: a role needs an organisation", ErrInvalid)
+		return nil, fmt.Errorf("%w: a Role needs an Organisation", ErrInvalid)
 	}
 	code, err := randomString(32)
 	if err != nil {

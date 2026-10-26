@@ -64,7 +64,7 @@ func (a *UploadsAPI) PlanUploads(w http.ResponseWriter, r *http.Request, pType g
 			return
 		}
 		if !model.IsSHA256(f.Sha256) || f.Size < 0 {
-			badRequest(w, r, "", "files["+strconv.Itoa(i)+"] needs a lower-case sha256 and a size of 0 or more.")
+			badRequest(w, r, "", "files["+strconv.Itoa(i)+"] needs a lowercase sha256 and a size of 0 or more.")
 			return
 		}
 		body.Files[i].Path = clean
@@ -351,7 +351,7 @@ func (a *UploadsAPI) CreateCommit(w http.ResponseWriter, r *http.Request, pType 
 	out := gen.CommitResponse{}
 	if createPR {
 		if a.d.Community == nil {
-			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusServiceUnavailable, Detail: "Pull requests are not available on this server."})
+			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusServiceUnavailable, Detail: "Pull requests are not available on this Instance."})
 			return
 		}
 		base := params.Revision

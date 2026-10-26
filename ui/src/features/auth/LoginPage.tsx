@@ -16,7 +16,7 @@ import { useSignedIn } from "@/lib/session";
 export const oidcErrors: Record<string, string> = {
   oidc_state: "The sign-in took too long or was started in another tab. Try again.",
   oidc_link_required:
-    "An account with this email already exists. Sign in with your password, then link the provider from Settings.",
+    "An account with this email already exists. Sign in with your password, then link the provider under Settings, Profile.",
   oidc_no_account:
     "There is no Hangar account for this identity, and this Instance does not create accounts automatically. Ask an admin for an invite.",
   oidc_identity_taken: "This identity is linked to another Hangar account.",
