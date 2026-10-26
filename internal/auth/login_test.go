@@ -208,7 +208,10 @@ func TestClearThrottle(t *testing.T) {
 	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
 		ctx := context.Background()
 		rec := audittest.NewFake()
-		s, _ := authtest.NewService(t, d, authtest.RealOptions{Audit: rec})
+		// The clock stands still, so the one-second locks outlast the
+		// password hashes on a slow machine.
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock, Audit: rec})
 		_, err := s.Users.Create(ctx, auth.NewUser{Username: "alice", Password: goodPassword}, model.System())
 		require.NoError(t, err)
 		for range 5 {

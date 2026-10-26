@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/db"
 	"github.com/hangar-hub/hangar/internal/jobs"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/repo"
@@ -135,6 +137,12 @@ func TestAdminUnlockSignIn(t *testing.T) {
 				_, err := in.auth.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: "wrong password 1", IP: ip})
 				require.ErrorIs(t, err, auth.ErrLoginFailed)
 			}
+			// The fifth failure locks for a second, less than a password
+			// hash takes on a slow machine, so hold the locks for an hour.
+			_, err := in.db.NewUpdate().Model((*db.LoginAttempt)(nil)).
+				Set("locked_until = ?", time.Now().UTC().Add(time.Hour)).
+				Where("locked_until IS NOT NULL").Exec(ctx)
+			require.NoError(t, err)
 		})
 	}
 	signIn := func(ip string) error {
