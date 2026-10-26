@@ -6,7 +6,7 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "mkdocs.yml", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "api/openapi.yaml", "deploy/cloudflare/docs-root/**"]
+    paths: ["docs/**", "overrides/**", "mkdocs.yml", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "api/openapi.yaml", "deploy/cloudflare/docs-root/**"]
   workflow_dispatch:
 
 permissions:
