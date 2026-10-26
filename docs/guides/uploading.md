@@ -34,6 +34,8 @@ If you turned Xet uploads off on the Instance (`hfapi.xet: reject`), set `HF_HUB
 
 Files over `lfs.multipart_threshold` (64 MiB by default) go up in parts, and a single file can be up to 5 TiB.
 
+Small files that are not stored with LFS (under `hfapi.regular_upload_max`, 10 MiB by default) travel inside the commit request itself. One commit can carry up to `hfapi.commit_inline_max` of them (1 GiB by default) and gets HTTP 413 above that. To upload a larger folder of small files, such as a dataset of many JSON Lines files, use `upload_large_folder`, which splits the upload into several commits.
+
 ## With hangar push
 
 ```sh

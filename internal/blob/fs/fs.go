@@ -21,6 +21,7 @@ import (
 	iofs "io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -271,6 +272,12 @@ func (s *Store) install(tmp, dst string) error {
 			break
 		}
 		if err = os.Rename(tmp, dst); err == nil {
+			// The rename is a change to the directory, so a power loss can
+			// undo it until the directory is synced, leaving rows that point
+			// at a missing file.
+			if err := syncDir(filepath.Dir(dst)); err != nil && !dirSyncUnsupported(err) {
+				return installError(s.relative(dst), err)
+			}
 			return nil
 		}
 		if !lostDirectory(err) {
@@ -279,6 +286,31 @@ func (s *Store) install(tmp, dst string) error {
 	}
 	_ = os.Remove(tmp)
 	return installError(s.relative(dst), err)
+}
+
+// syncDir flushes a directory's entries to stable storage, so a rename into
+// it survives a power loss. Windows cannot sync a directory handle, and
+// NTFS journals renames, so it does nothing there. Tests replace it.
+var syncDir = func(dir string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	d, err := os.Open(dir) //nolint:gosec // A directory under the root.
+	if err != nil {
+		return err
+	}
+	err = d.Sync()
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// dirSyncUnsupported reports whether err is how a filesystem says it cannot
+// sync a directory, as NFS and SMB mounts and some FUSE filesystems do. Such
+// a filesystem makes its own promises about renames, so install carries on.
+func dirSyncUnsupported(err error) bool {
+	return errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP)
 }
 
 // lostDirectory reports whether err is what MkdirAll or Rename return when

@@ -5,8 +5,8 @@ description: "Sign in to Hangar for the first time as hangar-admin, create a Tok
 # Sign in for the first time
 
 1. Open Hangar's public URL, such as <http://localhost:8080>.
-2. Sign in as `hangar-admin` with the password Hangar printed on first start (`docker logs hangar`), or the one you set in `HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD`.
-3. Choose your own password: open **Settings**, **Profile**, enter the printed password as the current password, then your new password twice, and select **Change password**. The new password needs at least 10 characters and cannot be a common password. Your other sessions are signed out; this one stays signed in. On the same page you can set your display name and email.
+2. Sign in as `hangar-admin` with the password Hangar generated on first start, or the one you set in `HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD`. Hangar saves a generated password as `bootstrap_admin_password` in `secrets.yaml` in `server.data_dir`; with Docker, read it with `docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password`.
+3. Choose your own password: open **Settings**, **Profile**, enter the generated password as the current password, then your new password twice, and select **Change password**. The new password needs at least 10 characters and cannot be a common password. Your other sessions are signed out; this one stays signed in. On the same page you can set your display name and email.
 
 ## Create a Token
 

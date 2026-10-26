@@ -126,8 +126,14 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	shutdown := func() error {
-		log.Info("shutting down", "timeout", cfg.Server.ShutdownTimeout.String())
+		log.Info("shutting down", "timeout", cfg.Server.ShutdownTimeout.String(), "drain_delay", cfg.Server.DrainDelay.String())
 		health.SetDraining()
+		// Keep serving while load balancers see /readyz fail and stop
+		// routing here; closing the listener at once refuses the requests
+		// they still send.
+		if cfg.Server.DrainDelay > 0 {
+			time.Sleep(cfg.Server.DrainDelay)
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Server.ShutdownTimeout)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -180,16 +186,19 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 	}
 	current.Store(&handler)
 
-	// Jobs run in roles all and worker. On shutdown the worker returns
-	// running Jobs to the queue.
+	// Jobs run in roles all and worker. On shutdown the worker stops
+	// claiming at once and returns running Jobs to the queue, waiting for
+	// their handlers for at most server.shutdown_timeout.
 	workerCtx, stopWorker := context.WithCancel(context.WithoutCancel(ctx))
 	workerDone := make(chan struct{})
 	if cfg.Server.Role != config.RoleWeb {
-		w := in.newWorker()
+		w := in.newWorker(cfg.Server.ShutdownTimeout)
 		go func() {
 			defer close(workerDone)
 			in.refreshStale(workerCtx)
-			_ = w.Run(workerCtx)
+			if err := w.Run(workerCtx); err != nil {
+				log.Warn("stopping the worker", "error", err.Error())
+			}
 		}()
 	} else {
 		close(workerDone)
@@ -208,10 +217,19 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 			serveErr = err
 		}
 	case <-ctx.Done():
+		// Stop claiming Jobs as soon as the signal arrives, while the HTTP
+		// server drains.
+		stopWorker()
 		serveErr = shutdown()
 	}
 	stopWorker()
-	<-workerDone
+	// Run returns by its own drain deadline; this bound covers the start-up
+	// work before it.
+	select {
+	case <-workerDone:
+	case <-time.After(cfg.Server.ShutdownTimeout):
+		log.Warn("the worker did not stop within server.shutdown_timeout; its Jobs return to the queue when their leases expire")
+	}
 	return serveErr
 }
 
@@ -221,8 +239,8 @@ func serve(ctx context.Context, cfg *config.Config, stderr io.Writer, ready chan
 func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 	logged := false
 	for {
-		// Schema reads an unreachable database as one with no migrations
-		// table, so ping first to log the real reason.
+		// Ping first, so an unreachable database is logged as the
+		// driver's connection error rather than a failed query.
 		var st db.SchemaStatus
 		err := d.PingContext(ctx)
 		if err == nil {
@@ -255,6 +273,17 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 // streamIdleTimeout is how long a request may go without sending or
 // reading data, and how long a keep-alive connection may sit idle.
 const streamIdleTimeout = 5 * time.Minute
+
+// Total limits on the request bodies of buffered endpoints, on top of
+// streamIdleTimeout, so a client that sends a body a byte at a time cannot
+// hold a goroutine, or a place in the sign-in queue, for long. Native API
+// bodies may be up to server.max_request_body (64 MiB by default), which
+// nativeBodyTimeout allows at about 0.5 MB/s; sign-in and registration
+// bodies are at most 64 KiB.
+const (
+	nativeBodyTimeout = 2 * time.Minute
+	authBodyTimeout   = 30 * time.Second
+)
 
 // Bounds of the retry interval in openBlobStoreWaiting.
 const (
@@ -335,17 +364,36 @@ func openBlobStore(ctx context.Context, cfg *config.Config, tel *telemetry.Telem
 	return blobs, nil
 }
 
-// printGenerated prints secrets generated on first start once, to stderr
-// and not to the log, which may be exported.
+// printGenerated tells the operator, once, where the secrets generated on
+// first start are. Under Docker, Compose and Kubernetes stderr is the
+// container log, which log shippers collect, so it never prints the
+// Instance key, and prints the admin password only when stderr is a
+// terminal.
 func printGenerated(w io.Writer, gen *config.Generated, cfg *config.Config) {
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Hangar generated these secrets on first start and saved them in "+gen.Path+".")
-	fmt.Fprintln(w, "They are shown once. Store them somewhere safe.")
+	fmt.Fprintln(w, "Hangar generated secrets on first start and saved them in "+gen.Path+" (mode 0600).")
 	if gen.AdminPassword != "" {
-		fmt.Fprintf(w, "  Admin username: %s\n  Admin password: %s\n", cfg.Security.BootstrapAdmin.Username, gen.AdminPassword)
+		fmt.Fprintf(w, "  Admin username: %s\n", cfg.Security.BootstrapAdmin.Username)
+		if isTerminal(w) {
+			fmt.Fprintf(w, "  Admin password: %s\n", gen.AdminPassword)
+		} else {
+			fmt.Fprintln(w, "  Admin password: bootstrap_admin_password in that file")
+		}
 	}
 	if gen.InstanceKey != "" {
-		fmt.Fprintf(w, "  Instance key:   %s\n", gen.InstanceKey)
+		fmt.Fprintln(w, "  Instance key:   instance_key in that file")
 	}
+	fmt.Fprintln(w, "Keep the file safe and back up the Instance key, which encrypts stored secrets.")
 	fmt.Fprintln(w, "")
+}
+
+// isTerminal reports whether w is a terminal, not a pipe or a file that
+// a log collector reads.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }

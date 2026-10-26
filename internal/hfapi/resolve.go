@@ -3,6 +3,7 @@ package hfapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -207,28 +208,31 @@ func (h *Handler) allowDownload(w http.ResponseWriter, r *http.Request, rp *repo
 
 // serveNotPresent answers a request for a file of a Partial mirror whose
 // LFS object is not in the Arsenal: through Pull-through when it is on,
-// and otherwise with a 409 that says how to Pull it. Metadata headers are
-// already set.
+// and otherwise with NotPresentMessage. Metadata headers are already set.
+//
+// HEAD answers 200, as for a present file: an EntryNotFound there would
+// make huggingface_hub cache the file as missing for this Commit, and keep
+// it missing after the file is pulled.
 func (h *Handler) serveNotPresent(w http.ResponseWriter, r *http.Request, rp *repo.Repo, sha model.CommitSHA, e model.Entry) {
 	ctx := r.Context()
+	hdr := w.Header()
+	hdr.Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
 	if r.Method == http.MethodHead {
-		w.Header().Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
-		w.Header().Set("Content-Length", strconv.FormatInt(e.Size, 10))
+		hdr.Set("Content-Length", strconv.FormatInt(e.Size, 10))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if h.d.PullThrough != nil && r.Header.Get("Range") == "" {
+	if h.d.PullThrough != nil {
+		rng, status, ok := parseRange(r.Header.Get("Range"), e.Size)
+		if !ok {
+			hdr.Set("Content-Range", "bytes */"+strconv.FormatInt(e.Size, 10))
+			httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusRequestedRangeNotSatisfiable, Message: "The requested range is not satisfiable."})
+			return
+		}
 		rc, err := h.d.PullThrough.File(ctx, httpx.Principal(ctx), rp, sha, e)
 		if err == nil {
 			defer func() { _ = rc.Close() }()
-			w.Header().Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
-			w.Header().Set("Content-Length", strconv.FormatInt(e.Size, 10))
-			w.WriteHeader(http.StatusOK)
-			n, err := io.Copy(w, io.LimitReader(rc, e.Size))
-			h.recordDownload(ctx, rp.ID.Type, "proxy", n, true)
-			if err != nil && !errors.Is(err, context.Canceled) {
-				h.log.WarnContext(ctx, "pull-through download interrupted", "error", err, "bytes", n)
-			}
+			h.streamPulled(w, r, rp, rc, e.Size, rng, status)
 			return
 		}
 		if !errors.Is(err, repo.ErrNotPresent) {
@@ -237,9 +241,44 @@ func (h *Handler) serveNotPresent(w http.ResponseWriter, r *http.Request, rp *re
 		}
 	}
 	httpx.WriteHubError(w, r, &httpx.HubError{
-		Status:  http.StatusConflict,
-		Message: e.Path + " is not in the arsenal: this Repo is a Partial mirror. Pull the file into the arsenal from the Repo page, or with `hangar pull " + rp.ID.String() + " --include '" + e.Path + "'`.",
+		Status:     http.StatusConflict,
+		Code:       httpx.CodeEntryNotFound,
+		Message:    NotPresentMessage(rp.ID, e.Path),
+		RepoCommit: sha,
 	})
+}
+
+// streamPulled writes a file that Pull-through streams from its start as
+// it arrives. A ranged request waits for the bytes before the range and
+// skips them, so it still gets a real 206 (resumed downloads, safetensors
+// header reads).
+func (h *Handler) streamPulled(w http.ResponseWriter, r *http.Request, rp *repo.Repo, rc io.Reader, size int64, rng *blob.Range, status int) {
+	ctx := r.Context()
+	length, start := size, int64(0)
+	if rng != nil {
+		start, length = rng.Start, rng.End-rng.Start+1
+		if _, err := io.CopyN(io.Discard, rc, start); err != nil {
+			h.serviceError(w, r, rp.ID, fmt.Errorf("pull-through: read up to byte %d: %w", start, err))
+			return
+		}
+		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(rng.Start, 10)+"-"+strconv.FormatInt(rng.End, 10)+"/"+strconv.FormatInt(size, 10))
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
+	w.WriteHeader(status)
+	n, err := io.Copy(w, io.LimitReader(rc, length))
+	h.recordDownload(ctx, rp.ID.Type, "proxy", n, start == 0)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		h.log.WarnContext(ctx, "pull-through download interrupted", "error", err, "bytes", n)
+	}
+}
+
+// NotPresentMessage is the X-Error-Message of a download of a file that a
+// Partial mirror lists but does not hold. huggingface_hub raises it as
+// RemoteEntryNotFoundError (X-Error-Code EntryNotFound) with this text.
+func NotPresentMessage(id model.RepoID, path string) string {
+	return path + " is not in the arsenal: " + id.String() + " is a Partial mirror, which lists every file but holds only the files that were pulled. " +
+		"To download only the files it holds, pass allow_patterns to snapshot_download (--include with hf download). " +
+		"To get this file, pull it from the Repo page or run: hangar pull " + id.Path() + " --include '" + path + "'"
 }
 
 func (h *Handler) recordDownload(ctx context.Context, t model.RepoType, mode string, n int64, newFile bool) {

@@ -1871,11 +1871,11 @@
               <pre tabindex="0" aria-label="Command to run Hangar with Docker"><code id="quickstart-cmd">docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
   -e HANGAR_SERVER_PUBLIC_URL=http://localhost:8080 \
   ghcr.io/hangar-hub/hangar:latest
-docker logs hangar</code></pre>
+docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password</code></pre>
               <span class="visually-hidden" id="copy-status" role="status" aria-live="polite"></span>
             </div>
             <ol class="next-steps">
-              <li><code>docker logs</code> prints the generated admin password and Instance key once.</li>
+              <li><code>docker cp</code> prints the admin password Hangar generated on first start.</li>
               <li>Open <code>http://localhost:8080</code>, sign in as <code>hangar-admin</code>, and pull a model from <strong>Discover</strong>.</li>
               <li><a class="link" href="/latest/get-started/hf-endpoint/">Set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code></a>, and load it with the tools you already use.</li>
             </ol>

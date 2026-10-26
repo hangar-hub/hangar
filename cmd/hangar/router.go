@@ -180,13 +180,19 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusBadRequest, Detail: err.Error()})
 		},
 	})
-	limited := http.MaxBytesHandler(native, cfg.Server.MaxRequestBody.Int64())
+	sized := http.MaxBytesHandler(native, cfg.Server.MaxRequestBody.Int64())
+	limited := httpx.BodyTimeout(nativeBodyTimeout)(sized)
+	authLimited := httpx.BodyTimeout(authBodyTimeout)(sized)
 	nativeLimited := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut && uploadPartPath.MatchString(r.URL.EscapedPath()) {
+		switch p := r.URL.EscapedPath(); {
+		case r.Method == http.MethodPut && uploadPartPath.MatchString(p):
 			native.ServeHTTP(w, r)
-			return
+		case strings.HasPrefix(p, "/api/hangar/v1/auth/"):
+			// Sign-in and registration bodies are small.
+			authLimited.ServeHTTP(w, r)
+		default:
+			limited.ServeHTTP(w, r)
 		}
-		limited.ServeHTTP(w, r)
 	})
 
 	casURL := in.casURL
@@ -209,7 +215,7 @@ func protocolHandler(ctx context.Context, in *instance, health *httpx.Health, vi
 		LFS:    in.gitServer.LFS(),
 		Ollama: in.ollama,
 		Xet:    cas,
-		Auth:   in.auth.Handler(),
+		Auth:   httpx.BodyTimeout(authBodyTimeout)(in.auth.Handler()),
 		UI:     web.Handler(web.Options{ConnectSrc: in.presignOrigins(ctx), DocsURL: cfg.UI.DocsURL}),
 	}
 	if in.viewer != nil {

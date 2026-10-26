@@ -335,6 +335,10 @@
         "test_upload_over_multipart_threshold"
       ]
     },
+    "POST /api/{type}s/{repo}/super-squash/{branch}": {
+      "note": "Squashing history is not implemented yet.",
+      "status": "not supported"
+    },
     "POST /api/{type}s/{repo}/tag/{rev}": {
       "status": "supported",
       "tests": [

@@ -151,9 +151,14 @@ type Options struct {
 // Service stores webhooks and delivers events to them. It implements
 // Emitter.
 type Service struct {
-	o         Options
-	transOnce sync.Once
-	trans     http.RoundTripper
+	o Options
+	// transports holds one transport per private-target policy, built on
+	// first use and reused: index 0 refuses private addresses, index 1
+	// allows them. Keeping them apart means a connection kept alive while
+	// private targets were allowed is never reused after they are turned
+	// off.
+	transMu    sync.Mutex
+	transports [2]*http.Transport
 }
 
 var _ Emitter = (*Service)(nil)
@@ -574,7 +579,11 @@ func (s *Service) send(ctx context.Context, hook *db.Webhook, d *db.WebhookDeliv
 	req.Header.Set(HeaderEvent, d.Event)
 	req.Header.Set(HeaderDelivery, d.ID.String())
 	req.Header.Set(HeaderSignature, Sign([]byte(secret), body))
-	client := &http.Client{Transport: s.transport(), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	rt, err := s.transport(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	client := &http.Client{Transport: rt, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	start := time.Now()
 	resp, err := client.Do(req)
 	dur := time.Since(start)
@@ -621,15 +630,37 @@ func (e privateError) Error() string { return "private address " + e.addr.String
 // metadata), carrier-grade NAT, unique local, unspecified and multicast.
 func IsPrivate(a netip.Addr) bool { return httpx.IsPrivateAddr(a) }
 
-func (s *Service) transport() http.RoundTripper {
+// transport returns the RoundTripper for a delivery: Options.Transport
+// if set, otherwise the shared transport for the current
+// webhooks.allow_private_targets setting.
+func (s *Service) transport(ctx context.Context) (http.RoundTripper, error) {
 	if s.o.Transport != nil {
-		return s.o.Transport
+		return s.o.Transport, nil
 	}
-	s.transOnce.Do(func() { s.trans = s.newTransport() })
-	return s.trans
+	allow := false
+	if s.o.AllowPrivateTargets != nil {
+		var err error
+		if allow, err = s.o.AllowPrivateTargets(ctx); err != nil {
+			return nil, fmt.Errorf("read webhooks.allow_private_targets: %w", err)
+		}
+	}
+	i := 0
+	if allow {
+		i = 1
+	}
+	s.transMu.Lock()
+	defer s.transMu.Unlock()
+	if s.transports[i] == nil {
+		s.transports[i] = newTransport(allow)
+	}
+	return s.transports[i], nil
 }
 
-func (s *Service) newTransport() http.RoundTripper {
+// newTransport returns a transport that checks every address it connects
+// to, after DNS resolution, so a name that resolves to a refused address
+// is refused however it is reached. Private addresses are allowed only
+// when allowPrivate is true; link-local and metadata addresses never are.
+func newTransport(allowPrivate bool) *http.Transport {
 	dialer := &net.Dialer{Timeout: DeliveryTimeout, Control: func(_, address string, _ syscall.RawConn) error {
 		ap, err := netip.ParseAddrPort(address)
 		if err != nil {
@@ -641,17 +672,7 @@ func (s *Service) newTransport() http.RoundTripper {
 		if httpx.IsReservedAddr(ap.Addr()) {
 			return privateError{addr: ap.Addr(), reserved: true}
 		}
-		if !IsPrivate(ap.Addr()) {
-			return nil
-		}
-		allow := false
-		if s.o.AllowPrivateTargets != nil {
-			var err error
-			if allow, err = s.o.AllowPrivateTargets(context.Background()); err != nil {
-				return err
-			}
-		}
-		if !allow {
+		if IsPrivate(ap.Addr()) && !allowPrivate {
 			return privateError{addr: ap.Addr()}
 		}
 		return nil

@@ -30,7 +30,8 @@ func (g *Generated) Any() bool { return g != nil && (g.InstanceKey != "" || g.Ad
 // EnsureSecrets fills security.instance_key and the bootstrap admin password
 // when the configuration leaves them empty. It reads them from
 // <server.data_dir>/secrets.yaml if that file exists, and otherwise generates
-// them and writes the file with mode 0600. A password_file, if set, is read
+// them and writes the file with mode 0600. In roles web and worker it never
+// generates an Instance key, because every process must use the same one. A password_file, if set, is read
 // into security.bootstrap_admin.password.
 func EnsureSecrets(c *Config) (*Generated, error) {
 	if c.Security.BootstrapAdmin.PasswordFile != "" {
@@ -67,6 +68,8 @@ func EnsureSecrets(c *Config) (*Generated, error) {
 	if needKey {
 		if v, _ := stored["instance_key"].(string); v != "" {
 			c.Security.InstanceKey = v
+		} else if c.Server.splitRole() {
+			return nil, errors.New(c.Server.missingSplitRoleKey())
 		} else {
 			key := make([]byte, InstanceKeyBytes)
 			if _, err := rand.Read(key); err != nil {

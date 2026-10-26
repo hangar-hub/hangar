@@ -262,7 +262,7 @@ lint-deploy: ## Lint the Helm chart, validate it with kubeconform, check the Com
 	@# The example values keep credentials in an existing Secret, so render the
 	@# chart's own Secrets (secrets: in values) once more with a dummy value.
 	helm template hangar deploy/helm/hangar -f deploy/helm/examples/scale-values.yaml \
-	  --set existingSecret= --set generateSecrets=false --set secrets.HANGAR_DATABASE_DSN=postgres://lint@postgres/hangar | $(KUBECONFORM)
+	  --set existingSecret= --set generateSecrets=false --set secrets.HANGAR_DATABASE_DSN=postgres://lint@postgres/hangar --set secrets.HANGAR_SECURITY_INSTANCE_KEY=lint | $(KUBECONFORM)
 	@# Render the chart and check every Pod spec (deploy/chart_test.go).
 	$(GO) test -count=1 -tags helm -run '^TestChart' ./deploy/
 	@for f in deploy/compose/*.yaml; do HANGAR_INSTANCE_KEY=x HANGAR_ADMIN_PASSWORD=x POSTGRES_PASSWORD=x MINIO_ROOT_PASSWORD=x \

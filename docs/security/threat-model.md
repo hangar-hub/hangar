@@ -360,7 +360,7 @@ Not covered by the policy:
 | Dependency updates | `.github/dependabot.yml` | Go modules, npm, GitHub Actions, Docker, Compose and uv, weekly. |
 | Signed images | `release.yml` | cosign keyless signing through GitHub OIDC, with an SPDX SBOM attestation (syft) and SLSA build provenance. The Helm chart is signed too. |
 | Signed archives and SBOMs | `.goreleaser.yaml` | `checksums.txt` signed into a Sigstore bundle, and an SPDX SBOM per archive. `TestGoReleaserSignsWithACosign3Bundle` (`deploy/release_test.go`). |
-| Image scanning | Trivy in `release.yml` | The release fails on critical CVEs that have a fix. |
+| Image scanning | Trivy in `release.yml` | The image is scanned by digest before it is signed or tagged; a critical CVE that has a fix stops the release before the image, chart or docs are published. |
 | Minimal image | `Dockerfile` | `scratch` with a Wolfi root filesystem, non-root, no shell. |
 
 How to verify signatures is in [Verify the image](../operate/security.md#verify-the-image).

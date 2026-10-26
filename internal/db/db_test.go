@@ -277,6 +277,31 @@ func TestSchemaStatusBeforeMigrate(t *testing.T) {
 	require.Equal(t, migrationVersions(t, db.SQLite), st.Pending)
 }
 
+// TestSchemaReportsErrorsOtherThanAMissingTable checks that Schema reads
+// only a missing migrations table as "not migrated yet": any other error,
+// such as a closed or unreachable database, is returned, so /readyz says
+// what is wrong instead of "waiting for hangar admin migrate".
+func TestSchemaReportsErrorsOtherThanAMissingTable(t *testing.T) {
+	ctx := context.Background()
+	d, err := db.Open(ctx, db.Options{Driver: db.SQLite, DSN: filepath.Join(t.TempDir(), "x.db")})
+	require.NoError(t, err)
+	require.NoError(t, d.Close())
+	st, err := d.Schema(ctx)
+	require.Error(t, err)
+	require.Empty(t, st.Pending)
+
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		// A missing table is what Schema reads as "not migrated yet", on
+		// both drivers; any other failed query is not.
+		_, err := d.ExecContext(ctx, "SELECT 1 FROM hangar_no_such_table")
+		require.True(t, db.IsUndefinedTable(err), "%v", err)
+		_, err = d.ExecContext(ctx, "SELECT no_such_column FROM jobs")
+		require.Error(t, err)
+		require.False(t, db.IsUndefinedTable(err), "%v", err)
+		require.False(t, db.IsUndefinedTable(errors.New("connection refused")))
+	})
+}
+
 // migrationVersions returns the versions of a driver's migration files,
 // such as "0001", in order.
 func migrationVersions(t *testing.T, driver string) []string {

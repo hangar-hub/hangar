@@ -360,7 +360,7 @@ Startup validates the whole config and exits with every error at once, not just 
 - Hub API errors use the Hub's status codes, `X-Error-Code` and `X-Error-Message` headers and JSON body ([03](03-hf-api.md)).
 - Native API errors use RFC 9457 problem details.
 - Every streaming endpoint has no body size limit apart from quotas; every buffered endpoint has `server.max_request_body`.
-- Timeouts: read header 30 seconds; streaming endpoints have no total timeout but an idle timeout of 5 minutes.
+- Timeouts: read header 30 seconds; streaming endpoints have no total timeout but an idle timeout of 5 minutes. Request bodies of buffered endpoints also have a total timeout: 30 seconds for sign-in, registration and the other routes under `/auth/` and `/api/hangar/v1/auth/`, and 2 minutes for the rest of the native API.
 
 ## Scale targets
 

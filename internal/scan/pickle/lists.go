@@ -1,8 +1,10 @@
 package pickle
 
 // The allow and deny lists for pickle imports (META-2). Each entry is a
-// `module.name` global, or a `module.*` prefix that matches the module and
-// every submodule. Sources, checked on 2026-10-13:
+// `module.name` global, a `module.*` prefix that matches the module and
+// every submodule, or, on the deny list only, a `module.prefix*` entry
+// that matches every global whose path starts with `module.prefix`.
+// Sources, checked on 2026-10-13:
 //
 //   - [picklescan] github.com/mmaitre314/picklescan 1.0.5,
 //     src/picklescan/scanner.py, _safe_globals and _unsafe_globals.
@@ -101,6 +103,19 @@ var unsafeGlobals = []string{
 	"joblib.load", "joblib.numpy_pickle.load", "pandas.read_pickle", "pandas.io.pickle.*", "antigravity.*",
 	// [spec]
 	"importlib.*", "http.client.*", "torch.load", "torch.hub.*", "multiprocessing.*", "marshal.*",
+	// [hangar] Found in the 1.2.3 security review, checked on 2026-10-23
+	// against SymPy 1.14, PyTorch 2.9 and PyYAML 6.0. SymPy, a PyTorch
+	// dependency, evaluates strings with eval in sympify, parse_expr and
+	// S(), and lambdify runs exec. torch.storage._load_from_bytes and the
+	// torch.serialization loaders call torch.load with weights_only=False
+	// on bytes the pickle supplies. PyYAML's loaders run any callable
+	// through !!python/object/apply.
+	"sympy.sympify", "sympy.S", "sympy.parse_expr", "sympy.lambdify",
+	"sympy.core.sympify.*", "sympy.core.singleton.*", "sympy.parsing.*", "sympy.utilities.lambdify.*",
+	"torch.storage._load*", "torch.serialization._load*", "torch.serialization._legacy_load",
+	"yaml.load*", "yaml.unsafe_load*", "yaml.full_load*", "yaml.Loader", "yaml.UnsafeLoader",
+	"yaml.FullLoader", "yaml.CLoader", "yaml.CUnsafeLoader", "yaml.CFullLoader",
+	"yaml.loader.*", "yaml.constructor.*", "yaml.cyaml.*",
 }
 
 // partialGlobals wrap another callable. [spec]: unsafe when the pickle

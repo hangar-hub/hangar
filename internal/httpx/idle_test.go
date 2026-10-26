@@ -64,6 +64,45 @@ func TestIdleTimeoutCutsStalledUpload(t *testing.T) {
 	require.True(t, isTimeout(err), err)
 }
 
+func TestBodyTimeoutCutsTrickledBodies(t *testing.T) {
+	// A body sent a byte at a time never goes idle, but a buffered
+	// endpoint still cuts it once its total time is up.
+	const idle, total = time.Second, 300 * time.Millisecond
+	for name, wrap := range map[string]func(http.Handler) http.Handler{
+		"with IdleTimeout":    func(h http.Handler) http.Handler { return httpx.IdleTimeout(idle)(httpx.BodyTimeout(total)(h)) },
+		"without IdleTimeout": httpx.BodyTimeout(total),
+	} {
+		t.Run(name, func(t *testing.T) {
+			errc := make(chan error, 1)
+			srv := httptest.NewServer(wrap(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				_, err := io.ReadAll(r.Body)
+				errc <- err
+			})))
+			t.Cleanup(srv.Close)
+			conn := dial(t, srv)
+			_, err := fmt.Fprint(conn, "POST /x HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\n")
+			require.NoError(t, err)
+			stop := make(chan struct{})
+			t.Cleanup(func() { close(stop) })
+			go func() {
+				for range 100 {
+					select {
+					case <-stop:
+						return
+					case <-time.After(50 * time.Millisecond):
+					}
+					if _, err := conn.Write([]byte("x")); err != nil {
+						return
+					}
+				}
+			}()
+			err = waitErr(t, errc)
+			require.Error(t, err)
+			require.True(t, isTimeout(err), err)
+		})
+	}
+}
+
 func TestIdleTimeoutKeepsSlowUploadsAndLongHandlers(t *testing.T) {
 	const idle = 200 * time.Millisecond
 	type result struct {

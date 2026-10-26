@@ -40,6 +40,8 @@ plugins:
 
 theme:
   name: material
+  # Theme overrides, such as the banner on older docs versions.
+  custom_dir: overrides
   language: en
   logo: assets/icon.svg
   favicon: assets/icon.svg
@@ -71,7 +73,12 @@ extra:
   homepage: https://hangar.page/
   version:
     provider: mike
-    default: latest
+    # Versions whose name or alias matches one of these are current, and
+    # their pages show no banner pointing to the latest version
+    # (overrides/main.html): the latest release, and dev, which is newer.
+    default:
+      - latest
+      - dev
 
 markdown_extensions:
   - admonition
@@ -121,6 +128,7 @@ nav:
       - Permissions: concepts/permissions.md
       - Where Hangar keeps data: concepts/data.md
       - How Hangar compares: concepts/comparison.md
+      - Hugging Face Hub on-premises: concepts/on-premises.md
   - Guides:
       - guides/index.md
       - Python libraries: guides/python.md
@@ -129,10 +137,14 @@ nav:
       - Datasets: guides/datasets.md
       - git and git-lfs: guides/git.md
       - Ollama: guides/ollama.md
+      - Private Ollama registry: guides/ollama-registry.md
       - LM Studio: guides/lm-studio.md
       - vLLM: guides/vllm.md
+      - Kubernetes model loading: guides/kubernetes.md
       - The hangar CLI: guides/hangar-cli.md
       - Importing an existing cache: guides/import.md
+      - Shared model cache: guides/shared-cache.md
+      - Rate limits in CI: guides/ci.md
       - Pull windows and bandwidth: guides/pull-windows.md
       - Air-gapped Instances: guides/air-gapped.md
       - Gated models: guides/gated.md

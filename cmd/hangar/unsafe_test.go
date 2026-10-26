@@ -307,7 +307,7 @@ func do0(t *testing.T, p model.Principal, token, method, url, body string) (*htt
 func runJobs(t *testing.T, in *instance, ids ...jobs.JobID) {
 	t.Helper()
 	ctx := context.Background()
-	w := in.newWorker()
+	w := in.newWorker(0)
 	deadline := time.Now().Add(2 * time.Minute)
 	for _, id := range ids {
 		for {

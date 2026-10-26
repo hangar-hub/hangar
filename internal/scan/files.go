@@ -111,12 +111,16 @@ func fromPickle(fr *FileResult, res pickle.Result, member string) {
 		detail = "in " + member
 	}
 	for _, imp := range res.Imports {
-		key := imp.Module + "\x00" + imp.Name + "\x00" + imp.Opcode + "\x00" + detail
+		where := detail
+		if imp.Nested {
+			where = strings.TrimPrefix(detail+", in a pickle held in a byte string", ", ")
+		}
+		key := imp.Module + "\x00" + imp.Name + "\x00" + imp.Opcode + "\x00" + where
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		f := Finding{Module: imp.Module, Name: imp.Name, Opcode: imp.Opcode, Status: statusOf(imp.Classification), Detail: detail}
+		f := Finding{Module: imp.Module, Name: imp.Name, Opcode: imp.Opcode, Status: statusOf(imp.Classification), Detail: where}
 		fr.Findings = append(fr.Findings, f)
 		fr.Status = Worst(fr.Status, f.Status)
 	}

@@ -298,6 +298,34 @@ func TestLFSResumeUpload(t *testing.T) {
 			require.NotEqual(t, u.ID, fresh.ID, name)
 		}
 
+		// Hangar's own uploads, with no User and no Repo, resume each other
+		// and never a User's.
+		system := repo.UploadParams{OID: oid, Size: int64(len(content)), Multipart: true, PartSize: 100, TTL: time.Hour, Resume: true}
+		sys, err := e.lfs.CreateUpload(e.ctx, system)
+		require.NoError(t, err)
+		require.NotEqual(t, u.ID, sys.ID, "a system upload does not take over a User's")
+		sysETag, err := e.lfs.PutPart(e.ctx, sys.ID, 1, bytes.NewReader(content[:100]), 100)
+		require.NoError(t, err)
+		sysAgain, err := e.lfs.CreateUpload(e.ctx, system)
+		require.NoError(t, err)
+		require.Equal(t, sys.ID, sysAgain.ID, "a retried transfer continues Hangar's upload")
+		got, err = e.lfs.GetUpload(e.ctx, sysAgain.ID)
+		require.NoError(t, err)
+		require.Len(t, got.Done, 1)
+		require.Equal(t, sysETag, got.Done[0].ETag)
+		for name, p := range map[string]repo.UploadParams{
+			"another part size": func() repo.UploadParams { q := system; q.PartSize = 125; return q }(),
+			"no resume":         func() repo.UploadParams { q := system; q.Resume = false; return q }(),
+			"a User only":       func() repo.UploadParams { q := system; q.UserID = alice.UserID; return q }(),
+		} {
+			fresh, err := e.lfs.CreateUpload(e.ctx, p)
+			require.NoError(t, err, name)
+			require.NotEqual(t, sys.ID, fresh.ID, name)
+		}
+		mine, err := e.lfs.CreateUpload(e.ctx, params)
+		require.NoError(t, err)
+		require.NotEqual(t, sys.ID, mine.ID, "a User's plan never resumes Hangar's upload")
+
 		// A completed upload is gone, so the next plan starts a new one.
 		var parts []blob.Part
 		parts = append(parts, blob.Part{Number: 1, ETag: etag})

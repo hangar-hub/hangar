@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -43,6 +44,47 @@ func testConfig(t *testing.T) *config.Config {
 	}})
 	require.NoError(t, err)
 	return cfg
+}
+
+// TestServerKeepsServingDuringTheDrainDelay: after the signal, /readyz
+// answers 503 at once but the listener stays open for server.drain_delay,
+// so requests a load balancer still routes here succeed.
+func TestServerKeepsServingDuringTheDrainDelay(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Server.DrainDelay = 3 * time.Second
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, io.Discard, ready) }()
+	var addr string
+	select {
+	case addr = <-ready:
+	case err := <-done:
+		t.Fatalf("server exited: %v", err)
+	case <-time.After(60 * time.Second):
+		t.Fatal("server did not start")
+	}
+	stopped := time.Now()
+	cancel()
+	require.Eventually(t, func() bool {
+		resp, err := http.Get("http://" + addr + "/readyz")
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode == http.StatusServiceUnavailable
+	}, 2*time.Second, 20*time.Millisecond, "/readyz fails as soon as the signal arrives")
+	resp, err := http.Get("http://" + addr + "/api/hangar/v1/me")
+	require.NoError(t, err, "the listener is still open during the drain delay")
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "requests are still served")
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, time.Since(stopped), cfg.Server.DrainDelay)
+	case <-time.After(60 * time.Second):
+		t.Fatal("server did not stop")
+	}
 }
 
 func TestServerServesHealthAndShutsDown(t *testing.T) {
@@ -106,14 +148,16 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 	resp, _ = get("/v2/")
 	require.NotEqual(t, http.StatusNotFound, resp.StatusCode)
 
-	// The bootstrap admin signs in with the password printed once.
-	password := ""
-	for _, line := range strings.Split(stderr.String(), "\n") {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "Admin password: "); ok {
-			password = v
-		}
-	}
+	// The bootstrap admin signs in with the password saved in
+	// secrets.yaml; stderr is not a terminal, so it names the file instead
+	// of printing the password, and never prints the Instance key.
+	stored := &config.Config{Server: config.ServerConfig{DataDir: cfg.Server.DataDir}}
+	require.NoError(t, config.LoadStoredSecrets(stored))
+	password := stored.Security.BootstrapAdmin.Password
 	require.NotEmpty(t, password)
+	require.NotContains(t, stderr.String(), password)
+	require.NotEmpty(t, stored.Security.InstanceKey)
+	require.NotContains(t, stderr.String(), stored.Security.InstanceKey)
 	login, err := http.Post(base+"/api/hangar/v1/auth/login", "application/json",
 		strings.NewReader(`{"username":"hangar-admin","password":"`+password+`"}`))
 	require.NoError(t, err)
@@ -175,8 +219,8 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 
 	require.NoError(t, checkReady(context.Background(), addr), "hangar healthcheck succeeds against a ready server")
 
-	// First start generated and printed the secrets once.
-	require.Contains(t, stderr.String(), "Admin password:")
+	// First start generated the secrets and said where they are.
+	require.Contains(t, stderr.String(), "Admin password: bootstrap_admin_password in that file")
 	_, err = os.Stat(filepath.Join(cfg.Server.DataDir, config.SecretsFileName))
 	require.NoError(t, err)
 
@@ -193,6 +237,19 @@ func TestServerServesHealthAndShutsDown(t *testing.T) {
 		t.Fatal("server did not shut down")
 	}
 	require.Error(t, checkReady(context.Background(), addr), "not ready after shutdown")
+}
+
+func TestPrintGeneratedKeepsSecretsOutOfLogs(t *testing.T) {
+	// stderr is the container log under Docker, Compose and Kubernetes.
+	gen := &config.Generated{Path: "/var/lib/hangar/secrets.yaml", InstanceKey: "a2V5LW5vdC1wcmludGVk", AdminPassword: "password-not-printed"}
+	cfg := &config.Config{}
+	cfg.Security.BootstrapAdmin.Username = "hangar-admin"
+	var out bytes.Buffer
+	printGenerated(&out, gen, cfg)
+	require.Contains(t, out.String(), "/var/lib/hangar/secrets.yaml")
+	require.Contains(t, out.String(), "Admin username: hangar-admin")
+	require.NotContains(t, out.String(), gen.InstanceKey)
+	require.NotContains(t, out.String(), gen.AdminPassword)
 }
 
 func TestServerRefusesInvalidConfig(t *testing.T) {
@@ -477,6 +534,7 @@ func TestReadyzWhileWaitingForMigrate(t *testing.T) {
 	dbtest.RequirePostgres(t)
 	cfg := testConfig(t)
 	cfg.Server.Role = config.RoleWeb
+	cfg.Security.InstanceKey = base64.StdEncoding.EncodeToString(make([]byte, config.InstanceKeyBytes))
 	cfg.Database.Driver = "postgres"
 	cfg.Database.DSN = dbtest.PostgresDSN(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

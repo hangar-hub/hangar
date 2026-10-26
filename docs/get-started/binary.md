@@ -51,7 +51,7 @@ hangar server --public-url http://localhost:8080 \
   --set git.cache_dir="$HOME/.cache/hangar/git"
 ```
 
-The first start prints the generated admin password and Instance key once. Keys can also come from a YAML file (`--config hangar.yaml`) or `HANGAR_*` environment variables; see the [configuration reference](../reference/configuration.md).
+The first start generates an admin password and an Instance key and saves them in `secrets.yaml` in `server.data_dir`, here `$HOME/hangar/secrets.yaml`. It prints the admin password only when you run it in a terminal; otherwise read it with `grep bootstrap_admin_password "$HOME/hangar/secrets.yaml"`. It never prints the Instance key. Keys can also come from a YAML file (`--config hangar.yaml`) or `HANGAR_*` environment variables; see the [configuration reference](../reference/configuration.md).
 
 ## Use the CLI
 

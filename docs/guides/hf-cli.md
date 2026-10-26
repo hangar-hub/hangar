@@ -59,6 +59,6 @@ Uploading to a branch that does not exist yet creates it. With `hf_xet` installe
 | "Invalid credentials in Authorization header" | The Token is wrong, expired or revoked, or it is a huggingface.co token (`hf_...`) rather than a Hangar one (`hgr_...`). | Create a Token in Hangar under **Settings**, **Tokens**. |
 | `hf auth whoami` shows your huggingface.co account | `HF_ENDPOINT` is not set in this shell. | Export `HF_ENDPOINT`, or use `eval "$(hangar env)"`. |
 | "Repository Not Found for url" | The Repo is private and your Token cannot read it, or it is not in the Arsenal. Private Repos answer as if they did not exist. | Check the Token, and pull the Repo first. |
-| HTTP 409, naming a `hangar pull` command | The Repo is a Partial mirror and the file was not pulled. | Run the command it names. |
+| HTTP 409, saying the file is not in the arsenal | The Repo is a Partial mirror and the file was not pulled. | Download only the files it holds with `--include`, or run the `hangar pull` command it names. |
 
 See also [Python libraries](python.md) and [Troubleshooting](../operate/troubleshooting.md).
