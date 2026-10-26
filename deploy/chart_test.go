@@ -342,6 +342,83 @@ func TestChartGenerateSecretsNeedsCluster(t *testing.T) {
 	}
 }
 
+// TestChartScaledOutPodsShareAnInstanceKey: with persistence off the chart
+// runs web and worker Pods, which refuse to start without
+// security.instance_key, so a render that gives them none fails with a
+// message that says where to put it.
+func TestChartScaledOutPodsShareAnInstanceKey(t *testing.T) {
+	scale := []string{"-f", "helm/examples/scale-values.yaml", "--set", "existingSecret=", "--set", "generateSecrets=false",
+		"--set-string", "secrets.HANGAR_DATABASE_DSN=postgres://hangar@db/hangar"}
+	msg := renderChartError(t, scale...)
+	for _, want := range []string{"HANGAR_SECURITY_INSTANCE_KEY", "existingSecret", "generateSecrets"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("helm template error does not mention %s:\n%s", want, msg)
+		}
+	}
+	for name, extra := range map[string][]string{
+		"secrets":        {"--set-string", "secrets.HANGAR_SECURITY_INSTANCE_KEY=key"},
+		"existingSecret": {"--set", "existingSecret=hangar-secrets"},
+		"config":         {"--set-string", "config.security.instance_key=key"},
+		"extraEnv":       {"--set", "extraEnv[0].name=HANGAR_SECURITY_INSTANCE_KEY", "--set", "extraEnv[0].valueFrom.secretKeyRef.name=keys", "--set", "extraEnv[0].valueFrom.secretKeyRef.key=instance"},
+		"extraEnvFrom":   {"--set", "extraEnvFrom[0].secretRef.name=keys"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			renderChart(t, append(slices.Clone(scale), extra...)...)
+		})
+	}
+	// With persistence on, the single Pod runs in role all and generates
+	// the key on its volume.
+	renderChart(t, "-f", "helm/hangar/ci/default-values.yaml", "--set", "generateSecrets=false")
+}
+
+// TestChartDrainsBeforeClosingTheListener: a terminating Pod keeps serving
+// for drainDelaySeconds while Kubernetes removes it from the Service's
+// endpoints, through a preStop sleep from Kubernetes 1.30 (the image has
+// no shell) and through server.drain_delay on 1.29, never both.
+func TestChartDrainsBeforeClosingTheListener(t *testing.T) {
+	base := []string{"-f", "helm/hangar/ci/default-values.yaml", "--set", "generateSecrets=false"}
+	hangar := func(docs []map[string]any) (map[string]any, string) {
+		var container map[string]any
+		var cfg string
+		for _, doc := range docs {
+			if doc["kind"] == "Deployment" {
+				container = containerByName(podSpec(doc)["containers"], "hangar")
+			}
+			if doc["kind"] == "ConfigMap" {
+				data, _ := doc["data"].(map[string]any)
+				cfg, _ = data["hangar.yaml"].(string)
+			}
+		}
+		if container == nil {
+			t.Fatal("no hangar container rendered")
+		}
+		return container, cfg
+	}
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		preStop   bool
+		configSet bool
+	}{
+		{"current Kubernetes", nil, true, false},
+		{"Kubernetes 1.29", []string{"--kube-version", "1.29.0"}, false, true},
+		{"turned off", []string{"--set", "drainDelaySeconds=0"}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, cfg := hangar(renderChart(t, append(slices.Clone(base), tc.args...)...))
+			lc, _ := c["lifecycle"].(map[string]any)
+			pre, _ := lc["preStop"].(map[string]any)
+			sleep, _ := pre["sleep"].(map[string]any)
+			if tc.preStop != (sleep != nil) || (sleep != nil && fmt.Sprint(sleep["seconds"]) != "5") {
+				t.Errorf("preStop = %v, want a 5 second sleep: %v", lc, tc.preStop)
+			}
+			if got := strings.Contains(cfg, "drain_delay: 5s"); got != tc.configSet {
+				t.Errorf("server.drain_delay set = %v, want %v:\n%s", got, tc.configSet, cfg)
+			}
+		})
+	}
+}
+
 // hooked returns the kind and name of every rendered resource with a Helm
 // hook other than the helm test Pod.
 func hooked(docs []map[string]any) []string {

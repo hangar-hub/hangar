@@ -935,15 +935,30 @@ func (f *Fake) Log(ctx context.Context, id model.RepoID, revision string, opts r
 	if err != nil {
 		return nil, err
 	}
-	sha, err := f.resolve(ctx, r, revision)
-	if err != nil {
-		return nil, err
+	starts := opts.From
+	if len(starts) == 0 {
+		sha, err := f.resolve(ctx, r, revision)
+		if err != nil {
+			return nil, err
+		}
+		starts = []model.CommitSHA{sha}
+	} else {
+		for _, sha := range starts {
+			if !model.IsFullSHA(string(sha)) {
+				return nil, fmt.Errorf("%w: %s", repo.ErrRevisionNotFound, sha)
+			}
+			if err := f.checkCommit(ctx, r, sha); err != nil {
+				return nil, err
+			}
+		}
 	}
 	args := []string{"log", logFormat, "--skip=" + strconv.Itoa(opts.Skip)}
 	if opts.Limit > 0 {
 		args = append(args, "--max-count="+strconv.Itoa(opts.Limit))
 	}
-	args = append(args, string(sha))
+	for _, sha := range starts {
+		args = append(args, string(sha))
+	}
 	if opts.Path != "" {
 		args = append(args, "--", opts.Path)
 	}

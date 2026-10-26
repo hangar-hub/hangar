@@ -93,7 +93,7 @@ HF_HUB_OFFLINE=1 vllm serve Qwen/Qwen3-0.6B
 |---|---|---|
 | `RepositoryNotFoundError`, "Repository Not Found for url" | `HF_TOKEN` is missing or cannot read the Repo, or the Repo is not in the Arsenal. Private Repos answer as if they did not exist. | Check the Token with `HF_TOKEN=hgr_... hf auth whoami`, and pull the Repo first. |
 | "Invalid credentials in Authorization header" | The Token is wrong, expired or revoked, or it is a huggingface.co token (`hf_...`) rather than a Hangar one (`hgr_...`). | Create a Token in Hangar. |
-| `HfHubHTTPError` with status 409, naming a `hangar pull` command | The Repo is a Partial mirror and the file was not pulled. | Run the command it names, or pull the whole Repo. |
+| `RemoteEntryNotFoundError` with status 409, saying the file is not in the arsenal | The Repo is a Partial mirror and the file was not pulled. | Run the `hangar pull` command it names, or pull the whole Repo. |
 | `LocalEntryNotFoundError` with `HF_HUB_OFFLINE=1` | The files are not in the local cache. | Run `hangar pull` for the model, or start once without `HF_HUB_OFFLINE`. |
 
 For other problems, see [Troubleshooting](../operate/troubleshooting.md).

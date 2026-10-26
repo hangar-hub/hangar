@@ -62,4 +62,5 @@ With your key registered, Hangar gives Ollama a short-lived token for each Repo 
 ## Limits
 
 - `ollama push` to Hangar is not supported. Use `hangar import --from-ollama` to bring models you have in Ollama into the Arsenal.
-- Ollama must reach Hangar on the host the model name gives, at the root of that host. Ollama refuses redirects to other hosts, so Hangar always streams Ollama downloads itself, even on S3 in `redirect` mode.
+- Ollama must reach Hangar on the host the model name gives, at the root of that host.
+- On S3 in `redirect` mode, Hangar answers a model layer download with a redirect to a presigned URL, so `ollama pull` takes the bytes straight from the bucket, as `hf download` does. Ollama follows that redirect only to a public address unless you pass `--insecure`, so with a bucket on a private network, such as MinIO on your LAN, pull with `--insecure` or set `storage.s3.download_mode: proxy`.

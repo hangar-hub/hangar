@@ -77,7 +77,13 @@ func (h *Handler) repoInfo(w http.ResponseWriter, r *http.Request, ref repoRef, 
 			sha = s
 		case errors.Is(err, repo.ErrRevisionNotFound):
 			// A Mirror being planned without Pull-through, or one that is
-			// empty on the Upstream, has no Commits yet.
+			// empty on the Upstream, has no Commits yet. Info without sha
+			// makes snapshot_download fail on a bare assertion, and a 503
+			// is not retried there (repo_info uses no backoff) and turns
+			// into "check your internet connection". RevisionNotFound is
+			// raised at once, with this message.
+			noHistory(w, r, rp)
+			return
 		case errors.Is(err, ErrPullPending):
 			pullPending(w, r, rp.ID)
 			return

@@ -4,7 +4,7 @@
 
 Every Hugging Face Hub endpoint that `huggingface_hub` and the libraries built on it call, and whether Hangar serves it. The compatibility suite in `compat/hf` writes this table from its own results, so every row marked supported is covered by a passing test against real clients.
 
-Tested with `huggingface_hub` 2.2.0: 65 endpoints supported and 4 not supported.
+Tested with `huggingface_hub` 2.2.0: 65 endpoints supported and 5 not supported.
 
 | Endpoint | Status | Covered by | Notes |
 |---|---|---|---|
@@ -52,6 +52,7 @@ Tested with `huggingface_hub` 2.2.0: 65 endpoints supported and 4 not supported.
 | `GET /api/{type}s/{repo}/refs` | Supported | `test_branches_and_tags` |  |
 | `GET /api/{type}s/{repo}/revision/{rev}` | Supported | `test_exists_checks`, `test_snapshot_download_and_offline` |  |
 | `PUT /api/{type}s/{repo}/settings` | Supported | `test_update_repo_settings`, `test_write_token_administers_own_repos` |  |
+| `POST /api/{type}s/{repo}/super-squash/{branch}` | Not supported | - | Squashing history is not implemented yet. |
 | `POST /api/{type}s/{repo}/tag/{rev}` | Supported | `test_branches_and_tags` |  |
 | `DELETE /api/{type}s/{repo}/tag/{tag}` | Supported | `test_branches_and_tags` |  |
 | `GET /api/{type}s/{repo}/tree/{rev}/{path}` | Supported | `test_snapshot_download_and_offline`, `test_tree_and_paths_info` |  |

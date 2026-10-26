@@ -19,6 +19,7 @@ import (
 
 	"github.com/hangar-hub/hangar/internal/auth"
 	"github.com/hangar-hub/hangar/internal/community"
+	"github.com/hangar-hub/hangar/internal/config"
 	"github.com/hangar-hub/hangar/internal/httpx"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/repo"
@@ -28,6 +29,9 @@ import (
 // spoolMemory is how many bytes of regular file content one commit keeps
 // in memory; the rest is spooled to temporary files.
 const spoolMemory = 32 << 20
+
+// defaultCommitInlineMax is the default of hfapi.commit_inline_max.
+const defaultCommitInlineMax = 1 << 30
 
 // MsgFileMissing is the text huggingface_hub matches on a failed
 // deletedFile to add its "is it a folder?" hint (contract §7.7).
@@ -161,6 +165,14 @@ func (h *Handler) parseCommitLine(c *commitRequest, key string, value json.RawMe
 			return badCommit("Unknown encoding %q for %s. Use base64.", v.Encoding, v.Path)
 		}
 		c.regularLen += int64(len(content))
+		limit := h.d.Settings.CommitInlineMax
+		if limit <= 0 {
+			limit = defaultCommitInlineMax
+		}
+		if c.regularLen > limit {
+			return &commitError{status: http.StatusRequestEntityTooLarge, msg: "The regular files in this commit add up to more than " +
+				config.ByteSize(limit).String() + " (hfapi.commit_inline_max). Split the upload into several commits (upload_large_folder does this), or upload large files with LFS."}
+		}
 		r, err := c.spool(content, inMemory)
 		if err != nil {
 			return err

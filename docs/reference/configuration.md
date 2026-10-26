@@ -21,6 +21,7 @@ HTTP server and process settings.
 | `server.trusted_proxies`<br>`HANGAR_SERVER_TRUSTED_PROXIES` | list of strings | `[]` | CIDR ranges of reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers Hangar trusts. |
 | `server.max_request_body`<br>`HANGAR_SERVER_MAX_REQUEST_BODY` | size | `64MiB` | Body size limit for endpoints that buffer the request body. Streaming endpoints have no limit apart from quotas. |
 | `server.shutdown_timeout`<br>`HANGAR_SERVER_SHUTDOWN_TIMEOUT` | duration | `30s` | How long to let in-flight requests finish on SIGTERM. Longer downloads are cut. |
+| `server.drain_delay`<br>`HANGAR_SERVER_DRAIN_DELAY` | duration | `0s` | How long to keep serving after SIGTERM while /readyz answers 503, so load balancers stop sending requests before the listener closes. 0 closes at once; the Helm chart uses a preStop hook instead. |
 | `server.timezone`<br>`HANGAR_SERVER_TIMEZONE` | string | `UTC` | IANA time zone for pull windows and schedules. |
 
 ## `database`
@@ -61,7 +62,7 @@ Secrets, sign-in and access defaults.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `security.instance_key`<br>`HANGAR_SECURITY_INSTANCE_KEY` | string | `""` | 32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. Generated on first start if empty. |
+| `security.instance_key`<br>`HANGAR_SECURITY_INSTANCE_KEY` | string | `""` | 32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. In role all, Hangar generates one in server.data_dir on first start if it is empty; roles web and worker never generate one, so set the same key on every process, or share one server.data_dir that already holds it. |
 | `security.anonymous_read`<br>`HANGAR_SECURITY_ANONYMOUS_READ` | bool | `false` | Let anonymous users read public Repos and see user and Organisation profiles. |
 | `security.registration`<br>`HANGAR_SECURITY_REGISTRATION` | string | `closed` | Who can create an account: open, invite or closed. |
 | `security.local_login`<br>`HANGAR_SECURITY_LOCAL_LOGIN` | bool | `true` | Show the username and password form. The bootstrap admin can always sign in at /auth/login?local=1. |
@@ -153,6 +154,7 @@ Hugging Face Hub API behaviour.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `hfapi.regular_upload_max`<br>`HANGAR_HFAPI_REGULAR_UPLOAD_MAX` | size | `10MiB` | Preupload answers regular for files below this size unless .gitattributes says LFS. |
+| `hfapi.commit_inline_max`<br>`HANGAR_HFAPI_COMMIT_INLINE_MAX` | size | `1GiB` | Most bytes of regular (non-LFS) file content one Hub API commit may carry. Content past 32 MiB is spooled to the temporary directory, so this bounds the disk a commit can fill. Larger commits get 413. |
 | `hfapi.xet`<br>`HANGAR_HFAPI_XET` | string | `ingest` | ingest accepts Xet uploads; reject turns them off and asks clients to set HF_HUB_DISABLE_XET=1. |
 | `hfapi.default_namespace`<br>`HANGAR_HFAPI_DEFAULT_NAMESPACE` | string | `""` | Namespace that single-segment Repo IDs such as gpt2 redirect to. Empty turns the redirect off. |
 

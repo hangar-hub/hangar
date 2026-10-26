@@ -51,7 +51,19 @@ pipe = DiffusionPipeline.from_pretrained("hf-internal-testing/tiny-stable-diffus
 
 ## Files that are not in the Arsenal
 
-A file of a Partial mirror that was not pulled is listed with its size, but downloading it fails with HTTP 409 (`HfHubHTTPError` in `huggingface_hub`), and the message names the `hangar pull` command to run. If the admin turned on Pull-through, the download starts the file's Pull instead and streams it as it arrives. Pull it first with `hangar pull <repo> --include <file>` or from the Repo page.
+A Partial mirror lists every file of the Repo with its size, but holds only the files that were pulled. Downloading a file it does not hold fails with HTTP 409 and the error code `EntryNotFound`, which `huggingface_hub` raises as `RemoteEntryNotFoundError`. The message names the `hangar pull` command that gets the file.
+
+`snapshot_download` stops at the first such file, so pass `allow_patterns` to download only the files the mirror holds:
+
+```python
+from huggingface_hub import snapshot_download
+
+folder = snapshot_download("bartowski/Llama-3.2-1B-Instruct-GGUF", allow_patterns=["*Q4_K_M.gguf", "*.json", "*.md"])
+```
+
+With the `hf` CLI, use `--include` in the same way. To get a missing file, pull it with `hangar pull <repo> --include <file>` or from the Repo page.
+
+If the admin turned on Pull-through, a download of a file that is not held starts the file's Pull instead and streams the file as it arrives. Ranged requests, such as a resumed download, work too: they wait until the transfer reaches the start of the range.
 
 ## Large downloads
 

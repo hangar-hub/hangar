@@ -68,7 +68,7 @@ type env struct {
 	alice     model.Principal
 }
 
-func newEnv(t *testing.T, withPullThrough bool) *env {
+func newEnv(t *testing.T, withPullThrough bool, configure ...func(*ollama.Options)) *env {
 	t.Helper()
 	d := dbtest.SQLite(t)
 	e := &env{repos: repotest.NewFake(t), authz: authtest.NewAuthz(), downloads: communitytest.NewFake(), pull: &pullThrough{}}
@@ -83,6 +83,9 @@ func newEnv(t *testing.T, withPullThrough bool) *env {
 		PublicURL: "http://hangar.test", Community: e.downloads, Window: 64 << 10}
 	if withPullThrough {
 		o.PullThrough = e.pull
+	}
+	for _, c := range configure {
+		c(&o)
 	}
 	h, err := ollama.New(o)
 	require.NoError(t, err)
@@ -309,6 +312,59 @@ func TestBlobsStreamWithSignedRanges(t *testing.T) {
 	r := e.get(t, "GET", "/v2/alice/tiny-gguf/blobs/"+lic.Digest, map[string]string{"Range": "bytes=0-2"})
 	require.Equal(t, http.StatusPartialContent, r.StatusCode)
 	require.Equal(t, "MIT", string(body(t, r)))
+}
+
+// presigningLFS is an LFS store whose Blob store presigns downloads, as S3
+// does.
+type presigningLFS struct {
+	repo.LFSStore
+	mu  sync.Mutex
+	ttl time.Duration
+}
+
+func (p *presigningLFS) PresignGet(_ context.Context, oid string, ttl time.Duration, _ string) (string, error) {
+	p.mu.Lock()
+	p.ttl = ttl
+	p.mu.Unlock()
+	return "https://bucket.example.test/lfs/" + oid + "?X-Amz-Signature=x", nil
+}
+
+// TestBlobsRedirectToTheBucket: with downloads in S3 redirect mode, a GET
+// of a layer stored as an LFS object answers 307 to a presigned URL, so
+// ollama pull takes the bytes straight from the bucket. HEAD, which Ollama
+// reads the size from, and small layers kept in the database are served
+// by Hangar.
+func TestBlobsRedirectToTheBucket(t *testing.T) {
+	var lfs *presigningLFS
+	e := newEnv(t, false, func(o *ollama.Options) {
+		lfs = &presigningLFS{LFSStore: o.LFS}
+		o.LFS, o.RedirectDownloads, o.PresignTTL = lfs, true, 2*time.Hour
+	})
+	m := e.manifest(t, "Q8_0", nil)
+	model := layer(m, ollama.MediaTypeModel)
+	oid := strings.TrimPrefix(model.Digest, "sha256:")
+
+	resp := e.get(t, "GET", "/v2/alice/tiny-gguf/blobs/"+model.Digest, nil)
+	require.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
+	require.Equal(t, "https://bucket.example.test/lfs/"+oid+"?X-Amz-Signature=x", resp.Header.Get("Location"))
+	require.Equal(t, model.Digest, resp.Header.Get("Docker-Content-Digest"))
+	require.Empty(t, body(t, resp))
+	require.Equal(t, 2*time.Hour, lfs.ttl)
+
+	head := e.get(t, "HEAD", "/v2/alice/tiny-gguf/blobs/"+model.Digest, nil)
+	require.Equal(t, http.StatusOK, head.StatusCode, "HEAD is answered here: a presigned GET URL does not answer HEAD")
+	require.Equal(t, fmt.Sprint(model.Size), head.Header.Get("Content-Length"))
+
+	lic := layer(m, ollama.MediaTypeLicense)
+	r := e.get(t, "GET", "/v2/alice/tiny-gguf/blobs/"+lic.Digest, nil)
+	require.Equal(t, http.StatusOK, r.StatusCode, "layers kept in the database are served")
+	require.Equal(t, mit, string(body(t, r)))
+
+	// A Blob store that cannot presign (the filesystem) serves the bytes.
+	e = newEnv(t, false, func(o *ollama.Options) { o.RedirectDownloads = true })
+	m = e.manifest(t, "Q8_0", nil)
+	resp = e.get(t, "GET", "/v2/alice/tiny-gguf/blobs/"+layer(m, ollama.MediaTypeModel).Digest, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestPrivateReposUseTheOllamaKeyFlow(t *testing.T) {
