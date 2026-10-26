@@ -347,7 +347,7 @@ func (o *OllamaStore) issue(ctx context.Context, req OllamaTokenRequest) (string
 	var key db.OllamaKey
 	err = o.s.db.NewSelect().Model(&key).Where("fingerprint = ?", ssh.FingerprintSHA256(pub)).Scan(ctx)
 	if db.IsNotFound(err) {
-		return "", time.Time{}, fmt.Errorf("%w: this Ollama key is not registered; add it in Settings > Ollama keys", ErrInvalidCredentials)
+		return "", time.Time{}, fmt.Errorf("%w: this Ollama key is not registered; add it under Settings, Ollama keys", ErrInvalidCredentials)
 	}
 	if err != nil {
 		return "", time.Time{}, err

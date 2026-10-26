@@ -276,7 +276,7 @@ func (h *Handler) streamPulled(w http.ResponseWriter, r *http.Request, rp *repo.
 // Partial mirror lists but does not hold. huggingface_hub raises it as
 // RemoteEntryNotFoundError (X-Error-Code EntryNotFound) with this text.
 func NotPresentMessage(id model.RepoID, path string) string {
-	return path + " is not in the arsenal: " + id.String() + " is a Partial mirror, which lists every file but holds only the files that were pulled. " +
+	return path + " is not in the Arsenal: " + id.String() + " is a Partial mirror, which lists every file but holds only the files that were pulled. " +
 		"To download only the files it holds, pass allow_patterns to snapshot_download (--include with hf download). " +
 		"To get this file, pull it from the Repo page or run: hangar pull " + id.Path() + " --include '" + path + "'"
 }

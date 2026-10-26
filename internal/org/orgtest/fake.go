@@ -106,7 +106,7 @@ func (f *Fake) CreateOrg(_ context.Context, name, displayName string, creator mo
 		return nil, fmt.Errorf("%w: %w", org.ErrInvalid, err)
 	}
 	if creator.IsAnonymous() {
-		return nil, fmt.Errorf("%w: sign in to create an organisation", org.ErrInvalid)
+		return nil, fmt.Errorf("%w: sign in to create an Organisation", org.ErrInvalid)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -135,7 +135,7 @@ func (f *Fake) EnsureMirrorNamespace(_ context.Context, name string) (*org.Names
 	defer f.mu.Unlock()
 	if ns := f.byNameLocked(name); ns != nil {
 		if !ns.ReservedMirror {
-			return nil, fmt.Errorf("%w: %s is a local namespace; set a namespace_prefix for this Upstream", org.ErrExists, name)
+			return nil, fmt.Errorf("%w: %s is a local Namespace; set a namespace_prefix for this Upstream", org.ErrExists, name)
 		}
 		out := *ns
 		return &out, nil

@@ -17,7 +17,7 @@ describe("form helpers", () => {
     expect(safeRedirect("/\\evil.example")).toBe("/");
     expect(safeRedirect("/a\r\nb")).toBe("/");
     expect(safeRedirect(`/${"a".repeat(2000)}`)).toBe("/");
-    expect(oidcErrors.oidc_link_required).toMatch(/link the provider from Settings/);
+    expect(oidcErrors.oidc_link_required).toMatch(/link the provider under Settings, Profile/);
   });
 
   it("validates Repo names as the Hub does", () => {

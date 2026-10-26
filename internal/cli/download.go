@@ -202,16 +202,16 @@ func (d *downloader) getOnce(ctx context.Context, f wantFile, target string) (in
 	}
 	if have+n < f.Size {
 		// The body ended early, as one cut off by a proxy does.
-		return counted, fmt.Errorf("got %d bytes, want %d; run the command again to resume: %w", have+n, f.Size,
+		return counted, fmt.Errorf("received %d bytes, expected %d; run the command again to resume: %w", have+n, f.Size,
 			&transportError{err: io.ErrUnexpectedEOF})
 	}
 	if have+n > f.Size {
 		_ = os.Remove(tmp)
-		return counted, fmt.Errorf("got %d bytes, want %d", have+n, f.Size)
+		return counted, fmt.Errorf("received %d bytes, expected %d", have+n, f.Size)
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != f.ETag {
 		_ = os.Remove(tmp)
-		return counted, fmt.Errorf("checksum mismatch: got %s, want %s", got, f.ETag)
+		return counted, fmt.Errorf("the checksum is %s, expected %s", got, f.ETag)
 	}
 	return counted, os.Rename(tmp, target)
 }

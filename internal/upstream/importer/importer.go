@@ -54,7 +54,7 @@ type Target interface {
 
 // ErrUpstreamMissing means the Upstream does not have the Repo; Targets
 // wrap it so imports can fall back to a local Repo.
-var ErrUpstreamMissing = errors.New("the upstream does not have this repo")
+var ErrUpstreamMissing = errors.New("the Upstream does not have this Repo")
 
 // Options configure an Importer.
 type Options struct {

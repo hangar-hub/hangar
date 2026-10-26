@@ -154,7 +154,7 @@ func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error, lar
 				return "", err
 			}
 			if !st.UpToDate() {
-				return "", fmt.Errorf("at %q, %d migrations pending; run hangar admin migrate", st.Current, len(st.Pending))
+				return "", fmt.Errorf("the database schema is at %q and this binary expects %q; run hangar admin migrate", st.Current, st.Expected)
 			}
 			return "at " + st.Current, nil
 		})
@@ -232,7 +232,7 @@ func (a *app) doctor(ctx context.Context, cfg *config.Config, loadErr error, lar
 			defer resp.Body.Close()
 			got, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 			if resp.StatusCode != http.StatusOK || !bytes.Equal(got, body) {
-				return "", fmt.Errorf("a presigned URL answered %d; clients will fail to download (check the endpoint, clock and bucket policy)", resp.StatusCode)
+				return "", fmt.Errorf("a presigned URL answered %d; clients cannot download files (check the endpoint, clock and bucket policy)", resp.StatusCode)
 			}
 			return "a presigned URL works from this host", nil
 		})

@@ -341,7 +341,7 @@ func scopeComplete(rec *repo.Repo, id uuid.UUID) string {
 
 // notInArsenal is the message for objects a Partial mirror does not hold.
 func notInArsenal(rec *repo.Repo) string {
-	return "Not in arsenal. Pull this file with: hangar pull " + rec.ID.Path() + " --include <path>, or clone with GIT_LFS_SKIP_SMUDGE=1"
+	return "This file is not in the Arsenal. Pull it with: hangar pull " + rec.ID.Path() + " --include <path>, or clone with GIT_LFS_SKIP_SMUDGE=1"
 }
 
 func (s *Server) batchDownload(ctx context.Context, rec *repo.Repo, req *batchRequest) (*batchResponse, error) {
@@ -366,7 +366,7 @@ func (s *Server) batchDownload(ctx context.Context, rec *repo.Repo, req *batchRe
 	resp := &batchResponse{Transfer: transferBasic, HashAlgo: "sha256", Objects: make([]objectResponse, 0, len(req.Objects))}
 	for _, o := range req.Objects {
 		if !validObject(o) {
-			resp.Objects = append(resp.Objects, objErr(o, http.StatusUnprocessableEntity, "The oid must be a lower-case SHA-256 and the size must not be negative."))
+			resp.Objects = append(resp.Objects, objErr(o, http.StatusUnprocessableEntity, "The oid must be a lowercase SHA-256 and the size must not be negative."))
 			continue
 		}
 		ref, ok := refs[o.OID]
@@ -485,7 +485,7 @@ func (s *Server) batchUpload(ctx context.Context, rec *repo.Repo, req *batchRequ
 	}
 	for _, o := range req.Objects {
 		if !validObject(o) {
-			resp.Objects = append(resp.Objects, objErr(o, http.StatusUnprocessableEntity, "The oid must be a lower-case SHA-256 and the size must not be negative."))
+			resp.Objects = append(resp.Objects, objErr(o, http.StatusUnprocessableEntity, "The oid must be a lowercase SHA-256 and the size must not be negative."))
 			continue
 		}
 		if obj, ok := stored[o.OID]; ok && obj.Verified {

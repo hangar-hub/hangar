@@ -247,7 +247,7 @@ func (a *app) ensureOllamaKey(ctx context.Context, c *client, in *bufio.Reader, 
 	if !yes {
 		a.logf("Your Ollama key %s is not registered with %s. Ollama needs it unless the Repo is public and the Instance allows anonymous reads.\nRegister it now? [y/N] ", fp, c.base.Host)
 		if !answeredYes(in) {
-			a.logf("Not registering the key. Only public Repos on an Instance that allows anonymous reads will work.\n")
+			a.logf("Not registering the key. Only public Repos on an Instance that allows anonymous reads work.\n")
 			return nil
 		}
 	}

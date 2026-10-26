@@ -106,7 +106,7 @@ export function AdminPullsPage() {
         </div>
         <Field
           label="Pull windows"
-          hint="Times when files may download, one per line, such as 01:00-07:00, in the Instance time zone. Empty means any time."
+          hint="Times when Pulls may fetch files, one per line, such as 01:00-07:00, in the Instance time zone. Empty means any time."
           error={
             w.invalid.length
               ? `Not in the form 01:00-07:00: ${w.invalid.join(", ")}`

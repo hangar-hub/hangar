@@ -25,7 +25,7 @@ var MaxUpstreamRefs = 100_000
 
 // errTooManyRefs is an advertisement over MaxUpstreamRefs.
 func errTooManyRefs() error {
-	return fmt.Errorf("the upstream advertises more than %d refs, the most Hangar mirrors", MaxUpstreamRefs)
+	return fmt.Errorf("the Upstream advertises more than %d refs, the most Hangar mirrors", MaxUpstreamRefs)
 }
 
 // mirrorRefPrefixes are the refs a Mirror fetches (04-git.md "Mirrors").
@@ -119,7 +119,7 @@ func (c *HTTPClient) FetchPack(ctx context.Context, u Upstream, cred Credentials
 	}
 	if string(hdr[:4]) != "PACK" {
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("%w: the upstream did not send a git pack", ErrUnavailable)
+		return nil, fmt.Errorf("%w: the Upstream did not send a git pack", ErrUnavailable)
 	}
 	if count := uint32(hdr[8])<<24 | uint32(hdr[9])<<16 | uint32(hdr[10])<<8 | uint32(hdr[11]); count == 0 {
 		_ = resp.Body.Close()

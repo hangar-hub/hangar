@@ -180,7 +180,7 @@ func TestPreuploadRejectMode(t *testing.T) {
 
 	r := e.Request(t, http.MethodGet, "/api/models/alice/rj/xet-write-token/main", "alice", "")
 	require.Equal(t, http.StatusBadRequest, r.StatusCode)
-	require.Equal(t, "Xet uploads are turned off on this Hangar. Set HF_HUB_DISABLE_XET=1 to upload.", r.Header.Get("X-Error-Message"))
+	require.Equal(t, "Xet uploads are turned off on this Instance. Set HF_HUB_DISABLE_XET=1 to upload.", r.Header.Get("X-Error-Message"))
 }
 
 func ndjson(t *testing.T, lines ...map[string]any) string {

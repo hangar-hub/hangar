@@ -123,7 +123,7 @@ func (h *Handler) redirectSingleSegment(w http.ResponseWriter, r *http.Request, 
 		loc += "?" + r.URL.RawQuery
 	}
 	w.Header().Set("Location", loc)
-	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusTemporaryRedirect, Message: "Repository IDs need a namespace; redirecting to " + h.d.Settings.DefaultNamespace + "."})
+	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusTemporaryRedirect, Message: "Repo IDs need a Namespace; redirecting to " + h.d.Settings.DefaultNamespace + "."})
 }
 
 // resolveRevision turns a Revision into a Commit SHA, writing
@@ -176,7 +176,7 @@ func (h *Handler) resolveAfterHistory(r *http.Request, rp *repo.Repo, rev string
 // is still planning.
 func pullPending(w http.ResponseWriter, r *http.Request, id model.RepoID) {
 	w.Header().Set("Retry-After", "10")
-	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusServiceUnavailable, Message: "Hangar is pulling " + id.Path() + " into the arsenal. Try again shortly."})
+	httpx.WriteHubError(w, r, &httpx.HubError{Status: http.StatusServiceUnavailable, Message: "Hangar is pulling " + id.Path() + " into the Arsenal. Try again shortly."})
 }
 
 // noHistory answers Repo info for a Repo whose default branch has no

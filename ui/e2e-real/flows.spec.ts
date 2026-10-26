@@ -314,7 +314,7 @@ test("Discover a model on the Upstream, pull one quant and open it in the GGUF v
   await settled(page);
   await expectAccessible(page);
   await page.goto(`/${repo.id}/blob/main/${repo.file.Q4_K_M}`);
-  await expect(page.getByText("This file is not in the arsenal")).toBeVisible();
+  await expect(page.getByText("This file is not in the Arsenal")).toBeVisible();
   expect(problems).toEqual([]);
 });
 

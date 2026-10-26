@@ -45,8 +45,8 @@ var (
 
 // Messages users see.
 const (
-	RejectMessage      = "Xet uploads are turned off on this Hangar. Set HF_HUB_DISABLE_XET=1 to upload."
-	UnknownXorbMessage = "The upload refers to data this Hangar no longer has. Clear the hf_xet cache (~/.cache/huggingface/xet) or set HF_HUB_DISABLE_XET=1, then upload again."
+	RejectMessage      = "Xet uploads are turned off on this Instance. Set HF_HUB_DISABLE_XET=1 to upload."
+	UnknownXorbMessage = "The upload refers to data this Instance no longer has. Clear the hf_xet cache (~/.cache/huggingface/xet) or set HF_HUB_DISABLE_XET=1, then upload again."
 )
 
 var hashRe = regexp.MustCompile(`^[0-9a-f]{64}$`)

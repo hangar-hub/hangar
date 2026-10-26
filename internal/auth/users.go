@@ -26,7 +26,7 @@ var (
 	ErrConflict = errors.New("already exists")
 	// ErrLastInstanceAdmin stops disabling or demoting the last enabled
 	// Instance admin, which would lock everyone out of the admin UI.
-	ErrLastInstanceAdmin = errors.New("the instance needs at least one enabled admin")
+	ErrLastInstanceAdmin = errors.New("the Instance needs at least one enabled admin")
 	// ErrDisabled means the user account is disabled.
 	ErrDisabled = errors.New("account is disabled")
 )

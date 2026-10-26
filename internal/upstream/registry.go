@@ -28,14 +28,14 @@ var (
 	// ErrUpstreamDisabled means an admin turned the Upstream off.
 	ErrUpstreamDisabled = errors.New("upstream is disabled")
 	// ErrUpstreamExists means the name is taken.
-	ErrUpstreamExists = errors.New("an upstream with that name already exists")
+	ErrUpstreamExists = errors.New("an Upstream with that name already exists")
 	// ErrUpstreamInvalid wraps validation errors.
 	ErrUpstreamInvalid = errors.New("invalid upstream")
 	// ErrUpstreamConfigured means the Upstream comes from the
 	// configuration file, so only `enabled` can change in the admin UI.
-	ErrUpstreamConfigured = errors.New("upstream is set in the configuration file")
+	ErrUpstreamConfigured = errors.New("the Upstream is set in the configuration file")
 	// ErrUpstreamInUse means Mirrors still use the Upstream.
-	ErrUpstreamInUse = errors.New("upstream is used by mirrors")
+	ErrUpstreamInUse = errors.New("the Upstream is in use")
 )
 
 // tokenPurpose binds Instance token ciphertexts to their use.
@@ -123,7 +123,7 @@ func (r *Registry) SyncConfig(ctx context.Context, ups map[string]config.Upstrea
 		for _, name := range names {
 			c := ups[name]
 			if !upstreamNameRe.MatchString(name) {
-				return fmt.Errorf("%w: upstream name %q must be lower-case letters, digits, '-' or '_'", ErrUpstreamInvalid, name)
+				return fmt.Errorf("%w: Upstream name %q must be lowercase letters, digits, '-' or '_'", ErrUpstreamInvalid, name)
 			}
 			base, err := validateBaseURL(c.BaseURL, "upstreams."+name+".base_url")
 			if err != nil {
@@ -309,7 +309,7 @@ type UpstreamUpdate struct {
 func (r *Registry) Create(ctx context.Context, p UpstreamParams, actor model.Principal) (*Upstream, error) {
 	p.Name = strings.TrimSpace(p.Name)
 	if !upstreamNameRe.MatchString(p.Name) {
-		return nil, fmt.Errorf("%w: the name must be 1 to 63 lower-case letters, digits, '-' or '_'", ErrUpstreamInvalid)
+		return nil, fmt.Errorf("%w: the name must be 1 to 63 lowercase letters, digits, '-' or '_'", ErrUpstreamInvalid)
 	}
 	base, err := validateBaseURL(p.BaseURL, "base_url")
 	if err != nil {

@@ -131,7 +131,7 @@ export function OllamaKeysPage() {
               required
               rows={3}
               className="font-mono text-xs"
-              placeholder="ssh-ed25519 AAAA..."
+              placeholder="ssh-ed25519 AAAA…"
               value={key}
               onChange={(e) => setKey(e.target.value)}
             />

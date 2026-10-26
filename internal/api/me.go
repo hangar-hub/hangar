@@ -188,14 +188,14 @@ func (h *Identity) CreateMyToken(w http.ResponseWriter, r *http.Request) {
 	if p.Token != nil {
 		if !p.Token.Restrictions.IsZero() || !p.Token.Scope.Includes(nt.Scope) {
 			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden,
-				Detail: "A token can only create tokens with the same or a lower scope, and only when it is not restricted."})
+				Detail: "A Token can only create Tokens with the same or a lower scope, and only when it is not restricted."})
 			return
 		}
 		// An expiry narrows a Token like a restriction does, so a Token
 		// cannot outlive the one that created it.
 		if exp := p.Token.ExpiresAt; exp != nil && (nt.ExpiresAt == nil || nt.ExpiresAt.After(*exp)) {
 			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden,
-				Detail: "A token that expires can only create tokens that expire no later than it does. Set expires_at to " +
+				Detail: "A Token that expires can only create Tokens that expire no later than it does. Set expires_at to " +
 					exp.UTC().Format(time.RFC3339) + " or earlier."})
 			return
 		}

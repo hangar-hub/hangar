@@ -391,7 +391,7 @@ func (f *FakeLFS) Verify(ctx context.Context, oid string, size int64, userID uui
 	if mismatch {
 		return repo.LFSObject{}, fmt.Errorf("%w: %s", repo.ErrChecksumMismatch, oid)
 	}
-	return repo.LFSObject{}, fmt.Errorf("%w: no upload of lfs object %s to verify", repo.ErrNotFound, oid)
+	return repo.LFSObject{}, fmt.Errorf("%w: no upload of LFS object %s to verify", repo.ErrNotFound, oid)
 }
 
 // proveStaged hashes a staged PUT, then stores it when the object is not

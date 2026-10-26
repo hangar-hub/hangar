@@ -154,10 +154,11 @@ Collect garbage: unreferenced LFS objects and unused git data.
 
 ```text
 Deletes LFS objects no Repo has referenced for gc.grace_period, orphaned
-blobs, retired and orphaned packs, git data of purged Repos, stale
-temporary files and abandoned uploads, then reports what it freed. It runs
-in this process; with --queue it queues a gc Job for the Instance's workers
-instead, which needs a running Instance on Postgres.
+LFS objects in the Blob store, retired and orphaned packs, git data of
+purged Repos, stale temporary files and abandoned uploads, then reports
+what it freed. It runs in this process; with --queue it queues a gc Job
+for the Instance's workers instead, which needs a running Instance on
+Postgres.
 ```
 
 Usage:
@@ -236,7 +237,7 @@ Flags:
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
 | `--set` | set a configuration key, such as --set storage.backend=s3 (repeatable) |  |
-| `--stale` | only results from an older indexer or scanner version |  |
+| `--stale` | queue Jobs only for results from an older indexer or scanner version |  |
 | `--type` | the type of Repo IDs without a prefix: model (the default) or dataset |  |
 
 ## hangar admin reset-password
@@ -276,7 +277,7 @@ Restore a backup made by hangar admin backup.
 ```text
 Restores a backup folder into the configured database and Blob store. The
 database is migrated first, and must then be at the same schema version as
-the backup: restore with the hangar version that made the backup, then
+the backup: restore with the Hangar version that made the backup, then
 upgrade. The database must be empty unless --force is given, which deletes
 every row first.
 
@@ -318,7 +319,8 @@ Replace the Instance key and re-encrypt every stored secret.
 ```text
 Generates a new security.instance_key (or uses --new-key) and, in one
 database transaction, re-encrypts every secret sealed with the old key:
-users' upstream tokens, Upstream Instance tokens and webhook secrets.
+users' Upstream tokens, the Instance's token for each Upstream, and webhook
+secrets.
 
 Stop every Hangar process first: a process still running with the old key
 cannot read the re-encrypted secrets. If the key came from secrets.yaml in
@@ -458,7 +460,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--shell` | shell syntax: bash, zsh, fish or powershell (default: from $SHELL) |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
@@ -496,7 +498,7 @@ Flags:
 
 ## hangar import
 
-Add models you already have on disk to the Arsenal without downloading them again.
+Add models you already have on disk to the Arsenal without pulling them again.
 
 ```text
 Adds content that is already on this machine to the Arsenal. Choose one source:
@@ -559,7 +561,7 @@ Flags:
 | `--from-hf-cache` | import a Hugging Face cache |  |
 | `--from-lmstudio` | import LM Studio's models folder |  |
 | `--from-ollama` | import Ollama's models |  |
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--namespace` | Namespace for local Repos (default: the Repo's own, or yours for Ollama models) |  |
 | `--offline` | never ask the Upstream; create local Repos |  |
 | `--ollama-models` | Ollama's models folder (default: $OLLAMA_MODELS or ~/.ollama/models) |  |
@@ -599,7 +601,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--local` | only look in the Arsenal |  |
 | `--revision` | branch, tag or Commit SHA (default: the default branch) |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
@@ -621,7 +623,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -639,7 +641,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -665,7 +667,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -683,7 +685,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -713,7 +715,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--lmstudio-dir` | LM Studio's models folder |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
@@ -754,7 +756,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--lmstudio-dir` | LM Studio's models folder |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
@@ -773,7 +775,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--lmstudio-dir` | LM Studio's models folder |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
@@ -804,7 +806,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--lmstudio-dir` | LM Studio's models folder |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
@@ -843,7 +845,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--no-browser` | print the approval link instead of opening a browser |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
@@ -883,7 +885,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -933,7 +935,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -949,7 +951,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -974,7 +976,7 @@ Inherited flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -984,7 +986,7 @@ Pull a Repo into the Arsenal and download it to the local cache.
 
 ```text
 Makes sure the Repo, or the files you choose, are in the Arsenal: if they are
-not, asks the Instance to Pull them from an Upstream and shows the progress.
+not, asks the Instance to pull them from an Upstream and shows the progress.
 Then downloads them into the local Hugging Face cache, where Python libraries
 pointed at the same Instance find them, or into a folder with --to.
 
@@ -1013,20 +1015,20 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `--cache-dir` | Hugging Face cache folder (default: $HF_HUB_CACHE or ~/.cache/huggingface/hub) |  |
-| `--config` | dataset Config to Pull (repeatable) |  |
+| `--config` | dataset Config to pull (repeatable) |  |
 | `--exclude` | skip files matching this pattern (repeatable) |  |
 | `--include` | only files matching this pattern, such as '*.safetensors' (repeatable) |  |
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--now` | start the Pull now, outside the Instance's pull windows, if allowed |  |
-| `--parquet-only` | Pull and download only the dataset's Parquet export |  |
+| `--parquet-only` | pull and download only the dataset's Parquet export |  |
 | `--revision` | branch, tag or Commit SHA (default: the default branch) |  |
-| `--server-only` | only Pull into the Arsenal; download nothing |  |
-| `--split` | dataset Split to Pull (repeatable) |  |
+| `--server-only` | only pull into the Arsenal; download nothing |  |
+| `--split` | dataset Split to pull (repeatable) |  |
 | `--to` | download into this folder instead of the Hugging Face cache |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--track` | make a new Mirror follow its upstream branch |  |
 | `--type` | Repo type for IDs without a prefix: model or dataset |  |
-| `--upstream` | Upstream to Pull from when the Repo is not in the Arsenal | `huggingface` |
+| `--upstream` | Upstream to pull from when the Repo is not in the Arsenal | `huggingface` |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
 ## hangar push
@@ -1040,10 +1042,11 @@ upload resumes from the parts already stored when you run the command again.
 A part that fails for a reason that may pass, such as a dropped connection
 or a 503 from a proxy, is sent again up to 6 times with a growing wait, and
 part URLs that expired are renewed. When finishing an upload fails for a
-reason that may pass, the Instance answers 503 with Retry-After, a proxy
-cuts the request off, or no answer comes within 5 minutes (40 seconds per
-GiB for a file larger than 7.5 GiB), and the command waits and tries again,
+reason that may pass (the Instance answers 503 with Retry-After, a proxy
+cuts the request off, or no answer comes within 5 minutes, or 40 seconds
+per GiB for a file larger than 7.5 GiB), the command waits and tries again,
 up to 10 times.
+
 A file that still fails does not stop the others: the command uploads the
 rest, names the files that failed and makes no Commit, so running it again
 sends only those files.
@@ -1079,7 +1082,7 @@ Flags:
 | `--description` | longer Commit description |  |
 | `--exclude` | skip files matching this pattern (repeatable) |  |
 | `--include` | only upload files matching this pattern (repeatable) |  |
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `-m`, `--message` | Commit message | `Upload with hangar push` |
 | `--private` | with --create, make the new Repo private |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
@@ -1120,12 +1123,12 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `--filter` | filter results (repeatable); see above |  |
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--limit` | maximum number of results, up to 500 | `50` |
-| `--sort` | sort order: for the Arsenal updated, name, size, parameters, downloads or likes; for an Upstream trending, downloads, likes or lastModified |  |
+| `--sort` | sort order. For the Arsenal: updated, name, size, parameters, downloads or likes. For an Upstream: trending, downloads, likes or lastModified |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--type` | Repo type: model or dataset | `model` |
-| `--upstream` | search this Upstream instead of the Arsenal (default huggingface) |  |
+| `--upstream` | search this Upstream instead of the Arsenal (default: huggingface) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
 ## hangar server
@@ -1143,7 +1146,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
-| `--json` | write logs as JSON, the default (shortcut for --set telemetry.log_format=json) |  |
+| `--json` | write logs as JSON, even if the configuration sets text (shortcut for --set telemetry.log_format=json) |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |
@@ -1179,7 +1182,7 @@ Flags:
 
 | Flag | Description | Default |
 |---|---|---|
-| `--json` | print JSON instead of a table |  |
+| `--json` | print JSON instead of text |  |
 | `--token` | Token to use instead of the saved login (or HANGAR_CLI_TOKEN) |  |
 | `--url` | Instance URL (default: from hangar login, or HANGAR_CLI_URL) |  |
 
@@ -1198,7 +1201,7 @@ Flags:
 | Flag | Description | Default |
 |---|---|---|
 | `-c`, `--config` | YAML configuration file (or set HANGAR_CONFIG) |  |
-| `--json` | write logs as JSON, the default (shortcut for --set telemetry.log_format=json) |  |
+| `--json` | write logs as JSON, even if the configuration sets text (shortcut for --set telemetry.log_format=json) |  |
 | `--listen` | shortcut for --set server.listen=... |  |
 | `--public-url` | shortcut for --set server.public_url=... |  |
 | `--role` | shortcut for --set server.role=... |  |

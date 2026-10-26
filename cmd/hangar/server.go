@@ -43,7 +43,7 @@ func newServerCommand(use, short, forceRole string) *cobra.Command {
 		},
 	}
 	flags.register(cmd)
-	cmd.Flags().BoolVar(&jsonLogs, "json", false, "write logs as JSON, the default (shortcut for --set telemetry.log_format=json)")
+	cmd.Flags().BoolVar(&jsonLogs, "json", false, "write logs as JSON, even if the configuration sets text (shortcut for --set telemetry.log_format=json)")
 	return cmd
 }
 

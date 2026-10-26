@@ -202,7 +202,7 @@ func (h *Identity) signedIn(w http.ResponseWriter, r *http.Request) (model.Princ
 func (h *Identity) needScope(w http.ResponseWriter, r *http.Request, p model.Principal, s model.Scope) bool {
 	if !p.MaxScope().Includes(s) {
 		httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusForbidden,
-			Detail: fmt.Sprintf("The token's %s scope does not allow this; it needs %s.", p.MaxScope(), s)})
+			Detail: fmt.Sprintf("The Token's %s scope does not allow this; it needs %s.", p.MaxScope(), s)})
 		return false
 	}
 	return true

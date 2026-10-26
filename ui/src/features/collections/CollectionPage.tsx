@@ -357,7 +357,7 @@ export function CollectionPage({ ns, slug }: { ns: string; slug: string }) {
       ) : null}
       {items.length === 0 ? (
         <EmptyState title="This Collection is empty">
-          {canEdit ? "Choose Edit to add Repos." : "Nothing has been added to it yet."}
+          {canEdit ? "Select Edit to add Repos." : "Nothing has been added to it yet."}
         </EmptyState>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

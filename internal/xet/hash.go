@@ -62,7 +62,7 @@ func (h Hash) IsZero() bool { return h == Hash{} }
 func ParseHash(s string) (Hash, error) {
 	var h Hash
 	if !ValidHash(s) {
-		return h, fmt.Errorf("xet: %q is not a 64-character lower-case hex hash", s)
+		return h, fmt.Errorf("xet: %q is not a 64-character lowercase hex hash", s)
 	}
 	for k := range 4 {
 		v, err := strconv.ParseUint(s[16*k:16*k+16], 16, 64)

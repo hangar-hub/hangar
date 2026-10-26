@@ -113,7 +113,7 @@ function General({ repo, ref }: { repo: Repo; ref: RepoRef }) {
           />
         )}
       </Field>
-      <Field label="Licence" hint="An SPDX ID such as apache-2.0, or other." error={errs.licence}>
+      <Field label="Licence" hint='An SPDX ID such as apache-2.0, or "other".' error={errs.licence}>
         {(p) => (
           <Input
             {...p}
@@ -126,7 +126,7 @@ function General({ repo, ref }: { repo: Repo; ref: RepoRef }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Visibility"
-          hint="Public: anyone who can reach Hangar. Internal: anyone signed in. Private: Namespace members and collaborators."
+          hint="Public: anyone who can reach this Instance. Internal: anyone signed in. Private: Namespace Members and collaborators."
           error={errs.visibility}
         >
           {(p) => (
@@ -366,7 +366,7 @@ function Collaborators({ ref }: { ref: RepoRef }) {
         </ul>
       ) : (
         <p className="text-sm text-muted">
-          No collaborators. Namespace members already have access.
+          No collaborators. Namespace Members already have access.
         </p>
       )}
       <form

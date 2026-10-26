@@ -119,7 +119,7 @@ func answerer(p model.Principal) error {
 		return fmt.Errorf("%w: sign in to answer a device login", ErrForbidden)
 	}
 	if p.Token != nil {
-		return fmt.Errorf("%w: answer device logins in the web UI, not with a token", ErrForbidden)
+		return fmt.Errorf("%w: answer device logins in the web UI, not with a Token", ErrForbidden)
 	}
 	return nil
 }

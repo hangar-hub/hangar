@@ -33,7 +33,7 @@ func platformAdmin(w http.ResponseWriter, r *http.Request, authz auth.Authz) (mo
 	}
 	if err := authz.Can(r.Context(), p, auth.ActionInstanceAdmin, auth.Target{}); err != nil {
 		if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrNotFound) {
-			platformProblem(w, r, http.StatusForbidden, "Only Instance admins can do this, with a session or an admin-scope token.")
+			platformProblem(w, r, http.StatusForbidden, "Only Instance admins can do this, with a session or an admin-scope Token.")
 			return p, false
 		}
 		platformFail(w, r, "Could not check permissions.", err)

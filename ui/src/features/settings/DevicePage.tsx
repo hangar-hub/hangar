@@ -61,7 +61,7 @@ export function DevicePage() {
         >
           {decide.data
             ? "Approved. Go back to your terminal: it signs in within a few seconds."
-            : "Denied. The terminal will not be signed in."}
+            : "Denied. The terminal is not signed in."}
         </p>
       ) : request ? (
         <DeviceDetails

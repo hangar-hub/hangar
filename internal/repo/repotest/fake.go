@@ -1501,7 +1501,7 @@ func (f *Fake) Purge(_ context.Context, id uuid.UUID) error {
 		return fmt.Errorf("%w: %s", repo.ErrNotFound, id)
 	}
 	if r.DeletedAt == nil {
-		return fmt.Errorf("%w: delete the repo before purging it", repo.ErrInvalid)
+		return fmt.Errorf("%w: delete the Repo before purging it", repo.ErrInvalid)
 	}
 	delete(f.repos, id)
 	for k, v := range f.redirects {

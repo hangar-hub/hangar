@@ -134,7 +134,7 @@ export function NewRepoPage({ kind }: { kind: RepoKind }) {
             [
               ["public", "Public", "Anyone who can reach this Instance can see and download it."],
               ["internal", "Internal", "Anyone signed in to this Instance."],
-              ["private", "Private", "Only members of the Namespace and collaborators."],
+              ["private", "Private", "Only Members of the Namespace and collaborators."],
             ] as const
           ).map(([v, label, hint]) => (
             <label key={v} className="flex items-start gap-2 text-sm">

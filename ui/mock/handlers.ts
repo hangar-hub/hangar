@@ -1337,7 +1337,7 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
       i.type !== "collection" &&
       !findRepo(ctx.state, i.type, ...(i.item_id.split("/") as [string, string]))
     ) {
-      return problem(404, `${i.item_id} is not in the arsenal.`, [
+      return problem(404, `${i.item_id} is not in the Arsenal.`, [
         { pointer: "/item_id", detail: "Pick a Repo you can see." },
       ]);
     }

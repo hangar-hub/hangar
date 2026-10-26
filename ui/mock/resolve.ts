@@ -42,7 +42,7 @@ export function resolveFile(
   const f = c.files.find((x) => x.path === filePath);
   if (!f) return hubError(404, "EntryNotFound", "Entry not found");
   if (f.present === false)
-    return hubError(404, "EntryNotFound", "This file is not in the arsenal yet.");
+    return hubError(404, "EntryNotFound", "This file is not in the Arsenal yet.");
   const base = filePath.split("/").pop() ?? "file";
   const headers: Record<string, string> = {
     "X-Repo-Commit": c.sha,

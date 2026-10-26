@@ -151,7 +151,7 @@ func (d *RepoDeps) problem(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	detail := err.Error()
 	if status == http.StatusNotFound && (errors.Is(err, auth.ErrNotFound) || errors.Is(err, repo.ErrNotFound)) {
-		detail = "Repository not found. If it is private, make sure you are signed in and have access to it."
+		detail = "Repo not found. If it is private, make sure you are signed in and have access to it."
 	}
 	if status == http.StatusInternalServerError {
 		d.Log.ErrorContext(r.Context(), "native api request failed", "error", err.Error())
@@ -168,7 +168,7 @@ func (d *RepoDeps) problem(w http.ResponseWriter, r *http.Request, err error) {
 	// looks the same as one that does not exist.
 	if status == http.StatusNotFound && httpx.Principal(r.Context()).IsAnonymous() && (errors.Is(err, auth.ErrNotFound) || errors.Is(err, repo.ErrNotFound)) {
 		status = http.StatusUnauthorized
-		detail = "Repository not found. If it is private, sign in to see it."
+		detail = "Repo not found. If it is private, sign in to see it."
 	}
 	httpx.WriteProblem(w, r, &httpx.Problem{Status: status, Detail: detail})
 }

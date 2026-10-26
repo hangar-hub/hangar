@@ -44,7 +44,7 @@ var (
 	ErrLoginFailed = fmt.Errorf("%w: wrong username or password", ErrInvalidCredentials)
 	// ErrLocalLoginDisabled means password sign-in is off and the user is
 	// not the bootstrap admin.
-	ErrLocalLoginDisabled = errors.New("password sign-in is turned off; use your organisation's sign-in provider")
+	ErrLocalLoginDisabled = errors.New("password sign-in is turned off; sign in with your sign-in provider")
 )
 
 // ThrottledError means too many recent failures; try again after RetryAfter.

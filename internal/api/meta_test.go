@@ -259,7 +259,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, status)
 	status, b := e.do("GET", base+"/files/main/tiny-Q8_0.gguf/header", "bob-token", nil)
 	require.Equal(t, http.StatusNotFound, status)
-	require.Contains(t, string(b), "not in the arsenal")
+	require.Contains(t, string(b), "not in the Arsenal")
 
 	var quants gen.QuantList
 	e.json("GET", base+"/quants", "bob-token", nil, http.StatusOK, &quants)

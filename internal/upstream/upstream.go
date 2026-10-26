@@ -25,13 +25,13 @@ import (
 var (
 	// ErrNotFound means the Repo, Revision or file does not exist upstream,
 	// or the credentials cannot see it.
-	ErrNotFound = errors.New("not found on upstream")
+	ErrNotFound = errors.New("not found on the Upstream")
 	// ErrUnauthorized means the Upstream rejected the credentials.
-	ErrUnauthorized = errors.New("upstream rejected the credentials")
+	ErrUnauthorized = errors.New("the Upstream rejected the credentials")
 	// ErrGated means the upstream Repo is gated and the user has no access.
-	ErrGated = errors.New("upstream repo is gated")
+	ErrGated = errors.New("the Repo is gated on the Upstream")
 	// ErrUnavailable means the Upstream failed after retries (5xx or network).
-	ErrUnavailable = errors.New("upstream unavailable")
+	ErrUnavailable = errors.New("the Upstream is unavailable")
 )
 
 // RateLimitError means the Upstream answered 429; RetryAfter says when to try again.

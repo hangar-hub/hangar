@@ -474,7 +474,7 @@ func TestLFSPartialMirror(t *testing.T) {
 				return
 			}
 			require.Equal(t, http.StatusNotFound, o.Error.Code)
-			require.Contains(t, o.Error.Message, "Not in arsenal. Pull this file with: hangar pull alice/mirror --include <path>")
+			require.Contains(t, o.Error.Message, "This file is not in the Arsenal. Pull it with: hangar pull alice/mirror --include <path>")
 		})
 	}
 	f := newFixture(t, func(o *gitservertest.Options, _ *fixture) { o.PullThrough = pullThrough{ok: true} })

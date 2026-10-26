@@ -54,7 +54,7 @@ func (h *Handler) preupload(w http.ResponseWriter, r *http.Request, ref repoRef,
 		return
 	}
 	if len(req.Files) > maxPreuploadFiles {
-		h.writeBadRequest(w, r, "Send at most 1000 files per preupload request.")
+		h.writeBadRequest(w, r, "Send at most 1,000 files per preupload request.")
 		return
 	}
 	sha, ok := h.resolveRevision(w, r, rp, rev)
@@ -72,7 +72,7 @@ func (h *Handler) preupload(w http.ResponseWriter, r *http.Request, ref repoRef,
 	for i, f := range req.Files {
 		c, err := model.CleanRepoPath(f.Path)
 		if err != nil || c == "" {
-			h.writeBadRequest(w, r, "Invalid path in repo: "+f.Path+".")
+			h.writeBadRequest(w, r, "Invalid path in the Repo: "+f.Path+".")
 			return
 		}
 		clean[i] = c
