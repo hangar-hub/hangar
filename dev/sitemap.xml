@@ -33,6 +33,10 @@
          <lastmod>2026-10-26</lastmod>
     </url>
     <url>
+         <loc>https://hangar.page/latest/concepts/on-premises/</loc>
+         <lastmod>2026-10-26</lastmod>
+    </url>
+    <url>
          <loc>https://hangar.page/latest/concepts/permissions/</loc>
          <lastmod>2026-10-26</lastmod>
     </url>
@@ -89,6 +93,10 @@
          <lastmod>2026-10-26</lastmod>
     </url>
     <url>
+         <loc>https://hangar.page/latest/guides/ci/</loc>
+         <lastmod>2026-10-26</lastmod>
+    </url>
+    <url>
          <loc>https://hangar.page/latest/guides/collections/</loc>
          <lastmod>2026-10-26</lastmod>
     </url>
@@ -117,7 +125,15 @@
          <lastmod>2026-10-26</lastmod>
     </url>
     <url>
+         <loc>https://hangar.page/latest/guides/kubernetes/</loc>
+         <lastmod>2026-10-26</lastmod>
+    </url>
+    <url>
          <loc>https://hangar.page/latest/guides/lm-studio/</loc>
+         <lastmod>2026-10-26</lastmod>
+    </url>
+    <url>
+         <loc>https://hangar.page/latest/guides/ollama-registry/</loc>
          <lastmod>2026-10-26</lastmod>
     </url>
     <url>
@@ -130,6 +146,10 @@
     </url>
     <url>
          <loc>https://hangar.page/latest/guides/python/</loc>
+         <lastmod>2026-10-26</lastmod>
+    </url>
+    <url>
+         <loc>https://hangar.page/latest/guides/shared-cache/</loc>
          <lastmod>2026-10-26</lastmod>
     </url>
     <url>
