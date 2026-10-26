@@ -77,6 +77,7 @@ The chart runs the migration in a pre-upgrade Job, or in an init container in ea
 
 | Upgrade | What to do |
 |---|---|
+| The release after 1.3.0, from any earlier 1.x | Run `hangar admin migrate` as usual (migrations `0008` to `0010`). On an HTTPS Instance, everyone signs in to the web UI once more, because the session cookie is now `__Host-hangar_session`. UI sessions unused for 7 days now end (`security.session_idle_timeout`). Device logins give a `read` Token unless the user chooses `write`, and their Tokens expire after 30 days. Registering an Ollama key needs a signature from the key: update `hangar` on machines that run `hangar ollama key register`. |
 | 1.1.x or 1.2.x, from any earlier 1.x | Nothing. No release since 1.0.0 has changed the database schema or the Helm chart's values. 1.2.0 added `ui.docs_url`, which defaults to https://hangar.page/; on an [air-gapped network](../guides/air-gapped.md#keep-the-web-ui-on-the-inside), point it at your copy of the docs. |
 
 ## Downgrades

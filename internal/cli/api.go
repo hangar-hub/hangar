@@ -233,6 +233,17 @@ func (c *client) ollamaKeys(ctx context.Context) ([]gen.OllamaKey, error) {
 	return r.JSON200.Items, nil
 }
 
+func (c *client) ollamaKeyChallenge(ctx context.Context) (*gen.OllamaKeyChallenge, error) {
+	r, err := c.api.CreateOllamaKeyChallengeWithResponse(ctx)
+	if err != nil {
+		return nil, c.reach(err)
+	}
+	if err := check(r.HTTPResponse, r.Body, http.StatusOK); err != nil {
+		return nil, err
+	}
+	return r.JSON200, nil
+}
+
 func (c *client) addOllamaKey(ctx context.Context, body gen.OllamaKeyCreate) (*gen.OllamaKey, error) {
 	r, err := c.api.AddMyOllamaKeyWithResponse(ctx, body)
 	if err != nil {

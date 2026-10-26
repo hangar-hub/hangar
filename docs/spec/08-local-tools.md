@@ -35,7 +35,7 @@ The config blob (`application/vnd.docker.container.image.v1+json`) is JSON with 
 
 ### Blobs
 
-`GET|HEAD /v2/{ns}/{name}/blobs/{digest}` serves the layer, with `Content-Length`, `Docker-Content-Digest` and range support.
+`GET|HEAD /v2/{ns}/{name}/blobs/{digest}` serves the layer, with `Content-Length`, `Docker-Content-Digest` and range support. A generated layer (`ollama_blobs`) is served only through a Repo whose manifest built it (`ollama_repo_blobs`), so a private Repo's layers cannot be read by digest through another Repo; a model layer must be an LFS object of the Repo, as before.
 
 **Redirect layer `GET`s in S3 `redirect` mode; serve everything else.** The general policy in Ollama's `makeRequest` (`server/images.go`, `isAllowedHost`) follows redirects only to the same host or Ollama's own CDN hosts, unless the user passes `--insecure`. The blob download does not use it. Ollama first sends `HEAD` for the size, under that policy, then one `GET` whose redirect policy stops at the first cross-host redirect and takes its `Location` as the URL of the parallel ranged part downloads (`server/download.go`, `blobDownload.run`, in 0.31.1 and in 0.40). So:
 

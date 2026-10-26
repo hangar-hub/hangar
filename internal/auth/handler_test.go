@@ -152,7 +152,7 @@ func TestUnlinkAndDeviceEdges(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, got.OIDCProviders)
 
-	_, err = s.Device.Start(ctx, strings.Repeat("x", 201))
+	_, err = s.Device.Start(ctx, strings.Repeat("x", 201), "")
 	require.ErrorIs(t, err, auth.ErrInvalid)
 	require.Equal(t, "ABCD-EFGH", auth.NormaliseUserCode("abcd efgh"))
 	require.Equal(t, "ABC", auth.NormaliseUserCode("abc"))
@@ -191,7 +191,7 @@ func TestCleanup(t *testing.T) {
 		u := mustUser(t, s, "alice", false)
 		_, _, err := s.Sessions.Create(ctx, u.ID, "", "")
 		require.NoError(t, err)
-		_, err = s.Device.Start(ctx, "")
+		_, err = s.Device.Start(ctx, "", "")
 		require.NoError(t, err)
 		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "10.0.0.1"})
 		require.ErrorIs(t, err, auth.ErrLoginFailed)

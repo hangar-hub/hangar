@@ -3,6 +3,8 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -18,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/hangar-hub/hangar/internal/api"
 	"github.com/hangar-hub/hangar/internal/api/gen"
@@ -31,6 +34,7 @@ import (
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/org"
 	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 const password = "correct horse battery staple 42"
@@ -285,13 +289,17 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		other.do(http.MethodGet, "/api/hangar/v1/me", nil, http.StatusNoContent, nil)
 		other.do(http.MethodGet, "/api/hangar/v1/me/sessions", nil, http.StatusUnauthorized, nil)
 
-		// Ollama keys.
-		key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q me@laptop"
+		// Ollama keys: adding one needs its signature over a challenge.
+		signer := newOllamaSigner(t)
+		key := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))) + " me@laptop"
+		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": key, "challenge": "x", "signature": "y"}, http.StatusUnprocessableEntity, nil)
 		var k gen.OllamaKey
-		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": key}, http.StatusCreated, &k)
+		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", signedOllamaKey(t, alice, key, signer), http.StatusCreated, &k)
 		require.Equal(t, "me@laptop", *k.Name)
-		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": key}, http.StatusConflict, nil)
-		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": "nope"}, http.StatusUnprocessableEntity, nil)
+		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", signedOllamaKey(t, alice, key, signer), http.StatusConflict, nil)
+		alice.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": "nope", "challenge": "x", "signature": "y"}, http.StatusUnprocessableEntity, nil)
+		readTok.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys/challenge", nil, http.StatusForbidden, nil)
+		anon.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys/challenge", nil, http.StatusUnauthorized, nil)
 		var keys gen.OllamaKeyList
 		alice.do(http.MethodGet, "/api/hangar/v1/me/ollama-keys", nil, http.StatusOK, &keys)
 		require.Len(t, keys.Items, 1)
@@ -303,8 +311,15 @@ func TestSessionsTokensAndKeys(t *testing.T) {
 		alice.do(http.MethodPut, "/api/hangar/v1/me/upstream-tokens/huggingface", map[string]any{"token": "hf_x"}, http.StatusNotFound, nil)
 
 		// Device login answers.
-		dc, err := e.svc.Device.Start(context.Background(), "hf")
+		dc, err := e.svc.Device.Start(context.Background(), "hf", "192.0.2.1")
 		require.NoError(t, err)
+		var dr gen.DeviceRequest
+		alice.do(http.MethodPost, "/api/hangar/v1/me/device/lookup", map[string]any{"user_code": dc.UserCode}, http.StatusOK, &dr)
+		require.Equal(t, "hf", dr.ClientId)
+		require.Equal(t, "192.0.2.1", dr.ClientIp)
+		require.Equal(t, 30, dr.TokenLifetimeDays)
+		anon.do(http.MethodPost, "/api/hangar/v1/me/device/lookup", map[string]any{"user_code": dc.UserCode}, http.StatusUnauthorized, nil)
+		alice.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": true, "scope": "admin"}, http.StatusBadRequest, nil)
 		alice.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": true}, http.StatusNoContent, nil)
 		alice.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": false}, http.StatusNotFound, nil)
 		anon.do(http.MethodPost, "/api/hangar/v1/me/device", map[string]any{"user_code": dc.UserCode, "approve": true}, http.StatusUnauthorized, nil)
@@ -666,7 +681,8 @@ func TestEveryW5ActionIsAudited(t *testing.T) {
 		root.do(http.MethodPost, "/api/hangar/v1/repos/models/bob/gated/access-requests", map[string]any{}, http.StatusCreated, &ar)
 		b.do(http.MethodPatch, "/api/hangar/v1/repos/models/bob/gated/access-requests/"+ar.Id.String(), map[string]any{"status": "accepted"}, http.StatusOK, nil)
 		root.do(http.MethodPatch, "/api/hangar/v1/admin/settings", map[string]any{"anonymous_read": true}, http.StatusOK, nil)
-		b.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]any{"public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q"}, http.StatusCreated, nil)
+		bobSigner := newOllamaSigner(t)
+		b.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys", signedOllamaKey(t, b, string(ssh.MarshalAuthorizedKey(bobSigner.PublicKey())), bobSigner), http.StatusCreated, nil)
 		b.do(http.MethodPut, "/api/hangar/v1/me/upstream-tokens/huggingface", map[string]any{"token": "hf_secret"}, http.StatusOK, nil)
 		var st gen.UpstreamTokenStatus
 		b.do(http.MethodGet, "/api/hangar/v1/me/upstream-tokens/huggingface", nil, http.StatusOK, &st)
@@ -704,4 +720,25 @@ func TestEveryW5ActionIsAudited(t *testing.T) {
 			require.True(t, got[a], "no %s event", a)
 		}
 	})
+}
+
+// newOllamaSigner makes an Ollama key pair, as ~/.ollama/id_ed25519 holds.
+func newOllamaSigner(t *testing.T) ssh.Signer {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	signer, err := ssh.NewSignerFromKey(priv)
+	require.NoError(t, err)
+	return signer
+}
+
+// signedOllamaKey asks c's user for a challenge and returns the body of
+// POST /me/ollama-keys with the key's signature over it.
+func signedOllamaKey(t *testing.T, c *client, pub string, signer ssh.Signer) map[string]any {
+	t.Helper()
+	var ch gen.OllamaKeyChallenge
+	c.do(http.MethodPost, "/api/hangar/v1/me/ollama-keys/challenge", nil, http.StatusOK, &ch)
+	sig, err := sshsig.Sign(signer, ch.Namespace, []byte(ch.Challenge))
+	require.NoError(t, err)
+	return map[string]any{"public_key": pub, "challenge": ch.Challenge, "signature": sig}
 }

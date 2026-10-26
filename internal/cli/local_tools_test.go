@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"os"
 	"path/filepath"
@@ -115,16 +116,19 @@ func TestLMStudioHardlinkAndFolderDiscovery(t *testing.T) {
 	require.Equal(t, "/x", lmStudioModelsDir("/x"))
 }
 
-// writeOllamaKey writes an ed25519 public key where Ollama keeps it and
-// returns its fingerprint.
+// writeOllamaKey writes an ed25519 key pair where Ollama keeps it, as
+// Ollama does, and returns its fingerprint.
 func writeOllamaKey(t *testing.T, home string) string {
 	t.Helper()
-	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	sp, err := ssh.NewPublicKey(pub)
 	require.NoError(t, err)
+	block, err := ssh.MarshalPrivateKey(priv, "")
+	require.NoError(t, err)
 	dir := filepath.Join(home, ".ollama")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "id_ed25519"), pem.EncodeToMemory(block), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "id_ed25519.pub"), ssh.MarshalAuthorizedKey(sp), 0o644))
 	return ssh.FingerprintSHA256(sp)
 }
@@ -177,6 +181,32 @@ func TestOllamaKeyRegisterAndInstall(t *testing.T) {
 
 	require.Equal(t, ExitUsage, e.run("ollama", "install", "datasets/acme/data").code)
 	require.Equal(t, ExitUsage, e.run("ollama", "install", "acme/x", "--url", e.inst.URL+"/sub").code)
+}
+
+// TestOllamaKeyRegisterProvesPossession checks that hangar ollama key
+// register signs the Instance's challenge with ~/.ollama/id_ed25519 (the
+// fake Instance verifies the signature), and refuses a private key that
+// does not match id_ed25519.pub instead of sending a signature that fails.
+func TestOllamaKeyRegisterProvesPossession(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	writeOllamaKey(t, e.home)
+	other := t.TempDir()
+	writeOllamaKey(t, other)
+	dir := filepath.Join(e.home, ".ollama")
+	b, err := os.ReadFile(filepath.Join(other, ".ollama", "id_ed25519"))
+	require.NoError(t, err)
+	good, err := os.ReadFile(filepath.Join(dir, "id_ed25519"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "id_ed25519"), b, 0o600))
+	r := e.run("ollama", "key", "register")
+	require.Equal(t, ExitUsage, r.code, r.stderr)
+	require.ErrorContains(t, r.err, "fix the pair")
+	require.Empty(t, e.inst.OllamaKeys())
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "id_ed25519"), good, 0o600))
+	e.ok("ollama", "key", "register")
+	require.Len(t, e.inst.OllamaKeys(), 1)
 }
 
 func TestOllamaInstallWithYesRegistersTheKey(t *testing.T) {

@@ -131,6 +131,7 @@ type SecurityConfig struct {
 	Registration   string          `koanf:"registration" desc:"Who can create an account: open, invite or closed."`
 	LocalLogin     bool            `koanf:"local_login" desc:"Show the username and password form. The bootstrap admin can always sign in at /auth/login?local=1."`
 	SessionTTL     time.Duration   `koanf:"session_ttl" desc:"Lifetime of a UI session."`
+	SessionIdle    time.Duration   `koanf:"session_idle_timeout" desc:"A UI session not used for this long ends before session_ttl. 0 turns the idle timeout off."`
 	BootstrapAdmin BootstrapConfig `koanf:"bootstrap_admin" desc:"The first admin, created on start if no admin exists."`
 }
 
@@ -315,6 +316,7 @@ func Default() Config {
 			Registration:   RegistrationClosed,
 			LocalLogin:     true,
 			SessionTTL:     720 * time.Hour,
+			SessionIdle:    168 * time.Hour,
 			BootstrapAdmin: BootstrapConfig{Username: "hangar-admin"},
 		},
 		OIDC: OIDCConfig{Providers: []OIDCProvider{}},

@@ -209,6 +209,67 @@ the admin UI instead.`,
 	return cmd
 }
 
+// unlockResult is the --json output of hangar admin unlock-sign-in.
+type unlockResult struct {
+	Removed int64 `json:"removed"`
+}
+
+func newUnlockSignInCommand() *cobra.Command {
+	var flags configFlags
+	var asJSON, all bool
+	var ip string
+	cmd := &cobra.Command{
+		Use:   "unlock-sign-in [username]",
+		Short: "Clear sign-in throttling for a user or an IP address",
+		Long: `Clears the sign-in throttle for a username, an IP address (--ip), or every
+username and address (--all), so they can sign in again at once. Use it when
+failed sign-ins, perhaps someone else's, have locked out an account you need,
+such as the bootstrap admin. The password is not changed; to change it, use
+hangar admin reset-password instead.`,
+		Example: `  hangar admin unlock-sign-in hangar-admin
+  hangar admin unlock-sign-in --ip 192.0.2.10
+  hangar admin unlock-sign-in --all`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			target := auth.ThrottleTarget{IP: strings.TrimSpace(ip), All: all}
+			if len(args) == 1 {
+				target.Username = args[0]
+			}
+			if !all && target.Username == "" && target.IP == "" {
+				return usageError{errors.New("name a username, pass --ip, or pass --all")}
+			}
+			if all && (target.Username != "" || target.IP != "") {
+				return usageError{errors.New("--all clears every counter; leave out the username and --ip")}
+			}
+			in, done, err := adminInstance(ctx, &flags, cmd.ErrOrStderr())
+			if err != nil {
+				return err
+			}
+			defer done()
+			n, err := in.auth.Login.ClearThrottle(ctx, target, model.System())
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), unlockResult{Removed: n})
+			}
+			out := cmd.OutOrStdout()
+			if n == 0 {
+				_, err = fmt.Fprintln(out, "Nothing to clear: no matching sign-in throttle.")
+				return err
+			}
+			_, err = fmt.Fprintf(out, "Cleared %d sign-in throttle counters. Sign-in works again at once.\n", n)
+			return err
+		},
+	}
+	flags.register(cmd)
+	addJSONFlag(cmd, &asJSON)
+	cmd.Flags().StringVar(&ip, "ip", "", "clear the throttle of this client IP address")
+	cmd.Flags().BoolVar(&all, "all", false, "clear the throttle of every username and IP address")
+	return cmd
+}
+
 // gcResult is the --json output of hangar admin gc.
 type gcResult struct {
 	// JobID is set with --queue.

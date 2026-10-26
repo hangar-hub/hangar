@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/hangar-hub/hangar/compat/harness"
 	"github.com/hangar-hub/hangar/internal/db/dbtest"
 	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 // binary is a real Hangar Instance started by compat/harness: the binary
@@ -148,10 +150,22 @@ func (b *binary) createRepo(t *testing.T, id model.RepoID, vis model.Visibility,
 }
 
 // registerKey registers an Ollama key for the bootstrap admin through the
-// native API, as Settings, Ollama keys and `hangar ollama key register` do.
-func (b *binary) registerKey(t *testing.T, authorizedKey string) {
+// native API, as Settings, Ollama keys and `hangar ollama key register` do:
+// it signs a challenge with the key's private half, then adds the key.
+func (b *binary) registerKey(t *testing.T, authorizedKey string, privateKey []byte) {
 	t.Helper()
 	c := &http.Client{Timeout: 30 * time.Second}
-	b.call(t, c, http.MethodPost, "/api/hangar/v1/me/ollama-keys", map[string]string{"Authorization": "Bearer " + b.token},
-		map[string]string{"name": "compat ollama", "public_key": authorizedKey}, http.StatusCreated, nil)
+	auth := map[string]string{"Authorization": "Bearer " + b.token}
+	var ch struct {
+		Challenge string `json:"challenge"`
+		Namespace string `json:"namespace"`
+	}
+	b.call(t, c, http.MethodPost, "/api/hangar/v1/me/ollama-keys/challenge", auth, struct{}{}, http.StatusOK, &ch)
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	require.NoError(t, err)
+	sig, err := sshsig.Sign(signer, ch.Namespace, []byte(ch.Challenge))
+	require.NoError(t, err)
+	b.call(t, c, http.MethodPost, "/api/hangar/v1/me/ollama-keys", auth,
+		map[string]string{"name": "compat ollama", "public_key": authorizedKey, "challenge": ch.Challenge, "signature": sig},
+		http.StatusCreated, nil)
 }

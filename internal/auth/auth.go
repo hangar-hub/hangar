@@ -163,14 +163,30 @@ var (
 	ErrAccessDenied         = errors.New("access_denied")
 )
 
+// DeviceRequest describes a pending device-code login, so the user can
+// check it is theirs before approving it.
+type DeviceRequest struct {
+	UserCode string
+	// ClientID is the client_id the device sent, such as hangar-cli.
+	ClientID string
+	// ClientIP is the address the login was started from.
+	ClientIP    string
+	RequestedAt time.Time
+	ExpiresAt   time.Time
+}
+
 // DeviceFlow runs device-code logins backed by Hangar Tokens. The Hub API
 // serves it at /oauth/device and /oauth/token; the UI approves user codes.
 type DeviceFlow interface {
-	// Start begins a login for a client.
-	Start(ctx context.Context, clientID string) (*DeviceCode, error)
+	// Start begins a login for a client calling from clientIP.
+	Start(ctx context.Context, clientID, clientIP string) (*DeviceCode, error)
+	// Lookup describes a pending user code to the signed-in user who is
+	// about to answer it.
+	Lookup(ctx context.Context, userCode string, p model.Principal) (*DeviceRequest, error)
 	// Approve lets the signed-in user grant a pending user code, which
-	// creates a write Token named after the client.
-	Approve(ctx context.Context, userCode string, p model.Principal) error
+	// creates a Token with the chosen scope (read or write), named after
+	// the client and expiring after DeviceTokenTTL.
+	Approve(ctx context.Context, userCode string, scope model.Scope, p model.Principal) error
 	// Deny refuses a pending user code.
 	Deny(ctx context.Context, userCode string, p model.Principal) error
 	// Poll exchanges a device code for a Token secret once approved, or

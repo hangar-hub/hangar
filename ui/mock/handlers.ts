@@ -488,6 +488,24 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     state.tokens = state.tokens.filter((t) => t.id !== params.id);
     return noContent;
   },
+  lookupDeviceLogin: ({ body }) => {
+    const d = body as S["DeviceLookup"];
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(d.user_code)) {
+      return problem(
+        404,
+        "That code does not exist or has expired. Run the login command again for a new one.",
+      );
+    }
+    const requested = new Date(Date.now() - 30_000);
+    return ok({
+      user_code: d.user_code,
+      client_id: "hangar-cli",
+      client_ip: "192.0.2.10",
+      requested_at: requested.toISOString(),
+      expires_at: new Date(requested.getTime() + 15 * 60_000).toISOString(),
+      token_lifetime_days: 30,
+    } satisfies S["DeviceRequest"]);
+  },
   decideDeviceLogin: ({ body }) => {
     const d = body as S["DeviceDecision"];
     if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(d.user_code)) {
@@ -499,6 +517,12 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
     return noContent;
   },
   listMyOllamaKeys: ({ state }) => ok({ items: state.ollamaKeys }),
+  createOllamaKeyChallenge: () =>
+    ok({
+      challenge: `hangar-ollama-key:${randomUUID()}:${Math.floor(Date.now() / 1000) + 900}:mock-nonce:mock-mac:localhost`,
+      namespace: "hangar-ollama-key",
+      expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+    } satisfies S["OllamaKeyChallenge"]),
   addMyOllamaKey: ({ state, body }) => {
     const k = body as S["OllamaKeyCreate"];
     if (!k.public_key.startsWith("ssh-ed25519 ")) {
@@ -506,6 +530,13 @@ export const handlers: Partial<Record<keyof operations, Handler>> = {
         400,
         "That is not an Ollama public key. Paste the contents of ~/.ollama/id_ed25519.pub.",
         [{ pointer: "/public_key", detail: "Expected a line starting with ssh-ed25519." }],
+      );
+    }
+    if (!k.signature?.trim().startsWith("-----BEGIN SSH SIGNATURE-----")) {
+      return problem(
+        422,
+        "Sign a new challenge with the private key of this Ollama key (ssh-keygen -Y sign -n hangar-ollama-key, or hangar ollama key register).",
+        [{ pointer: "/signature", detail: "Paste the output of the ssh-keygen command." }],
       );
     }
     const key: S["OllamaKey"] = {

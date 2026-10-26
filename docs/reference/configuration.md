@@ -67,6 +67,7 @@ Secrets, sign-in and access defaults.
 | `security.registration`<br>`HANGAR_SECURITY_REGISTRATION` | string | `closed` | Who can create an account: open, invite or closed. |
 | `security.local_login`<br>`HANGAR_SECURITY_LOCAL_LOGIN` | bool | `true` | Show the username and password form. The bootstrap admin can always sign in at /auth/login?local=1. |
 | `security.session_ttl`<br>`HANGAR_SECURITY_SESSION_TTL` | duration | `720h` | Lifetime of a UI session. |
+| `security.session_idle_timeout`<br>`HANGAR_SECURITY_SESSION_IDLE_TIMEOUT` | duration | `168h` | A UI session not used for this long ends before session_ttl. 0 turns the idle timeout off. |
 | `security.bootstrap_admin.username`<br>`HANGAR_SECURITY_BOOTSTRAP_ADMIN_USERNAME` | string | `hangar-admin` | Username of the bootstrap admin. |
 | `security.bootstrap_admin.password`<br>`HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD` | string | `""` | Password of the bootstrap admin. Generated on first start if empty and no password_file is set. |
 | `security.bootstrap_admin.password_file`<br>`HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD_FILE` | string | `""` | File that holds the bootstrap admin password. |

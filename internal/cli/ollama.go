@@ -17,6 +17,7 @@ import (
 
 	"github.com/hangar-hub/hangar/internal/api/gen"
 	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 // runOllama runs the ollama CLI. Tests replace it.
@@ -51,6 +52,32 @@ func ollamaPublicKey() (key, fingerprint string, err error) {
 		return "", "", fmt.Errorf("read %s: %w", p, err)
 	}
 	return strings.TrimSpace(string(b)), ssh.FingerprintSHA256(pub), nil
+}
+
+// ollamaSigner reads Ollama's private key, ~/.ollama/id_ed25519, which
+// signs the challenge that proves to the Instance that this user holds the
+// key. Ollama writes it without a passphrase.
+func ollamaSigner(fingerprint string) (ssh.Signer, error) {
+	p := filepath.Join(ollamaDir(), "id_ed25519")
+	b, err := os.ReadFile(p) // #nosec G304 -- Ollama's fixed key path.
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, notFoundf("no Ollama private key at %s; run ollama once (for example ollama list) to create it", p)
+	}
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.ParsePrivateKey(b)
+	var missing *ssh.PassphraseMissingError
+	if errors.As(err, &missing) {
+		return nil, usagef("%s has a passphrase; register the key in the web UI under Settings, Ollama keys, which shows the ssh-keygen command that signs with it", p)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", p, err)
+	}
+	if got := ssh.FingerprintSHA256(signer.PublicKey()); got != fingerprint {
+		return nil, usagef("%s is for the key %s, but id_ed25519.pub is %s; fix the pair before registering it", p, got, fingerprint)
+	}
+	return signer, nil
 }
 
 func (a *app) ollamaCommand() *cobra.Command {
@@ -136,7 +163,11 @@ unless the Repo is public and the Instance allows anonymous reads
 	register := &cobra.Command{
 		Use:   "register",
 		Short: "Register ~/.ollama/id_ed25519.pub with the Instance",
-		Args:  args(cobra.NoArgs),
+		Long: `Registers your Ollama key (~/.ollama/id_ed25519.pub) with the Instance, unless
+it is already registered. To prove the key is yours, the CLI signs a challenge
+from the Instance with the private key, ~/.ollama/id_ed25519, which never
+leaves this machine.`,
+		Args: args(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			a := a.with(cmd)
 			c, err := a.client()
@@ -178,9 +209,21 @@ func (a *app) registerOllamaKey(ctx context.Context, c *client) (fingerprint str
 			return fp, true, nil
 		}
 	}
+	signer, err := ollamaSigner(fp)
+	if err != nil {
+		return "", false, err
+	}
+	ch, err := c.ollamaKeyChallenge(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	sig, err := sshsig.Sign(signer, ch.Namespace, []byte(ch.Challenge))
+	if err != nil {
+		return "", false, err
+	}
 	host, _ := os.Hostname()
 	name := "Ollama on " + orDash(host)
-	if _, err := c.addOllamaKey(ctx, gen.OllamaKeyCreate{Name: &name, PublicKey: pub}); err != nil {
+	if _, err := c.addOllamaKey(ctx, gen.OllamaKeyCreate{Name: &name, PublicKey: pub, Challenge: ch.Challenge, Signature: sig}); err != nil {
 		return "", false, err
 	}
 	return fp, false, nil

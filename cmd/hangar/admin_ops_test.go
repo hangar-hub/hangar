@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/hangar-hub/hangar/internal/auth"
+	"github.com/hangar-hub/hangar/internal/db"
 	"github.com/hangar-hub/hangar/internal/jobs"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/repo"
@@ -118,6 +120,65 @@ func TestAdminCreateUserAndResetPassword(t *testing.T) {
 		_, err := in.auth.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: created.Password, IP: "127.0.0.1"})
 		require.Error(t, err, "the old password no longer works")
 	})
+}
+
+// TestAdminUnlockSignIn covers hangar admin unlock-sign-in (security
+// review finding 11): it clears the throttle of a username, an IP address
+// or everything, so a locked-out admin signs in again without a new
+// password.
+func TestAdminUnlockSignIn(t *testing.T) {
+	e := newAdminEnv(t)
+	var created userResult
+	e.json(&created, "", "admin", "create-user", "hangar-admin", "--admin")
+	lock := func(ip string) {
+		e.with(func(in *instance) {
+			ctx := context.Background()
+			for range 5 {
+				_, err := in.auth.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: "wrong password 1", IP: ip})
+				require.ErrorIs(t, err, auth.ErrLoginFailed)
+			}
+			// The fifth failure locks for a second, less than a password
+			// hash takes on a slow machine, so hold the locks for an hour.
+			_, err := in.db.NewUpdate().Model((*db.LoginAttempt)(nil)).
+				Set("locked_until = ?", time.Now().UTC().Add(time.Hour)).
+				Where("locked_until IS NOT NULL").Exec(ctx)
+			require.NoError(t, err)
+		})
+	}
+	signIn := func(ip string) error {
+		var err error
+		e.with(func(in *instance) {
+			_, err = in.auth.Login.Password(context.Background(), auth.LoginAttempt{Username: "hangar-admin", Password: created.Password, IP: ip})
+		})
+		return err
+	}
+	var te *auth.ThrottledError
+
+	lock("203.0.113.9")
+	require.ErrorAs(t, signIn("198.51.100.1"), &te)
+	out, code := e.run("", "admin", "unlock-sign-in")
+	require.Equal(t, 1, code)
+	require.Contains(t, out, "name a username")
+	out, code = e.run("", "admin", "unlock-sign-in", "hangar-admin", "--all")
+	require.Equal(t, 1, code)
+	require.Contains(t, out, "--all clears every counter")
+	out, code = e.run("", "admin", "unlock-sign-in", "Hangar-Admin")
+	require.Equal(t, 0, code, out)
+	require.Contains(t, out, "Cleared 1 sign-in throttle counters.")
+	require.NoError(t, signIn("198.51.100.1"))
+
+	require.ErrorAs(t, signIn("203.0.113.9"), &te, "the address that sent the guesses is still locked")
+	var res unlockResult
+	e.json(&res, "", "admin", "unlock-sign-in", "--ip", "203.0.113.9")
+	require.Equal(t, int64(1), res.Removed)
+	require.NoError(t, signIn("203.0.113.9"))
+
+	lock("203.0.113.10")
+	e.json(&res, "", "admin", "unlock-sign-in", "--all")
+	require.Equal(t, int64(2), res.Removed, "the username's and the address's counters")
+	out, code = e.run("", "admin", "unlock-sign-in", "--all")
+	require.Equal(t, 0, code, out)
+	require.Contains(t, out, "Nothing to clear")
 }
 
 func TestAdminGC(t *testing.T) {

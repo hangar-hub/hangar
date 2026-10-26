@@ -148,6 +148,15 @@ type OllamaBlob struct {
 	Timestamps
 }
 
+// OllamaRepoBlob is a row of ollama_repo_blobs: a generated Ollama layer
+// built from a Repo, which the registry serves only through that Repo.
+type OllamaRepoBlob struct {
+	bun.BaseModel `bun:"table:ollama_repo_blobs"`
+	RepoID        uuid.UUID `bun:"repo_id,pk,type:uuid"`
+	Digest        string    `bun:"digest,pk"`
+	Timestamps
+}
+
 // Membership is a row of memberships.
 type Membership struct {
 	bun.BaseModel  `bun:"table:memberships"`
@@ -212,6 +221,16 @@ type LoginAttempt struct {
 	Timestamps
 }
 
+// LoginKnownClient is a row of login_known_clients: an IP address a User
+// has signed in from with a password.
+type LoginKnownClient struct {
+	bun.BaseModel `bun:"table:login_known_clients"`
+	UserID        uuid.UUID `bun:"user_id,pk,type:uuid"`
+	IP            string    `bun:"ip,pk"`
+	LastSuccessAt time.Time `bun:"last_success_at,notnull"`
+	Timestamps
+}
+
 // OIDCState is a row of oidc_states.
 type OIDCState struct {
 	bun.BaseModel `bun:"table:oidc_states"`
@@ -232,7 +251,9 @@ type OAuthDeviceCode struct {
 	DeviceCodeHash string     `bun:"device_code_hash,pk"`
 	UserCode       string     `bun:"user_code,notnull"`
 	ClientID       string     `bun:"client_id,notnull"`
+	ClientIP       string     `bun:"client_ip,notnull"`
 	Status         string     `bun:"status,notnull"`
+	Scope          string     `bun:"scope,notnull"`
 	UserID         *uuid.UUID `bun:"user_id,type:uuid"`
 	TokenID        *uuid.UUID `bun:"token_id,type:uuid"`
 	PollInterval   int        `bun:"poll_interval,notnull"`
@@ -790,7 +811,7 @@ func AllModels() []any {
 	return []any{
 		(*Namespace)(nil), (*User)(nil), (*Identity)(nil), (*Session)(nil), (*Token)(nil),
 		(*OllamaKey)(nil), (*OllamaNonce)(nil), (*OllamaBlob)(nil), (*Membership)(nil),
-		(*Invite)(nil), (*PasswordReset)(nil), (*EmailChange)(nil), (*LoginAttempt)(nil), (*OIDCState)(nil),
+		(*Invite)(nil), (*PasswordReset)(nil), (*EmailChange)(nil), (*LoginAttempt)(nil), (*LoginKnownClient)(nil), (*OIDCState)(nil),
 		(*OAuthDeviceCode)(nil), (*Repo)(nil), (*RepoRedirect)(nil), (*Collaborator)(nil),
 		(*Ref)(nil), (*Pack)(nil), (*Commit)(nil), (*TreeEntry)(nil), (*LFSObject)(nil),
 		(*LFSUploader)(nil), (*RepoLFS)(nil), (*Upload)(nil), (*Upstream)(nil), (*UpstreamToken)(nil),
@@ -800,6 +821,6 @@ func AllModels() []any {
 		(*DownloadCount)(nil), (*AccessRequest)(nil), (*Webhook)(nil), (*WebhookDelivery)(nil),
 		(*AuditEvent)(nil), (*Quota)(nil), (*Setting)(nil), (*XetXorb)(nil), (*XetFile)(nil),
 		(*DatasetSplit)(nil), (*DatasetStat)(nil), (*RepoFacts)(nil), (*RepoFacetValue)(nil),
-		(*RepoFactsChange)(nil),
+		(*RepoFactsChange)(nil), (*OllamaRepoBlob)(nil),
 	}
 }

@@ -11,12 +11,13 @@ import (
 
 // CleanupResult counts the rows Cleanup removed.
 type CleanupResult struct {
-	Sessions, DeviceCodes, OIDCStates, OllamaNonces, LoginAttempts int64
+	Sessions, DeviceCodes, OIDCStates, OllamaNonces, LoginAttempts, KnownClients int64
 }
 
 // Cleanup removes expired authentication state: sessions, device codes a
-// day after expiry, OIDC states, Ollama nonces, and sign-in throttle
-// counters that have decayed. Expiry is enforced on read, so this only
+// day after expiry, OIDC states, Ollama nonces, sign-in throttle
+// counters that have decayed, and addresses a User last signed in from
+// more than 90 days ago. Expiry is enforced on read, so this only
 // keeps the tables small; run it as a scheduled Job (hourly is plenty).
 func (s *Service) Cleanup(ctx context.Context) (CleanupResult, error) {
 	var res CleanupResult
@@ -40,6 +41,7 @@ func (s *Service) Cleanup(ctx context.Context) (CleanupResult, error) {
 	res.OIDCStates = del((*db.OIDCState)(nil), "expires_at < ?", now)
 	res.OllamaNonces = del((*db.OllamaNonce)(nil), "expires_at < ?", now)
 	res.LoginAttempts = del((*db.LoginAttempt)(nil), "last_failure_at < ? AND (locked_until IS NULL OR locked_until < ?)", now.Add(-throttleDecay), now)
+	res.KnownClients = del((*db.LoginKnownClient)(nil), "last_success_at < ?", now.Add(-knownClientTTL))
 	return res, errors.Join(errs...)
 }
 

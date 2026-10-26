@@ -85,7 +85,7 @@ func TestCrossOriginBrowserCredentials(t *testing.T) {
 	require.NoError(t, err)
 	var cookie *http.Cookie
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == auth.SessionCookie {
+		if c.Name == s.SessionCookieName() {
 			cookie = c
 		}
 	}

@@ -239,7 +239,16 @@ func (h *Identity) DecideDeviceLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	if body.Approve {
-		err = h.auth.Device.Approve(r.Context(), body.UserCode, p)
+		// A device login gets read access unless the user chooses write
+		// (05-auth.md "Device login").
+		scope := model.ScopeRead
+		if body.Scope != nil && *body.Scope == gen.DeviceDecisionScopeWrite {
+			scope = model.ScopeWrite
+		} else if body.Scope != nil && !body.Scope.Valid() {
+			httpx.WriteProblem(w, r, &httpx.Problem{Status: http.StatusBadRequest, Detail: "scope must be read or write."})
+			return
+		}
+		err = h.auth.Device.Approve(r.Context(), body.UserCode, scope, p)
 	} else {
 		err = h.auth.Device.Deny(r.Context(), body.UserCode, p)
 	}
@@ -248,6 +257,27 @@ func (h *Identity) DecideDeviceLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// LookupDeviceLogin implements POST /me/device/lookup: it describes a
+// pending device login (client, time and IP address), so the user can
+// check it is theirs before answering it.
+func (h *Identity) LookupDeviceLogin(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.signedIn(w, r)
+	if !ok {
+		return
+	}
+	var body gen.DeviceLookup
+	if !h.decode(w, r, &body) {
+		return
+	}
+	req, err := h.auth.Device.Lookup(r.Context(), body.UserCode, p)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, r, http.StatusOK, gen.DeviceRequest{UserCode: req.UserCode, ClientId: req.ClientID, ClientIp: req.ClientIP,
+		RequestedAt: req.RequestedAt, ExpiresAt: req.ExpiresAt, TokenLifetimeDays: int(auth.DeviceTokenTTL / (24 * time.Hour))})
 }
 
 func idOllamaKeyOut(k auth.OllamaKey) gen.OllamaKey {
@@ -282,12 +312,29 @@ func (h *Identity) AddMyOllamaKey(w http.ResponseWriter, r *http.Request) {
 	if !h.decode(w, r, &body) {
 		return
 	}
-	k, err := h.auth.Ollama.Add(r.Context(), p.UserID, idStr(body.Name), body.PublicKey, p)
+	k, err := h.auth.Ollama.Add(r.Context(), p.UserID, idStr(body.Name), body.PublicKey, body.Challenge, body.Signature, p)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, r, http.StatusCreated, idOllamaKeyOut(*k))
+}
+
+// CreateOllamaKeyChallenge implements POST /me/ollama-keys/challenge: a
+// challenge the user signs with the Ollama key they are about to add, to
+// prove they hold it.
+func (h *Identity) CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.signedIn(w, r)
+	if !ok || !h.needScope(w, r, p, model.ScopeWrite) {
+		return
+	}
+	c, err := h.auth.Ollama.Challenge(r.Context(), p.UserID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, r, http.StatusOK, gen.OllamaKeyChallenge{Challenge: c.Challenge, Namespace: c.Namespace, ExpiresAt: c.ExpiresAt})
 }
 
 // DeleteMyOllamaKey implements DELETE /me/ollama-keys/{id}.

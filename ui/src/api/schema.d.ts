@@ -182,9 +182,35 @@ export interface paths {
         put?: never;
         /**
          * Approve or deny a device-code login
-         * @description Answers the code that `hf auth login` shows in a browser-based login.
+         * @description Answers the code that `hf auth login` or `hangar login` shows in a
+         *     browser-based login. Needs a UI session. Approving creates a Token
+         *     with the chosen scope (`read` unless the request says `write`) that
+         *     expires after `token_lifetime_days` days.
          */
         post: operations["decideDeviceLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/device/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Describe a pending device-code login
+         * @description Says which client started the login with this code, when and from
+         *     which IP address, so the user can check it is theirs before
+         *     answering it. Needs a UI session. The code travels in the body, not
+         *     the URL, so it stays out of access logs and traces.
+         */
+        post: operations["lookupDeviceLogin"];
         delete?: never;
         options?: never;
         head?: never;
@@ -201,8 +227,38 @@ export interface paths {
         /** List my Ollama keys */
         get: operations["listMyOllamaKeys"];
         put?: never;
-        /** Register an Ollama public key */
+        /**
+         * Register an Ollama public key
+         * @description Registers a key after checking that you hold it: `signature` must be
+         *     the key's SSH signature over a challenge from
+         *     `POST /me/ollama-keys/challenge`.
+         */
         post: operations["addMyOllamaKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/ollama-keys/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get a challenge to sign with an Ollama key
+         * @description Returns a challenge to sign with the private key of the Ollama key
+         *     you are about to register, to prove you hold it:
+         *     `printf '%s' '<challenge>' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n hangar-ollama-key`.
+         *     Send the challenge and the signature with the key to
+         *     `POST /me/ollama-keys` within 15 minutes. `hangar ollama key
+         *     register` does all of this.
+         */
+        post: operations["createOllamaKeyChallenge"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2035,6 +2091,30 @@ export interface components {
         DeviceDecision: {
             user_code: string;
             approve: boolean;
+            /**
+             * @description The scope of the Token an approval creates. Defaults to `read`.
+             * @enum {string}
+             */
+            scope?: "read" | "write";
+        };
+        DeviceLookup: {
+            user_code: string;
+        };
+        DeviceRequest: {
+            user_code: string;
+            /** @description The client_id the device sent */
+            client_id: string;
+            /** @description The IP address the login was started from. Empty if unknown. */
+            client_ip: string;
+            /** Format: date-time */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description When the code stops working if nobody answers it.
+             */
+            expires_at: string;
+            /** @description How many days the Token an approval creates lasts. */
+            token_lifetime_days: number;
         };
         OllamaKey: {
             /** Format: uuid */
@@ -2053,6 +2133,22 @@ export interface components {
             name?: string;
             /** @description The contents of ~/.ollama/id_ed25519.pub. */
             public_key: string;
+            /** @description A challenge from `POST /me/ollama-keys/challenge` */
+            challenge: string;
+            /**
+             * @description The SSH signature of the challenge by this key in the
+             *     `hangar-ollama-key` namespace, as `ssh-keygen -Y sign` writes it
+             *     (`-----BEGIN SSH SIGNATURE-----` and the lines after it).
+             */
+            signature: string;
+        };
+        OllamaKeyChallenge: {
+            /** @description The text to sign. */
+            challenge: string;
+            /** @description The signature namespace to pass to `ssh-keygen -Y sign -n`. */
+            namespace: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         UpstreamTokenStatus: {
             upstream: string;
@@ -3330,6 +3426,31 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    lookupDeviceLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceLookup"];
+            };
+        };
+        responses: {
+            /** @description The pending login. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listMyOllamaKeys: {
         parameters: {
             query?: never;
@@ -3371,6 +3492,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OllamaKey"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createOllamaKeyChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The challenge. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OllamaKeyChallenge"];
                 };
             };
             default: components["responses"]["Problem"];

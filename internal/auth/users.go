@@ -440,7 +440,7 @@ func (us *UserStore) SetPassword(ctx context.Context, id uuid.UUID, password str
 		if _, err := tx.NewDelete().Model((*db.Session)(nil)).Where("user_id = ?", id).Exec(ctx); err != nil {
 			return err
 		}
-		_, err = tx.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", throttleKeys(u.Username, "")[0]).Exec(ctx)
+		_, err = tx.NewDelete().Model((*db.LoginAttempt)(nil)).Where("key = ?", userThrottleKey(u.Username)).Exec(ctx)
 		return err
 	})
 	if err != nil {

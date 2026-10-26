@@ -143,7 +143,9 @@ func (in *inProcess) createRepo(t *testing.T, id model.RepoID, vis model.Visibil
 	indextest.Commit(t, in.repos, id, files)
 }
 
-func (in *inProcess) registerKey(t *testing.T, authorizedKey string) {
+// registerKey registers the key with the fake OllamaAuth, which needs no
+// proof that owner holds it.
+func (in *inProcess) registerKey(t *testing.T, authorizedKey string, _ []byte) {
 	t.Helper()
 	in.keys.register(authorizedKey, indextest.Owner(owner))
 }

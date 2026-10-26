@@ -37,6 +37,7 @@ describe("api client", () => {
   it("falls back to the readable hangar_csrf cookie", () => {
     setCsrfToken(undefined);
     expect(currentCsrfToken("a=1; hangar_csrf=abc%3D; b=2")).toBe("abc=");
+    expect(currentCsrfToken("hangar_csrf=old; __Host-hangar_csrf=new")).toBe("new");
     expect(currentCsrfToken("a=1")).toBeUndefined();
     setCsrfToken("from-me");
     expect(currentCsrfToken("hangar_csrf=cookie")).toBe("from-me");

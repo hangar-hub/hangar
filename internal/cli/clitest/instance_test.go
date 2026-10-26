@@ -22,6 +22,7 @@ import (
 	"github.com/hangar-hub/hangar/internal/api/gen"
 	"github.com/hangar-hub/hangar/internal/cli/clitest"
 	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 func client(t *testing.T, i *clitest.Instance, token string) *gen.ClientWithResponses {
@@ -270,9 +271,15 @@ func TestMeKeysAndDeviceLogin(t *testing.T) {
 	anon, _ := client(t, i, "").GetMeWithResponse(ctx)
 	require.Equal(t, http.StatusNoContent, anon.StatusCode())
 
-	pub, _, _ := ed25519.GenerateKey(rand.Reader)
-	sp, _ := ssh.NewPublicKey(pub)
-	k, _ := c.AddMyOllamaKeyWithResponse(ctx, gen.OllamaKeyCreate{PublicKey: string(ssh.MarshalAuthorizedKey(sp))})
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := ssh.NewSignerFromKey(priv)
+	sp := signer.PublicKey()
+	ch, _ := c.CreateOllamaKeyChallengeWithResponse(ctx)
+	unsigned, _ := c.AddMyOllamaKeyWithResponse(ctx, gen.OllamaKeyCreate{PublicKey: string(ssh.MarshalAuthorizedKey(sp)), Challenge: ch.JSON200.Challenge})
+	require.Equal(t, http.StatusUnprocessableEntity, unsigned.StatusCode(), "a key needs its signature over the challenge")
+	sig, err := sshsig.Sign(signer, ch.JSON200.Namespace, []byte(ch.JSON200.Challenge))
+	require.NoError(t, err)
+	k, _ := c.AddMyOllamaKeyWithResponse(ctx, gen.OllamaKeyCreate{PublicKey: string(ssh.MarshalAuthorizedKey(sp)), Challenge: ch.JSON200.Challenge, Signature: sig})
 	require.Equal(t, ssh.FingerprintSHA256(sp), k.JSON201.Fingerprint)
 	bad, _ := c.AddMyOllamaKeyWithResponse(ctx, gen.OllamaKeyCreate{PublicKey: "nope"})
 	require.Equal(t, http.StatusUnprocessableEntity, bad.StatusCode())

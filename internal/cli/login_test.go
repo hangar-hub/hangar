@@ -98,7 +98,10 @@ func TestDeviceLogin(t *testing.T) {
 	}()
 	r := e.ok("login", "--url", e.inst.URL)
 	require.Contains(t, r.stderr, "ABCD-0001")
-	require.Contains(t, opened, "/settings/device?code=ABCD-0001")
+	// The page asks for the code to be typed, so the CLI opens it without
+	// the code even when the Instance sends a link that has it.
+	require.True(t, strings.HasSuffix(opened, "/settings/device"), "opened %s", opened)
+	require.Contains(t, r.stderr, "type the code ABCD-0001")
 	require.Contains(t, r.stdout, "as alice")
 	e.ok("whoami")
 }

@@ -66,18 +66,20 @@ type UpstreamLookup interface {
 // Service is the database-backed implementation of every interface in this
 // package. Its fields expose the parts each caller needs.
 type Service struct {
-	db       *db.DB
-	cfg      *config.Config
-	orgs     *org.DBService
-	audit    audit.Recorder
-	inst     *telemetry.Instruments
-	log      *slog.Logger
-	now      func() time.Time
-	sealer   *secrets.Sealer
-	jwtKey   []byte
-	csrfKey  []byte
-	client   *http.Client
-	upstream UpstreamLookup
+	db      *db.DB
+	cfg     *config.Config
+	orgs    *org.DBService
+	audit   audit.Recorder
+	inst    *telemetry.Instruments
+	log     *slog.Logger
+	now     func() time.Time
+	sealer  *secrets.Sealer
+	jwtKey  []byte
+	csrfKey []byte
+	// challengeKey signs Ollama key challenges.
+	challengeKey []byte
+	client       *http.Client
+	upstream     UpstreamLookup
 	// origins refuses cross-origin requests that carry browser credentials.
 	origins *originGuard
 	// viewerHost is datasets-server.<public host>, for httpx.Classify.
@@ -130,6 +132,7 @@ func New(opts Options) (*Service, error) {
 		db: opts.DB, cfg: opts.Config, orgs: opts.Orgs, audit: opts.Audit, inst: opts.Instruments,
 		log: opts.Log, now: opts.Now, sealer: sealer, client: opts.HTTPClient, upstream: opts.Upstreams,
 		jwtKey: deriveKey(key, "hangar ollama registry jwt v1"), csrfKey: deriveKey(key, "hangar csrf v1"),
+		challengeKey: deriveKey(key, "hangar ollama key challenge v1"),
 	}
 	if s.origins, err = newOriginGuard(opts.Config.Server.PublicURL); err != nil {
 		return nil, err

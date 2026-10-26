@@ -44,8 +44,10 @@ func (a *app) loginCommand() *cobra.Command {
 		Use:   "login",
 		Short: "Sign in to an Instance and save the Token",
 		Long: `Signs in to an Instance. Without --token, starts a device-code login: the
-browser opens a page on the Instance where you approve the code shown here,
-and the Instance creates a write Token for the CLI.
+browser opens a page on the Instance where you type the code shown here,
+check the details and approve it. The Instance then creates a Token for the
+CLI that expires in 30 days, with read access, or write access if you choose
+it on that page (needed to push, upload and pull into the Instance).
 
 The URL and username are saved in ~/.config/hangar/config.yaml. The Token is
 saved in the OS keychain where one is available, otherwise in that file with
@@ -145,11 +147,13 @@ func (a *app) deviceLogin(ctx context.Context, base *url.URL, noBrowser bool) (s
 	if err != nil {
 		return "", fmt.Errorf("start the device login: %w", err)
 	}
-	link := dc.VerificationURIComplete
+	// The approval page asks for the code to be typed, so open the page
+	// without it, even when an older Instance sends a link that has it.
+	link := dc.VerificationURI
 	if link == "" {
-		link = dc.VerificationURI
+		link = dc.VerificationURIComplete
 	}
-	a.logf("To approve this login, open %s and check the code is %s.\n", link, dc.UserCode)
+	a.logf("To approve this login, open %s and type the code %s.\nChoose write access there if you will push, upload or pull into the Instance.\n", link, dc.UserCode)
 	if !noBrowser {
 		if err := openBrowser(link); err != nil {
 			a.logf("Could not open a browser (%v). Open the link yourself.\n", err)

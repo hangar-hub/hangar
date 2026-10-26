@@ -381,11 +381,17 @@ func digestOf(b []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// storeBlob keeps a generated layer so GET .../blobs/{digest} can serve it.
-func (h *Handler) storeBlob(ctx context.Context, mediaType string, b []byte) (Layer, error) {
+// storeBlob keeps a generated layer of the Repo rp so GET
+// .../blobs/{digest} can serve it, and records that rp has it: the layer
+// is served only through a Repo it was built from.
+func (h *Handler) storeBlob(ctx context.Context, rp *repo.Repo, mediaType string, b []byte) (Layer, error) {
 	d := digestOf(b)
 	row := &db.OllamaBlob{Digest: d, MediaType: mediaType, Size: int64(len(b)), Data: b}
 	if _, err := h.o.DB.NewInsert().Model(row).On("CONFLICT (digest) DO NOTHING").Exec(ctx); err != nil {
+		return Layer{}, err
+	}
+	link := &db.OllamaRepoBlob{RepoID: rp.UUID, Digest: d}
+	if _, err := h.o.DB.NewInsert().Model(link).On("CONFLICT (repo_id, digest) DO NOTHING").Exec(ctx); err != nil {
 		return Layer{}, err
 	}
 	return Layer{MediaType: mediaType, Digest: d, Size: int64(len(b))}, nil
@@ -405,14 +411,14 @@ func (h *Handler) readSmall(ctx context.Context, id model.RepoID, commit model.C
 
 // fileLayer is the layer of a GGUF file: its LFS object, or for a file
 // stored in git, its bytes kept in ollama_blobs.
-func (h *Handler) fileLayer(ctx context.Context, id model.RepoID, commit model.CommitSHA, e model.Entry, mediaType string) (Layer, error) {
+func (h *Handler) fileLayer(ctx context.Context, rp *repo.Repo, commit model.CommitSHA, e model.Entry, mediaType string) (Layer, error) {
 	if e.LFS != nil {
 		return Layer{MediaType: mediaType, Digest: "sha256:" + e.LFS.OID, Size: e.LFS.Size}, nil
 	}
 	if e.Size > maxInlineModel {
 		return Layer{}, fmt.Errorf("%s is stored in git rather than LFS and is too large to serve to Ollama", e.Path)
 	}
-	rc, _, err := h.o.Repos.OpenFile(ctx, id, commit, e.Path, nil)
+	rc, _, err := h.o.Repos.OpenFile(ctx, rp.ID, commit, e.Path, nil)
 	if err != nil {
 		return Layer{}, err
 	}
@@ -421,7 +427,7 @@ func (h *Handler) fileLayer(ctx context.Context, id model.RepoID, commit model.C
 	if err != nil {
 		return Layer{}, err
 	}
-	return h.storeBlob(ctx, mediaType, b)
+	return h.storeBlob(ctx, rp, mediaType, b)
 }
 
 var licenceFileRe = regexp.MustCompile(`(?i)^licen[cs]e(\.(md|txt))?$`)
@@ -460,7 +466,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 		return nil, missing, errNotPresent
 	}
 	modelEntry := byPath[g.Files[0]]
-	modelLayer, err := h.fileLayer(ctx, rp.ID, commit, modelEntry, MediaTypeModel)
+	modelLayer, err := h.fileLayer(ctx, rp, commit, modelEntry, MediaTypeModel)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -474,7 +480,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 	}
 	layers := []Layer{modelLayer}
 	if len(g.Projectors) > 0 {
-		proj, err := h.fileLayer(ctx, rp.ID, commit, byPath[g.Projectors[0]], MediaTypeProjector)
+		proj, err := h.fileLayer(ctx, rp, commit, byPath[g.Projectors[0]], MediaTypeProjector)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -486,7 +492,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 		if err != nil {
 			return nil, nil, err
 		}
-		l, err := h.storeBlob(ctx, MediaTypeTemplate, b)
+		l, err := h.storeBlob(ctx, rp, MediaTypeTemplate, b)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -494,7 +500,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 	} else if t, ok, err := MatchTemplate(header.ChatTemplate()); err != nil {
 		return nil, nil, err
 	} else if ok {
-		l, err := h.storeBlob(ctx, MediaTypeTemplate, t.Body)
+		l, err := h.storeBlob(ctx, rp, MediaTypeTemplate, t.Body)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -506,7 +512,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 		if err != nil {
 			return nil, nil, err
 		}
-		l, err := h.storeBlob(ctx, MediaTypeSystem, b)
+		l, err := h.storeBlob(ctx, rp, MediaTypeSystem, b)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -523,7 +529,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 		params = b
 	}
 	if len(params) > 0 {
-		l, err := h.storeBlob(ctx, MediaTypeParams, params)
+		l, err := h.storeBlob(ctx, rp, MediaTypeParams, params)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -535,7 +541,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 			if err != nil {
 				return nil, nil, err
 			}
-			l, err := h.storeBlob(ctx, MediaTypeLicense, b)
+			l, err := h.storeBlob(ctx, rp, MediaTypeLicense, b)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -563,7 +569,7 @@ func (h *Handler) build(ctx context.Context, rp *repo.Repo, commit model.CommitS
 	if err != nil {
 		return nil, nil, err
 	}
-	cfgLayer, err := h.storeBlob(ctx, MediaTypeConfig, raw)
+	cfgLayer, err := h.storeBlob(ctx, rp, MediaTypeConfig, raw)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -688,8 +694,11 @@ func (h *Handler) blob(w http.ResponseWriter, r *http.Request, id model.RepoID, 
 	if !ok {
 		return
 	}
+	// A generated layer is served only through a Repo it was built from,
+	// so its digest gives nothing away through another Repo.
 	var row db.OllamaBlob
-	err := h.o.DB.NewSelect().Model(&row).Where("digest = ?", digest).Scan(ctx)
+	err := h.o.DB.NewSelect().Model(&row).Where("digest = ?", digest).
+		Where("EXISTS (SELECT 1 FROM ollama_repo_blobs AS rb WHERE rb.digest = ?TableAlias.digest AND rb.repo_id = ?)", rp.UUID).Scan(ctx)
 	switch {
 	case err == nil:
 		h.serve(w, r, rp, digest, row.Size, func(rng *blob.Range) (io.ReadCloser, error) {

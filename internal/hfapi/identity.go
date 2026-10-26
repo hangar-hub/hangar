@@ -106,7 +106,7 @@ func (h *Handler) deviceStart(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, r, http.StatusBadRequest, "invalid_request", "client_id is required.")
 		return
 	}
-	dc, err := h.d.Devices.Start(r.Context(), clientID)
+	dc, err := h.d.Devices.Start(r.Context(), clientID, httpx.ClientIP(r))
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -121,9 +121,9 @@ func (h *Handler) deviceStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// deviceToken serves POST /oauth/token for the device-code grant. Hangar
-// Tokens do not expire unless their owner sets an expiry, so the response
-// has no refresh token and the client never tries to refresh.
+// deviceToken serves POST /oauth/token for the device-code grant. The
+// Token expires after auth.DeviceTokenTTL and cannot be refreshed, so the
+// response has no refresh token: the user signs in again.
 func (h *Handler) deviceToken(w http.ResponseWriter, r *http.Request) {
 	form, err := h.readForm(r)
 	if err != nil {

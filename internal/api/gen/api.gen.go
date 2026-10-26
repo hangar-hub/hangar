@@ -243,6 +243,24 @@ func (e DependencyKind) Valid() bool {
 	}
 }
 
+// Defines values for DeviceDecisionScope.
+const (
+	DeviceDecisionScopeRead  DeviceDecisionScope = "read"
+	DeviceDecisionScopeWrite DeviceDecisionScope = "write"
+)
+
+// Valid indicates whether the value is a known member of the DeviceDecisionScope enum.
+func (e DeviceDecisionScope) Valid() bool {
+	switch e {
+	case DeviceDecisionScopeRead:
+		return true
+	case DeviceDecisionScopeWrite:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DiscussionKind.
 const (
 	DiscussionKindDiscussion  DiscussionKind = "discussion"
@@ -1329,8 +1347,36 @@ type DependencyKind string
 
 // DeviceDecision defines model for DeviceDecision.
 type DeviceDecision struct {
-	Approve  bool   `json:"approve"`
+	Approve bool `json:"approve"`
+
+	// Scope The scope of the Token an approval creates. Defaults to `read`.
+	Scope    *DeviceDecisionScope `json:"scope,omitempty"`
+	UserCode string               `json:"user_code"`
+}
+
+// DeviceDecisionScope The scope of the Token an approval creates. Defaults to `read`.
+type DeviceDecisionScope string
+
+// DeviceLookup defines model for DeviceLookup.
+type DeviceLookup struct {
 	UserCode string `json:"user_code"`
+}
+
+// DeviceRequest defines model for DeviceRequest.
+type DeviceRequest struct {
+	// ClientId The client_id the device sent
+	ClientId string `json:"client_id"`
+
+	// ClientIp The IP address the login was started from. Empty if unknown.
+	ClientIp string `json:"client_ip"`
+
+	// ExpiresAt When the code stops working if nobody answers it.
+	ExpiresAt   time.Time `json:"expires_at"`
+	RequestedAt time.Time `json:"requested_at"`
+
+	// TokenLifetimeDays How many days the Token an approval creates lasts.
+	TokenLifetimeDays int    `json:"token_lifetime_days"`
+	UserCode          string `json:"user_code"`
 }
 
 // DiscoverDetail defines model for DiscoverDetail.
@@ -1788,12 +1834,29 @@ type OllamaKey struct {
 	Name        *string            `json:"name,omitempty"`
 }
 
+// OllamaKeyChallenge defines model for OllamaKeyChallenge.
+type OllamaKeyChallenge struct {
+	// Challenge The text to sign.
+	Challenge string    `json:"challenge"`
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// Namespace The signature namespace to pass to `ssh-keygen -Y sign -n`.
+	Namespace string `json:"namespace"`
+}
+
 // OllamaKeyCreate defines model for OllamaKeyCreate.
 type OllamaKeyCreate struct {
-	Name *string `json:"name,omitempty"`
+	// Challenge A challenge from `POST /me/ollama-keys/challenge`
+	Challenge string  `json:"challenge"`
+	Name      *string `json:"name,omitempty"`
 
 	// PublicKey The contents of ~/.ollama/id_ed25519.pub.
 	PublicKey string `json:"public_key"`
+
+	// Signature The SSH signature of the challenge by this key in the
+	// `hangar-ollama-key` namespace, as `ssh-keygen -Y sign` writes it
+	// (`-----BEGIN SSH SIGNATURE-----` and the lines after it).
+	Signature string `json:"signature"`
 }
 
 // OllamaKeyList defines model for OllamaKeyList.
@@ -2725,6 +2788,9 @@ type UpdateMeJSONRequestBody = MeUpdate
 // DecideDeviceLoginJSONRequestBody defines body for DecideDeviceLogin for application/json ContentType.
 type DecideDeviceLoginJSONRequestBody = DeviceDecision
 
+// LookupDeviceLoginJSONRequestBody defines body for LookupDeviceLogin for application/json ContentType.
+type LookupDeviceLoginJSONRequestBody = DeviceLookup
+
 // AddMyOllamaKeyJSONRequestBody defines body for AddMyOllamaKey for application/json ContentType.
 type AddMyOllamaKeyJSONRequestBody = OllamaKeyCreate
 
@@ -3226,7 +3292,10 @@ type ClientInterface interface {
 
 	// DecideDeviceLoginWithBody Approve or deny a device-code login
 	//
-	// Answers the code that `hf auth login` shows in a browser-based login.
+	// Answers the code that `hf auth login` or `hangar login` shows in a
+	// browser-based login. Needs a UI session. Approving creates a Token
+	// with the chosen scope (`read` unless the request says `write`) that
+	// expires after `token_lifetime_days` days.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -3235,12 +3304,39 @@ type ClientInterface interface {
 
 	// DecideDeviceLogin Approve or deny a device-code login
 	//
-	// Answers the code that `hf auth login` shows in a browser-based login.
+	// Answers the code that `hf auth login` or `hangar login` shows in a
+	// browser-based login. Needs a UI session. Approving creates a Token
+	// with the chosen scope (`read` unless the request says `write`) that
+	// expires after `token_lifetime_days` days.
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /me/device (the `DecideDeviceLogin` operationId).
 	DecideDeviceLogin(ctx context.Context, body DecideDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LookupDeviceLoginWithBody Describe a pending device-code login
+	//
+	// Says which client started the login with this code, when and from
+	// which IP address, so the user can check it is theirs before
+	// answering it. Needs a UI session. The code travels in the body, not
+	// the URL, so it stays out of access logs and traces.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+	LookupDeviceLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LookupDeviceLogin Describe a pending device-code login
+	//
+	// Says which client started the login with this code, when and from
+	// which IP address, so the user can check it is theirs before
+	// answering it. Needs a UI session. The code travels in the body, not
+	// the URL, so it stays out of access logs and traces.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+	LookupDeviceLogin(ctx context.Context, body LookupDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListMyOllamaKeys List my Ollama keys
 	//
@@ -3249,6 +3345,10 @@ type ClientInterface interface {
 
 	// AddMyOllamaKeyWithBody Register an Ollama public key
 	//
+	// Registers a key after checking that you hold it: `signature` must be
+	// the key's SSH signature over a challenge from
+	// `POST /me/ollama-keys/challenge`.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
@@ -3256,10 +3356,26 @@ type ClientInterface interface {
 
 	// AddMyOllamaKey Register an Ollama public key
 	//
+	// Registers a key after checking that you hold it: `signature` must be
+	// the key's SSH signature over a challenge from
+	// `POST /me/ollama-keys/challenge`.
+	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
 	AddMyOllamaKey(ctx context.Context, body AddMyOllamaKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateOllamaKeyChallenge Get a challenge to sign with an Ollama key
+	//
+	// Returns a challenge to sign with the private key of the Ollama key
+	// you are about to register, to prove you hold it:
+	// `printf '%s' '<challenge>' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n hangar-ollama-key`.
+	// Send the challenge and the signature with the key to
+	// `POST /me/ollama-keys` within 15 minutes. `hangar ollama key
+	// register` does all of this.
+	//
+	// Corresponds with POST /me/ollama-keys/challenge (the `CreateOllamaKeyChallenge` operationId).
+	CreateOllamaKeyChallenge(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteMyOllamaKey Remove an Ollama key
 	//
@@ -4810,7 +4926,10 @@ func (c *Client) UpdateMe(ctx context.Context, body UpdateMeJSONRequestBody, req
 
 // DecideDeviceLoginWithBody Approve or deny a device-code login
 //
-// Answers the code that `hf auth login` shows in a browser-based login.
+// Answers the code that `hf auth login` or `hangar login` shows in a
+// browser-based login. Needs a UI session. Approving creates a Token
+// with the chosen scope (`read` unless the request says `write`) that
+// expires after `token_lifetime_days` days.
 //
 // Takes any type of body and a specified content type.
 //
@@ -4829,13 +4948,60 @@ func (c *Client) DecideDeviceLoginWithBody(ctx context.Context, contentType stri
 
 // DecideDeviceLogin Approve or deny a device-code login
 //
-// Answers the code that `hf auth login` shows in a browser-based login.
+// Answers the code that `hf auth login` or `hangar login` shows in a
+// browser-based login. Needs a UI session. Approving creates a Token
+// with the chosen scope (`read` unless the request says `write`) that
+// expires after `token_lifetime_days` days.
 //
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /me/device (the `DecideDeviceLogin` operationId).
 func (c *Client) DecideDeviceLogin(ctx context.Context, body DecideDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDecideDeviceLoginRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// LookupDeviceLoginWithBody Describe a pending device-code login
+//
+// Says which client started the login with this code, when and from
+// which IP address, so the user can check it is theirs before
+// answering it. Needs a UI session. The code travels in the body, not
+// the URL, so it stays out of access logs and traces.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+func (c *Client) LookupDeviceLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLookupDeviceLoginRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// LookupDeviceLogin Describe a pending device-code login
+//
+// Says which client started the login with this code, when and from
+// which IP address, so the user can check it is theirs before
+// answering it. Needs a UI session. The code travels in the body, not
+// the URL, so it stays out of access logs and traces.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+func (c *Client) LookupDeviceLogin(ctx context.Context, body LookupDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLookupDeviceLoginRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4863,6 +5029,10 @@ func (c *Client) ListMyOllamaKeys(ctx context.Context, reqEditors ...RequestEdit
 
 // AddMyOllamaKeyWithBody Register an Ollama public key
 //
+// Registers a key after checking that you hold it: `signature` must be
+// the key's SSH signature over a challenge from
+// `POST /me/ollama-keys/challenge`.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
@@ -4880,11 +5050,37 @@ func (c *Client) AddMyOllamaKeyWithBody(ctx context.Context, contentType string,
 
 // AddMyOllamaKey Register an Ollama public key
 //
+// Registers a key after checking that you hold it: `signature` must be
+// the key's SSH signature over a challenge from
+// `POST /me/ollama-keys/challenge`.
+//
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
 func (c *Client) AddMyOllamaKey(ctx context.Context, body AddMyOllamaKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAddMyOllamaKeyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateOllamaKeyChallenge Get a challenge to sign with an Ollama key
+//
+// Returns a challenge to sign with the private key of the Ollama key
+// you are about to register, to prove you hold it:
+// `printf '%s' '<challenge>' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n hangar-ollama-key`.
+// Send the challenge and the signature with the key to
+// `POST /me/ollama-keys` within 15 minutes. `hangar ollama key
+// register` does all of this.
+//
+// Corresponds with POST /me/ollama-keys/challenge (the `CreateOllamaKeyChallenge` operationId).
+func (c *Client) CreateOllamaKeyChallenge(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateOllamaKeyChallengeRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -8609,6 +8805,46 @@ func NewDecideDeviceLoginRequestWithBody(server string, contentType string, body
 	return req, nil
 }
 
+// NewLookupDeviceLoginRequest calls the generic LookupDeviceLogin builder with application/json body
+func NewLookupDeviceLoginRequest(server string, body LookupDeviceLoginJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewLookupDeviceLoginRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewLookupDeviceLoginRequestWithBody constructs an http.Request for the LookupDeviceLogin method, with any body, and a specified content type
+func NewLookupDeviceLoginRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/me/device/lookup")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListMyOllamaKeysRequest constructs an http.Request for the ListMyOllamaKeys method
 func NewListMyOllamaKeysRequest(server string) (*http.Request, error) {
 	var err error
@@ -8672,6 +8908,33 @@ func NewAddMyOllamaKeyRequestWithBody(server string, contentType string, body io
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCreateOllamaKeyChallengeRequest constructs an http.Request for the CreateOllamaKeyChallenge method
+func NewCreateOllamaKeyChallengeRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/me/ollama-keys/challenge")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -13623,7 +13886,10 @@ type ClientWithResponsesInterface interface {
 
 	// DecideDeviceLoginWithBodyWithResponse Approve or deny a device-code login
 	//
-	// Answers the code that `hf auth login` shows in a browser-based login.
+	// Answers the code that `hf auth login` or `hangar login` shows in a
+	// browser-based login. Needs a UI session. Approving creates a Token
+	// with the chosen scope (`read` unless the request says `write`) that
+	// expires after `token_lifetime_days` days.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -13632,12 +13898,39 @@ type ClientWithResponsesInterface interface {
 
 	// DecideDeviceLoginWithResponse Approve or deny a device-code login
 	//
-	// Answers the code that `hf auth login` shows in a browser-based login.
+	// Answers the code that `hf auth login` or `hangar login` shows in a
+	// browser-based login. Needs a UI session. Approving creates a Token
+	// with the chosen scope (`read` unless the request says `write`) that
+	// expires after `token_lifetime_days` days.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /me/device (the `DecideDeviceLogin` operationId).
 	DecideDeviceLoginWithResponse(ctx context.Context, body DecideDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideDeviceLoginResponse, error)
+
+	// LookupDeviceLoginWithBodyWithResponse Describe a pending device-code login
+	//
+	// Says which client started the login with this code, when and from
+	// which IP address, so the user can check it is theirs before
+	// answering it. Needs a UI session. The code travels in the body, not
+	// the URL, so it stays out of access logs and traces.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+	LookupDeviceLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*LookupDeviceLoginResponse, error)
+
+	// LookupDeviceLoginWithResponse Describe a pending device-code login
+	//
+	// Says which client started the login with this code, when and from
+	// which IP address, so the user can check it is theirs before
+	// answering it. Needs a UI session. The code travels in the body, not
+	// the URL, so it stays out of access logs and traces.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+	LookupDeviceLoginWithResponse(ctx context.Context, body LookupDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*LookupDeviceLoginResponse, error)
 
 	// ListMyOllamaKeysWithResponse List my Ollama keys
 	//
@@ -13648,6 +13941,10 @@ type ClientWithResponsesInterface interface {
 
 	// AddMyOllamaKeyWithBodyWithResponse Register an Ollama public key
 	//
+	// Registers a key after checking that you hold it: `signature` must be
+	// the key's SSH signature over a challenge from
+	// `POST /me/ollama-keys/challenge`.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
@@ -13655,10 +13952,28 @@ type ClientWithResponsesInterface interface {
 
 	// AddMyOllamaKeyWithResponse Register an Ollama public key
 	//
+	// Registers a key after checking that you hold it: `signature` must be
+	// the key's SSH signature over a challenge from
+	// `POST /me/ollama-keys/challenge`.
+	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
 	AddMyOllamaKeyWithResponse(ctx context.Context, body AddMyOllamaKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*AddMyOllamaKeyResponse, error)
+
+	// CreateOllamaKeyChallengeWithResponse Get a challenge to sign with an Ollama key
+	//
+	// Returns a challenge to sign with the private key of the Ollama key
+	// you are about to register, to prove you hold it:
+	// `printf '%s' '<challenge>' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n hangar-ollama-key`.
+	// Send the challenge and the signature with the key to
+	// `POST /me/ollama-keys` within 15 minutes. `hangar ollama key
+	// register` does all of this.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /me/ollama-keys/challenge (the `CreateOllamaKeyChallenge` operationId).
+	CreateOllamaKeyChallengeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CreateOllamaKeyChallengeResponse, error)
 
 	// DeleteMyOllamaKeyWithResponse Remove an Ollama key
 	//
@@ -16391,6 +16706,54 @@ func (r DecideDeviceLoginResponse) ContentType() string {
 	return ""
 }
 
+type LookupDeviceLoginResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeviceRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r LookupDeviceLoginResponse) GetJSON200() *DeviceRequest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r LookupDeviceLoginResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r LookupDeviceLoginResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r LookupDeviceLoginResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LookupDeviceLoginResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r LookupDeviceLoginResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListMyOllamaKeysResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -16481,6 +16844,54 @@ func (r AddMyOllamaKeyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AddMyOllamaKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateOllamaKeyChallengeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OllamaKeyChallenge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CreateOllamaKeyChallengeResponse) GetJSON200() *OllamaKeyChallenge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateOllamaKeyChallengeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateOllamaKeyChallengeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateOllamaKeyChallengeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateOllamaKeyChallengeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateOllamaKeyChallengeResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -20812,7 +21223,10 @@ func (c *ClientWithResponses) UpdateMeWithResponse(ctx context.Context, body Upd
 
 // DecideDeviceLoginWithBodyWithResponse Approve or deny a device-code login
 //
-// Answers the code that `hf auth login` shows in a browser-based login.
+// Answers the code that `hf auth login` or `hangar login` shows in a
+// browser-based login. Needs a UI session. Approving creates a Token
+// with the chosen scope (`read` unless the request says `write`) that
+// expires after `token_lifetime_days` days.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -20827,7 +21241,10 @@ func (c *ClientWithResponses) DecideDeviceLoginWithBodyWithResponse(ctx context.
 
 // DecideDeviceLoginWithResponse Approve or deny a device-code login
 //
-// Answers the code that `hf auth login` shows in a browser-based login.
+// Answers the code that `hf auth login` or `hangar login` shows in a
+// browser-based login. Needs a UI session. Approving creates a Token
+// with the chosen scope (`read` unless the request says `write`) that
+// expires after `token_lifetime_days` days.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -20838,6 +21255,42 @@ func (c *ClientWithResponses) DecideDeviceLoginWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseDecideDeviceLoginResponse(rsp)
+}
+
+// LookupDeviceLoginWithBodyWithResponse Describe a pending device-code login
+//
+// Says which client started the login with this code, when and from
+// which IP address, so the user can check it is theirs before
+// answering it. Needs a UI session. The code travels in the body, not
+// the URL, so it stays out of access logs and traces.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+func (c *ClientWithResponses) LookupDeviceLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*LookupDeviceLoginResponse, error) {
+	rsp, err := c.LookupDeviceLoginWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLookupDeviceLoginResponse(rsp)
+}
+
+// LookupDeviceLoginWithResponse Describe a pending device-code login
+//
+// Says which client started the login with this code, when and from
+// which IP address, so the user can check it is theirs before
+// answering it. Needs a UI session. The code travels in the body, not
+// the URL, so it stays out of access logs and traces.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /me/device/lookup (the `LookupDeviceLogin` operationId).
+func (c *ClientWithResponses) LookupDeviceLoginWithResponse(ctx context.Context, body LookupDeviceLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*LookupDeviceLoginResponse, error) {
+	rsp, err := c.LookupDeviceLogin(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLookupDeviceLoginResponse(rsp)
 }
 
 // ListMyOllamaKeysWithResponse List my Ollama keys
@@ -20855,6 +21308,10 @@ func (c *ClientWithResponses) ListMyOllamaKeysWithResponse(ctx context.Context, 
 
 // AddMyOllamaKeyWithBodyWithResponse Register an Ollama public key
 //
+// Registers a key after checking that you hold it: `signature` must be
+// the key's SSH signature over a challenge from
+// `POST /me/ollama-keys/challenge`.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
@@ -20868,6 +21325,10 @@ func (c *ClientWithResponses) AddMyOllamaKeyWithBodyWithResponse(ctx context.Con
 
 // AddMyOllamaKeyWithResponse Register an Ollama public key
 //
+// Registers a key after checking that you hold it: `signature` must be
+// the key's SSH signature over a challenge from
+// `POST /me/ollama-keys/challenge`.
+//
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /me/ollama-keys (the `AddMyOllamaKey` operationId).
@@ -20877,6 +21338,26 @@ func (c *ClientWithResponses) AddMyOllamaKeyWithResponse(ctx context.Context, bo
 		return nil, err
 	}
 	return ParseAddMyOllamaKeyResponse(rsp)
+}
+
+// CreateOllamaKeyChallengeWithResponse Get a challenge to sign with an Ollama key
+//
+// Returns a challenge to sign with the private key of the Ollama key
+// you are about to register, to prove you hold it:
+// `printf '%s' '<challenge>' | ssh-keygen -Y sign -f ~/.ollama/id_ed25519 -n hangar-ollama-key`.
+// Send the challenge and the signature with the key to
+// `POST /me/ollama-keys` within 15 minutes. `hangar ollama key
+// register` does all of this.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /me/ollama-keys/challenge (the `CreateOllamaKeyChallenge` operationId).
+func (c *ClientWithResponses) CreateOllamaKeyChallengeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CreateOllamaKeyChallengeResponse, error) {
+	rsp, err := c.CreateOllamaKeyChallenge(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateOllamaKeyChallengeResponse(rsp)
 }
 
 // DeleteMyOllamaKeyWithResponse Remove an Ollama key
@@ -23615,6 +24096,39 @@ func ParseDecideDeviceLoginResponse(rsp *http.Response) (*DecideDeviceLoginRespo
 	return response, nil
 }
 
+// ParseLookupDeviceLoginResponse parses an HTTP response from a LookupDeviceLoginWithResponse call
+func ParseLookupDeviceLoginResponse(rsp *http.Response) (*LookupDeviceLoginResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LookupDeviceLoginResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeviceRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListMyOllamaKeysResponse parses an HTTP response from a ListMyOllamaKeysWithResponse call
 func ParseListMyOllamaKeysResponse(rsp *http.Response) (*ListMyOllamaKeysResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -23668,6 +24182,39 @@ func ParseAddMyOllamaKeyResponse(rsp *http.Response) (*AddMyOllamaKeyResponse, e
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateOllamaKeyChallengeResponse parses an HTTP response from a CreateOllamaKeyChallengeWithResponse call
+func ParseCreateOllamaKeyChallengeResponse(rsp *http.Response) (*CreateOllamaKeyChallengeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateOllamaKeyChallengeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OllamaKeyChallenge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -26294,12 +26841,18 @@ type ServerInterface interface {
 	// DecideDeviceLogin Approve or deny a device-code login
 	// (POST /me/device)
 	DecideDeviceLogin(w http.ResponseWriter, r *http.Request)
+	// LookupDeviceLogin Describe a pending device-code login
+	// (POST /me/device/lookup)
+	LookupDeviceLogin(w http.ResponseWriter, r *http.Request)
 	// ListMyOllamaKeys List my Ollama keys
 	// (GET /me/ollama-keys)
 	ListMyOllamaKeys(w http.ResponseWriter, r *http.Request)
 	// AddMyOllamaKey Register an Ollama public key
 	// (POST /me/ollama-keys)
 	AddMyOllamaKey(w http.ResponseWriter, r *http.Request)
+	// CreateOllamaKeyChallenge Get a challenge to sign with an Ollama key
+	// (POST /me/ollama-keys/challenge)
+	CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request)
 	// DeleteMyOllamaKey Remove an Ollama key
 	// (DELETE /me/ollama-keys/{id})
 	DeleteMyOllamaKey(w http.ResponseWriter, r *http.Request, id ID)
@@ -26786,6 +27339,12 @@ func (_ Unimplemented) DecideDeviceLogin(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// LookupDeviceLogin Describe a pending device-code login
+// (POST /me/device/lookup)
+func (_ Unimplemented) LookupDeviceLogin(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListMyOllamaKeys List my Ollama keys
 // (GET /me/ollama-keys)
 func (_ Unimplemented) ListMyOllamaKeys(w http.ResponseWriter, r *http.Request) {
@@ -26795,6 +27354,12 @@ func (_ Unimplemented) ListMyOllamaKeys(w http.ResponseWriter, r *http.Request) 
 // AddMyOllamaKey Register an Ollama public key
 // (POST /me/ollama-keys)
 func (_ Unimplemented) AddMyOllamaKey(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateOllamaKeyChallenge Get a challenge to sign with an Ollama key
+// (POST /me/ollama-keys/challenge)
+func (_ Unimplemented) CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -28652,6 +29217,20 @@ func (siw *ServerInterfaceWrapper) DecideDeviceLogin(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// LookupDeviceLogin operation middleware
+func (siw *ServerInterfaceWrapper) LookupDeviceLogin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LookupDeviceLogin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListMyOllamaKeys operation middleware
 func (siw *ServerInterfaceWrapper) ListMyOllamaKeys(w http.ResponseWriter, r *http.Request) {
 
@@ -28671,6 +29250,20 @@ func (siw *ServerInterfaceWrapper) AddMyOllamaKey(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AddMyOllamaKey(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOllamaKeyChallenge operation middleware
+func (siw *ServerInterfaceWrapper) CreateOllamaKeyChallenge(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOllamaKeyChallenge(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -32427,10 +33020,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/me/device", wrapper.DecideDeviceLogin)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/device/lookup", wrapper.LookupDeviceLogin)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me/ollama-keys", wrapper.ListMyOllamaKeys)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/me/ollama-keys", wrapper.AddMyOllamaKey)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/ollama-keys/challenge", wrapper.CreateOllamaKeyChallenge)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/me/ollama-keys/{id}", wrapper.DeleteMyOllamaKey)
@@ -32759,254 +33358,269 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"MVojpDLcttJZf0Az6f8bAA==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

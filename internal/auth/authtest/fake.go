@@ -346,12 +346,14 @@ func (t *Tokens) Revoke(_ context.Context, id uuid.UUID, actor model.Principal) 
 }
 
 type device struct {
-	code     auth.DeviceCode
-	status   string
-	user     model.Principal
-	secret   string
-	expires  time.Time
-	clientID string
+	code      auth.DeviceCode
+	status    string
+	user      model.Principal
+	secret    string
+	requested time.Time
+	expires   time.Time
+	clientID  string
+	clientIP  string
 }
 
 // DeviceFlow is a fake auth.DeviceFlow that creates Tokens through Tokens.
@@ -382,7 +384,7 @@ func randomCode(n int) string {
 }
 
 // Start implements auth.DeviceFlow.
-func (d *DeviceFlow) Start(_ context.Context, clientID string) (*auth.DeviceCode, error) {
+func (d *DeviceFlow) Start(_ context.Context, clientID, clientIP string) (*auth.DeviceCode, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	code := auth.DeviceCode{
@@ -390,18 +392,36 @@ func (d *DeviceFlow) Start(_ context.Context, clientID string) (*auth.DeviceCode
 		VerificationURI: strings.TrimRight(d.BaseURL, "/") + "/settings/device",
 		Interval:        5 * time.Second, ExpiresIn: 15 * time.Minute,
 	}
-	code.VerificationURIComplete = code.VerificationURI + "?code=" + code.UserCode
-	dev := &device{code: code, status: "pending", expires: d.now().Add(code.ExpiresIn), clientID: clientID}
+	now := d.now()
+	dev := &device{code: code, status: "pending", requested: now, expires: now.Add(code.ExpiresIn), clientID: clientID, clientIP: clientIP}
 	d.byCode[code.DeviceCode] = dev
 	d.byUser[code.UserCode] = dev
 	out := code
 	return &out, nil
 }
 
+// Lookup implements auth.DeviceFlow.
+func (d *DeviceFlow) Lookup(_ context.Context, userCode string, p model.Principal) (*auth.DeviceRequest, error) {
+	if p.IsAnonymous() || p.Token != nil {
+		return nil, auth.ErrForbidden
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	dev, ok := d.byUser[userCode]
+	if !ok || dev.status != "pending" || d.now().After(dev.expires) {
+		return nil, auth.ErrNotFound
+	}
+	return &auth.DeviceRequest{UserCode: userCode, ClientID: dev.clientID, ClientIP: dev.clientIP,
+		RequestedAt: dev.requested, ExpiresAt: dev.expires}, nil
+}
+
 // Approve implements auth.DeviceFlow.
-func (d *DeviceFlow) Approve(ctx context.Context, userCode string, p model.Principal) error {
+func (d *DeviceFlow) Approve(ctx context.Context, userCode string, scope model.Scope, p model.Principal) error {
 	if p.IsAnonymous() {
 		return auth.ErrForbidden
+	}
+	if scope != model.ScopeRead && scope != model.ScopeWrite {
+		return auth.ErrInvalid
 	}
 	d.mu.Lock()
 	dev, ok := d.byUser[userCode]
@@ -414,7 +434,8 @@ func (d *DeviceFlow) Approve(ctx context.Context, userCode string, p model.Princ
 	if dev.clientID != "" {
 		name = dev.clientID
 	}
-	_, secret, err := d.Tokens.Create(ctx, auth.NewToken{UserID: p.UserID, Name: name, Scope: model.ScopeWrite})
+	expires := d.now().Add(auth.DeviceTokenTTL)
+	_, secret, err := d.Tokens.Create(ctx, auth.NewToken{UserID: p.UserID, Name: name, Scope: scope, ExpiresAt: &expires})
 	if err != nil {
 		return err
 	}

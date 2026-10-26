@@ -28,6 +28,7 @@ import (
 	"github.com/hangar-hub/hangar/internal/db/dbtest"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/secrets"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 // ollamaKey is an Ollama client key pair, generated in the test.
@@ -54,6 +55,17 @@ func (k ollamaKey) sign(t *testing.T, fullURL string) string {
 	require.NoError(t, err)
 	parts := bytes.Split(ssh.MarshalAuthorizedKey(k.signer.PublicKey()), []byte(" "))
 	return fmt.Sprintf("%s:%s", bytes.TrimSpace(parts[1]), base64.StdEncoding.EncodeToString(sig.Blob))
+}
+
+// addKey registers k for userID the way the UI and CLI do: it asks for a
+// challenge and signs it with the key.
+func addKey(t *testing.T, s *auth.Service, userID uuid.UUID, name string, k ollamaKey, actor model.Principal) (*auth.OllamaKey, error) {
+	t.Helper()
+	c, err := s.Ollama.Challenge(context.Background(), userID)
+	require.NoError(t, err)
+	sig, err := sshsig.Sign(k.signer, c.Namespace, []byte(c.Challenge))
+	require.NoError(t, err)
+	return s.Ollama.Add(context.Background(), userID, name, k.pub, c.Challenge, sig, actor)
 }
 
 // realmURL builds the URL Ollama's registryChallenge.URL builds.
@@ -89,18 +101,18 @@ func TestOllamaKeysAndRegistryTokens(t *testing.T) {
 		s.Ollama.Repos = repoMap{"alice/secret-gguf": private}
 
 		key := newOllamaKey(t)
-		k, err := s.Ollama.Add(ctx, alice.ID, "", key.pub, alice.Principal(model.AuthSession))
+		k, err := addKey(t, s, alice.ID, "", key, alice.Principal(model.AuthSession))
 		require.NoError(t, err)
 		require.Equal(t, "me@laptop", k.Name, "the key comment names it")
 		require.True(t, strings.HasPrefix(k.Fingerprint, "SHA256:"))
 		require.False(t, strings.Contains(k.PublicKey, "me@laptop"))
-		_, err = s.Ollama.Add(ctx, bob.ID, "", key.pub, bob.Principal(model.AuthSession))
+		_, err = addKey(t, s, bob.ID, "", key, bob.Principal(model.AuthSession))
 		require.ErrorIs(t, err, auth.ErrConflict, "a key belongs to one user")
 		for name, bad := range map[string]string{
 			"garbage": "not a key",
 			"rsa":     "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDHu9g5sAtGyoUwZ0ZGXUdhWtjMm8w3/F9BfZz6S0XyFQ== x",
 		} {
-			_, err = s.Ollama.Add(ctx, alice.ID, "", bad, alice.Principal(model.AuthSession))
+			_, err = s.Ollama.Add(ctx, alice.ID, "", bad, "", "", alice.Principal(model.AuthSession))
 			require.ErrorIs(t, err, auth.ErrInvalid, name)
 		}
 		keys, err := s.Ollama.List(ctx, alice.ID)
@@ -149,7 +161,7 @@ func TestOllamaKeysAndRegistryTokens(t *testing.T) {
 
 		// bob's key cannot read alice's private Repo; unknown Repos are 404 too.
 		bobKey := newOllamaKey(t)
-		_, err = s.Ollama.Add(ctx, bob.ID, "bob's", bobKey.pub, bob.Principal(model.AuthSession))
+		_, err = addKey(t, s, bob.ID, "bob's", bobKey, bob.Principal(model.AuthSession))
 		require.NoError(t, err)
 		_, err = issue(bobKey, clock.Now(), "nonce-6", repo)
 		require.ErrorIs(t, err, auth.ErrNotFound)
@@ -223,7 +235,7 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 		_, ciP := tokenPrincipal(auth.NewToken{Name: "ci", ExpiresAt: &weekOut,
 			Restrictions: model.TokenRestrictions{Repos: []string{"model:alice/ci-model"}}})
 		key := newOllamaKey(t)
-		_, err = s.Ollama.Add(ctx, alice.ID, "stolen", key.pub, ciP)
+		_, err = addKey(t, s, alice.ID, "stolen", key, ciP)
 		require.NoError(t, err)
 		_, err = issue(key, ciRepo)
 		require.NoError(t, err, "the key reads what its Token can read")
@@ -247,7 +259,7 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 		laptop, laptopP := tokenPrincipal(auth.NewToken{Name: "laptop"})
 
 		key2 := newOllamaKey(t)
-		_, err = s.Ollama.Add(ctx, alice.ID, "", key2.pub, laptopP)
+		_, err = addKey(t, s, alice.ID, "", key2, laptopP)
 		require.NoError(t, err)
 		_, err = issue(key2, privateRepo)
 		require.NoError(t, err, "an unrestricted Token that does not expire reads everything the user can")
@@ -257,7 +269,7 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 
 		// The key can be registered again, here in a UI session, which
 		// gives the user's read access with no expiry.
-		k, err := s.Ollama.Add(ctx, alice.ID, "", key.pub, alice.Principal(model.AuthSession))
+		k, err := addKey(t, s, alice.ID, "", key, alice.Principal(model.AuthSession))
 		require.NoError(t, err)
 		_, err = issue(key, privateRepo)
 		require.NoError(t, err)
@@ -265,6 +277,73 @@ func TestOllamaKeysFollowTheirToken(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, keys, 1)
 		require.Equal(t, k.ID, keys[0].ID)
+	})
+}
+
+// TestOllamaKeysNeedProofOfPossession covers security review finding 12:
+// anyone who learnt someone's Ollama public key could register it first,
+// so that person's `ollama pull` authenticated as the squatter. Adding a
+// key now needs the key's signature over a challenge issued to the user
+// adding it, less than 15 minutes old.
+func TestOllamaKeysNeedProofOfPossession(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(time.Now().UTC().Truncate(time.Second))
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		alice := mustUser(t, s, "alice", false)
+		mallory := mustUser(t, s, "mallory", false)
+		aliceKey := newOllamaKey(t)
+		malloryP := mallory.Principal(model.AuthSession)
+
+		c, err := s.Ollama.Challenge(ctx, mallory.ID)
+		require.NoError(t, err)
+		require.Equal(t, auth.OllamaKeyNamespace, c.Namespace)
+		require.True(t, strings.HasPrefix(c.Challenge, "hangar-ollama-key:"+mallory.ID.String()+":"))
+		require.True(t, strings.HasSuffix(c.Challenge, ":hangar.test"), "it names the Instance: %s", c.Challenge)
+		require.Equal(t, clock.Now().Add(15*time.Minute), c.ExpiresAt)
+
+		// Mallory has alice's public key but not its private half.
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, c.Challenge, "", malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "no signature")
+		own := newOllamaKey(t)
+		sig, err := sshsig.Sign(own.signer, c.Namespace, []byte(c.Challenge))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, c.Challenge, sig, malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "signed by another key")
+
+		// A signature alice made for her own challenge does not work for
+		// mallory, and a challenge cannot be edited or made up.
+		ac, err := s.Ollama.Challenge(ctx, alice.ID)
+		require.NoError(t, err)
+		aliceSig, err := sshsig.Sign(aliceKey.signer, ac.Namespace, []byte(ac.Challenge))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, ac.Challenge, aliceSig, malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "a challenge is bound to its user")
+		forged := strings.Replace(ac.Challenge, alice.ID.String(), mallory.ID.String(), 1)
+		forgedSig, err := sshsig.Sign(aliceKey.signer, ac.Namespace, []byte(forged))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, mallory.ID, "", aliceKey.pub, forged, forgedSig, malloryP)
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "the challenge's MAC covers the user")
+		wrongNS, err := sshsig.Sign(aliceKey.signer, "file", []byte(ac.Challenge))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", aliceKey.pub, ac.Challenge, wrongNS, alice.Principal(model.AuthSession))
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof, "another signature namespace")
+
+		// The holder of the key adds it; `echo` adds a newline, which is fine.
+		withNewline, err := sshsig.Sign(aliceKey.signer, ac.Namespace, []byte(ac.Challenge+"\n"))
+		require.NoError(t, err)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", aliceKey.pub, ac.Challenge, withNewline, alice.Principal(model.AuthSession))
+		require.NoError(t, err)
+
+		// Challenges expire after 15 minutes.
+		late := newOllamaKey(t)
+		lc, err := s.Ollama.Challenge(ctx, alice.ID)
+		require.NoError(t, err)
+		lateSig, err := sshsig.Sign(late.signer, lc.Namespace, []byte(lc.Challenge))
+		require.NoError(t, err)
+		clock.Advance(15 * time.Minute)
+		_, err = s.Ollama.Add(ctx, alice.ID, "", late.pub, lc.Challenge, lateSig, alice.Principal(model.AuthSession))
+		require.ErrorIs(t, err, auth.ErrOllamaKeyProof)
 	})
 }
 
@@ -308,12 +387,13 @@ func TestDeviceFlow(t *testing.T) {
 		alice := mustUser(t, s, "alice", false)
 		aliceP := alice.Principal(model.AuthSession)
 
-		dc, err := s.Device.Start(ctx, "hf-cli")
+		dc, err := s.Device.Start(ctx, "hf-cli", "198.51.100.7")
 		require.NoError(t, err)
 		require.Regexp(t, `^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$`, dc.UserCode)
 		require.Equal(t, "http://hangar.test/settings/device", dc.VerificationURI)
-		require.Equal(t, dc.VerificationURI+"?code="+dc.UserCode, dc.VerificationURIComplete)
+		require.Empty(t, dc.VerificationURIComplete, "no link carries the code, so none can approve it in one click")
 		require.Equal(t, 5*time.Second, dc.Interval)
+		requested := clock.Now().UTC()
 
 		_, err = s.Device.Poll(ctx, dc.DeviceCode)
 		require.ErrorIs(t, err, auth.ErrAuthorizationPending)
@@ -323,13 +403,28 @@ func TestDeviceFlow(t *testing.T) {
 		_, err = s.Device.Poll(ctx, dc.DeviceCode)
 		require.ErrorIs(t, err, auth.ErrAuthorizationPending)
 
-		require.ErrorIs(t, s.Device.Approve(ctx, dc.UserCode, model.Anonymous()), auth.ErrForbidden)
+		// The approval page shows who asked, when and from where.
+		req, err := s.Device.Lookup(ctx, dc.UserCode, aliceP)
+		require.NoError(t, err)
+		require.Equal(t, "hf-cli", req.ClientID)
+		require.Equal(t, "198.51.100.7", req.ClientIP)
+		require.WithinDuration(t, requested, req.RequestedAt, time.Second)
+		require.WithinDuration(t, requested.Add(15*time.Minute), req.ExpiresAt, time.Second)
+		_, err = s.Device.Lookup(ctx, dc.UserCode, model.Anonymous())
+		require.ErrorIs(t, err, auth.ErrForbidden)
+		_, err = s.Device.Lookup(ctx, "BBBB-BBBB", aliceP)
+		require.ErrorIs(t, err, auth.ErrNotFound)
+
+		require.ErrorIs(t, s.Device.Approve(ctx, dc.UserCode, model.ScopeRead, model.Anonymous()), auth.ErrForbidden)
 		tokenP := aliceP
 		tokenP.Token = &model.TokenInfo{Scope: model.ScopeAdmin}
-		require.ErrorIs(t, s.Device.Approve(ctx, dc.UserCode, tokenP), auth.ErrForbidden, "approve in the UI, not with a token")
-		require.ErrorIs(t, s.Device.Approve(ctx, "BBBB-BBBB", aliceP), auth.ErrNotFound)
+		require.ErrorIs(t, s.Device.Approve(ctx, dc.UserCode, model.ScopeRead, tokenP), auth.ErrForbidden, "approve in the UI, not with a token")
+		_, err = s.Device.Lookup(ctx, dc.UserCode, tokenP)
+		require.ErrorIs(t, err, auth.ErrForbidden, "look up in the UI, not with a token")
+		require.ErrorIs(t, s.Device.Approve(ctx, "BBBB-BBBB", model.ScopeRead, aliceP), auth.ErrNotFound)
+		require.ErrorIs(t, s.Device.Approve(ctx, dc.UserCode, model.ScopeAdmin, aliceP), auth.ErrInvalid, "a device login never gets admin")
 		typed := strings.ToLower(strings.ReplaceAll(dc.UserCode, "-", ""))
-		require.NoError(t, s.Device.Approve(ctx, typed, aliceP), "codes are accepted in any case, without the dash")
+		require.NoError(t, s.Device.Approve(ctx, typed, model.ScopeWrite, aliceP), "codes are accepted in any case, without the dash")
 		require.ErrorIs(t, s.Device.Deny(ctx, dc.UserCode, aliceP), auth.ErrNotFound, "already answered")
 
 		clock.Advance(5 * time.Second)
@@ -340,30 +435,47 @@ func TestDeviceFlow(t *testing.T) {
 		p, err := s.Authenticate(r)
 		require.NoError(t, err)
 		require.Equal(t, alice.ID, p.UserID)
-		require.Equal(t, model.ScopeWrite, p.Token.Scope)
+		require.Equal(t, model.ScopeWrite, p.Token.Scope, "the scope the user chose")
 		require.Equal(t, "device login (hf-cli)", p.Token.Name)
+		require.NotNil(t, p.Token.ExpiresAt, "a device Token expires")
+		require.WithinDuration(t, clock.Now().Add(auth.DeviceTokenTTL), *p.Token.ExpiresAt, time.Second)
 		clock.Advance(5 * time.Second)
 		_, err = s.Device.Poll(ctx, dc.DeviceCode)
 		require.ErrorIs(t, err, auth.ErrExpiredToken, "the secret is handed out once")
 
-		dc2, err := s.Device.Start(ctx, uuid.NewString())
+		read, err := s.Device.Start(ctx, "hangar-cli", "")
+		require.NoError(t, err)
+		require.NoError(t, s.Device.Approve(ctx, read.UserCode, model.ScopeRead, aliceP))
+		clock.Advance(5 * time.Second)
+		readSecret, err := s.Device.Poll(ctx, read.DeviceCode)
+		require.NoError(t, err)
+		r = httptest.NewRequest(http.MethodGet, "http://hangar.test/api/whoami-v2", nil)
+		r.Header.Set("Authorization", "Bearer "+readSecret)
+		p, err = s.Authenticate(r)
+		require.NoError(t, err)
+		require.Equal(t, model.ScopeRead, p.Token.Scope)
+		clock.Advance(auth.DeviceTokenTTL)
+		_, err = s.Authenticate(r)
+		require.ErrorIs(t, err, auth.ErrInvalidCredentials, "the Token stops working after DeviceTokenTTL")
+
+		dc2, err := s.Device.Start(ctx, uuid.NewString(), "")
 		require.NoError(t, err)
 		require.NoError(t, s.Device.Deny(ctx, dc2.UserCode, aliceP))
 		_, err = s.Device.Poll(ctx, dc2.DeviceCode)
 		require.ErrorIs(t, err, auth.ErrAccessDenied)
 
-		dc3, err := s.Device.Start(ctx, "")
+		dc3, err := s.Device.Start(ctx, "", "")
 		require.NoError(t, err)
 		clock.Advance(16 * time.Minute)
 		_, err = s.Device.Poll(ctx, dc3.DeviceCode)
 		require.ErrorIs(t, err, auth.ErrExpiredToken)
-		require.ErrorIs(t, s.Device.Approve(ctx, dc3.UserCode, aliceP), auth.ErrNotFound)
+		require.ErrorIs(t, s.Device.Approve(ctx, dc3.UserCode, model.ScopeRead, aliceP), auth.ErrNotFound)
 		_, err = s.Device.Poll(ctx, "unknown")
 		require.ErrorIs(t, err, auth.ErrExpiredToken)
 		clock.Advance(24 * time.Hour)
 		n, err := s.Device.DeleteExpired(ctx)
 		require.NoError(t, err)
-		require.Equal(t, int64(3), n)
+		require.Equal(t, int64(4), n)
 	})
 }
 

@@ -15,6 +15,8 @@ hangar whoami
 hangar logout
 ```
 
+The device sign-in opens the Instance's **Connect a device** page. Type the code the CLI prints, check the client (`hangar-cli`), the time and the IP address, and choose `read` access, or `write` if you will push, upload or pull into the Instance. The Token expires in 30 days; run `hangar login` again then.
+
 The URL and username are saved in `~/.config/hangar/config.yaml`; the Token goes in the OS keychain (macOS Keychain, Windows Credential Manager or the Secret Service on Linux) where one is available, otherwise in that file with mode 0600. In scripts and CI, set `HANGAR_CLI_URL` and `HANGAR_CLI_TOKEN` instead, or pass `--url` and `--token`. `HANGAR_CLI_CONFIG` points the CLI at another configuration file, and `HANGAR_CLI_NO_KEYCHAIN=1` keeps the Token in that file instead of the OS keychain.
 
 ## Find and inspect

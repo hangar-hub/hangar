@@ -21,6 +21,7 @@ type Action string
 const (
 	LoginSucceeded           Action = "login.succeeded"
 	LoginFailed              Action = "login.failed"
+	LoginThrottleCleared     Action = "login.throttle_cleared"
 	Logout                   Action = "logout"
 	TokenCreated             Action = "token.created"
 	TokenRevoked             Action = "token.revoked"

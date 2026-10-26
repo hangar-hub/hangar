@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -19,6 +20,7 @@ import (
 	"github.com/hangar-hub/hangar/internal/audit"
 	"github.com/hangar-hub/hangar/internal/db"
 	"github.com/hangar-hub/hangar/internal/model"
+	"github.com/hangar-hub/hangar/internal/sshsig"
 )
 
 // Ollama registry auth timings (docs/spec/08-local-tools.md "Auth").
@@ -123,15 +125,96 @@ func OllamaRequestURL(publicURL string, r *http.Request) string {
 const liveOllamaKey = "(?TableAlias.token_id IS NULL OR EXISTS (SELECT 1 FROM tokens AS lt WHERE lt.id = ?TableAlias.token_id" +
 	" AND lt.revoked_at IS NULL AND (lt.expires_at IS NULL OR lt.expires_at > ?)))"
 
+// OllamaKeyNamespace is the SSH signature namespace of the proof that a
+// user holds the Ollama key they add (`ssh-keygen -Y sign -n`).
+const OllamaKeyNamespace = "hangar-ollama-key"
+
+// ollamaChallengeTTL is how long a key challenge can be signed and used.
+const ollamaChallengeTTL = 15 * time.Minute
+
+// OllamaKeyChallenge is a server-issued text the user signs with their
+// Ollama key, to prove they hold it, before the key is added.
+type OllamaKeyChallenge struct {
+	Challenge string
+	Namespace string
+	ExpiresAt time.Time
+}
+
+// ErrOllamaKeyProof means the signature that should prove the user holds
+// the key is missing, wrong or over an unknown or expired challenge.
+var ErrOllamaKeyProof = fmt.Errorf("%w: sign a new challenge with the private key of this Ollama key (ssh-keygen -Y sign -n %s, or hangar ollama key register)", ErrInvalid, OllamaKeyNamespace)
+
+// challengeMAC binds a challenge to its User and expiry, so the server
+// needs no state: only it can make a challenge that passes.
+func (o *OllamaStore) challengeMAC(userID uuid.UUID, expires int64, nonce string) string {
+	m := hmac.New(sha256.New, o.s.challengeKey)
+	_, _ = fmt.Fprintf(m, "ollama key challenge v1|%s|%d|%s", userID, expires, nonce)
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+}
+
+// Challenge issues a challenge for userID to sign with the Ollama key
+// they are about to add (docs/spec/05-auth.md "Ollama keys"). It names the
+// Instance, so a user can see what they are signing, and is valid for 15
+// minutes.
+func (o *OllamaStore) Challenge(_ context.Context, userID uuid.UUID) (*OllamaKeyChallenge, error) {
+	nonce, err := randomString(16)
+	if err != nil {
+		return nil, err
+	}
+	exp := o.s.nowUTC().Add(ollamaChallengeTTL).Truncate(time.Second)
+	host := o.s.publicURL()
+	if u, err := url.Parse(host); err == nil && u.Host != "" {
+		host = u.Host
+	}
+	// The host is last, as it may hold a colon and a port.
+	c := fmt.Sprintf("hangar-ollama-key:%s:%d:%s:%s:%s", userID, exp.Unix(), nonce, o.challengeMAC(userID, exp.Unix(), nonce), host)
+	return &OllamaKeyChallenge{Challenge: c, Namespace: OllamaKeyNamespace, ExpiresAt: exp}, nil
+}
+
+// checkKeyProof checks that signature is the key's SSH signature over a
+// live challenge issued to userID. A trailing newline, which `echo` or a
+// shell adds when the challenge is piped to ssh-keygen, is allowed.
+func (o *OllamaStore) checkKeyProof(userID uuid.UUID, pub ssh.PublicKey, challenge, signature string) error {
+	challenge = strings.TrimSpace(challenge)
+	parts := strings.SplitN(challenge, ":", 6)
+	if len(parts) != 6 || parts[0] != "hangar-ollama-key" || parts[1] != userID.String() {
+		return ErrOllamaKeyProof
+	}
+	exp, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || !o.s.nowUTC().Before(time.Unix(exp, 0)) {
+		return ErrOllamaKeyProof
+	}
+	if !hmac.Equal([]byte(parts[4]), []byte(o.challengeMAC(userID, exp, parts[3]))) {
+		return ErrOllamaKeyProof
+	}
+	for _, msg := range []string{challenge, challenge + "\n", challenge + "\r\n"} {
+		if sshsig.Verify(signature, pub, OllamaKeyNamespace, []byte(msg)) == nil {
+			return nil
+		}
+	}
+	return ErrOllamaKeyProof
+}
+
 // Add registers a key for a User and records an ollama_key.changed event.
+// The user proves they hold the key's private half by signing a challenge
+// from Challenge, so nobody can register someone else's public key and
+// have that person's `ollama pull` authenticate as them.
+//
 // A key added with a Token is bound to it (docs/spec/05-auth.md "Ollama
 // keys"): its registry tokens get that Token's scope, restrictions and
 // expiry, and stop when the Token is revoked or expires, so a restricted
 // or expiring Token cannot use a key to read more, or for longer, than it
 // could itself. Keys added in a UI session have the user's read access.
-func (o *OllamaStore) Add(ctx context.Context, userID uuid.UUID, name, publicKey string, actor model.Principal) (*OllamaKey, error) {
+func (o *OllamaStore) Add(ctx context.Context, userID uuid.UUID, name, publicKey, challenge, signature string, actor model.Principal) (*OllamaKey, error) {
 	norm, fp, err := ParseOllamaPublicKey(publicKey)
 	if err != nil {
+		return nil, err
+	}
+	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(norm))
+	if err != nil {
+		return nil, fmt.Errorf("%w: not an SSH public key", ErrInvalid)
+	}
+	if err := o.checkKeyProof(userID, pub, challenge, signature); err != nil {
 		return nil, err
 	}
 	name = strings.TrimSpace(name)

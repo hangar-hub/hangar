@@ -140,15 +140,18 @@ type Instance struct {
 	// DeviceAutoApprove approves device logins on the first poll.
 	DeviceAutoApprove bool
 
-	repos       map[string]*Repo
-	upstream    map[string]*UpstreamRepo
-	objects     map[string][]byte
-	uploads     map[uuid.UUID]*upload
-	jobs        map[uuid.UUID]*job
-	jobOrder    []uuid.UUID
-	ollamaKeys  []gen.OllamaKey
-	devices     map[string]*device
-	failedParts map[string]partFailure
+	repos      map[string]*Repo
+	upstream   map[string]*UpstreamRepo
+	objects    map[string][]byte
+	uploads    map[uuid.UUID]*upload
+	jobs       map[uuid.UUID]*job
+	jobOrder   []uuid.UUID
+	ollamaKeys []gen.OllamaKey
+	// keyChallenges holds the Ollama key challenges issued, which
+	// AddMyOllamaKey checks a signature against.
+	keyChallenges map[string]bool
+	devices       map[string]*device
+	failedParts   map[string]partFailure
 	// failedCompletes holds injected completion failures by SHA-256.
 	failedCompletes map[string]completeFailure
 	// droppedCompletes counts completions to cut off, by SHA-256.
@@ -194,6 +197,7 @@ func New(t testing.TB) *Instance {
 		uploads:          map[uuid.UUID]*upload{},
 		jobs:             map[uuid.UUID]*job{},
 		devices:          map[string]*device{},
+		keyChallenges:    map[string]bool{},
 		failedParts:      map[string]partFailure{},
 		failedCompletes:  map[string]completeFailure{},
 		droppedCompletes: map[string]int{},

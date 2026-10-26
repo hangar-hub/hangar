@@ -83,8 +83,9 @@ func TestPasswordLoginAndThrottling(t *testing.T) {
 		require.Equal(t, audit.LoginSucceeded, last.Action)
 		require.Equal(t, "10.0.0.1", last.IP)
 
-		// Wrong password and unknown user look the same.
-		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "10.0.0.1"})
+		// Wrong password and unknown user look the same. (From an address
+		// alice has not signed in from, so it counts for her username.)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "10.0.0.2"})
 		require.ErrorIs(t, err, auth.ErrLoginFailed)
 		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "nobody", Password: "wrong-password-1", IP: "10.0.0.9"})
 		require.ErrorIs(t, err, auth.ErrLoginFailed)
@@ -141,6 +142,108 @@ func TestPasswordLoginAndThrottling(t *testing.T) {
 		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword})
 		require.ErrorIs(t, err, auth.ErrLoginFailed)
 		_ = bob
+	})
+}
+
+// TestUsernameLockSparesKnownAddresses covers security review finding 11:
+// anyone could keep a named account, such as the break-glass admin,
+// locked by sending a wrong password for it every time the lock ended.
+// The username's lock now applies only from IP addresses the User has not
+// signed in from, so its owner still signs in from a known address, while
+// guesses from anywhere else stay throttled.
+func TestUsernameLockSparesKnownAddresses(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock})
+		_, err := s.Users.Create(ctx, auth.NewUser{Username: "hangar-admin", Password: goodPassword}, model.System())
+		require.NoError(t, err)
+		const home = "10.9.0.1"
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: goodPassword, IP: home})
+		require.NoError(t, err)
+		var te *auth.ThrottledError
+		failOrLocked := func(ip string) {
+			t.Helper()
+			_, err := s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: "wrong-password-1", IP: ip})
+			if !errors.Is(err, auth.ErrLoginFailed) {
+				require.True(t, errors.As(err, &te), "%v", err)
+			}
+		}
+
+		// An attacker sends wrong passwords from many addresses.
+		for i := range 8 {
+			failOrLocked(fmt.Sprintf("203.0.113.%d", i))
+		}
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: goodPassword, IP: "198.51.100.1"})
+		require.True(t, errors.As(err, &te), "a new address is still locked out: %v", err)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: goodPassword, IP: home})
+		require.NoError(t, err, "the owner signs in from an address they used before")
+
+		// From a known address only that address's counter applies, so
+		// it is still limited to five guesses.
+		for range 5 {
+			_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: "wrong-password-1", IP: home})
+			require.ErrorIs(t, err, auth.ErrLoginFailed)
+		}
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: goodPassword, IP: home})
+		require.True(t, errors.As(err, &te), "the known address is throttled by its own counter")
+
+		// Known addresses are forgotten 90 days after their last success.
+		clock.Advance(91 * 24 * time.Hour)
+		for range 5 {
+			failOrLocked("203.0.113.50")
+		}
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "hangar-admin", Password: goodPassword, IP: home})
+		require.True(t, errors.As(err, &te), "after 90 days the address is new again")
+		res, err := s.Cleanup(ctx)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), res.KnownClients, "the stale known address is removed")
+	})
+}
+
+// TestClearThrottle covers hangar admin unlock-sign-in: clearing a
+// username's or an address's counters lets it sign in at once, and the
+// change is audited.
+func TestClearThrottle(t *testing.T) {
+	dbtest.ForEachDriver(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		rec := audittest.NewFake()
+		// The clock stands still, so the one-second locks outlast the
+		// password hashes on a slow machine.
+		clock := authtest.NewClock(start())
+		s, _ := authtest.NewService(t, d, authtest.RealOptions{Clock: clock, Audit: rec})
+		_, err := s.Users.Create(ctx, auth.NewUser{Username: "alice", Password: goodPassword}, model.System())
+		require.NoError(t, err)
+		for range 5 {
+			_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: "wrong-password-1", IP: "203.0.113.1"})
+			require.ErrorIs(t, err, auth.ErrLoginFailed)
+		}
+		var te *auth.ThrottledError
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "198.51.100.1"})
+		require.True(t, errors.As(err, &te))
+
+		_, err = s.Login.ClearThrottle(ctx, auth.ThrottleTarget{}, model.System())
+		require.ErrorIs(t, err, auth.ErrInvalid, "say what to clear")
+		n, err := s.Login.ClearThrottle(ctx, auth.ThrottleTarget{Username: "ALICE"}, model.System())
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		require.Equal(t, audit.LoginThrottleCleared, rec.Actions()[len(rec.Actions())-1])
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "198.51.100.1"})
+		require.NoError(t, err)
+
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "203.0.113.1"})
+		require.True(t, errors.As(err, &te), "the address that sent the guesses is still locked")
+		n, err = s.Login.ClearThrottle(ctx, auth.ThrottleTarget{IP: "203.0.113.1"}, model.System())
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "alice", Password: goodPassword, IP: "203.0.113.1"})
+		require.NoError(t, err)
+
+		_, err = s.Login.Password(ctx, auth.LoginAttempt{Username: "bob", Password: "wrong-password-1", IP: "203.0.113.2"})
+		require.ErrorIs(t, err, auth.ErrLoginFailed)
+		n, err = s.Login.ClearThrottle(ctx, auth.ThrottleTarget{All: true}, model.System())
+		require.NoError(t, err)
+		require.Equal(t, int64(2), n, "user:bob and ip:203.0.113.2")
 	})
 }
 
