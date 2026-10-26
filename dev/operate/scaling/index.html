@@ -1817,6 +1817,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#shutting-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shutting down
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#targets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3005,6 +3016,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#shutting-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shutting down
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#targets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3071,10 +3093,13 @@
 <h2 id="what-a-scaled-out-instance-needs">What a scaled-out Instance needs<a class="headerlink" href="#what-a-scaled-out-instance-needs" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Postgres and an S3-compatible bucket (or a shared filesystem path).</li>
-<li>The same <code>security.instance_key</code> on every process.</li>
+<li>The same <code>security.instance_key</code> on every process. Hangar generates a key only in role <code>all</code>. A process in role <code>web</code> or <code>worker</code> refuses to start without one, unless it shares a <code>server.data_dir</code> whose <code>secrets.yaml</code> already holds a key. Make a key with <code>openssl rand -base64 32</code> and give it to every process as <code>HANGAR_SECURITY_INSTANCE_KEY</code>. The Helm chart generates one into a Secret, or reads it from <code>existingSecret</code>.</li>
 <li><code>hangar admin migrate</code> before new versions start.</li>
 <li>Each worker process runs up to <code>jobs.workers</code> Jobs at once (4 by default). <code>pull.concurrency</code> also caps Pull transfers across the Instance.</li>
 </ul>
+<h2 id="shutting-down">Shutting down<a class="headerlink" href="#shutting-down" title="Permanent link">&para;</a></h2>
+<p>On SIGTERM, a process answers 503 on <code>/readyz</code> at once, and its worker stops claiming new Jobs. It keeps serving for <code>server.drain_delay</code> (0 by default), so a load balancer that checks <code>/readyz</code> stops sending requests before the listener closes. Then in-flight requests get up to <code>server.shutdown_timeout</code> (30 seconds) to finish, and the worker waits as long for its Jobs. A Job whose handler is still running after that goes back to the queue when its lease expires.</p>
+<p>Behind a load balancer outside Kubernetes, set <code>server.drain_delay</code> to a little more than the load balancer's health check interval, such as <code>5s</code>. The Helm chart adds a 5-second <code>preStop</code> sleep (<code>drainDelaySeconds</code>), or sets <code>server.drain_delay</code> on Kubernetes 1.29, which has no sleep action.</p>
 <p>The <a href="../../get-started/compose/#scaled-out">scaled Compose example</a> and the <a href="../../get-started/helm/#scaled-out-with-postgres-and-s3">Helm chart</a> show complete setups.</p>
 <h2 id="targets">Targets<a class="headerlink" href="#targets" title="Permanent link">&para;</a></h2>
 <p>On the reference setup (two <code>web</code> replicas with 2 vCPU and 1 GiB each, one <code>worker</code>, Postgres and MinIO), Hangar aims for:</p>

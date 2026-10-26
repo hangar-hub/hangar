@@ -3200,9 +3200,9 @@ vllm<span class="w"> </span>serve<span class="w"> </span>Qwen/Qwen3-0.6B
 <td>Create a Token in Hangar.</td>
 </tr>
 <tr>
-<td><code>HfHubHTTPError</code> with status 409, naming a <code>hangar pull</code> command</td>
+<td><code>RemoteEntryNotFoundError</code> with status 409, saying the file is not in the arsenal</td>
 <td>The Repo is a Partial mirror and the file was not pulled.</td>
-<td>Run the command it names, or pull the whole Repo.</td>
+<td>Run the <code>hangar pull</code> command it names, or pull the whole Repo.</td>
 </tr>
 <tr>
 <td><code>LocalEntryNotFoundError</code> with <code>HF_HUB_OFFLINE=1</code></td>

@@ -3118,7 +3118,8 @@ Pull it now? [y/N]
 <h2 id="limits">Limits<a class="headerlink" href="#limits" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>ollama push</code> to Hangar is not supported. Use <code>hangar import --from-ollama</code> to bring models you have in Ollama into the Arsenal.</li>
-<li>Ollama must reach Hangar on the host the model name gives, at the root of that host. Ollama refuses redirects to other hosts, so Hangar always streams Ollama downloads itself, even on S3 in <code>redirect</code> mode.</li>
+<li>Ollama must reach Hangar on the host the model name gives, at the root of that host.</li>
+<li>On S3 in <code>redirect</code> mode, Hangar answers a model layer download with a redirect to a presigned URL, so <code>ollama pull</code> takes the bytes straight from the bucket, as <code>hf download</code> does. Ollama follows that redirect only to a public address unless you pass <code>--insecure</code>, so with a bucket on a private network, such as MinIO on your LAN, pull with <code>--insecure</code> or set <code>storage.s3.download_mode: proxy</code>.</li>
 </ul>
 
 

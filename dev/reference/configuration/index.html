@@ -3445,6 +3445,12 @@
 <td>How long to let in-flight requests finish on SIGTERM. Longer downloads are cut.</td>
 </tr>
 <tr>
+<td><code>server.drain_delay</code><br><code>HANGAR_SERVER_DRAIN_DELAY</code></td>
+<td>duration</td>
+<td><code>0s</code></td>
+<td>How long to keep serving after SIGTERM while /readyz answers 503, so load balancers stop sending requests before the listener closes. 0 closes at once; the Helm chart uses a preStop hook instead.</td>
+</tr>
+<tr>
 <td><code>server.timezone</code><br><code>HANGAR_SERVER_TIMEZONE</code></td>
 <td>string</td>
 <td><code>UTC</code></td>
@@ -3604,7 +3610,7 @@
 <td><code>security.instance_key</code><br><code>HANGAR_SECURITY_INSTANCE_KEY</code></td>
 <td>string</td>
 <td><code>""</code></td>
-<td>32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. Generated on first start if empty.</td>
+<td>32-byte key, base64-encoded, that encrypts stored secrets and signs URLs. In role all, Hangar generates one in server.data_dir on first start if it is empty; roles web and worker never generate one, so set the same key on every process, or share one server.data_dir that already holds it.</td>
 </tr>
 <tr>
 <td><code>security.anonymous_read</code><br><code>HANGAR_SECURITY_ANONYMOUS_READ</code></td>
@@ -3983,6 +3989,12 @@
 <td>size</td>
 <td><code>10MiB</code></td>
 <td>Preupload answers regular for files below this size unless .gitattributes says LFS.</td>
+</tr>
+<tr>
+<td><code>hfapi.commit_inline_max</code><br><code>HANGAR_HFAPI_COMMIT_INLINE_MAX</code></td>
+<td>size</td>
+<td><code>1GiB</code></td>
+<td>Most bytes of regular (non-LFS) file content one Hub API commit may carry. Content past 32 MiB is spooled to the temporary directory, so this bounds the disk a commit can fill. Larger commits get 413.</td>
 </tr>
 <tr>
 <td><code>hfapi.xet</code><br><code>HANGAR_HFAPI_XET</code></td>

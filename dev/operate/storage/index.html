@@ -3143,7 +3143,7 @@
 <ul>
 <li>In <code>redirect</code> mode, LFS downloads and zip exports answer with a presigned URL, so file bytes go straight from the store to the client. Clients must reach the store's endpoint; if they cannot, use <code>proxy</code>, which streams through Hangar.</li>
 <li>In <code>direct</code> upload mode, large-file uploads from git-lfs, <code>huggingface_hub</code>, <code>hangar push</code> and the web UI go straight to presigned URLs, and the UI's Content Security Policy allows the store's origin. Clients must reach the store's endpoint; if they cannot, set <code>upload_mode: proxy</code>, and uploads stream through Hangar into the store. Presigned upload URLs sign no headers, because <code>huggingface_hub</code> sends none, and write to a staging key under <code>tmp/uploads/</code>; Hangar checks the SHA-256 and size of what arrives and copies it into place server-side before anyone can download it.</li>
-<li>Ollama downloads always stream through Hangar, because Ollama refuses redirects to other hosts.</li>
+<li>In <code>redirect</code> mode, Ollama model layers redirect to presigned URLs too. Ollama follows a redirect only to a public address unless it pulls with <code>--insecure</code>; see <a href="../../guides/ollama/#limits">Ollama</a>.</li>
 <li>At start, a server or worker that cannot reach the bucket keeps trying for <code>startup_wait</code>, logging <code>waiting for the Blob store</code> with the endpoint, the bucket and the error on each attempt, and then exits. While it waits, <code>/healthz</code> answers 200 and <code>/readyz</code> answers 503, so an object store that starts after Hangar, as in some GitOps installs, does not put Hangar into a restart back-off. The filesystem backend is not retried.</li>
 </ul>
 <table>

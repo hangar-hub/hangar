@@ -3120,6 +3120,7 @@
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>openssl<span class="w"> </span>rand<span class="w"> </span>-base64<span class="w"> </span><span class="m">18</span><span class="k">)</span><span class="s2">"</span>
 helm<span class="w"> </span>install<span class="w"> </span>hangar<span class="w"> </span>oci://ghcr.io/hangar-hub/charts/hangar<span class="w"> </span>--namespace<span class="w"> </span>hangar<span class="w"> </span>-f<span class="w"> </span>values.yaml
 </code></pre></div>
+<p>Every <code>web</code> and <code>worker</code> Pod must have the same Instance key, and Hangar refuses to start in those roles without one. Give it through <code>existingSecret</code> as above, through <code>secrets</code>, or let the chart generate it (<code>generateSecrets</code>, the default, which needs <code>helm install</code> or <code>helm upgrade</code>). A render that gives the Pods no key stops with an error.</p>
 <p>A pre-install and pre-upgrade Job runs <code>hangar admin migrate</code>, and <code>web</code> and <code>worker</code> Pods report ready only when the schema is at the version they expect. With <code>migrations.mode: initContainer</code>, each <code>web</code> and <code>worker</code> Pod runs the migration in an init container instead, with no Helm hooks; see <a href="#run-with-argo-cd">Run with Argo CD</a>. A fuller example is <a href="https://github.com/hangar-hub/hangar/blob/main/deploy/helm/examples/scale-values.yaml"><code>deploy/helm/examples/scale-values.yaml</code></a>.</p>
 <h2 id="run-with-argo-cd">Run with Argo CD<a class="headerlink" href="#run-with-argo-cd" title="Permanent link">&para;</a></h2>
 <p>Argo CD, Flux and other GitOps tools render the chart with <code>helm template</code> and apply the result. Two things differ from <code>helm install</code>:</p>
@@ -3242,6 +3243,10 @@ kubectl<span class="w"> </span>create<span class="w"> </span>secret<span class="
 <tr>
 <td><code>cacheSizeLimit</code>, <code>tmpSizeLimit</code></td>
 <td>Sizes of the emptyDir volumes for the git pack cache (default 16Gi) and <code>/tmp</code>. The pack cache goes over <code>git.cache_size</code> (10GiB by default) while Repos are in use, so the chart requires <code>cacheSizeLimit</code> to be at least a quarter larger; the kubelet evicts a Pod whose emptyDir passes its limit.</td>
+</tr>
+<tr>
+<td><code>drainDelaySeconds</code></td>
+<td>Seconds a terminating Pod keeps serving before Hangar closes its listener, so requests routed to it during a rolling update still succeed (default 5). A <code>preStop</code> sleep on Kubernetes 1.30 and later, <code>server.drain_delay</code> on 1.29. 0 turns it off.</td>
 </tr>
 <tr>
 <td><code>extraEnv</code>, <code>extraEnvFrom</code>, <code>extraVolumes</code>, <code>extraVolumeMounts</code></td>
