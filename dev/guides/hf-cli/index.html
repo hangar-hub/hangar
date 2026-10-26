@@ -3246,7 +3246,7 @@ hf<span class="w"> </span>repos<span class="w"> </span>create<span class="w"> </
 hf<span class="w"> </span>upload<span class="w"> </span>acme/my-model<span class="w"> </span>./weights
 </code></pre></div>
 <h2 id="sign-in">Sign in<a class="headerlink" href="#sign-in" title="Permanent link">&para;</a></h2>
-<p>Use <code>hf auth login --token</code>, or the <code>HF_TOKEN</code> variable. The browser sign-in that <code>hf auth login</code> starts without <code>--token</code> also works: it opens Hangar's device page, where you approve the code, and Hangar creates a write Token for the CLI.</p>
+<p>Use <code>hf auth login --token</code>, or the <code>HF_TOKEN</code> variable. The browser sign-in that <code>hf auth login</code> starts without <code>--token</code> also works: open Hangar's device page, type the code your terminal shows, check which client asked, when and from which IP address, and choose <code>read</code> or <code>write</code> access. Hangar then creates a Token for the CLI that expires in 30 days. Choose <code>write</code> if you will upload. Hangar never fills in the code from a link, so a link someone sends you cannot sign their device in as you.</p>
 <p><code>hf</code> keeps one active Token in <code>~/.cache/huggingface/token</code>, whichever endpoint it came from. If you also use huggingface.co, set <code>HF_ENDPOINT</code> and <code>HF_TOKEN</code> in each shell instead of signing in to both:</p>
 <div class="highlight"><pre><span></span><code><span class="nv">HF_ENDPOINT</span><span class="o">=</span>https://hangar.example.com<span class="w"> </span><span class="nv">HF_TOKEN</span><span class="o">=</span>hgr_...<span class="w"> </span>hf<span class="w"> </span>auth<span class="w"> </span>whoami
 </code></pre></div>

@@ -2796,6 +2796,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#hangar-admin-unlock-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin unlock-sign-in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#hangar-config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3679,6 +3690,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#hangar-admin-unlock-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin unlock-sign-in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#hangar-config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4055,6 +4077,7 @@
 <li><a href="#hangar-admin-reset-password"><code>hangar admin reset-password</code></a>: Set a local user's password</li>
 <li><a href="#hangar-admin-restore"><code>hangar admin restore</code></a>: Restore a backup made by hangar admin backup</li>
 <li><a href="#hangar-admin-rotate-key"><code>hangar admin rotate-key</code></a>: Replace the Instance key and re-encrypt every stored secret</li>
+<li><a href="#hangar-admin-unlock-sign-in"><code>hangar admin unlock-sign-in</code></a>: Clear sign-in throttling for a user or an IP address</li>
 </ul>
 <h2 id="hangar-admin-backup">hangar admin backup<a class="headerlink" href="#hangar-admin-backup" title="Permanent link">&para;</a></h2>
 <p>Back up the database and the Blob store to a folder.</p>
@@ -4590,6 +4613,74 @@ start Hangar again.
 <tr>
 <td><code>--set</code></td>
 <td>set a configuration key, such as --set database.dsn=... (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-unlock-sign-in">hangar admin unlock-sign-in<a class="headerlink" href="#hangar-admin-unlock-sign-in" title="Permanent link">&para;</a></h2>
+<p>Clear sign-in throttling for a user or an IP address.</p>
+<div class="highlight"><pre><span></span><code>Clears the sign-in throttle for a username, an IP address (--ip), or every
+username and address (--all), so they can sign in again at once. Use it when
+failed sign-ins, perhaps someone else's, have locked out an account you need,
+such as the bootstrap admin. The password is not changed; to change it, use
+hangar admin reset-password instead.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span><span class="o">[</span>username<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span>hangar-admin
+hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span>--ip<span class="w"> </span><span class="m">192</span>.0.2.10
+hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span>--all
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--all</code></td>
+<td>clear the throttle of every username and IP address</td>
+<td></td>
+</tr>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--ip</code></td>
+<td>clear the throttle of this client IP address</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
 <td></td>
 </tr>
 </tbody>
@@ -5352,8 +5443,10 @@ install uses them.
 <h2 id="hangar-login">hangar login<a class="headerlink" href="#hangar-login" title="Permanent link">&para;</a></h2>
 <p>Sign in to an Instance and save the Token.</p>
 <div class="highlight"><pre><span></span><code>Signs in to an Instance. Without --token, starts a device-code login: the
-browser opens a page on the Instance where you approve the code shown here,
-and the Instance creates a write Token for the CLI.
+browser opens a page on the Instance where you type the code shown here,
+check the details and approve it. The Instance then creates a Token for the
+CLI that expires in 30 days, with read access, or write access if you choose
+it on that page (needed to push, upload and pull into the Instance).
 
 The URL and username are saved in ~/.config/hangar/config.yaml. The Token is
 saved in the OS keychain where one is available, otherwise in that file with
@@ -5572,6 +5665,11 @@ hangar<span class="w"> </span>ollama<span class="w"> </span>install<span class="
 </table>
 <h2 id="hangar-ollama-key-register">hangar ollama key register<a class="headerlink" href="#hangar-ollama-key-register" title="Permanent link">&para;</a></h2>
 <p>Register ~/.ollama/id_ed25519.pub with the Instance.</p>
+<div class="highlight"><pre><span></span><code>Registers your Ollama key (~/.ollama/id_ed25519.pub) with the Instance, unless
+it is already registered. To prove the key is yours, the CLI signs a challenge
+from the Instance with the private key, ~/.ollama/id_ed25519, which never
+leaves this machine.
+</code></pre></div>
 <p>Usage:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>key<span class="w"> </span>register
 </code></pre></div>

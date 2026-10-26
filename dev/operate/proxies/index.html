@@ -3211,7 +3211,7 @@
 <p>Hangar serves plain HTTP; put a reverse proxy in front of it for TLS. Whatever proxy you use:</p>
 <ul>
 <li>Set <code>server.public_url</code> to the address clients use, with <code>https://</code>.</li>
-<li>Set <code>server.trusted_proxies</code> to the proxy's addresses, so Hangar believes its <code>X-Forwarded-For</code> and <code>X-Forwarded-Proto</code> headers and nobody else's.</li>
+<li>Set <code>server.trusted_proxies</code> to the proxy's addresses, so Hangar believes its <code>X-Forwarded-For</code> and <code>X-Forwarded-Proto</code> headers and nobody else's. Without it, every client has the proxy's address: one client's failed sign-ins throttle everyone, and the audit log records the proxy. Hangar logs a warning the first time a request with <code>X-Forwarded-For</code> comes from a peer that is not in the list.</li>
 <li>Do not buffer request or response bodies, and do not set a total request timeout: uploads and downloads stream and can take hours. Hangar closes connections idle for 5 minutes itself.</li>
 <li>Allow large request bodies (5 TiB files go up in parts of up to 512 MiB).</li>
 <li>Route <code>datasets-server.&lt;host&gt;</code> to Hangar as well, for the <code>datasets</code> library (see <a href="../../guides/datasets/#the-datasets-server-name">Datasets</a>).</li>
