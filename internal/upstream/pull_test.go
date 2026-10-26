@@ -220,6 +220,36 @@ func TestPullResumesFromUploadedParts(t *testing.T) {
 	})
 }
 
+// TestRetriedPullResumesTheTransfer: "Retry the Pull" queues new Jobs with
+// no result, so the upload ID of the earlier transfer is lost. The new
+// transfer still resumes Hangar's upload of the object by OID, size and
+// part size, instead of downloading the file from the start.
+func TestRetriedPullResumesTheTransfer(t *testing.T) {
+	forEachDB(t, func(t *testing.T, d *db.DB) {
+		e := newEnv(t, d, upstreamtest.HarnessOptions{PartSize: 1 << 10})
+		alice := e.User("alice")
+		big := bytes.Repeat([]byte("retry!!"), 1000) // 7,000 bytes, 7 parts
+		commit := e.Seed(tiny, nil, map[string][]byte{"model.safetensors": big})
+		e.Server.BreakAfter(3584)
+		id, _, err := e.Service.StartPull(e.Ctx, upstream.PullRequest{Repo: tiny, Actor: alice})
+		require.NoError(t, err)
+		e.Queue.RunPending(e.Ctx)
+		files, _, err := e.Queue.List(e.Ctx, jobs.Filter{Kinds: []jobs.Kind{jobs.KindPullFile}})
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		require.Equal(t, 1, files[0].Attempts, "the transfer broke after three parts")
+
+		require.NoError(t, e.Queue.Cancel(e.Ctx, id))
+		retried, err := e.Queue.Retry(e.Ctx, id)
+		require.NoError(t, err)
+		e.Server.BreakAfter(0)
+		e.Run(10)
+		require.Equal(t, jobs.StatusSucceeded, e.Job(retried).Status, e.Job(retried).Error)
+		require.Equal(t, big, readFile(t, e.Repos, tiny, commit, "model.safetensors"))
+		require.Equal(t, []string{"bytes=3072-"}, e.Server.Ranges(), "the retried Pull resumes after the three parts already uploaded")
+	})
+}
+
 // TestPullStartsAgainWhenTheBlobStoreExpiredItsUpload covers a Pull that
 // outlives the bucket's rule for aborting incomplete multipart uploads: the
 // upload ID in the Job's result no longer exists, so the retry starts a new

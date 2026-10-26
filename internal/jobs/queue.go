@@ -207,6 +207,16 @@ func (q *DBQueue) Get(ctx context.Context, id JobID) (*Job, error) {
 	return fromRow(&row)
 }
 
+// Postpone implements Queue.
+func (q *DBQueue) Postpone(ctx context.Context, id JobID, until time.Time) error {
+	until = until.UTC().Truncate(time.Microsecond)
+	if _, err := q.db.NewUpdate().Model((*db.Job)(nil)).Set("run_after = ?", until).Set("updated_at = ?", q.clock()).
+		Where("id = ? AND status = ? AND run_after < ?", id, string(StatusPending), until).Exec(ctx); err != nil {
+		return fmt.Errorf("postpone job %s: %w", id, err)
+	}
+	return nil
+}
+
 // List implements Queue. The cursor is the last Job ID of the previous page.
 func (q *DBQueue) List(ctx context.Context, f Filter) ([]*Job, string, error) {
 	limit := f.Limit
