@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.1](https://github.com/hangar-hub/hangar/compare/v1.3.0...v1.3.1) (2026-10-26)
+
+
+### Bug fixes
+
+* apply the language review to error messages, CLI help and UI copy ([#63](https://github.com/hangar-hub/hangar/issues/63)) ([fc8f915](https://github.com/hangar-hub/hangar/commit/fc8f9151a2b228570ed1f6fd4ef5468b58f2377b))
+* **auth:** harden device login, sign-in lockout, Ollama keys and sessions ([#59](https://github.com/hangar-hub/hangar/issues/59)) ([d710aa1](https://github.com/hangar-hub/hangar/commit/d710aa12e7c7161244ebba616c9ae7ec0947408e))
+* Hub API errors for Mirrors, commit limits and cursors, and graceful shutdown ([#62](https://github.com/hangar-hub/hangar/issues/62)) ([41feca3](https://github.com/hangar-hub/hangar/commit/41feca361d435e6eea94ad06ac30fbe8b545d483))
+* keep staged uploads from GC, resume retried Pulls, and harden blob deletes ([#61](https://github.com/hangar-hub/hangar/issues/61)) ([5229d29](https://github.com/hangar-hub/hangar/commit/5229d29b35d395e3d4207a440c1a5854a92a034e))
+* scan nested pickles, stop printing generated secrets, and scan release images before signing ([#60](https://github.com/hangar-hub/hangar/issues/60)) ([e660f0d](https://github.com/hangar-hub/hangar/commit/e660f0d8869e0706bcc9a30046f96f08b50ad9cb))
+
+
+### Documentation
+
+* add guides for an Ollama registry, a shared cache, CI and Kubernetes, and a banner on older versions ([#54](https://github.com/hangar-hub/hangar/issues/54)) ([11f1b41](https://github.com/hangar-hub/hangar/commit/11f1b4151519b943300a467bcb2ffead57d452cf))
+
 ## [1.3.0](https://github.com/hangar-hub/hangar/compare/v1.2.3...v1.3.0) (2026-10-23)
 
 
