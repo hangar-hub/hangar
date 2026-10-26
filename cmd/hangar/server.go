@@ -256,6 +256,17 @@ func waitForSchema(ctx context.Context, d *db.DB, log *slog.Logger) error {
 // reading data, and how long a keep-alive connection may sit idle.
 const streamIdleTimeout = 5 * time.Minute
 
+// Total limits on the request bodies of buffered endpoints, on top of
+// streamIdleTimeout, so a client that sends a body a byte at a time cannot
+// hold a goroutine, or a place in the sign-in queue, for long. Native API
+// bodies may be up to server.max_request_body (64 MiB by default), which
+// nativeBodyTimeout allows at about 0.5 MB/s; sign-in and registration
+// bodies are at most 64 KiB.
+const (
+	nativeBodyTimeout = 2 * time.Minute
+	authBodyTimeout   = 30 * time.Second
+)
+
 // Bounds of the retry interval in openBlobStoreWaiting.
 const (
 	blobRetryFirst = time.Second
@@ -335,17 +346,36 @@ func openBlobStore(ctx context.Context, cfg *config.Config, tel *telemetry.Telem
 	return blobs, nil
 }
 
-// printGenerated prints secrets generated on first start once, to stderr
-// and not to the log, which may be exported.
+// printGenerated tells the operator, once, where the secrets generated on
+// first start are. Under Docker, Compose and Kubernetes stderr is the
+// container log, which log shippers collect, so it never prints the
+// Instance key, and prints the admin password only when stderr is a
+// terminal.
 func printGenerated(w io.Writer, gen *config.Generated, cfg *config.Config) {
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Hangar generated these secrets on first start and saved them in "+gen.Path+".")
-	fmt.Fprintln(w, "They are shown once. Store them somewhere safe.")
+	fmt.Fprintln(w, "Hangar generated secrets on first start and saved them in "+gen.Path+" (mode 0600).")
 	if gen.AdminPassword != "" {
-		fmt.Fprintf(w, "  Admin username: %s\n  Admin password: %s\n", cfg.Security.BootstrapAdmin.Username, gen.AdminPassword)
+		fmt.Fprintf(w, "  Admin username: %s\n", cfg.Security.BootstrapAdmin.Username)
+		if isTerminal(w) {
+			fmt.Fprintf(w, "  Admin password: %s\n", gen.AdminPassword)
+		} else {
+			fmt.Fprintln(w, "  Admin password: bootstrap_admin_password in that file")
+		}
 	}
 	if gen.InstanceKey != "" {
-		fmt.Fprintf(w, "  Instance key:   %s\n", gen.InstanceKey)
+		fmt.Fprintln(w, "  Instance key:   instance_key in that file")
 	}
+	fmt.Fprintln(w, "Keep the file safe and back up the Instance key, which encrypts stored secrets.")
 	fmt.Fprintln(w, "")
+}
+
+// isTerminal reports whether w is a terminal, not a pipe or a file that
+// a log collector reads.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }

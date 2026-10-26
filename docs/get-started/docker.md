@@ -15,21 +15,17 @@ docker run -d --name hangar -p 8080:8080 -v hangar:/var/lib/hangar \
 
 `HANGAR_SERVER_PUBLIC_URL` is the URL clients use to reach Hangar. It appears in git URLs, LFS links and redirects, so set it to the address your users type, such as `https://hangar.example.com` behind a reverse proxy.
 
-On the first start Hangar generates an Instance key and a password for the first admin, saves them in `/var/lib/hangar/secrets.yaml` (mode 0600) and prints them once:
+On the first start Hangar generates an Instance key and a password for the first admin and saves them in `/var/lib/hangar/secrets.yaml` (mode 0600). The container log names the file but never holds the secrets, because log collectors can read it. The image has no shell, so copy the password out of the volume with `docker cp`:
 
 ```sh
-docker logs hangar
+docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin_password
 ```
 
 ```text
-Hangar generated these secrets on first start and saved them in /var/lib/hangar/secrets.yaml.
-They are shown once. Store them somewhere safe.
-  Admin username: hangar-admin
-  Admin password: XLhYPMrxhrVxjJDFmpPcPtVy
-  Instance key:   kDsZ+ywVEYHQMu+TaL+iXngDASu4CMDPRC0zH0RYkZs=
+bootstrap_admin_password: XLhYPMrxhrVxjJDFmpPcPtVy
 ```
 
-Keep the Instance key: it encrypts stored secrets such as upstream tokens and webhook secrets. Later starts read both from the file.
+The file also holds `instance_key`. Keep a copy of it: it encrypts stored secrets such as upstream tokens and webhook secrets. Later starts read both from the file.
 
 ## The image
 
