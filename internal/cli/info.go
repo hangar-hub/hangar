@@ -140,7 +140,7 @@ func (a *app) printRepoInfo(info repoInfo) error {
 		{"Default branch", r.DefaultBranch},
 		{"Commit", info.Commit},
 		{"Arsenal", arsenalLabel(info.Arsenal, false)},
-		{"Size", formatBytes(r.SizeBytes + r.LfsBytes)},
+		{"Size", formatBytes(r.SizeBytes)},
 	}
 	if l := deref(r.Licence); l != "" {
 		rows = append(rows, []string{"Licence", l})
