@@ -188,13 +188,23 @@ func upsertLFS(ctx context.Context, tx bun.IDB, repoID uuid.UUID, refs []LFSRef,
 
 // touchRepo updates last_modified_at and the size columns.
 func (s *Store) touchRepo(ctx context.Context, tx bun.IDB, repoID uuid.UUID, now time.Time) error {
-	_, err := tx.NewUpdate().Model((*db.Repo)(nil)).
-		Set("last_modified_at = ?", now).Set("updated_at = ?", now).
-		Set("lfs_bytes = (SELECT COALESCE(SUM(size), 0) FROM repo_lfs WHERE repo_id = ? AND present = ?)", repoID, true).
-		Set("size_bytes = (SELECT COALESCE(SUM(size), 0) FROM packs WHERE repo_id = ? AND state = ?) + (SELECT COALESCE(SUM(size), 0) FROM repo_lfs WHERE repo_id = ? AND present = ?)",
-			repoID, gitstore.PackLive, repoID, true).
-		Where("id = ?", repoID).Exec(ctx)
+	q := tx.NewUpdate().Model((*db.Repo)(nil)).
+		Set("last_modified_at = ?", now).Set("updated_at = ?", now)
+	_, err := setSizes(q, repoID).Where("id = ?", repoID).Exec(ctx)
 	return err
+}
+
+// setSizes sets a Repo's size columns from its live packs and its LFS
+// objects (Repo.SizeBytes, PresentBytes and LFSBytes).
+func setSizes(q *bun.UpdateQuery, repoID uuid.UUID) *bun.UpdateQuery {
+	const (
+		git  = "(SELECT COALESCE(SUM(size), 0) FROM packs WHERE repo_id = ? AND state = ?)"
+		held = "(SELECT COALESCE(SUM(size), 0) FROM repo_lfs WHERE repo_id = ? AND present = ?)"
+		all  = "(SELECT COALESCE(SUM(size), 0) FROM repo_lfs WHERE repo_id = ?)"
+	)
+	return q.Set("lfs_bytes = "+held, repoID, true).
+		Set("size_bytes = "+git+" + "+all, repoID, gitstore.PackLive, repoID).
+		Set("present_bytes = "+git+" + "+held, repoID, gitstore.PackLive, repoID, true)
 }
 
 // afterRefMove fills the caches, enqueues index, scan and compaction Jobs,

@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hangar-hub/hangar/internal/hfapi"
+	"github.com/hangar-hub/hangar/internal/hfapi/hfapitest"
 	"github.com/hangar-hub/hangar/internal/index"
 	"github.com/hangar-hub/hangar/internal/model"
 	"github.com/hangar-hub/hangar/internal/repo"
+	"github.com/hangar-hub/hangar/internal/repo/repotest"
 	"github.com/hangar-hub/hangar/internal/scan"
 )
 
@@ -96,6 +98,32 @@ func TestRepoInfo(t *testing.T) {
 	requireHubError(t, e.Request(t, http.MethodGet, "/api/models/alice/bert/revision/nope", "", ""), http.StatusNotFound, "RevisionNotFound")
 	requireHubError(t, e.Request(t, http.MethodGet, "/api/models/alice/none", "", ""), http.StatusUnauthorized, "RepoNotFound")
 	requireHubError(t, e.Request(t, http.MethodGet, "/api/datasets/alice/bert", "bob", ""), http.StatusNotFound, "RepoNotFound")
+}
+
+// partialSizes reports the sizes of a Partial mirror for every Repo: a
+// total of 6000 bytes, of which the Instance holds 1000.
+type partialSizes struct{ *repotest.Fake }
+
+func (p partialSizes) Get(ctx context.Context, id model.RepoID) (*repo.Repo, error) {
+	r, err := p.Fake.Get(ctx, id)
+	if err == nil {
+		r.SizeBytes, r.PresentBytes = 6000, 1000
+	}
+	return r, err
+}
+
+// TestUsedStorageIsWhatTheInstanceHolds checks that usedStorage of a
+// Partial mirror counts the files the Instance holds, not the files it has
+// not pulled (issue #69).
+func TestUsedStorageIsWhatTheInstanceHolds(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, func(o *hfapitest.Options) {
+		fake := repotest.NewFake(t)
+		o.Repos, o.LFS = partialSizes{fake}, fake.LFS
+	})
+	seed(t, e, "alice", modelID("alice", "partial"), model.VisibilityPublic, map[string]string{"config.json": configJSON})
+	info := decode[map[string]any](t, e.Request(t, http.MethodGet, "/api/models/alice/partial?expand=usedStorage", "", ""))
+	require.Equal(t, float64(1000), info["usedStorage"])
 }
 
 func TestDatasetInfoAndEmptyMirror(t *testing.T) {

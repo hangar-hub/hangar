@@ -4,10 +4,12 @@ import (
 	"context"
 	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun/migrate"
 
@@ -170,5 +172,61 @@ func TestMigrateRefusesANewerSchema(t *testing.T) {
 		require.Equal(t, []string{"9999"}, st.Unknown)
 		require.Equal(t, "9999", st.Current)
 		require.ErrorIs(t, st.CheckNotNewer(), db.ErrSchemaNewer)
+	})
+}
+
+// TestRepoPresentBytesMigration checks that 0011 moves what size_bytes
+// counted, git data plus the LFS objects held, to present_bytes, and adds
+// the LFS objects a Partial mirror does not hold to size_bytes.
+func TestRepoPresentBytesMigration(t *testing.T) {
+	forEachEmptyDB(t, func(t *testing.T, d *db.DB) {
+		ctx := context.Background()
+		files := migrationFiles(t, d.Driver(), func(p string) string { return p })
+		before := fstest.MapFS{}
+		for p, f := range files {
+			if p < "0011" {
+				before[p] = f
+			}
+		}
+		require.NoError(t, d.MigrateFS(ctx, before))
+
+		ns, mirror, local := uuid.NewString(), uuid.NewString(), uuid.NewString()
+		_, err := d.ExecContext(ctx, "INSERT INTO namespaces (id, name, kind) VALUES (?, 'acme', 'org')", ns)
+		require.NoError(t, err)
+		type lfsObject struct {
+			size    int64
+			present bool
+		}
+		// The Partial mirror holds 100 bytes of git data and one of its two
+		// LFS objects; the local Repo holds everything.
+		for _, r := range []struct {
+			id, name  string
+			size, lfs int64
+			objects   []lfsObject
+		}{
+			{mirror, "mirror", 1100, 1000, []lfsObject{{1000, true}, {5000, false}}},
+			{local, "local", 300, 200, []lfsObject{{200, true}}},
+		} {
+			_, err := d.ExecContext(ctx, "INSERT INTO repos (id, namespace_id, name, type, visibility, size_bytes, lfs_bytes) VALUES (?, ?, ?, 'model', 'public', ?, ?)",
+				r.id, ns, r.name, r.size, r.lfs)
+			require.NoError(t, err)
+			for i, o := range r.objects {
+				_, err := d.ExecContext(ctx, "INSERT INTO repo_lfs (repo_id, oid, size, present) VALUES (?, ?, ?, ?)", r.id, r.name+strconv.Itoa(i), o.size, o.present)
+				require.NoError(t, err)
+			}
+		}
+
+		require.NoError(t, d.MigrateFS(ctx, files))
+		for _, want := range []struct {
+			id                     string
+			size, present, lfsHeld int64
+		}{{mirror, 6100, 1100, 1000}, {local, 300, 300, 200}} {
+			var size, present, lfs int64
+			require.NoError(t, d.NewSelect().Table("repos").Column("size_bytes", "present_bytes", "lfs_bytes").
+				Where("id = ?", want.id).Scan(ctx, &size, &present, &lfs))
+			require.Equal(t, want.size, size, "size_bytes is the total")
+			require.Equal(t, want.present, present, "present_bytes is what size_bytes counted")
+			require.Equal(t, want.lfsHeld, lfs, "lfs_bytes does not change")
+		}
 	})
 }

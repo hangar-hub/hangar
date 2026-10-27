@@ -409,10 +409,6 @@ func (s *Store) SetLFSPresence(ctx context.Context, id model.RepoID, refs []LFSR
 }
 
 func (s *Store) touchSizes(ctx context.Context, tx bun.IDB, repoID uuid.UUID) error {
-	_, err := tx.NewUpdate().Model((*db.Repo)(nil)).
-		Set("lfs_bytes = (SELECT COALESCE(SUM(size), 0) FROM repo_lfs WHERE repo_id = ? AND present = ?)", repoID, true).
-		Set("size_bytes = (SELECT COALESCE(SUM(size), 0) FROM packs WHERE repo_id = ? AND state = ?) + (SELECT COALESCE(SUM(size), 0) FROM repo_lfs WHERE repo_id = ? AND present = ?)",
-			repoID, gitstore.PackLive, repoID, true).
-		Where("id = ?", repoID).Exec(ctx)
+	_, err := setSizes(tx.NewUpdate().Model((*db.Repo)(nil)), repoID).Where("id = ?", repoID).Exec(ctx)
 	return err
 }

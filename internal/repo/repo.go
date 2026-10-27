@@ -93,9 +93,13 @@ type Repo struct {
 	// LastModified is the time of the newest Commit on any branch.
 	LastModified time.Time
 	DeletedAt    *time.Time
-	// SizeBytes is git data plus LFS objects; LFSBytes counts LFS objects only.
-	SizeBytes int64
-	LFSBytes  int64
+	// SizeBytes is the total: git data plus every LFS object the Repo's
+	// Commits reference, held or not. PresentBytes is git data plus the LFS
+	// objects the Instance holds, and LFSBytes the LFS objects it holds. They
+	// differ only for a Partial mirror.
+	SizeBytes    int64
+	PresentBytes int64
+	LFSBytes     int64
 }
 
 // CreateParams describes a new Repo.

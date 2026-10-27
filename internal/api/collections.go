@@ -47,7 +47,7 @@ func (a *CollectionsAPI) collRepo(ctx context.Context, it collections.Item) *gen
 func collRepoOf(r *repo.Repo) *gen.Repo {
 	out := &gen.Repo{Id: r.ID.String(), Type: gen.RepoTypeSingular(r.ID.Type), Namespace: r.ID.Namespace, Name: r.ID.Name,
 		Visibility: gen.Visibility(r.Visibility), DefaultBranch: r.DefaultBranch, Mirror: r.Mirror, Gated: gen.RepoGated(r.Gating.Mode),
-		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, SizeBytes: r.SizeBytes, LfsBytes: r.LFSBytes}
+		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, SizeBytes: r.SizeBytes, LfsBytes: r.LFSBytes, PresentBytes: ptr(r.PresentBytes)}
 	u := r.UUID
 	out.Uuid = &u
 	if r.Description != "" {

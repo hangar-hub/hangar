@@ -246,16 +246,20 @@ func TestInfoAndSearch(t *testing.T) {
 	require.Contains(t, r.stdout, "42")
 
 	e.ok("pull", id.String()+":Q4_K_M", "--server-only")
-	// Size counts each stored file once, LFS objects included.
-	var stored int64
+	// A Partial mirror shows the size it holds of the total, each file
+	// counted once.
+	var stored, total int64
 	for p, c := range files {
+		total += int64(len(c))
 		if e.inst.Present(id, "main", p) {
 			stored += int64(len(c))
 		}
 	}
 	require.Greater(t, stored, int64(200<<10))
+	size := regexp.QuoteMeta(formatBytes(stored) + " of " + formatBytes(total))
 	r = e.ok("info", id.String())
-	require.Regexp(t, `Size:\s+`+regexp.QuoteMeta(formatBytes(stored))+`\n`, r.stdout)
+	require.Regexp(t, `Size:\s+`+size+`\n`, r.stdout)
+	require.Regexp(t, `bartowski/Tiny-GGUF\s.*\s`+size+`\s+mirror`, e.ok("search", "tiny").stdout)
 	require.Contains(t, r.stdout, "Partly in arsenal")
 	require.Contains(t, r.stdout, "Not in arsenal")
 	require.Contains(t, r.stdout, "Q8_0")

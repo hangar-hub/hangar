@@ -200,6 +200,7 @@ func toRepo(row *repoRow) *Repo {
 		CreatedAt:     row.CreatedAt.UTC(),
 		UpdatedAt:     row.UpdatedAt.UTC(),
 		SizeBytes:     row.SizeBytes,
+		PresentBytes:  row.PresentBytes,
 		LFSBytes:      row.LFSBytes,
 	}
 	if row.CreatedBy != nil {
