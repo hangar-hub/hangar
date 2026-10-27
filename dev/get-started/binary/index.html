@@ -3207,11 +3207,12 @@ hangar<span class="w"> </span>version
 </code></pre></div>
 <p>On macOS, download <code>hangar_${VERSION}_darwin_arm64.tar.gz</code> (or <code>darwin_amd64</code> on an Intel Mac) and check it with <code>shasum -a 256 --ignore-missing -c checksums.txt</code>. To check that <code>checksums.txt</code> itself came from Hangar's release workflow, verify its signature as <a href="../../operate/security/#verify-the-image">Verify the image</a> describes.</p>
 <p>Archives are built for Linux, macOS and Windows on amd64 and arm64, named <code>hangar_&lt;version&gt;_&lt;os&gt;_&lt;arch&gt;</code>: <code>.tar.gz</code> for Linux and macOS, and <code>.zip</code> for Windows. CI tests the server on Linux only; see <a href="../../reference/compatibility/#platforms">Tested versions and platforms</a>.</p>
+<p>Each archive also has shell completion scripts in its <code>completions</code> folder. To turn them on, see <a href="../../guides/hangar-cli/#turn-on-tab-completion">Turn on tab completion</a>.</p>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code>brew<span class="w"> </span>install<span class="w"> </span>--cask<span class="w"> </span>hangar-hub/tap/hangar
 </code></pre></div>
-<p>The cask removes macOS's quarantine attribute from the binary when it installs it, because the binary is not notarised, so Gatekeeper does not check it. <code>brew upgrade --cask hangar-hub/tap/hangar</code> installs new releases.</p>
+<p>The cask removes macOS's quarantine attribute from the binary when it installs it, because the binary is not notarised, so Gatekeeper does not check it. <code>brew upgrade --cask hangar-hub/tap/hangar</code> installs new releases. The cask also installs tab completion for bash, zsh and fish.</p>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code>go<span class="w"> </span>install<span class="w"> </span>github.com/hangar-hub/hangar/cmd/hangar@latest
