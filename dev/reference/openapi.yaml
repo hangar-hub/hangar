@@ -1665,9 +1665,9 @@ components:
         likes: {type: integer, format: int64}
         liked: {type: boolean}
         downloads: {type: integer, format: int64, description: Downloads in the last 30 days.}
-        size_bytes: {type: integer, format: int64}
-        lfs_bytes: {type: integer, format: int64}
-        present_bytes: {type: integer, format: int64}
+        size_bytes: {type: integer, format: int64, description: "Total size: git data plus every LFS object the Repo's Commits reference, held or not. The size sort and the size_max filter use it."}
+        lfs_bytes: {type: integer, format: int64, description: LFS objects the Instance holds.}
+        present_bytes: {type: integer, format: int64, description: Git data plus the LFS objects the Instance holds. Less than size_bytes only for a Partial mirror.}
         summary: {$ref: "#/components/schemas/RepoSummary"}
         permissions: {$ref: "#/components/schemas/RepoPermissions"}
     RepoSummary:
