@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0](https://github.com/hangar-hub/hangar/compare/v1.3.1...v1.4.0) (2026-10-27)
+
+
+### Features
+
+* **cli:** complete Repo IDs, quants, Jobs and flag values in the shell ([#70](https://github.com/hangar-hub/hangar/issues/70)) ([4bad839](https://github.com/hangar-hub/hangar/commit/4bad8395b29612a320bc85926963838b5c832820))
+
+
+### Bug fixes
+
+* **cli:** stop counting LFS objects twice in search and info sizes ([#68](https://github.com/hangar-hub/hangar/issues/68)) ([89b893c](https://github.com/hangar-hub/hangar/commit/89b893cfeea074e973effc96749efad7bb276891))
+* **index:** convert MLX bit widths and group sizes inside their range checks ([#65](https://github.com/hangar-hub/hangar/issues/65)) ([84dd538](https://github.com/hangar-hub/hangar/commit/84dd538fae92cbacbababf858cab53a87e70cba0))
+* show a Partial mirror's size as present of total ([#71](https://github.com/hangar-hub/hangar/issues/71)) ([d05f2ea](https://github.com/hangar-hub/hangar/commit/d05f2ea1058e2d08d60753cb6c8ddff3b3e454b3)), closes [#69](https://github.com/hangar-hub/hangar/issues/69)
+
+
+### Documentation
+
+* list the new guides and the on-premises page in llms.txt ([#66](https://github.com/hangar-hub/hangar/issues/66)) ([c2d54f4](https://github.com/hangar-hub/hangar/commit/c2d54f44776bc2c71b494000ba4430bf1527ccea))
+
 ## [1.3.1](https://github.com/hangar-hub/hangar/compare/v1.3.0...v1.3.1) (2026-10-26)
 
 
