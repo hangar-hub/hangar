@@ -1,0 +1,6248 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Every hangar command and flag, for the server, the client and admin work, with exit codes. Generated from the binary.">
+      
+      
+      
+        <link rel="canonical" href="https://hangar.page/latest/reference/cli/">
+      
+      
+        <link rel="prev" href="../native-api/">
+      
+      
+        <link rel="next" href="../configuration/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/icon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>CLI - Hangar</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        
+        <link rel="stylesheet" href="../../assets/external/fonts.googleapis.com/css.49ea35f2.css">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/reference/cli/"><meta property="og:title" content="CLI - Hangar"><meta property="og:description" content="Every hangar command and flag, for the server, the client and admin work, with exit codes. Generated from the binary."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "CLI", "description": "Every hangar command and flag, for the server, the client and admin work, with exit codes. Generated from the binary.", "url": "https://hangar.page/latest/reference/cli/", "mainEntityOfPage": "https://hangar.page/latest/reference/cli/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Reference", "item": "https://hangar.page/latest/reference/"}, {"@type": "ListItem", "position": 4, "name": "CLI", "item": "https://hangar.page/latest/reference/cli/"}]}]}</script></head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cli-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/reference/cli/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://hangar.page/" title="Hangar" class="md-header__button md-logo" aria-label="Hangar" data-md-component="logo">
+      
+  <img src="../../assets/icon.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Hangar
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CLI
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="teal"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="blue-grey" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/hangar-hub/hangar" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hangar-hub/hangar
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../get-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../concepts/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Concepts
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operate/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../project/support/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://hangar.page/" title="Hangar" class="md-nav__button md-logo" aria-label="Hangar" data-md-component="logo">
+      
+  <img src="../../assets/icon.svg" alt="logo">
+
+    </a>
+    Hangar
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/hangar-hub/hangar" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hangar-hub/hangar
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../get-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/requirements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/docker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/compose/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Compose
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/helm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Helm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/binary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Binary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/first-login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First sign-in
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/first-pull/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pull your first model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../get-started/hf-endpoint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Point HF_ENDPOINT at Hangar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../concepts/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/repos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repos and Revisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/mirrors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mirrors and Upstreams
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/pulls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pulls and Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Jobs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Permissions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Where Hangar keeps data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How Hangar compares
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/hf-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The hf CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/uploading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uploading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/datasets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    git and git-lfs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ollama
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/lm-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/vllm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    vLLM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/hangar-cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The hangar CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/pull-windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pull windows and bandwidth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/air-gapped/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Air-gapped Instances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/gated/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gated models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/collections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/webhooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage backends
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/databases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Databases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/scaling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/oidc/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OIDC
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    OIDC
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/keycloak/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keycloak
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/authentik/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentik
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/entra-id/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Microsoft Entra ID
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/google/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/okta/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Okta
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/gitlab/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitLab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/oidc/unifi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UniFi Identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/proxies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TLS and reverse proxies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/backup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup and restore
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/upgrades/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrades
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/uninstall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uninstall
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security hardening
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/threat-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threat model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hub-api-compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub API compatibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tested versions and platforms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit codes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin backup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-create-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin create-user
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-doctor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin doctor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-gc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin gc
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-migrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin migrate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-reindex" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin reindex
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-reset-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin reset-password
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin restore
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-rotate-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin rotate-key
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-unlock-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin unlock-sign-in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar config
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-config-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar config reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-config-validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar config validate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar env
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-healthcheck" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar healthcheck
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar import
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar info
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs-cancel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs cancel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs-watch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs watch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio-remove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio remove
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar login
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-logout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar logout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama key
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama-key-register" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama key register
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-pull" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar pull
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-push" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar push
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar search
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar version
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-whoami" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar whoami
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar worker
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../webhooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhook events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get help
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/versioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Versioning and support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/licence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Licence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit codes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin backup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-create-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin create-user
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-doctor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin doctor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-gc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin gc
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-migrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin migrate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-reindex" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin reindex
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-reset-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin reset-password
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin restore
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-rotate-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin rotate-key
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-admin-unlock-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar admin unlock-sign-in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar config
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-config-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar config reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-config-validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar config validate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar env
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-healthcheck" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar healthcheck
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar import
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar info
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs-cancel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs cancel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-jobs-watch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar jobs watch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-lmstudio-remove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar lmstudio remove
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-login" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar login
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-logout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar logout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama key
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-ollama-key-register" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar ollama key register
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-pull" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar pull
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-push" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar push
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar search
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar version
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-whoami" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar whoami
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hangar-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hangar worker
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cli-reference">CLI reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
+<!-- Generated by `hangar reference cli`. Do not edit; run `make generate`. -->
+
+<p><code>hangar</code> is one binary for the server and the client. Client commands talk to an Instance through the Hub API and the native API; admin commands work on an Instance's database and Blob store directly.</p>
+<p>Every client command takes <code>--url</code>, <code>--token</code> and <code>--json</code>. Without <code>--url</code> and <code>--token</code>, they use the login saved by <code>hangar login</code>, or the <code>HANGAR_CLI_URL</code> and <code>HANGAR_CLI_TOKEN</code> environment variables.</p>
+<h2 id="exit-codes">Exit codes<a class="headerlink" href="#exit-codes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Success.</td>
+</tr>
+<tr>
+<td>1</td>
+<td>An error.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>A usage error, such as a missing argument or an unknown flag.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Not found, such as a Repo or a file.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>An authentication error: not signed in, or the Token is not allowed.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin">hangar admin<a class="headerlink" href="#hangar-admin" title="Permanent link">&para;</a></h2>
+<p>Administer an Instance directly through its database and Blob store.</p>
+<p>Subcommands:</p>
+<ul>
+<li><a href="#hangar-admin-backup"><code>hangar admin backup</code></a>: Back up the database and the Blob store to a folder</li>
+<li><a href="#hangar-admin-create-user"><code>hangar admin create-user</code></a>: Create a local user</li>
+<li><a href="#hangar-admin-doctor"><code>hangar admin doctor</code></a>: Check the configuration, database, Blob store, presigned URLs, clock and git</li>
+<li><a href="#hangar-admin-gc"><code>hangar admin gc</code></a>: Collect garbage: unreferenced LFS objects and unused git data</li>
+<li><a href="#hangar-admin-migrate"><code>hangar admin migrate</code></a>: Apply database migrations</li>
+<li><a href="#hangar-admin-reindex"><code>hangar admin reindex</code></a>: Index and scan Repos again</li>
+<li><a href="#hangar-admin-reset-password"><code>hangar admin reset-password</code></a>: Set a local user's password</li>
+<li><a href="#hangar-admin-restore"><code>hangar admin restore</code></a>: Restore a backup made by hangar admin backup</li>
+<li><a href="#hangar-admin-rotate-key"><code>hangar admin rotate-key</code></a>: Replace the Instance key and re-encrypt every stored secret</li>
+<li><a href="#hangar-admin-unlock-sign-in"><code>hangar admin unlock-sign-in</code></a>: Clear sign-in throttling for a user or an IP address</li>
+</ul>
+<h2 id="hangar-admin-backup">hangar admin backup<a class="headerlink" href="#hangar-admin-backup" title="Permanent link">&para;</a></h2>
+<p>Back up the database and the Blob store to a folder.</p>
+<div class="highlight"><pre><span></span><code>Writes a backup folder: manifest.json, every database table as JSON Lines in
+db/, and every Blob store object in blobs/ under its key. Staging objects
+(tmp/, uploads/ and exports/) are left out.
+
+The database is read in one transaction, so it is consistent. Objects are
+copied after it; LFS objects and git packs never change once written, and
+garbage collection keeps unreferenced objects for gc.grace_period, so every
+object the database references is in the backup.
+
+With SQLite, stop Hangar first: only one process may open the database. With
+Postgres, the backup can run while Hangar is running. With --skip-blobs, back
+up the Blob store with the storage's own tools instead (for example bucket
+replication or a filesystem snapshot).
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>backup<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>backup<span class="w"> </span>--output<span class="w"> </span>/backups/hangar-<span class="k">$(</span>date<span class="w"> </span>+%F<span class="k">)</span>
+hangar<span class="w"> </span>admin<span class="w"> </span>backup<span class="w"> </span>--output<span class="w"> </span>/backups/db-only<span class="w"> </span>--skip-blobs
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>-o</code>, <code>--output</code></td>
+<td>folder to write the backup to; must not exist or be empty</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set database.dsn=... (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--skip-blobs</code></td>
+<td>back up the database only</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-create-user">hangar admin create-user<a class="headerlink" href="#hangar-admin-create-user" title="Permanent link">&para;</a></h2>
+<p>Create a local user.</p>
+<div class="highlight"><pre><span></span><code>Creates a local user with a personal Namespace. The password is read from
+standard input with --password-stdin, or generated and printed once.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>create-user<span class="w"> </span>&lt;username&gt;<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--admin</code></td>
+<td>make the user an Instance admin</td>
+<td></td>
+</tr>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--display-name</code></td>
+<td>the user's display name</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--email</code></td>
+<td>the user's email address</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--password-stdin</code></td>
+<td>read the password from standard input instead of generating one</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-doctor">hangar admin doctor<a class="headerlink" href="#hangar-admin-doctor" title="Permanent link">&para;</a></h2>
+<p>Check the configuration, database, Blob store, presigned URLs, clock and git.</p>
+<div class="highlight"><pre><span></span><code>Runs the same kind of checks as the readiness endpoint, with more detail:
+the configuration, the database connection and schema version, the clock
+against the database, a write, read and delete in the Blob store, presigned
+downloads on S3, and the git version. Exits with 1 if any check fails.
+
+With --large-read, it also writes an object of that size (1100 MiB if no
+size is given) to the Blob store and reads it back in one request at
+16 MiB/s, more slowly than the store sends, as Hangar does when it checks
+a large upload on a small server. A proxy in front of the store that cuts
+long reads, such as nginx with its default proxy_max_temp_file_size of
+1024 MiB, fails this check. It takes over a minute at the default size
+and deletes the object afterwards.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>doctor<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>doctor<span class="w"> </span>--config<span class="w"> </span>/etc/hangar/hangar.yaml
+hangar<span class="w"> </span>admin<span class="w"> </span>doctor<span class="w"> </span>--config<span class="w"> </span>/etc/hangar/hangar.yaml<span class="w"> </span>--large-read
+hangar<span class="w"> </span>admin<span class="w"> </span>doctor<span class="w"> </span>--config<span class="w"> </span>/etc/hangar/hangar.yaml<span class="w"> </span>--large-read<span class="o">=</span>3GiB
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--large-read</code></td>
+<td>also write an object of this size and read it back slowly in one request, to find a proxy that cuts long reads</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set database.dsn=... (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-gc">hangar admin gc<a class="headerlink" href="#hangar-admin-gc" title="Permanent link">&para;</a></h2>
+<p>Collect garbage: unreferenced LFS objects and unused git data.</p>
+<div class="highlight"><pre><span></span><code>Deletes LFS objects no Repo has referenced for gc.grace_period, orphaned
+LFS objects in the Blob store, retired and orphaned packs, git data of
+purged Repos, stale temporary files and abandoned uploads, then reports
+what it freed. It runs in this process; with --queue it queues a gc Job
+for the Instance's workers instead, which needs a running Instance on
+Postgres.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>gc<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--git</code></td>
+<td>collect git data only</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--lfs</code></td>
+<td>collect LFS objects only</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--queue</code></td>
+<td>queue a gc Job for the Instance's workers instead of running it here</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-migrate">hangar admin migrate<a class="headerlink" href="#hangar-admin-migrate" title="Permanent link">&para;</a></h2>
+<p>Apply database migrations.</p>
+<div class="highlight"><pre><span></span><code>Applies every pending migration. The Helm chart runs it in a pre-install and pre-upgrade Job, or in an init container of each web and worker Pod. Migrators that start together wait for one another. With --wait-for-database, it also waits for a Postgres server that does not answer yet, such as one whose Pod is still starting.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>migrate<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--wait-for-database</code></td>
+<td>how long to keep trying to connect while a Postgres database does not answer (0 fails at once)</td>
+<td><code>0s</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-reindex">hangar admin reindex<a class="headerlink" href="#hangar-admin-reindex" title="Permanent link">&para;</a></h2>
+<p>Index and scan Repos again.</p>
+<div class="highlight"><pre><span></span><code>Queues index and scan Jobs for the head of every branch of the named Repos,
+or of every Repo when none is named. With --stale it queues them only for
+results from an older indexer or scanner version, as workers do when they
+start. The Instance's workers run the Jobs; on SQLite they run when Hangar
+starts again.
+
+Name a Repo as namespace/name, or datasets/namespace/name for a dataset.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>reindex<span class="w"> </span><span class="o">[</span>repo...<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--stale</code></td>
+<td>queue Jobs only for results from an older indexer or scanner version</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>the type of Repo IDs without a prefix: model (the default) or dataset</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-reset-password">hangar admin reset-password<a class="headerlink" href="#hangar-admin-reset-password" title="Permanent link">&para;</a></h2>
+<p>Set a local user's password.</p>
+<div class="highlight"><pre><span></span><code>Sets a new password for a user, signs them out everywhere and clears
+sign-in throttling, for example when the only admin is locked out. The
+password is read from standard input with --password-stdin, or generated
+and printed once. To let a user choose their own, create a reset link in
+the admin UI instead.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>reset-password<span class="w"> </span>&lt;username&gt;<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--password-stdin</code></td>
+<td>read the password from standard input instead of generating one</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-restore">hangar admin restore<a class="headerlink" href="#hangar-admin-restore" title="Permanent link">&para;</a></h2>
+<p>Restore a backup made by hangar admin backup.</p>
+<div class="highlight"><pre><span></span><code>Restores a backup folder into the configured database and Blob store. The
+database is migrated first, and must then be at the same schema version as
+the backup: restore with the Hangar version that made the backup, then
+upgrade. The database must be empty unless --force is given, which deletes
+every row first.
+
+Rows are written in one transaction, so a failed restore leaves the database
+as it was. Objects already in the Blob store with the right size are not
+copied again. A backup from SQLite restores into Postgres and the other way
+round, and a filesystem backup restores into S3 and the other way round.
+
+Stop every Hangar process first.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>restore<span class="w"> </span>&lt;backup-folder&gt;<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>restore<span class="w"> </span>/backups/hangar-2026-10-13
+hangar<span class="w"> </span>admin<span class="w"> </span>restore<span class="w"> </span>/backups/hangar-2026-10-13<span class="w"> </span>--set<span class="w"> </span>database.driver<span class="o">=</span>postgres<span class="w"> </span>--set<span class="w"> </span>database.dsn<span class="o">=</span>postgres://...
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>delete every row in the database before restoring</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set database.dsn=... (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--skip-blobs</code></td>
+<td>restore the database only</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-rotate-key">hangar admin rotate-key<a class="headerlink" href="#hangar-admin-rotate-key" title="Permanent link">&para;</a></h2>
+<p>Replace the Instance key and re-encrypt every stored secret.</p>
+<div class="highlight"><pre><span></span><code>Generates a new security.instance_key (or uses --new-key) and, in one
+database transaction, re-encrypts every secret sealed with the old key:
+users' Upstream tokens, the Instance's token for each Upstream, and webhook
+secrets.
+
+Stop every Hangar process first: a process still running with the old key
+cannot read the re-encrypted secrets. If the key came from secrets.yaml in
+server.data_dir, the file is updated. Otherwise the new key is printed once;
+put it in your configuration, environment or Kubernetes Secret before you
+start Hangar again.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>rotate-key<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--new-key</code></td>
+<td>the new key, 32 bytes base64-encoded (default: generate one)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set database.dsn=... (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-admin-unlock-sign-in">hangar admin unlock-sign-in<a class="headerlink" href="#hangar-admin-unlock-sign-in" title="Permanent link">&para;</a></h2>
+<p>Clear sign-in throttling for a user or an IP address.</p>
+<div class="highlight"><pre><span></span><code>Clears the sign-in throttle for a username, an IP address (--ip), or every
+username and address (--all), so they can sign in again at once. Use it when
+failed sign-ins, perhaps someone else's, have locked out an account you need,
+such as the bootstrap admin. The password is not changed; to change it, use
+hangar admin reset-password instead.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span><span class="o">[</span>username<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span>hangar-admin
+hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span>--ip<span class="w"> </span><span class="m">192</span>.0.2.10
+hangar<span class="w"> </span>admin<span class="w"> </span>unlock-sign-in<span class="w"> </span>--all
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--all</code></td>
+<td>clear the throttle of every username and IP address</td>
+<td></td>
+</tr>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--ip</code></td>
+<td>clear the throttle of this client IP address</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-config">hangar config<a class="headerlink" href="#hangar-config" title="Permanent link">&para;</a></h2>
+<p>Work with the configuration.</p>
+<p>Subcommands:</p>
+<ul>
+<li><a href="#hangar-config-reference"><code>hangar config reference</code></a>: Print every configuration key with its type, default and description</li>
+<li><a href="#hangar-config-validate"><code>hangar config validate</code></a>: Check the configuration and list every problem</li>
+</ul>
+<h2 id="hangar-config-reference">hangar config reference<a class="headerlink" href="#hangar-config-reference" title="Permanent link">&para;</a></h2>
+<p>Print every configuration key with its type, default and description.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>config<span class="w"> </span>reference<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-config-validate">hangar config validate<a class="headerlink" href="#hangar-config-validate" title="Permanent link">&para;</a></h2>
+<p>Check the configuration and list every problem.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>config<span class="w"> </span>validate<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-env">hangar env<a class="headerlink" href="#hangar-env" title="Permanent link">&para;</a></h2>
+<p>Print environment variables that point Python tools at the Instance.</p>
+<div class="highlight"><pre><span></span><code>Prints HF_ENDPOINT and HF_TOKEN for the current Instance, so huggingface_hub,
+the hf CLI, transformers, datasets and other Hugging Face tools use Hangar.
+
+It also prints DISABLE_SAFETENSORS_CONVERSION=1. Without it, transformers can
+send the Repo ID of a model that has only pickle weights, and any Token passed
+to it, to a conversion service on huggingface.co.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>env<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>hangar<span class="w"> </span>env<span class="k">)</span><span class="s2">"</span>
+hangar<span class="w"> </span>env<span class="w"> </span>--shell<span class="w"> </span>fish<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="nb">source</span>
+hangar<span class="w"> </span>env<span class="w"> </span>--shell<span class="w"> </span>powershell<span class="w"> </span><span class="p">|</span><span class="w"> </span>Invoke-Expression
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--shell</code></td>
+<td>shell syntax: bash, zsh, fish or powershell (default: from $SHELL)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-healthcheck">hangar healthcheck<a class="headerlink" href="#hangar-healthcheck" title="Permanent link">&para;</a></h2>
+<p>Call /readyz on this host and exit 0 when ready.</p>
+<div class="highlight"><pre><span></span><code>Calls /readyz on the local listen address. The container image uses it as its HEALTHCHECK.
+
+With --retry-for, it tries again while the connection fails, for up to that long. A check
+through a Kubernetes Service needs this: the Service starts routing to a new Pod a moment
+after the Pod is ready, and until then it refuses connections. An answer from /readyz,
+ready or not, is never retried.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>healthcheck<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--retry-for</code></td>
+<td>keep trying for this long while the connection fails, such as 30s (0 tries once)</td>
+<td><code>0s</code></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-import">hangar import<a class="headerlink" href="#hangar-import" title="Permanent link">&para;</a></h2>
+<p>Add models you already have on disk to the Arsenal without pulling them again.</p>
+<div class="highlight"><pre><span></span><code>Adds content that is already on this machine to the Arsenal. Choose one source:
+
+  --from-hf-cache [path]   a Hugging Face cache (default ~/.cache/huggingface/hub).
+                           Each Repo becomes a Mirror of the Upstream Repo with
+                           the same ID: the Instance fetches its history, and
+                           the CLI uploads the files of every cached snapshot
+                           whose content matches a file the Mirror is missing.
+                           With --offline, or when the Upstream does not have
+                           the Repo, each becomes a local Repo with one Commit
+                           of the snapshot of main, or else the newest.
+  --from-dir &lt;dir&gt;         a folder, uploaded to --repo as one Commit, as
+                           hangar push does.
+  --from-lmstudio [path]   LM Studio's models folder (&lt;publisher&gt;/&lt;repo&gt;/&lt;files&gt;).
+                           Folders that match an Upstream Repo of the same name
+                           become Partial mirrors; the rest become local Repos.
+  --from-ollama            Ollama's models. Each model and tag becomes a local
+                           Repo in your Namespace (or --namespace) with its GGUF
+                           file and its template, system and params files.
+
+Uploads go through the Instance's API, so you need write access to the
+Namespaces involved. A file that fails to upload does not stop the other
+files or Repos: files that went up into a Mirror are added to it, and the
+results name what failed, so running the command again sends only that.
+Files whose content matches nothing in a Mirror are named after the results,
+with the reason. Use --dry-run to see what would be imported.
+
+To import some models and not the rest, give --only once for each, as it
+appears in the source: a Repo ID such as bartowski/Qwen2.5-7B-Instruct-GGUF
+for a Hugging Face cache, a &lt;publisher&gt;/&lt;repo&gt; folder for LM Studio, or a
+model and tag such as llama3.2:1b for Ollama (llama3.2 means llama3.2:latest).
+Patterns can use * and ?, which do not match /, and ignore case. A pattern
+that matches nothing stops the import before anything is uploaded.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache
+hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w"> </span>/mnt/models/hf<span class="w"> </span>--offline<span class="w"> </span>--namespace<span class="w"> </span>acme
+hangar<span class="w"> </span>import<span class="w"> </span>--from-hf-cache<span class="w"> </span>--only<span class="w"> </span><span class="s1">'bartowski/*'</span><span class="w"> </span>--only<span class="w"> </span>Qwen/Qwen2.5-7B-Instruct<span class="w"> </span>--dry-run
+hangar<span class="w"> </span>import<span class="w"> </span>--from-dir<span class="w"> </span>./weights<span class="w"> </span>--repo<span class="w"> </span>acme/my-model
+hangar<span class="w"> </span>import<span class="w"> </span>--from-lmstudio
+hangar<span class="w"> </span>import<span class="w"> </span>--from-ollama<span class="w"> </span>--namespace<span class="w"> </span>acme
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--dry-run</code></td>
+<td>only list what would be imported</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--from-dir</code></td>
+<td>import a folder as one Commit to --repo</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--from-hf-cache</code></td>
+<td>import a Hugging Face cache</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--from-lmstudio</code></td>
+<td>import LM Studio's models folder</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--from-ollama</code></td>
+<td>import Ollama's models</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--namespace</code></td>
+<td>Namespace for local Repos (default: the Repo's own, or yours for Ollama models)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--offline</code></td>
+<td>never ask the Upstream; create local Repos</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--ollama-models</code></td>
+<td>Ollama's models folder (default: $OLLAMA_MODELS or ~/.ollama/models)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--only</code></td>
+<td>only import models matching this pattern, such as 'bartowski/*' or llama3.2:1b (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--private</code></td>
+<td>make new local Repos private</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--repo</code></td>
+<td>with --from-dir, the Repo to import into, such as acme/model or datasets/acme/data</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--upstream</code></td>
+<td>Upstream that Mirrors track</td>
+<td><code>huggingface</code></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-info">hangar info<a class="headerlink" href="#hangar-info" title="Permanent link">&para;</a></h2>
+<p>Show a Repo's metadata, files, quants, Dependencies and Arsenal state.</p>
+<div class="highlight"><pre><span></span><code>Shows a Repo in the Arsenal: its metadata, files (and whether each one is in
+the Arsenal), GGUF quants, Dependencies and, for datasets, Configs and Splits.
+
+If the Repo is not in the Arsenal, shows what an Upstream has instead, unless
+--local is set. Repo IDs for datasets take a datasets/ prefix.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>info<span class="w"> </span>&lt;repo&gt;<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>info<span class="w"> </span>bartowski/Llama-3.2-3B-Instruct-GGUF
+hangar<span class="w"> </span>info<span class="w"> </span>datasets/lhoestq/demo1<span class="w"> </span>--json
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--local</code></td>
+<td>only look in the Arsenal</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--revision</code></td>
+<td>branch, tag or Commit SHA (default: the default branch)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>Repo type for IDs without a prefix: model or dataset</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--upstream</code></td>
+<td>Upstream to ask when the Repo is not in the Arsenal</td>
+<td><code>huggingface</code></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-jobs">hangar jobs<a class="headerlink" href="#hangar-jobs" title="Permanent link">&para;</a></h2>
+<p>List, watch and cancel your Pulls and other Jobs.</p>
+<p>Subcommands:</p>
+<ul>
+<li><a href="#hangar-jobs-cancel"><code>hangar jobs cancel</code></a>: Cancel a Job</li>
+<li><a href="#hangar-jobs-list"><code>hangar jobs list</code></a>: List your Jobs, newest first</li>
+<li><a href="#hangar-jobs-watch"><code>hangar jobs watch</code></a>: Show a Job's progress until it finishes</li>
+</ul>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-jobs-cancel">hangar jobs cancel<a class="headerlink" href="#hangar-jobs-cancel" title="Permanent link">&para;</a></h2>
+<p>Cancel a Job.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span><span class="nb">jobs</span><span class="w"> </span>cancel<span class="w"> </span>&lt;job-id&gt;
+</code></pre></div>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-jobs-list">hangar jobs list<a class="headerlink" href="#hangar-jobs-list" title="Permanent link">&para;</a></h2>
+<p>List your Jobs, newest first.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span><span class="nb">jobs</span><span class="w"> </span>list<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--all</code></td>
+<td>list every Job you can see, not only yours (admins see the whole Instance)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--kind</code></td>
+<td>only Jobs of this kind, such as pull</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--status</code></td>
+<td>only Jobs with this status: pending, running, succeeded, failed or cancelled</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-jobs-watch">hangar jobs watch<a class="headerlink" href="#hangar-jobs-watch" title="Permanent link">&para;</a></h2>
+<p>Show a Job's progress until it finishes.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span><span class="nb">jobs</span><span class="w"> </span>watch<span class="w"> </span>&lt;job-id&gt;
+</code></pre></div>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-lmstudio">hangar lmstudio<a class="headerlink" href="#hangar-lmstudio" title="Permanent link">&para;</a></h2>
+<p>Install Hangar models into LM Studio.</p>
+<div class="highlight"><pre><span></span><code>Installs models from the Instance into LM Studio's models folder, laid out as
+&lt;namespace&gt;/&lt;name&gt;/&lt;files&gt;. Files are downloaded once into the local Hugging
+Face cache and linked into LM Studio's folder, so the disk is used once even
+when Python libraries use the same model.
+
+The models folder is --lmstudio-dir if given; otherwise the downloadsFolder in
+LM Studio's settings.json, in LM Studio's home folder (the path in
+~/.lmstudio-home-pointer, else ~/.cache/lm-studio, else ~/.lmstudio);
+otherwise the models folder in that home folder.
+</code></pre></div>
+<p>Subcommands:</p>
+<ul>
+<li><a href="#hangar-lmstudio-install"><code>hangar lmstudio install</code></a>: Download a model and link it into LM Studio</li>
+<li><a href="#hangar-lmstudio-list"><code>hangar lmstudio list</code></a>: List models installed from Hangar, and whether a newer Revision exists</li>
+<li><a href="#hangar-lmstudio-remove"><code>hangar lmstudio remove</code></a>: Remove a model's links from LM Studio</li>
+</ul>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--lmstudio-dir</code></td>
+<td>LM Studio's models folder</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-lmstudio-install">hangar lmstudio install<a class="headerlink" href="#hangar-lmstudio-install" title="Permanent link">&para;</a></h2>
+<p>Download a model and link it into LM Studio.</p>
+<div class="highlight"><pre><span></span><code>Downloads a model into the local cache and links it into LM Studio. For a GGUF
+Repo, installs one quant group and any mmproj-*.gguf projector files; without
+a quant, picks Q4_K_M, or the closest available. Other Repos, such as MLX,
+are installed whole.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>lmstudio<span class="w"> </span>install<span class="w"> </span>&lt;repo&gt;<span class="o">[</span>:&lt;quant&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>lmstudio<span class="w"> </span>install<span class="w"> </span>bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
+hangar<span class="w"> </span>lmstudio<span class="w"> </span>install<span class="w"> </span>mlx-community/SmolLM-135M-Instruct-4bit<span class="w"> </span>--link-mode<span class="w"> </span>copy
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--cache-dir</code></td>
+<td>Hugging Face cache folder (default: $HF_HUB_CACHE or ~/.cache/huggingface/hub)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--link-mode</code></td>
+<td>how files get into LM Studio's folder: symlink, hardlink or copy</td>
+<td><code>symlink</code></td>
+</tr>
+<tr>
+<td><code>--revision</code></td>
+<td>branch, tag or Commit SHA (default: the default branch)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--lmstudio-dir</code></td>
+<td>LM Studio's models folder</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-lmstudio-list">hangar lmstudio list<a class="headerlink" href="#hangar-lmstudio-list" title="Permanent link">&para;</a></h2>
+<p>List models installed from Hangar, and whether a newer Revision exists.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>lmstudio<span class="w"> </span>list
+</code></pre></div>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--lmstudio-dir</code></td>
+<td>LM Studio's models folder</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-lmstudio-remove">hangar lmstudio remove<a class="headerlink" href="#hangar-lmstudio-remove" title="Permanent link">&para;</a></h2>
+<p>Remove a model's links from LM Studio.</p>
+<div class="highlight"><pre><span></span><code>Removes the files hangar lmstudio install put in LM Studio's folder. With
+--prune, also deletes the model's files from the local cache when no other
+install uses them.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>lmstudio<span class="w"> </span>remove<span class="w"> </span>&lt;repo&gt;<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--prune</code></td>
+<td>also delete cached files no other install uses</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--lmstudio-dir</code></td>
+<td>LM Studio's models folder</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-login">hangar login<a class="headerlink" href="#hangar-login" title="Permanent link">&para;</a></h2>
+<p>Sign in to an Instance and save the Token.</p>
+<div class="highlight"><pre><span></span><code>Signs in to an Instance. Without --token, starts a device-code login: the
+browser opens a page on the Instance where you type the code shown here,
+check the details and approve it. The Instance then creates a Token for the
+CLI that expires in 30 days, with read access, or write access if you choose
+it on that page (needed to push, upload and pull into the Instance).
+
+The URL and username are saved in ~/.config/hangar/config.yaml. The Token is
+saved in the OS keychain where one is available, otherwise in that file with
+mode 0600. Pass --token - to read the Token from standard input.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>login<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>login<span class="w"> </span>--url<span class="w"> </span>https://hangar.example.com
+hangar<span class="w"> </span>login<span class="w"> </span>--url<span class="w"> </span>http://localhost:8080<span class="w"> </span>--token<span class="w"> </span>hgr_xxxxxxxx
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$TOKEN</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>hangar<span class="w"> </span>login<span class="w"> </span>--url<span class="w"> </span>https://hangar.example.com<span class="w"> </span>--token<span class="w"> </span>-
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--no-browser</code></td>
+<td>print the approval link instead of opening a browser</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-logout">hangar logout<a class="headerlink" href="#hangar-logout" title="Permanent link">&para;</a></h2>
+<p>Forget the saved Token.</p>
+<div class="highlight"><pre><span></span><code>Removes the saved Token from the OS keychain and the configuration file.
+The Token itself stays valid until you revoke it in the web UI under
+Settings, Tokens.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span><span class="nb">logout</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-ollama">hangar ollama<a class="headerlink" href="#hangar-ollama" title="Permanent link">&para;</a></h2>
+<p>Install Hangar GGUF models into Ollama.</p>
+<p>Subcommands:</p>
+<ul>
+<li><a href="#hangar-ollama-install"><code>hangar ollama install</code></a>: Pull a GGUF model into Ollama from the Instance</li>
+<li><a href="#hangar-ollama-key"><code>hangar ollama key</code></a>: Manage your Ollama key on the Instance</li>
+</ul>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-ollama-install">hangar ollama install<a class="headerlink" href="#hangar-ollama-install" title="Permanent link">&para;</a></h2>
+<p>Pull a GGUF model into Ollama from the Instance.</p>
+<div class="highlight"><pre><span></span><code>Runs ollama pull &lt;host&gt;/&lt;namespace&gt;/&lt;name&gt;:&lt;quant&gt; against the Instance, adding
+--insecure for an http:// Instance.
+
+Before that, checks that the quant is in the Arsenal. Without a quant, Ollama
+asks for "latest", which is Q4_K_M or the closest quant. Ollama shows only
+"file does not exist" for a quant the Instance has not pulled, so when it is
+missing this command says so, prints the hangar pull command that pulls it
+into the Instance, and offers to run it (--pull runs it without asking).
+
+Then checks that your Ollama key (~/.ollama/id_ed25519.pub) is registered with
+the Instance, and offers to register it. Ollama needs the key for every Repo
+unless the Repo is public and the Instance allows anonymous reads
+(security.anonymous_read, off by default).
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>install<span class="w"> </span>&lt;repo&gt;<span class="o">[</span>:&lt;quant&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>install<span class="w"> </span>bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
+hangar<span class="w"> </span>ollama<span class="w"> </span>install<span class="w"> </span>bartowski/Llama-3.2-3B-Instruct-GGUF:Q8_0<span class="w"> </span>--pull
+hangar<span class="w"> </span>ollama<span class="w"> </span>install<span class="w"> </span>acme/private-model<span class="w"> </span>--yes
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--pull</code></td>
+<td>pull the quant into the Instance first, without asking, if it is not in the Arsenal</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--skip-key-check</code></td>
+<td>do not check the Ollama key, for public Repos on an Instance that allows anonymous reads</td>
+<td></td>
+</tr>
+<tr>
+<td><code>-y</code>, <code>--yes</code></td>
+<td>register the Ollama key without asking</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-ollama-key">hangar ollama key<a class="headerlink" href="#hangar-ollama-key" title="Permanent link">&para;</a></h2>
+<p>Manage your Ollama key on the Instance.</p>
+<p>Subcommands:</p>
+<ul>
+<li><a href="#hangar-ollama-key-register"><code>hangar ollama key register</code></a>: Register ~/.ollama/id_ed25519.pub with the Instance</li>
+</ul>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-ollama-key-register">hangar ollama key register<a class="headerlink" href="#hangar-ollama-key-register" title="Permanent link">&para;</a></h2>
+<p>Register ~/.ollama/id_ed25519.pub with the Instance.</p>
+<div class="highlight"><pre><span></span><code>Registers your Ollama key (~/.ollama/id_ed25519.pub) with the Instance, unless
+it is already registered. To prove the key is yours, the CLI signs a challenge
+from the Instance with the private key, ~/.ollama/id_ed25519, which never
+leaves this machine.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>key<span class="w"> </span>register
+</code></pre></div>
+<p>Inherited flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-pull">hangar pull<a class="headerlink" href="#hangar-pull" title="Permanent link">&para;</a></h2>
+<p>Pull a Repo into the Arsenal and download it to the local cache.</p>
+<div class="highlight"><pre><span></span><code>Makes sure the Repo, or the files you choose, are in the Arsenal: if they are
+not, asks the Instance to pull them from an Upstream and shows the progress.
+Then downloads them into the local Hugging Face cache, where Python libraries
+pointed at the same Instance find them, or into a folder with --to.
+
+Choose files with a GGUF quant after a colon, --include and --exclude
+patterns, or, for datasets, --config, --split and --parquet-only. With
+--server-only, nothing is downloaded to this machine.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>pull<span class="w"> </span>&lt;repo&gt;<span class="o">[</span>:&lt;quant&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>pull<span class="w"> </span>bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
+hangar<span class="w"> </span>pull<span class="w"> </span>hf-internal-testing/tiny-random-bert<span class="w"> </span>--include<span class="w"> </span><span class="s1">'*.json'</span><span class="w"> </span>--include<span class="w"> </span><span class="s1">'*.safetensors'</span>
+hangar<span class="w"> </span>pull<span class="w"> </span>datasets/lhoestq/demo1<span class="w"> </span>--config<span class="w"> </span>default<span class="w"> </span>--split<span class="w"> </span>train<span class="w"> </span>--parquet-only<span class="w"> </span>--to<span class="w"> </span>./data
+hangar<span class="w"> </span>pull<span class="w"> </span>Qwen/Qwen3-0.6B<span class="w"> </span>--server-only
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--cache-dir</code></td>
+<td>Hugging Face cache folder (default: $HF_HUB_CACHE or ~/.cache/huggingface/hub)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--config</code></td>
+<td>dataset Config to pull (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--exclude</code></td>
+<td>skip files matching this pattern (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--include</code></td>
+<td>only files matching this pattern, such as '*.safetensors' (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--now</code></td>
+<td>start the Pull now, outside the Instance's pull windows, if allowed</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--parquet-only</code></td>
+<td>pull and download only the dataset's Parquet export</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--revision</code></td>
+<td>branch, tag or Commit SHA (default: the default branch)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--server-only</code></td>
+<td>only pull into the Arsenal; download nothing</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--split</code></td>
+<td>dataset Split to pull (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--to</code></td>
+<td>download into this folder instead of the Hugging Face cache</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--track</code></td>
+<td>make a new Mirror follow its upstream branch</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>Repo type for IDs without a prefix: model or dataset</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--upstream</code></td>
+<td>Upstream to pull from when the Repo is not in the Arsenal</td>
+<td><code>huggingface</code></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-push">hangar push<a class="headerlink" href="#hangar-push" title="Permanent link">&para;</a></h2>
+<p>Upload a folder to a Repo as one Commit.</p>
+<div class="highlight"><pre><span></span><code>Uploads every file under a folder as one Commit. Large files go up in parts,
+straight to the Blob store where the Instance allows it, and an interrupted
+upload resumes from the parts already stored when you run the command again.
+A part that fails for a reason that may pass, such as a dropped connection
+or a 503 from a proxy, is sent again up to 6 times with a growing wait, and
+part URLs that expired are renewed. When finishing an upload fails for a
+reason that may pass (the Instance answers 503 with Retry-After, a proxy
+cuts the request off, or no answer comes within 5 minutes, or 40 seconds
+per GiB for a file larger than 7.5 GiB), the command waits and tries again,
+up to 10 times.
+
+A file that still fails does not stop the others: the command uploads the
+rest, names the files that failed and makes no Commit, so running it again
+sends only those files.
+Files the Instance already has anywhere are not sent again.
+
+With --branch, a branch that does not exist yet is created from the default
+branch before the upload starts.
+
+The .git folder and huggingface_hub's .cache/huggingface folder are skipped.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>push<span class="w"> </span>&lt;dir&gt;<span class="w"> </span>&lt;repo&gt;<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>push<span class="w"> </span>./my-finetune<span class="w"> </span>acme/my-finetune<span class="w"> </span>--create<span class="w"> </span>--private
+hangar<span class="w"> </span>push<span class="w"> </span>./data<span class="w"> </span>datasets/acme/reviews<span class="w"> </span>--message<span class="w"> </span><span class="s2">"Add the March export"</span>
+hangar<span class="w"> </span>push<span class="w"> </span>./out<span class="w"> </span>acme/model<span class="w"> </span>--branch<span class="w"> </span>experiment<span class="w"> </span>--include<span class="w"> </span><span class="s1">'*.safetensors'</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--branch</code></td>
+<td>branch to commit to, created from the default branch if it does not exist (default: the default branch)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--create</code></td>
+<td>create the Repo if it does not exist</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--create-pr</code></td>
+<td>open a pull request instead of committing to the branch</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--description</code></td>
+<td>longer Commit description</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--exclude</code></td>
+<td>skip files matching this pattern (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--include</code></td>
+<td>only upload files matching this pattern (repeatable)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>-m</code>, <code>--message</code></td>
+<td>Commit message</td>
+<td><code>Upload with hangar push</code></td>
+</tr>
+<tr>
+<td><code>--private</code></td>
+<td>with --create, make the new Repo private</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>Repo type for IDs without a prefix: model or dataset</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-search">hangar search<a class="headerlink" href="#hangar-search" title="Permanent link">&para;</a></h2>
+<p>Search the Arsenal, or an Upstream with --upstream.</p>
+<div class="highlight"><pre><span></span><code>Searches the Repos you can see in the Arsenal. With --upstream, searches an
+Upstream instead (Discover) and marks each result as in the Arsenal, partly in
+the Arsenal, or not.
+
+Filters for the Arsenal are key=value pairs: format, task, library, quant,
+licence, ns, params_min, params_max, context_min, size_max, mirror, modality,
+language and size_category. Filters for an Upstream are its tags, such as
+gguf, mlx or text-generation.
+</code></pre></div>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>search<span class="w"> </span><span class="o">[</span>query<span class="o">]</span><span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Examples:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>search<span class="w"> </span>llama<span class="w"> </span>--filter<span class="w"> </span><span class="nv">format</span><span class="o">=</span>gguf<span class="w"> </span>--filter<span class="w"> </span><span class="nv">quant</span><span class="o">=</span>Q4_K_M
+hangar<span class="w"> </span>search<span class="w"> </span>--type<span class="w"> </span>dataset<span class="w"> </span>--filter<span class="w"> </span><span class="nv">task</span><span class="o">=</span>text-classification
+hangar<span class="w"> </span>search<span class="w"> </span>qwen<span class="w"> </span>--upstream<span class="w"> </span>--filter<span class="w"> </span>gguf<span class="w"> </span>--sort<span class="w"> </span>downloads
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--filter</code></td>
+<td>filter results (repeatable); see above</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--limit</code></td>
+<td>maximum number of results, up to 500</td>
+<td><code>50</code></td>
+</tr>
+<tr>
+<td><code>--sort</code></td>
+<td>sort order. For the Arsenal: updated, name, size, parameters, downloads or likes. For an Upstream: trending, downloads, likes or lastModified</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>Repo type: model or dataset</td>
+<td><code>model</code></td>
+</tr>
+<tr>
+<td><code>--upstream</code></td>
+<td>search this Upstream instead of the Arsenal (default: huggingface)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-server">hangar server<a class="headerlink" href="#hangar-server" title="Permanent link">&para;</a></h2>
+<p>Run the Instance: web UI, APIs and Jobs, as set by server.role.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>server<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>write logs as JSON, even if the configuration sets text (shortcut for --set telemetry.log_format=json)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-version">hangar version<a class="headerlink" href="#hangar-version" title="Permanent link">&para;</a></h2>
+<p>Print the version.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>version<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-whoami">hangar whoami<a class="headerlink" href="#hangar-whoami" title="Permanent link">&para;</a></h2>
+<p>Show the signed-in user.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>whoami
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--json</code></td>
+<td>print JSON instead of text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>Token to use instead of the saved login (or HANGAR_CLI_TOKEN)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>Instance URL (default: from hangar login, or HANGAR_CLI_URL)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="hangar-worker">hangar worker<a class="headerlink" href="#hangar-worker" title="Permanent link">&para;</a></h2>
+<p>Run a worker that only runs Jobs, with health and metrics endpoints.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>worker<span class="w"> </span><span class="o">[</span>flags<span class="o">]</span>
+</code></pre></div>
+<p>Flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-c</code>, <code>--config</code></td>
+<td>YAML configuration file (or set HANGAR_CONFIG)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>write logs as JSON, even if the configuration sets text (shortcut for --set telemetry.log_format=json)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--listen</code></td>
+<td>shortcut for --set server.listen=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--public-url</code></td>
+<td>shortcut for --set server.public_url=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>shortcut for --set server.role=...</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--set</code></td>
+<td>set a configuration key, such as --set storage.backend=s3 (repeatable)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../native-api/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Native API">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Native API
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../configuration/" class="md-footer__link md-footer__link--next" aria-label="Next: Configuration">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Configuration
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Hangar is source-available under the Elastic License 2.0. Hugging Face, Ollama and LM Studio are trademarks of their owners. Hangar is an independent project, not affiliated with or endorsed by them.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
