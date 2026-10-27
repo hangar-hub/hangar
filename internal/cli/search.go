@@ -50,6 +50,9 @@ gguf, mlx or text-generation.`,
 	f.StringArrayVar(&filters, "filter", nil, "filter results (repeatable); see above")
 	f.StringVar(&sort, "sort", "", "sort order. For the Arsenal: updated, name, size, parameters, downloads or likes. For an Upstream: trending, downloads, likes or lastModified")
 	f.IntVar(&limit, "limit", 50, "maximum number of results, up to 500")
+	_ = cmd.RegisterFlagCompletionFunc("type", repoTypes)
+	_ = cmd.RegisterFlagCompletionFunc("filter", completeSearchFilter)
+	_ = cmd.RegisterFlagCompletionFunc("sort", completeSearchSort)
 	return cmd
 }
 

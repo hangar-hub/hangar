@@ -40,6 +40,7 @@ func (f *adminFlags) register(cmd *cobra.Command, a *app) {
 	fl.BoolVar(&a.json, "json", false, "print JSON instead of text")
 	fl.StringVarP(&f.file, "config", "c", "", "YAML configuration file (or set HANGAR_CONFIG)")
 	fl.StringArrayVar(&f.set, "set", nil, "set a configuration key, such as --set database.dsn=... (repeatable)")
+	CompleteConfigFlags(cmd)
 }
 
 func (f *adminFlags) load() (*config.Config, error) {

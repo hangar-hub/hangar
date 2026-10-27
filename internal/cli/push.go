@@ -63,6 +63,15 @@ The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,
   hangar push ./data datasets/acme/reviews --message "Add the March export"
   hangar push ./out acme/model --branch experiment --include '*.safetensors'`,
 		Args: args(cobra.ExactArgs(2)),
+		ValidArgsFunction: func(cmd *cobra.Command, argv []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			switch len(argv) {
+			case 0:
+				return nil, cobra.ShellCompDirectiveFilterDirs
+			case 1:
+				return a.completeRepo(cmd, toComplete, o.Type, "", false)
+			}
+			return nil, noFiles
+		},
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			ref, err := parseRepoRef(argv[1], o.Type, false)
@@ -98,6 +107,7 @@ The .git folder and huggingface_hub's .cache/huggingface folder are skipped.`,
 	f.StringArrayVar(&o.Include, "include", nil, "only upload files matching this pattern (repeatable)")
 	f.StringArrayVar(&o.Exclude, "exclude", nil, "skip files matching this pattern (repeatable)")
 	f.BoolVar(&o.CreatePR, "create-pr", false, "open a pull request instead of committing to the branch")
+	_ = cmd.RegisterFlagCompletionFunc("type", repoTypes)
 	return cmd
 }
 

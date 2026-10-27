@@ -23,13 +23,15 @@ One binary is both the server and the client. Install it with any of these:
 
     Archives are built for Linux, macOS and Windows on amd64 and arm64, named `hangar_<version>_<os>_<arch>`: `.tar.gz` for Linux and macOS, and `.zip` for Windows. CI tests the server on Linux only; see [Tested versions and platforms](../reference/compatibility.md#platforms).
 
+    Each archive also has shell completion scripts in its `completions` folder. To turn them on, see [Turn on tab completion](../guides/hangar-cli.md#turn-on-tab-completion).
+
 === "Homebrew"
 
     ```sh
     brew install --cask hangar-hub/tap/hangar
     ```
 
-    The cask removes macOS's quarantine attribute from the binary when it installs it, because the binary is not notarised, so Gatekeeper does not check it. `brew upgrade --cask hangar-hub/tap/hangar` installs new releases.
+    The cask removes macOS's quarantine attribute from the binary when it installs it, because the binary is not notarised, so Gatekeeper does not check it. `brew upgrade --cask hangar-hub/tap/hangar` installs new releases. The cask also installs tab completion for bash, zsh and fish.
 
 === "go install"
 

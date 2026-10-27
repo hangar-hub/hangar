@@ -147,6 +147,7 @@ otherwise the models folder in that home folder.`,
 	a.clientFlags(cmd)
 	var lmDir string
 	cmd.PersistentFlags().StringVar(&lmDir, "lmstudio-dir", "", "LM Studio's models folder")
+	_ = cmd.MarkPersistentFlagDirname("lmstudio-dir")
 
 	var linkMode, revision, cacheDir string
 	install := &cobra.Command{
@@ -158,7 +159,8 @@ a quant, picks Q4_K_M, or the closest available. Other Repos, such as MLX,
 are installed whole.`,
 		Example: `  hangar lmstudio install bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
   hangar lmstudio install mlx-community/SmolLM-135M-Instruct-4bit --link-mode copy`,
-		Args: args(cobra.ExactArgs(1)),
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: a.completeRepoArg(ptr(string(model.RepoTypeModel)), "", true),
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			ref, err := parseRepoRef(argv[0], "model", true)
@@ -179,6 +181,8 @@ are installed whole.`,
 	install.Flags().StringVar(&linkMode, "link-mode", defaultLinkMode(), "how files get into LM Studio's folder: symlink, hardlink or copy")
 	install.Flags().StringVar(&revision, "revision", "", "branch, tag or Commit SHA (default: the default branch)")
 	install.Flags().StringVar(&cacheDir, "cache-dir", "", "Hugging Face cache folder (default: $HF_HUB_CACHE or ~/.cache/huggingface/hub)")
+	_ = install.RegisterFlagCompletionFunc("link-mode", values(linkSymlink, linkHardlink, linkCopy))
+	_ = install.MarkFlagDirname("cache-dir")
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -196,7 +200,8 @@ are installed whole.`,
 		Long: `Removes the files hangar lmstudio install put in LM Studio's folder. With
 --prune, also deletes the model's files from the local cache when no other
 install uses them.`,
-		Args: args(cobra.ExactArgs(1)),
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: completeLMInstall,
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			ref, err := parseRepoRef(argv[0], "model", false)

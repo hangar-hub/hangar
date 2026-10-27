@@ -96,6 +96,8 @@ that matches nothing stops the import before anything is uploaded.`,
   hangar import --from-lmstudio
   hangar import --from-ollama --namespace acme`,
 		Args: args(cobra.MaximumNArgs(1)),
+		// The argument is the optional path of --from-hf-cache or --from-lmstudio.
+		ValidArgsFunction: dirs,
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			f := cmd.Flags()
@@ -162,6 +164,10 @@ that matches nothing stops the import before anything is uploaded.`,
 	f.BoolVar(&o.Private, "private", false, "make new local Repos private")
 	f.StringVar(&o.OllamaModels, "ollama-models", "", "Ollama's models folder (default: $OLLAMA_MODELS or ~/.ollama/models)")
 	f.StringArrayVar(&o.Only, "only", nil, "only import models matching this pattern, such as 'bartowski/*' or llama3.2:1b (repeatable)")
+	for _, n := range []string{"from-hf-cache", "from-dir", "from-lmstudio", "ollama-models"} {
+		_ = cmd.MarkFlagDirname(n)
+	}
+	_ = cmd.RegisterFlagCompletionFunc("repo", a.completeRepoFlag(ptr("")))
 	return cmd
 }
 

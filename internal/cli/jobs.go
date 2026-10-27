@@ -36,10 +36,13 @@ func (a *app) jobsCommand() *cobra.Command {
 	list.Flags().BoolVar(&all, "all", false, "list every Job you can see, not only yours (admins see the whole Instance)")
 	list.Flags().StringVar(&kind, "kind", "", "only Jobs of this kind, such as pull")
 	list.Flags().StringVar(&status, "status", "", "only Jobs with this status: pending, running, succeeded, failed or cancelled")
+	_ = list.RegisterFlagCompletionFunc("kind", completeJobKind)
+	_ = list.RegisterFlagCompletionFunc("status", jobStatuses)
 	watch := &cobra.Command{
-		Use:   "watch <job-id>",
-		Short: "Show a Job's progress until it finishes",
-		Args:  args(cobra.ExactArgs(1)),
+		Use:               "watch <job-id>",
+		Short:             "Show a Job's progress until it finishes",
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: a.completeJob,
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			id, err := parseJobID(argv[0])
@@ -60,9 +63,10 @@ func (a *app) jobsCommand() *cobra.Command {
 		},
 	}
 	cancel := &cobra.Command{
-		Use:   "cancel <job-id>",
-		Short: "Cancel a Job",
-		Args:  args(cobra.ExactArgs(1)),
+		Use:               "cancel <job-id>",
+		Short:             "Cancel a Job",
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: a.completeJob,
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			id, err := parseJobID(argv[0])
