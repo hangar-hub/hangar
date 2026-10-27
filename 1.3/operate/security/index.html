@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/security/"><meta property="og:title" content="Security hardening - Hangar"><meta property="og:description" content="A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Security hardening", "description": "A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities.", "url": "https://hangar.page/latest/operate/security/", "mainEntityOfPage": "https://hangar.page/latest/operate/security/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Security hardening", "item": "https://hangar.page/latest/operate/security/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/security/"><meta property="og:title" content="Security hardening - Hangar"><meta property="og:description" content="A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Security hardening", "description": "A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities.", "url": "https://hangar.page/latest/operate/security/", "mainEntityOfPage": "https://hangar.page/latest/operate/security/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Security hardening", "item": "https://hangar.page/latest/operate/security/"}]}]}</script></head>
   
   
     
@@ -88,6 +88,16 @@
     </div>
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/operate/security/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
         
       </div>
     
@@ -806,6 +816,8 @@
       
         
       
+        
+      
     
     
     
@@ -1056,6 +1068,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1074,6 +1114,14 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1335,6 +1383,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/lm-studio/" class="md-nav__link">
         
   
@@ -1391,6 +1467,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/hangar-cli/" class="md-nav__link">
         
   
@@ -1427,6 +1531,62 @@
     
   
     Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
   
 
     
@@ -3139,9 +3299,10 @@
 <p>This page lists what to do to run Hangar securely. For what Hangar protects, its trust boundaries and the threats it mitigates or leaves to you, see the <a href="../../security/threat-model/">threat model</a>.</p>
 <h2 id="checklist">Checklist<a class="headerlink" href="#checklist" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Serve Hangar over HTTPS only, with <code>server.public_url</code> set to the <code>https://</code> address, and set <code>server.trusted_proxies</code> to your proxy's addresses.</li>
+<li>Serve Hangar over HTTPS only, with <code>server.public_url</code> set to the <code>https://</code> address, and set <code>server.trusted_proxies</code> to your proxy's addresses. Without it, every client shares the proxy's address, so one client's failed sign-ins throttle everyone; Hangar logs a warning when it sees <code>X-Forwarded-For</code> from a peer outside the list.</li>
 <li>Keep <code>security.registration: closed</code> (the default) or <code>invite</code>, and leave <code>security.anonymous_read</code> off unless you want a public Instance. While it is off, signed-out visitors cannot see public Repos, user and Organisation profiles, member lists or public Collections either.</li>
-<li>Use OIDC with groups for Instance admins (<code>admin_groups</code>), and turn off local sign-in (<code>security.local_login: false</code>), keeping the bootstrap admin as a break-glass account with a long password stored offline.</li>
+<li>Use OIDC with groups for Instance admins (<code>admin_groups</code>), and turn off local sign-in (<code>security.local_login: false</code>), keeping the bootstrap admin as a break-glass account with a long password stored offline. Failed sign-ins from elsewhere do not lock an account out from addresses it signed in from in the last 90 days; if the bootstrap admin is locked out anyway, clear it with <code>hangar admin unlock-sign-in &lt;username&gt;</code> on the server host.</li>
+<li>Keep <code>server.public_url</code> on HTTPS so the session and CSRF cookies use the <code>__Host-</code> prefix, and keep <code>security.session_idle_timeout</code> (7 days by default) or shorten it on shared machines.</li>
 <li>Give Tokens the smallest scope, limit them to the Namespaces or Repos they need, and set an expiry.</li>
 <li>Tell users to change the password an admin gave them under <strong>Settings</strong>, <strong>Profile</strong>. A password change signs out the user's other sessions but keeps their Tokens, so someone who thinks their account was used by someone else should also revoke their Tokens under <strong>Settings</strong>, <strong>Tokens</strong>. Wrong current passwords count towards the same throttle as failed sign-ins. Users who forget their password still need a reset link from an admin. When a user changes their email, it waits for confirmation: select <strong>Email link</strong> next to them under <strong>Admin</strong>, <strong>Users</strong> and send the link to the new address, not to the user some other way, because opening it is what proves the address is theirs.</li>
 <li>Store the Instance key, database DSN and S3 keys in secrets, not configuration files. Rotate the Instance key with <code>hangar admin rotate-key</code> if it leaks.</li>
@@ -3323,7 +3484,7 @@ sha256sum<span class="w"> </span>--ignore-missing<span class="w"> </span>-c<span
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>

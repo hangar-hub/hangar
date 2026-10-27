@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/scaling/"><meta property="og:title" content="Scaling - Hangar"><meta property="og:description" content="Scale Hangar from one process to many: run web and worker roles behind a load balancer with Postgres and S3, and the targets it meets."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Scaling", "description": "Scale Hangar from one process to many: run web and worker roles behind a load balancer with Postgres and S3, and the targets it meets.", "url": "https://hangar.page/latest/operate/scaling/", "mainEntityOfPage": "https://hangar.page/latest/operate/scaling/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Scaling", "item": "https://hangar.page/latest/operate/scaling/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/scaling/"><meta property="og:title" content="Scaling - Hangar"><meta property="og:description" content="Scale Hangar from one process to many: run web and worker roles behind a load balancer with Postgres and S3, and the targets it meets."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Scaling", "description": "Scale Hangar from one process to many: run web and worker roles behind a load balancer with Postgres and S3, and the targets it meets.", "url": "https://hangar.page/latest/operate/scaling/", "mainEntityOfPage": "https://hangar.page/latest/operate/scaling/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Scaling", "item": "https://hangar.page/latest/operate/scaling/"}]}]}</script></head>
   
   
     
@@ -88,6 +88,16 @@
     </div>
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/operate/scaling/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
         
       </div>
     
@@ -806,6 +816,8 @@
       
         
       
+        
+      
     
     
     
@@ -1056,6 +1068,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1074,6 +1114,14 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1335,6 +1383,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/lm-studio/" class="md-nav__link">
         
   
@@ -1391,6 +1467,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/hangar-cli/" class="md-nav__link">
         
   
@@ -1427,6 +1531,62 @@
     
   
     Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
   
 
     
@@ -1810,6 +1970,17 @@
     <span class="md-ellipsis">
       
         What a scaled-out Instance needs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shutting-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shutting down
       
     </span>
   </a>
@@ -3005,6 +3176,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#shutting-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shutting down
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#targets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3071,10 +3253,13 @@
 <h2 id="what-a-scaled-out-instance-needs">What a scaled-out Instance needs<a class="headerlink" href="#what-a-scaled-out-instance-needs" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Postgres and an S3-compatible bucket (or a shared filesystem path).</li>
-<li>The same <code>security.instance_key</code> on every process.</li>
+<li>The same <code>security.instance_key</code> on every process. Hangar generates a key only in role <code>all</code>. A process in role <code>web</code> or <code>worker</code> refuses to start without one, unless it shares a <code>server.data_dir</code> whose <code>secrets.yaml</code> already holds a key. Make a key with <code>openssl rand -base64 32</code> and give it to every process as <code>HANGAR_SECURITY_INSTANCE_KEY</code>. The Helm chart generates one into a Secret, or reads it from <code>existingSecret</code>.</li>
 <li><code>hangar admin migrate</code> before new versions start.</li>
 <li>Each worker process runs up to <code>jobs.workers</code> Jobs at once (4 by default). <code>pull.concurrency</code> also caps Pull transfers across the Instance.</li>
 </ul>
+<h2 id="shutting-down">Shutting down<a class="headerlink" href="#shutting-down" title="Permanent link">&para;</a></h2>
+<p>On SIGTERM, a process answers 503 on <code>/readyz</code> at once, and its worker stops claiming new Jobs. It keeps serving for <code>server.drain_delay</code> (0 by default), so a load balancer that checks <code>/readyz</code> stops sending requests before the listener closes. Then in-flight requests get up to <code>server.shutdown_timeout</code> (30 seconds) to finish, and the worker waits as long for its Jobs. A Job whose handler is still running after that goes back to the queue when its lease expires.</p>
+<p>Behind a load balancer outside Kubernetes, set <code>server.drain_delay</code> to a little more than the load balancer's health check interval, such as <code>5s</code>. The Helm chart adds a 5-second <code>preStop</code> sleep (<code>drainDelaySeconds</code>), or sets <code>server.drain_delay</code> on Kubernetes 1.29, which has no sleep action.</p>
 <p>The <a href="../../get-started/compose/#scaled-out">scaled Compose example</a> and the <a href="../../get-started/helm/#scaled-out-with-postgres-and-s3">Helm chart</a> show complete setups.</p>
 <h2 id="targets">Targets<a class="headerlink" href="#targets" title="Permanent link">&para;</a></h2>
 <p>On the reference setup (two <code>web</code> replicas with 2 vCPU and 1 GiB each, one <code>worker</code>, Postgres and MinIO), Hangar aims for:</p>
@@ -3213,7 +3398,7 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>

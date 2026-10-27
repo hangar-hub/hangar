@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/get-started/helm/"><meta property="og:title" content="Hugging Face Hub on Kubernetes with Helm - Hangar"><meta property="og:description" content="Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Hugging Face Hub on Kubernetes with Helm", "description": "Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD.", "url": "https://hangar.page/latest/get-started/helm/", "mainEntityOfPage": "https://hangar.page/latest/get-started/helm/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Get started", "item": "https://hangar.page/latest/get-started/"}, {"@type": "ListItem", "position": 4, "name": "Helm", "item": "https://hangar.page/latest/get-started/helm/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/get-started/helm/"><meta property="og:title" content="Hugging Face Hub on Kubernetes with Helm - Hangar"><meta property="og:description" content="Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Hugging Face Hub on Kubernetes with Helm", "description": "Deploy Hangar on Kubernetes with its Helm chart: one Pod with SQLite, or scaled out with Postgres and S3, and with Argo CD.", "url": "https://hangar.page/latest/get-started/helm/", "mainEntityOfPage": "https://hangar.page/latest/get-started/helm/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Get started", "item": "https://hangar.page/latest/get-started/"}, {"@type": "ListItem", "position": 4, "name": "Helm", "item": "https://hangar.page/latest/get-started/helm/"}]}]}</script></head>
   
   
     
@@ -88,6 +88,16 @@
     </div>
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/get-started/helm/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
         
       </div>
     
@@ -747,6 +757,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -886,6 +907,8 @@
       
         
           
+        
+      
         
       
         
@@ -1152,6 +1175,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1170,6 +1221,14 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1431,6 +1490,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/lm-studio/" class="md-nav__link">
         
   
@@ -1487,6 +1574,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/hangar-cli/" class="md-nav__link">
         
   
@@ -1523,6 +1638,62 @@
     
   
     Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
   
 
     
@@ -3056,6 +3227,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3120,6 +3302,7 @@
 <span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">HANGAR_SECURITY_BOOTSTRAP_ADMIN_PASSWORD</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>openssl<span class="w"> </span>rand<span class="w"> </span>-base64<span class="w"> </span><span class="m">18</span><span class="k">)</span><span class="s2">"</span>
 helm<span class="w"> </span>install<span class="w"> </span>hangar<span class="w"> </span>oci://ghcr.io/hangar-hub/charts/hangar<span class="w"> </span>--namespace<span class="w"> </span>hangar<span class="w"> </span>-f<span class="w"> </span>values.yaml
 </code></pre></div>
+<p>Every <code>web</code> and <code>worker</code> Pod must have the same Instance key, and Hangar refuses to start in those roles without one. Give it through <code>existingSecret</code> as above, through <code>secrets</code>, or let the chart generate it (<code>generateSecrets</code>, the default, which needs <code>helm install</code> or <code>helm upgrade</code>). A render that gives the Pods no key stops with an error.</p>
 <p>A pre-install and pre-upgrade Job runs <code>hangar admin migrate</code>, and <code>web</code> and <code>worker</code> Pods report ready only when the schema is at the version they expect. With <code>migrations.mode: initContainer</code>, each <code>web</code> and <code>worker</code> Pod runs the migration in an init container instead, with no Helm hooks; see <a href="#run-with-argo-cd">Run with Argo CD</a>. A fuller example is <a href="https://github.com/hangar-hub/hangar/blob/main/deploy/helm/examples/scale-values.yaml"><code>deploy/helm/examples/scale-values.yaml</code></a>.</p>
 <h2 id="run-with-argo-cd">Run with Argo CD<a class="headerlink" href="#run-with-argo-cd" title="Permanent link">&para;</a></h2>
 <p>Argo CD, Flux and other GitOps tools render the chart with <code>helm template</code> and apply the result. Two things differ from <code>helm install</code>:</p>
@@ -3244,6 +3427,10 @@ kubectl<span class="w"> </span>create<span class="w"> </span>secret<span class="
 <td>Sizes of the emptyDir volumes for the git pack cache (default 16Gi) and <code>/tmp</code>. The pack cache goes over <code>git.cache_size</code> (10GiB by default) while Repos are in use, so the chart requires <code>cacheSizeLimit</code> to be at least a quarter larger; the kubelet evicts a Pod whose emptyDir passes its limit.</td>
 </tr>
 <tr>
+<td><code>drainDelaySeconds</code></td>
+<td>Seconds a terminating Pod keeps serving before Hangar closes its listener, so requests routed to it during a rolling update still succeed (default 5). A <code>preStop</code> sleep on Kubernetes 1.30 and later, <code>server.drain_delay</code> on 1.29. 0 turns it off.</td>
+</tr>
+<tr>
 <td><code>extraEnv</code>, <code>extraEnvFrom</code>, <code>extraVolumes</code>, <code>extraVolumeMounts</code></td>
 <td>Anything else.</td>
 </tr>
@@ -3251,6 +3438,8 @@ kubectl<span class="w"> </span>create<span class="w"> </span>secret<span class="
 </table>
 <p>Every Pod runs as non-root with a read-only root filesystem, no privilege escalation, every capability dropped and the <code>RuntimeDefault</code> seccomp profile. <code>helm test</code> checks <code>/readyz</code> from inside the cluster.</p>
 <p>The full list is in the chart's <a href="https://github.com/hangar-hub/hangar/blob/main/deploy/helm/hangar/values.yaml"><code>values.yaml</code></a>.</p>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<p>To load models into other Pods in the cluster from Hangar, without downloading them on every Pod start, see <a href="../../guides/kubernetes/">Load models in Kubernetes</a>.</p>
 
 
 
@@ -3355,7 +3544,7 @@ kubectl<span class="w"> </span>create<span class="w"> </span>secret<span class="
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>

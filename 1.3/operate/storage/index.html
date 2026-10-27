@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/storage/"><meta property="og:title" content="Store models on S3, MinIO or local disk - Hangar"><meta property="og:description" content="Choose where Hangar stores model files: the filesystem or any S3-compatible store, with multipart upload clean-up, garbage collection and quotas."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Store models on S3, MinIO or local disk", "description": "Choose where Hangar stores model files: the filesystem or any S3-compatible store, with multipart upload clean-up, garbage collection and quotas.", "url": "https://hangar.page/latest/operate/storage/", "mainEntityOfPage": "https://hangar.page/latest/operate/storage/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Storage backends", "item": "https://hangar.page/latest/operate/storage/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/storage/"><meta property="og:title" content="Store models on S3, MinIO or local disk - Hangar"><meta property="og:description" content="Choose where Hangar stores model files: the filesystem or any S3-compatible store, with multipart upload clean-up, garbage collection and quotas."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Store models on S3, MinIO or local disk", "description": "Choose where Hangar stores model files: the filesystem or any S3-compatible store, with multipart upload clean-up, garbage collection and quotas.", "url": "https://hangar.page/latest/operate/storage/", "mainEntityOfPage": "https://hangar.page/latest/operate/storage/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Storage backends", "item": "https://hangar.page/latest/operate/storage/"}]}]}</script></head>
   
   
     
@@ -88,6 +88,16 @@
     </div>
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/operate/storage/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
         
       </div>
     
@@ -806,6 +816,8 @@
       
         
       
+        
+      
     
     
     
@@ -1056,6 +1068,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1074,6 +1114,14 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1335,6 +1383,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/lm-studio/" class="md-nav__link">
         
   
@@ -1391,6 +1467,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/hangar-cli/" class="md-nav__link">
         
   
@@ -1427,6 +1531,62 @@
     
   
     Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
   
 
     
@@ -3143,7 +3303,7 @@
 <ul>
 <li>In <code>redirect</code> mode, LFS downloads and zip exports answer with a presigned URL, so file bytes go straight from the store to the client. Clients must reach the store's endpoint; if they cannot, use <code>proxy</code>, which streams through Hangar.</li>
 <li>In <code>direct</code> upload mode, large-file uploads from git-lfs, <code>huggingface_hub</code>, <code>hangar push</code> and the web UI go straight to presigned URLs, and the UI's Content Security Policy allows the store's origin. Clients must reach the store's endpoint; if they cannot, set <code>upload_mode: proxy</code>, and uploads stream through Hangar into the store. Presigned upload URLs sign no headers, because <code>huggingface_hub</code> sends none, and write to a staging key under <code>tmp/uploads/</code>; Hangar checks the SHA-256 and size of what arrives and copies it into place server-side before anyone can download it.</li>
-<li>Ollama downloads always stream through Hangar, because Ollama refuses redirects to other hosts.</li>
+<li>In <code>redirect</code> mode, Ollama model layers redirect to presigned URLs too. Ollama follows a redirect only to a public address unless it pulls with <code>--insecure</code>; see <a href="../../guides/ollama/#limits">Ollama</a>.</li>
 <li>At start, a server or worker that cannot reach the bucket keeps trying for <code>startup_wait</code>, logging <code>waiting for the Blob store</code> with the endpoint, the bucket and the error on each attempt, and then exits. While it waits, <code>/healthz</code> answers 200 and <code>/readyz</code> answers 503, so an object store that starts after Hangar, as in some GitOps installs, does not put Hangar into a restart back-off. The filesystem backend is not retried.</li>
 </ul>
 <table>
@@ -3305,7 +3465,7 @@ hangar<span class="w"> </span>admin<span class="w"> </span>gc<span class="w"> </
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>

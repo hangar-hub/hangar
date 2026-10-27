@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://hangar.page/latest/guides/hangar-cli/">
       
       
-        <link rel="prev" href="../vllm/">
+        <link rel="prev" href="../kubernetes/">
       
       
         <link rel="next" href="../import/">
@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/hangar-cli/"><meta property="og:title" content="The hangar CLI - Hangar"><meta property="og:description" content="Use the hangar CLI to sign in, find and inspect Repos, pull and download, upload and import, follow Jobs and script Hangar."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "The hangar CLI", "description": "Use the hangar CLI to sign in, find and inspect Repos, pull and download, upload and import, follow Jobs and script Hangar.", "url": "https://hangar.page/latest/guides/hangar-cli/", "mainEntityOfPage": "https://hangar.page/latest/guides/hangar-cli/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "The hangar CLI", "item": "https://hangar.page/latest/guides/hangar-cli/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/hangar-cli/"><meta property="og:title" content="The hangar CLI - Hangar"><meta property="og:description" content="Use the hangar CLI to sign in, find and inspect Repos, pull and download, upload and import, follow Jobs and script Hangar."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "The hangar CLI", "description": "Use the hangar CLI to sign in, find and inspect Repos, pull and download, upload and import, follow Jobs and script Hangar.", "url": "https://hangar.page/latest/guides/hangar-cli/", "mainEntityOfPage": "https://hangar.page/latest/guides/hangar-cli/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "The hangar CLI", "item": "https://hangar.page/latest/guides/hangar-cli/"}]}]}</script></head>
   
   
     
@@ -88,6 +88,16 @@
     </div>
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/guides/hangar-cli/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
         
       </div>
     
@@ -806,6 +816,8 @@
       
         
       
+        
+      
     
     
     
@@ -1056,6 +1068,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1076,6 +1116,14 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1340,6 +1388,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../lm-studio/" class="md-nav__link">
         
   
@@ -1376,6 +1452,34 @@
     
   
     vLLM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
   
 
     
@@ -1556,6 +1660,62 @@
     
   
     Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
   
 
     
@@ -3150,6 +3310,7 @@ hangar<span class="w"> </span>login<span class="w"> </span>--url<span class="w">
 hangar<span class="w"> </span>whoami
 hangar<span class="w"> </span><span class="nb">logout</span>
 </code></pre></div>
+<p>The device sign-in opens the Instance's <strong>Connect a device</strong> page. Type the code the CLI prints, check the client (<code>hangar-cli</code>), the time and the IP address, and choose <code>read</code> access, or <code>write</code> if you will push, upload or pull into the Instance. The Token expires in 30 days; run <code>hangar login</code> again then.</p>
 <p>The URL and username are saved in <code>~/.config/hangar/config.yaml</code>; the Token goes in the OS keychain (macOS Keychain, Windows Credential Manager or the Secret Service on Linux) where one is available, otherwise in that file with mode 0600. In scripts and CI, set <code>HANGAR_CLI_URL</code> and <code>HANGAR_CLI_TOKEN</code> instead, or pass <code>--url</code> and <code>--token</code>. <code>HANGAR_CLI_CONFIG</code> points the CLI at another configuration file, and <code>HANGAR_CLI_NO_KEYCHAIN=1</code> keeps the Token in that file instead of the OS keychain.</p>
 <h2 id="find-and-inspect">Find and inspect<a class="headerlink" href="#find-and-inspect" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>search<span class="w"> </span>llama<span class="w"> </span>--filter<span class="w"> </span><span class="nv">format</span><span class="o">=</span>gguf<span class="w"> </span>--filter<span class="w"> </span><span class="nv">quant</span><span class="o">=</span>Q4_K_M<span class="w">   </span><span class="c1"># the Arsenal</span>
@@ -3221,7 +3382,7 @@ hangar<span class="w"> </span><span class="nb">jobs</span><span class="w"> </spa
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../vllm/" class="md-footer__link md-footer__link--prev" aria-label="Previous: vLLM">
+          <a href="../kubernetes/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Kubernetes model loading">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3231,7 +3392,7 @@ hangar<span class="w"> </span><span class="nb">jobs</span><span class="w"> </spa
                 Previous
               </span>
               <div class="md-ellipsis">
-                vLLM
+                Kubernetes model loading
               </div>
             </div>
           </a>
@@ -3285,7 +3446,7 @@ hangar<span class="w"> </span><span class="nb">jobs</span><span class="w"> </spa
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>

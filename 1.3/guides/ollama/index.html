@@ -16,7 +16,7 @@
         <link rel="prev" href="../git/">
       
       
-        <link rel="next" href="../lm-studio/">
+        <link rel="next" href="../ollama-registry/">
       
       
         
@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/ollama/"><meta property="og:title" content="Ollama pull from a private GGUF model registry - Hangar"><meta property="og:description" content="Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Ollama pull from a private GGUF model registry", "description": "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer.", "url": "https://hangar.page/latest/guides/ollama/", "mainEntityOfPage": "https://hangar.page/latest/guides/ollama/", "inLanguage": "en-GB", "dateModified": "2026-10-23", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "Ollama", "item": "https://hangar.page/latest/guides/ollama/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/ollama/"><meta property="og:title" content="Ollama pull from a private GGUF model registry - Hangar"><meta property="og:description" content="Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Ollama pull from a private GGUF model registry", "description": "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer.", "url": "https://hangar.page/latest/guides/ollama/", "mainEntityOfPage": "https://hangar.page/latest/guides/ollama/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "Ollama", "item": "https://hangar.page/latest/guides/ollama/"}]}]}</script></head>
   
   
     
@@ -88,6 +88,16 @@
     </div>
     
       <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're reading the documentation for an older version of Hangar.
+  <a href="https://hangar.page/latest/guides/ollama/"><strong>Read this page in the latest version.</strong></a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../..",location),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
         
       </div>
     
@@ -806,6 +816,8 @@
       
         
       
+        
+      
     
     
     
@@ -1056,6 +1068,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/on-premises/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hugging Face Hub on-premises
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1076,6 +1116,14 @@
       
         
           
+        
+      
+        
+      
+        
+      
+        
+      
         
       
         
@@ -1431,6 +1479,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../ollama-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Private Ollama registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../lm-studio/" class="md-nav__link">
         
   
@@ -1487,6 +1563,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes model loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../hangar-cli/" class="md-nav__link">
         
   
@@ -1523,6 +1627,62 @@
     
   
     Importing an existing cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shared-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared model cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rate limits in CI
   
 
     
@@ -3077,10 +3237,11 @@
 
 
 <h1 id="use-ollama">Use Ollama<a class="headerlink" href="#use-ollama" title="Permanent link">&para;</a></h1>
+<p>This guide pulls GGUF models from Hangar into Ollama on your own machine. To set Hangar up as the Ollama registry for a team or for shared Ollama servers, see <a href="../ollama-registry/">Run a private Ollama registry</a>.</p>
 <p>Hangar serves GGUF Repos to Ollama the way huggingface.co does. Ollama signs its requests with the key pair in <code>~/.ollama</code>, and Hangar needs that key for every Repo unless the Repo is public and the Instance allows anonymous reads (<code>security.anonymous_read</code>, off by default). Register the key once:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>key<span class="w"> </span>register
 </code></pre></div>
-<p>or paste <code>~/.ollama/id_ed25519.pub</code> under <strong>Settings</strong>, <strong>Ollama keys</strong>. A key you paste in Settings reads every Repo you can read. A key the CLI registers is tied to the CLI's token: it reads only what that token can read, and stops working when the token expires or is revoked. Run <code>hangar ollama key register</code> again after you sign the CLI in with a new token. Then this works with no Modelfile:</p>
+<p>or paste <code>~/.ollama/id_ed25519.pub</code> under <strong>Settings</strong>, <strong>Ollama keys</strong>. To prove the key is yours, Settings shows an <code>ssh-keygen -Y sign</code> command to run on the machine that has the key; paste its output as the signature. The CLI signs with <code>~/.ollama/id_ed25519</code> itself. The private key never leaves your machine. A key you paste in Settings reads every Repo you can read. A key the CLI registers is tied to the CLI's token: it reads only what that token can read, and stops working when the token expires or is revoked. Run <code>hangar ollama key register</code> again after you sign the CLI in with a new token. Then this works with no Modelfile:</p>
 <div class="highlight"><pre><span></span><code>ollama<span class="w"> </span>pull<span class="w"> </span>hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 ollama<span class="w"> </span>run<span class="w"> </span>hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 </code></pre></div>
@@ -3118,7 +3279,8 @@ Pull it now? [y/N]
 <h2 id="limits">Limits<a class="headerlink" href="#limits" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>ollama push</code> to Hangar is not supported. Use <code>hangar import --from-ollama</code> to bring models you have in Ollama into the Arsenal.</li>
-<li>Ollama must reach Hangar on the host the model name gives, at the root of that host. Ollama refuses redirects to other hosts, so Hangar always streams Ollama downloads itself, even on S3 in <code>redirect</code> mode.</li>
+<li>Ollama must reach Hangar on the host the model name gives, at the root of that host.</li>
+<li>On S3 in <code>redirect</code> mode, Hangar answers a model layer download with a redirect to a presigned URL, so <code>ollama pull</code> takes the bytes straight from the bucket, as <code>hf download</code> does. Ollama follows that redirect only to a public address unless you pass <code>--insecure</code>, so with a bucket on a private network, such as MinIO on your LAN, pull with <code>--insecure</code> or set <code>storage.s3.download_mode: proxy</code>.</li>
 </ul>
 
 
@@ -3177,13 +3339,13 @@ Pull it now? [y/N]
         
         
           
-          <a href="../lm-studio/" class="md-footer__link md-footer__link--next" aria-label="Next: LM Studio">
+          <a href="../ollama-registry/" class="md-footer__link md-footer__link--next" aria-label="Next: Private Ollama registry">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                LM Studio
+                Private Ollama registry
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -3224,7 +3386,7 @@ Pull it now? [y/N]
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest", "dev"], "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
