@@ -121,7 +121,7 @@ func (a *app) searchArsenal(ctx context.Context, q, typ, sort string, filters []
 		if repo.Type == gen.RepoTypeSingularDataset {
 			id = "datasets/" + id
 		}
-		rows = append(rows, []string{id, formats, quants, formatBytes(repo.SizeBytes + repo.LfsBytes), source, repo.UpdatedAt.Local().Format("2006-01-02")})
+		rows = append(rows, []string{id, formats, quants, formatBytes(repo.SizeBytes), source, repo.UpdatedAt.Local().Format("2006-01-02")})
 	}
 	return a.table([]string{"REPO", "FORMATS", "QUANTS", "SIZE", "SOURCE", "UPDATED"}, rows)
 }

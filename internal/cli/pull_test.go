@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -226,7 +227,7 @@ func TestPullDatasetParquetExport(t *testing.T) {
 func TestInfoAndSearch(t *testing.T) {
 	e := newEnv(t)
 	e.login()
-	id, _ := ggufRepo(e)
+	id, files := ggufRepo(e)
 
 	// Not in the Arsenal yet: info shows the Upstream's view.
 	r := e.ok("info", id.String())
@@ -245,7 +246,16 @@ func TestInfoAndSearch(t *testing.T) {
 	require.Contains(t, r.stdout, "42")
 
 	e.ok("pull", id.String()+":Q4_K_M", "--server-only")
+	// Size counts each stored file once, LFS objects included.
+	var stored int64
+	for p, c := range files {
+		if e.inst.Present(id, "main", p) {
+			stored += int64(len(c))
+		}
+	}
+	require.Greater(t, stored, int64(200<<10))
 	r = e.ok("info", id.String())
+	require.Regexp(t, `Size:\s+`+regexp.QuoteMeta(formatBytes(stored))+`\n`, r.stdout)
 	require.Contains(t, r.stdout, "Partly in arsenal")
 	require.Contains(t, r.stdout, "Not in arsenal")
 	require.Contains(t, r.stdout, "Q8_0")
