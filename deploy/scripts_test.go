@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -384,5 +385,141 @@ func TestDocsOutdatedBanner(t *testing.T) {
 	}
 	if out, err := run("0.9"); err == nil {
 		t.Errorf("the script accepted a version that is not published:\n%s", out)
+	}
+}
+
+// TestIndexNow checks that scripts/indexnow.py submits the pages that changed
+// between two gh-pages commits: new pages, pages with a new <lastmod>, the
+// home page when its file changed, and pages that have gone, read from the
+// sitemaps robots.txt lists, through mike's latest symlink. It also checks
+// that the root of docs-root holds a key file IndexNow accepts.
+func TestIndexNow(t *testing.T) {
+	repo := t.TempDir()
+	gitEnv := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com", "GIT_CONFIG_GLOBAL=/dev/null")
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = gitEnv
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(name, body string) {
+		t.Helper()
+		path := filepath.Join(repo, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sitemap := func(entries ...string) string {
+		var b strings.Builder
+		b.WriteString(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`)
+		for i := 0; i < len(entries); i += 2 {
+			b.WriteString("<url><loc>https://hangar.page/latest/" + entries[i] + "</loc>")
+			if entries[i+1] != "" {
+				b.WriteString("<lastmod>" + entries[i+1] + "</lastmod>")
+			}
+			b.WriteString("</url>")
+		}
+		return b.String() + "</urlset>"
+	}
+	robots, err := os.ReadFile(filepath.Join("cloudflare", "docs-root", "robots.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	homeSitemap, err := os.ReadFile(filepath.Join("cloudflare", "docs-root", "sitemap.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	git("init", "-q", "-b", "gh-pages")
+	write("robots.txt", string(robots))
+	write("sitemap.xml", string(homeSitemap))
+	write("index.html", "home")
+	write("1.0/sitemap.xml", sitemap("", "2026-10-20", "faq/", "2026-10-20", "guides/git/", "2026-10-20", "guides/old/", "2026-10-20"))
+	if err := os.Symlink("1.0", filepath.Join(repo, "latest")); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "1.0")
+	before := git("rev-parse", "HEAD")
+
+	// 1.1 changes the FAQ, adds a guide, drops one, and becomes latest.
+	write("1.1/sitemap.xml", sitemap("", "2026-10-20", "faq/", "2026-10-27", "guides/git/", "2026-10-20", "guides/new/", "2026-10-27"))
+	git("rm", "-q", "latest")
+	if err := os.Symlink("1.1", filepath.Join(repo, "latest")); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "1.1")
+	afterDocs := git("rev-parse", "HEAD")
+	write("index.html", "new home")
+	git("commit", "-q", "-am", "home")
+
+	run := func(args ...string) string {
+		t.Helper()
+		abs, err := filepath.Abs("../scripts/indexnow.py")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("python3", append([]string{abs, "--dry-run"}, args...)...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("the script failed: %v\n%s", err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	for _, tc := range []struct {
+		name          string
+		before, after string
+		want          []string
+	}{
+		{"new version", before, afterDocs, []string{
+			"https://hangar.page/latest/faq/", "https://hangar.page/latest/guides/new/", "https://hangar.page/latest/guides/old/"}},
+		{"home page", afterDocs, "HEAD", []string{"https://hangar.page/"}},
+		{"nothing", "HEAD", "HEAD", nil},
+		{"first deploy", "", before, []string{
+			"https://hangar.page/", "https://hangar.page/latest/", "https://hangar.page/latest/faq/",
+			"https://hangar.page/latest/guides/git/", "https://hangar.page/latest/guides/old/"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Fields(run(tc.before, tc.after))
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	// IndexNow reads the key from https://hangar.page/<key>.txt.
+	entries, err := os.ReadDir(filepath.Join("cloudflare", "docs-root"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyFile := regexp.MustCompile(`^([0-9a-f]{32})\.txt$`)
+	var keys []string
+	for _, e := range entries {
+		m := keyFile.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join("cloudflare", "docs-root", e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != m[1] {
+			t.Errorf("%s holds %q, want only the key", e.Name(), body)
+		}
+		keys = append(keys, m[1])
+	}
+	if len(keys) != 1 {
+		t.Errorf("docs-root has %d IndexNow key files, want 1", len(keys))
 	}
 }

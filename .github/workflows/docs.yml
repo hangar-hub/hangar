@@ -27,9 +27,24 @@ jobs:
       - name: Build with no broken links
         run: make docs
       - name: Publish as dev
+        id: publish
+        env:
+          # docs/hooks.py fails the build when it cannot date pages from git.
+          DOCS_REQUIRE_GIT_DATES: "1"
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin gh-pages --depth=1 || true
+          # The whole history, and no tags: a shallow fetch makes the checkout
+          # shallow, and docs/hooks.py then dates every page with the build
+          # date rather than its last commit.
+          git fetch --no-tags origin gh-pages || true
+          before="$(git rev-parse --verify --quiet origin/gh-pages || true)"
+          echo "before=$before" >> "$GITHUB_OUTPUT"
           uv run --no-project --with-requirements docs/requirements.txt mike deploy --push dev
           ./scripts/docs-root-files.sh --push
+      # Tells Bing and the other IndexNow search engines which pages changed,
+      # once the docs Worker serves them.
+      - name: Submit changed pages to IndexNow
+        env:
+          BEFORE: ${{ steps.publish.outputs.before }}
+        run: python3 scripts/indexnow.py "$BEFORE" gh-pages
