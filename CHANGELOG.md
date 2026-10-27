@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.1](https://github.com/hangar-hub/hangar/compare/v1.4.0...v1.4.1) (2026-10-27)
+
+
+### Documentation
+
+* add upgrade notes for 1.3.0 and 1.4.0 ([#72](https://github.com/hangar-hub/hangar/issues/72)) ([efb953a](https://github.com/hangar-hub/hangar/commit/efb953a471e8709156ce51a8815604a68ed8c20d))
+
+
+### Dependencies
+
+* bump golang.org/x/tools ([#55](https://github.com/hangar-hub/hangar/issues/55)) ([d222200](https://github.com/hangar-hub/hangar/commit/d222200530ff19b8377705fd6f78caba52f36849))
+* bump the actions group across 1 directory with 10 updates ([#75](https://github.com/hangar-hub/hangar/issues/75)) ([97b140e](https://github.com/hangar-hub/hangar/commit/97b140eca212de0695dd2c8af72c33287698ca77))
+* bump the ui-minor-and-patch group across 1 directory with 5 updates ([#74](https://github.com/hangar-hub/hangar/issues/74)) ([7f83627](https://github.com/hangar-hub/hangar/commit/7f8362734309524ed7534a62f2c684fd5aebe1b2))
+* fix the open Dependabot alerts in the UI and compat lockfiles ([#73](https://github.com/hangar-hub/hangar/issues/73)) ([947b48b](https://github.com/hangar-hub/hangar/commit/947b48b4b9bbd6dffa68adbaea693621598ee1e7))
+
 ## [1.4.0](https://github.com/hangar-hub/hangar/compare/v1.3.1...v1.4.0) (2026-10-27)
 
 
