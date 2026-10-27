@@ -16,6 +16,11 @@ dependencies = [
 
 [tool.uv]
 package = false
+# filelock 4.2.1, which fixes GHSA-v4x8-3wr5-3wq8 and five other advisories
+# for 3.20.4 to 4.2.0, needs Python 3.11. Python 3.10, which the floor
+# client cell runs, takes 3.20.3: the newest release outside every filelock
+# advisory.
+constraint-dependencies = ["filelock==3.20.3; python_full_version < '3.11'"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]
