@@ -1,4 +1,5 @@
 ---
+title: Monitor a model hub with OpenTelemetry
 description: "Monitor Hangar with OpenTelemetry traces, metrics and logs over OTLP, health checks, and setups for Elastic, Grafana and any OTLP backend."
 ---
 

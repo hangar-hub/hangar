@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with GitLab (OIDC)
 description: "Set up sign-in to Hangar with GitLab.com or self-managed GitLab as the OpenID Connect provider."
 ---
 

@@ -1,4 +1,5 @@
 ---
+title: Harden Hangar and block unsafe pickle models
 description: "A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities."
 ---
 

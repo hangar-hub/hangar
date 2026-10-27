@@ -1,4 +1,5 @@
 ---
+title: Upgrade Hangar with Docker, Compose or Helm
 description: "Upgrade Hangar with Docker, Docker Compose, Helm, Homebrew or the binary, with database migrations, checks afterwards, and what to do to go back."
 ---
 

@@ -94,7 +94,11 @@
               "availability": "https://schema.org/InStock"
             },
             "publisher": { "@id": "https://hangar.page/#organization" },
-            "sameAs": ["https://github.com/hangar-hub/hangar", "https://github.com/hangar-hub/hangar/pkgs/container/hangar"]
+            "sameAs": [
+              "https://github.com/hangar-hub/hangar",
+              "https://github.com/hangar-hub/hangar/pkgs/container/hangar",
+              "https://artifacthub.io/packages/helm/hangar/hangar"
+            ]
           },
           {
             "@type": "FAQPage",
@@ -1554,8 +1558,11 @@
             <li data-reveal style="--i: 0">
               <h3>Every machine downloads the same gigabytes</h3>
               <p>
-                Laptops, CI runners and GPU nodes each fetch the same weights from huggingface.co.
-                With Hangar you pull a model once, and every client loads it from your own network.
+                Laptops, <a class="link" href="/latest/guides/ci/">CI runners</a> and
+                <a class="link" href="/latest/guides/kubernetes/">Kubernetes Pods</a> each fetch the
+                same weights from huggingface.co. With Hangar you pull a model once, and every client
+                loads it from a <a class="link" href="/latest/guides/shared-cache/">shared model cache</a>
+                on your own network.
               </p>
             </li>
             <li data-reveal style="--i: 1">
@@ -1570,14 +1577,17 @@
               <h3>Every tool fetches its own copy</h3>
               <p>
                 Hugging Face libraries, Ollama and LM Studio each download from the internet
-                separately. Hangar gives them one source on your network.
+                separately. Hangar gives them one source on your network, and doubles as a
+                <a class="link" href="/latest/guides/ollama-registry/">private Ollama registry</a>.
               </p>
             </li>
             <li data-reveal style="--i: 3">
               <h3>Some networks can't reach the internet at all</h3>
               <p>
                 An <a class="link" href="/latest/guides/air-gapped/">air-gapped Instance</a> pulls
-                from another Hangar Instance that can.
+                from another Hangar Instance that can. Hugging Face does not sell the
+                <a class="link" href="/latest/concepts/on-premises/">Hub on-premises</a>, so this is
+                how you run one.
               </p>
             </li>
           </ul>

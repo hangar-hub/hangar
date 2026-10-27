@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with Keycloak (OIDC)
 description: "Set up sign-in to Hangar with Keycloak as the OpenID Connect provider, and try it locally with the Compose example's ready realm."
 ---
 

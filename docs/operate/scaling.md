@@ -1,4 +1,5 @@
 ---
+title: Scale a self-hosted model hub on Postgres and S3
 description: "Scale Hangar from one process to many: run web and worker roles behind a load balancer with Postgres and S3, and the targets it meets."
 ---
 

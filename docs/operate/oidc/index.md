@@ -1,4 +1,5 @@
 ---
+title: OIDC single sign-on for a self-hosted model hub
 description: "Sign in to Hangar with any OpenID Connect provider, with PKCE, groups mapped to admins and Organisations, alongside local accounts."
 ---
 

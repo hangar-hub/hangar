@@ -1,4 +1,5 @@
 ---
+title: Limit model download bandwidth with Pull windows
 description: "Queue Pulls into time windows and cap their bandwidth, so large model downloads into Hangar do not saturate your connection."
 ---
 

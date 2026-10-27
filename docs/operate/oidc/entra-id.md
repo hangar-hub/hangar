@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with Microsoft Entra ID (OIDC)
 description: "Set up sign-in to Hangar with Microsoft Entra ID as the OpenID Connect provider: register an app, create a client secret and configure Hangar."
 ---
 

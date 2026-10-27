@@ -1,4 +1,5 @@
 ---
+title: Run Hangar behind nginx, Caddy or Traefik with TLS
 description: "Put Hangar behind a reverse proxy for TLS: the settings every proxy needs, Helm values, and large file uploads through nginx."
 ---
 

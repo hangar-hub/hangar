@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with UniFi Identity (OIDC)
 description: "Set up sign-in to Hangar with UniFi Identity Enterprise as the OpenID Connect provider."
 ---
 

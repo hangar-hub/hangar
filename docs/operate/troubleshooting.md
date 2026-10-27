@@ -1,4 +1,5 @@
 ---
+title: Troubleshoot a self-hosted Hugging Face Hub
 description: "Fix common Hangar problems: check the configuration end to end with hangar admin doctor, and find what you need in the logs."
 ---
 
