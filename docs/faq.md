@@ -9,7 +9,7 @@ description: "Answers about Hangar: is it a model registry or a private Hugging 
 
 ### Is Hangar a model registry?
 
-It covers the storage and serving side of one. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.
+It covers the storage and serving side of one, which some teams call a model repository or model store. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.
 
 For experiment tracking and model lineage, pair it with MLflow: MLflow records runs and model versions, and Hangar stores and serves the files. See [How Hangar compares](concepts/comparison.md#model-registries-mlflow).
 
@@ -17,15 +17,19 @@ For experiment tracking and model lineage, pair it with MLflow: MLflow records r
 
 Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set `HF_ENDPOINT` to your Instance, and `huggingface_hub`, `transformers` and `datasets` use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access. See [Point `HF_ENDPOINT` at Hangar](get-started/hf-endpoint.md). For what Hugging Face itself offers, see [Hugging Face Hub on-premises](concepts/on-premises.md).
 
-### Is Hangar a cache for Hugging Face models?
+### Is Hangar a cache or proxy for Hugging Face models?
 
 It does more than cache. Each Pull keeps a [Mirror](concepts/mirrors.md) of the Repo with its git history and the upstream Commit SHAs, so a Revision pinned in your code still resolves after the upstream Repo changes or disappears. You can also upload models that exist nowhere else. Clients load everything from your own storage.
 
-A caching proxy, such as olah, keeps whatever clients happen to download. [How Hangar compares](concepts/comparison.md) sets the two kinds of tool side by side.
+With [Pull-through](concepts/mirrors.md#pull-through) on, Hangar also works as a caching proxy: it fetches a Repo from huggingface.co the first time a client asks for it. A plain caching proxy, such as olah, keeps only whatever clients happen to download. [How Hangar compares](concepts/comparison.md) sets the two kinds of tool side by side.
+
+### Is Hangar like hf-mirror.com?
+
+For your tools, yes: you set `HF_ENDPOINT` to Hangar, as you would to hf-mirror.com. hf-mirror.com is a public mirror of huggingface.co that someone else runs. Hangar runs on your own servers, holds only what you choose, controls who can download it, and works without internet access. See [Moving from a public mirror](get-started/hf-endpoint.md#moving-from-a-public-mirror).
 
 ### Does Hangar run models?
 
-No. Hangar stores and serves files. Run models with the tools you already use, such as `transformers`, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope.
+No. Hangar is a model storage server, not an inference server: it stores and serves files. Run models with the tools you already use, such as `transformers`, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope.
 
 ### Is there a hosted version?
 
@@ -49,11 +53,15 @@ Yes. `ollama pull hangar.example.com/org/model:Q4_K_M` pulls a GGUF quantisation
 
 Yes for uploads. Hangar accepts Xet uploads, so `huggingface_hub` with `hf_xet` installed works with no setup. It stores whole files and serves them over plain HTTP.
 
+### Does Hangar scan models for malware?
+
+Yes, for the formats that can run code. Pickle, PyTorch, joblib and NumPy files can run code when they are loaded, so a malicious model can hide malware in them. Hangar lists the imports of every such file at the tip of each branch, tag and pull request, marks unsafe and suspicious files in the web UI, and can refuse to serve them. Prefer safetensors, which cannot run code. See [Blocking unsafe downloads](operate/security.md#blocking-unsafe-downloads).
+
 ### Does it handle datasets?
 
 Yes. Dataset Repos work with `load_dataset`, pandas and Polars over `hf://` and DuckDB over HTTPS, and the web UI has a Dataset Viewer. Hangar builds a Parquet export of each dataset, as huggingface.co does. See [Datasets](guides/datasets.md).
 
-### Can Hangar run air-gapped, with no internet access?
+### Can Hangar run offline or air-gapped, with no internet access?
 
 Yes. An Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also carry a backup or a Hugging Face cache across and import it. See [Air-gapped Instances](guides/air-gapped.md).
 

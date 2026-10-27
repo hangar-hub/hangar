@@ -9,7 +9,7 @@ description: "Hangar is a self-hosted model and dataset hub, compatible with the
 
 [Get started](get-started/index.md){ .md-button .md-button--primary } [Try the demo](https://demo.hangar.page/){ .md-button }
 
-Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. It keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:
+Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. It's model storage and management for your machine learning models and datasets: it keeps them on your own storage, with full version history, and serves them to the tools you already use:
 
 - **Hugging Face clients.** Set `HF_ENDPOINT`, and `huggingface_hub`, the `hf` CLI, `transformers`, `diffusers`, `sentence-transformers`, `datasets` and vLLM work unchanged.
 - **git.** `git clone` and `git push`, with git-lfs.

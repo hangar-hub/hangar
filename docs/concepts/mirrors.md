@@ -1,9 +1,11 @@
 ---
-title: Mirror Hugging Face Repos with full git history
-description: "How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with Partial mirrors, tracking and Pull-through."
+title: Self-hosted Hugging Face mirror with git history
+description: "Run your own Hugging Face mirror: Hangar mirrors Repos from huggingface.co with their Commit SHAs, and can work as a pull-through caching proxy."
 ---
 
 # Mirrors and Upstreams
+
+Hangar is a self-hosted Hugging Face mirror. It copies the Repos you choose from huggingface.co, or from another hub, into your own storage, keeps their Repo IDs and Commit SHAs, and serves them to your tools through `HF_ENDPOINT`. Unlike a public mirror such as hf-mirror.com, it runs on your own servers, and it can also hold models that exist nowhere else.
 
 ## Upstreams
 
@@ -31,7 +33,7 @@ A Mirror can follow its upstream branch (`--track` on `hangar pull`, or **Track 
 
 ## Pull-through
 
-Pull-through is off by default. When it is on (`pull.pull_through.enabled`) and a Repo ID matches `pull.pull_through.allow`, a Hub API or git request for a Repo that is not in the Arsenal starts a Pull automatically, and a download of a file that is not present starts that file's Pull and streams it as it arrives.
+Pull-through is off by default. When it is on (`pull.pull_through.enabled`) and a Repo ID matches `pull.pull_through.allow`, a Hub API or git request for a Repo that is not in the Arsenal starts a Pull automatically, and a download of a file that is not present starts that file's Pull and streams it as it arrives. With Pull-through on, Hangar works as a caching proxy for huggingface.co: clients ask Hangar for any allowed Repo, and Hangar fetches and keeps it on first use.
 
 ## Related pages
 
