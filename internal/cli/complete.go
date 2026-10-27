@@ -346,7 +346,9 @@ func setDefaultCompletions(c *cobra.Command) {
 	if c.ValidArgsFunction == nil && len(c.ValidArgs) == 0 && !c.HasSubCommands() {
 		c.ValidArgsFunction = cobra.NoFileCompletions
 	}
-	c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+	// Flags and PersistentFlags, not LocalFlags: LocalFlags merges the
+	// persistent flags into Flags, which adds [flags] to usage lines.
+	visit := func(f *pflag.Flag) {
 		if f.Value.Type() == "bool" {
 			return
 		}
@@ -360,7 +362,9 @@ func setDefaultCompletions(c *cobra.Command) {
 			return
 		}
 		_ = c.RegisterFlagCompletionFunc(f.Name, cobra.NoFileCompletions)
-	})
+	}
+	c.Flags().VisitAll(visit)
+	c.PersistentFlags().VisitAll(visit)
 	for _, s := range c.Commands() {
 		setDefaultCompletions(s)
 	}
