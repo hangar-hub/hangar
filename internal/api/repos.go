@@ -251,6 +251,7 @@ func (d *RepoDeps) toPageRepo(ctx context.Context, p model.Principal, r *repo.Re
 		Visibility: gen.Visibility(r.Visibility), Description: str(r.Description), DefaultBranch: r.DefaultBranch,
 		Licence: str(r.Licence), Mirror: r.Mirror, Gated: gen.RepoGated(r.Gating.Mode),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, SizeBytes: r.SizeBytes, LfsBytes: r.LFSBytes,
+		PresentBytes: ptr(r.PresentBytes),
 	}
 	u := r.UUID
 	out.Uuid = &u

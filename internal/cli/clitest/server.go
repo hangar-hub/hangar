@@ -84,17 +84,16 @@ func (s *server) apiRepo(repo *Repo) gen.Repo {
 	if head != nil {
 		seen := map[string]bool{}
 		for _, f := range head.files {
-			// As on the server, size_bytes is git data plus the LFS objects
-			// held, and lfs_bytes is the LFS objects held.
-			if f.LFS {
-				if s.i.present(f) {
-					size += int64(len(f.Content))
-					lfs += int64(len(f.Content))
-					present += int64(len(f.Content))
-				}
-			} else {
-				size += int64(len(f.Content))
+			// As on the server, size_bytes is every file, held or not;
+			// present_bytes leaves out the LFS objects not held; and
+			// lfs_bytes is the LFS objects held.
+			size += int64(len(f.Content))
+			switch {
+			case !f.LFS:
 				present += int64(len(f.Content))
+			case s.i.present(f):
+				present += int64(len(f.Content))
+				lfs += int64(len(f.Content))
 			}
 			if q := quantOf(f.Path); q != "" && !seen[q] {
 				seen[q] = true

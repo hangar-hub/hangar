@@ -146,7 +146,7 @@ All tables have `created_at` and `updated_at` (UTC). IDs are UUIDv7 unless state
 | `ollama_keys` | Ollama public keys | `user_id`, `public_key`, `fingerprint` |
 | `upstream_tokens` | Users' tokens for Upstreams | `user_id`, `upstream_id`, `ciphertext` (AES-256-GCM with the Instance key) |
 | `memberships` | Organisation members | `org_namespace_id`, `user_id`, `role` |
-| `repos` | Repos | `namespace_id`, `name`, `type`, `visibility`, `default_branch`, `head_ref`, `description`, `settings` (json), `gating` (json), `deleted_at`, `size_bytes`, `lfs_bytes` |
+| `repos` | Repos | `namespace_id`, `name`, `type`, `visibility`, `default_branch`, `head_ref`, `description`, `settings` (json), `gating` (json), `deleted_at`, `size_bytes` (git data plus every LFS object referenced, held or not), `present_bytes` (git data plus the LFS objects held), `lfs_bytes` (LFS objects held) |
 | `repo_redirects` | Renames and transfers | `old_namespace`, `old_name`, `type`, `repo_id` |
 | `collaborators` | Per-repo access | `repo_id`, `user_id`, `role` |
 | `refs` | Branches, tags, PR refs | `repo_id`, `name` (full, for example `refs/heads/main`), `target` (SHA-1); compare-and-swap on `target` ([04](04-git.md)) |

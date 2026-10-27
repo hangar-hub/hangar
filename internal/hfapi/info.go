@@ -186,7 +186,9 @@ func (h *Handler) buildInfo(ctx context.Context, rp *repo.Repo, sha model.Commit
 		out["tags"] = mergeTags(rp.Tags, summary)
 	}
 	if o.want("usedStorage", !o.list) {
-		out["usedStorage"] = rp.SizeBytes
+		// The storage the Repo uses on this Instance: for a Partial mirror,
+		// only the files it holds.
+		out["usedStorage"] = rp.PresentBytes
 	}
 	if !isModel && o.want("description", !o.list) {
 		out["description"] = rp.Description

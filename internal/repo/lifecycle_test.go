@@ -260,6 +260,12 @@ func TestPartialMirrorPresence(t *testing.T) {
 		require.Len(t, lrefs, 2)
 		require.True(t, lrefs[haveOID].Present)
 		require.False(t, lrefs[missingOID].Present)
+		// The size is the total; present and LFS bytes count what it holds.
+		got, err := e.svc.Get(e.ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, int64(len(have)), got.LFSBytes)
+		require.Equal(t, int64(len(missing)), got.SizeBytes-got.PresentBytes)
+		require.Greater(t, got.PresentBytes, got.LFSBytes, "present bytes include git data")
 
 		// A Pull fetches the file later.
 		e.putLFS(missing)
@@ -268,9 +274,10 @@ func TestPartialMirrorPresence(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, q8.Present)
 		require.Equal(t, string(missing), e.read(id, "", "m-Q8.gguf"))
-		got, err := e.svc.Get(e.ctx, id)
+		got, err = e.svc.Get(e.ctx, id)
 		require.NoError(t, err)
 		require.Equal(t, int64(len(have)+len(missing)), got.LFSBytes)
+		require.Equal(t, got.SizeBytes, got.PresentBytes, "it holds every file now")
 		require.ErrorIs(t, e.svc.SetLFSPresence(e.ctx, id, []repo.LFSRef{{OID: "bad"}}), repo.ErrInvalid)
 
 		// Mirrors refuse branch and tag changes until detached.

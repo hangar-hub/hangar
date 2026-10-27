@@ -310,6 +310,41 @@ func TestRepoLifecycleEndpoints(t *testing.T) {
 	f.expect(http.StatusNotFound, http.MethodPost, "bob", "/repos/models/lab/small/restore", nil)
 }
 
+// TestPartialMirrorSizes checks a Partial mirror's sizes (issue #69):
+// size_bytes is the total, present_bytes and lfs_bytes count what the
+// Instance holds, and the size_max filter compares the total.
+func TestPartialMirrorSizes(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	alice := f.user("alice")
+	id := model.RepoID{Type: model.RepoTypeModel, Namespace: "alice", Name: "mirror"}
+	_, err := f.real.Create(f.ctx, repo.CreateParams{ID: id, Visibility: model.VisibilityPublic, Actor: alice, Mirror: true})
+	require.NoError(t, err)
+	held := bytes.Repeat([]byte("h"), 1000)
+	_, err = f.real.LFS.Ingest(f.ctx, sum256(held), int64(len(held)), bytes.NewReader(held))
+	require.NoError(t, err)
+	_, err = f.real.Commit(f.ctx, repo.CommitParams{Repo: id, Revision: "main", Summary: "Mirror", Actor: model.System(), AllowMirror: true,
+		Operations: []repo.Operation{
+			{Kind: repo.OpAddLFS, Path: "m-Q4_K_M.gguf", OID: sum256(held), Size: int64(len(held))},
+			{Kind: repo.OpAddLFS, Path: "m-Q8_0.gguf", OID: sum256(bytes.Repeat([]byte("m"), 5000)), Size: 5000},
+		}})
+	require.NoError(t, err)
+
+	var got gen.Repo
+	f.expect(http.StatusOK, http.MethodGet, "alice", "/repos/models/alice/mirror", nil).json(t, &got)
+	require.True(t, got.Mirror)
+	require.Equal(t, int64(1000), got.LfsBytes)
+	require.NotNil(t, got.PresentBytes)
+	require.Equal(t, int64(5000), got.SizeBytes-*got.PresentBytes, "the total includes the quant not pulled")
+
+	var list gen.RepoList
+	f.expect(http.StatusOK, http.MethodGet, "alice", fmt.Sprintf("/repos?size_max=%d", *got.PresentBytes), nil).json(t, &list)
+	require.Empty(t, list.Items)
+	f.expect(http.StatusOK, http.MethodGet, "alice", fmt.Sprintf("/repos?size_max=%d", got.SizeBytes), nil).json(t, &list)
+	require.Len(t, list.Items, 1)
+	require.Equal(t, got.PresentBytes, list.Items[0].PresentBytes)
+}
+
 func TestListAndSearchEndpoints(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

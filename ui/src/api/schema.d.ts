@@ -2200,11 +2200,20 @@ export interface components {
              * @description Downloads in the last 30 days.
              */
             downloads: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Total size: git data plus every LFS object the Repo's Commits reference, held or not. The size sort and the size_max filter use it.
+             */
             size_bytes: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description LFS objects the Instance holds.
+             */
             lfs_bytes: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Git data plus the LFS objects the Instance holds. Less than size_bytes only for a Partial mirror.
+             */
             present_bytes?: number;
             summary?: components["schemas"]["RepoSummary"];
             permissions?: components["schemas"]["RepoPermissions"];

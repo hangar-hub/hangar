@@ -121,9 +121,18 @@ func (a *app) searchArsenal(ctx context.Context, q, typ, sort string, filters []
 		if repo.Type == gen.RepoTypeSingularDataset {
 			id = "datasets/" + id
 		}
-		rows = append(rows, []string{id, formats, quants, formatBytes(repo.SizeBytes), source, repo.UpdatedAt.Local().Format("2006-01-02")})
+		rows = append(rows, []string{id, formats, quants, repoSize(repo), source, repo.UpdatedAt.Local().Format("2006-01-02")})
 	}
 	return a.table([]string{"REPO", "FORMATS", "QUANTS", "SIZE", "SOURCE", "UPDATED"}, rows)
+}
+
+// repoSize is a Repo's size, as present of total for a Partial mirror, as
+// the web UI shows it.
+func repoSize(r gen.Repo) string {
+	if r.Mirror && r.PresentBytes != nil && *r.PresentBytes < r.SizeBytes {
+		return formatBytes(*r.PresentBytes) + " of " + formatBytes(r.SizeBytes)
+	}
+	return formatBytes(r.SizeBytes)
 }
 
 // applyRepoFilter sets one key=value Arsenal filter.

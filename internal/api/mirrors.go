@@ -149,7 +149,8 @@ func (h *Upstreams) PullMoreIntoMirror(w http.ResponseWriter, r *http.Request, p
 func upRepoResource(rp *repo.Repo) gen.Repo {
 	out := gen.Repo{Id: rp.ID.String(), Namespace: rp.ID.Namespace, Name: rp.ID.Name, Type: gen.RepoTypeSingular(rp.ID.Type),
 		Visibility: gen.Visibility(rp.Visibility), DefaultBranch: rp.DefaultBranch, Mirror: rp.Mirror, CreatedAt: rp.CreatedAt,
-		UpdatedAt: rp.UpdatedAt, SizeBytes: rp.SizeBytes, LfsBytes: rp.LFSBytes, Uuid: ptr(rp.UUID), Gated: gen.RepoGated(rp.Gating.Mode)}
+		UpdatedAt: rp.UpdatedAt, SizeBytes: rp.SizeBytes, LfsBytes: rp.LFSBytes, PresentBytes: ptr(rp.PresentBytes), Uuid: ptr(rp.UUID),
+		Gated: gen.RepoGated(rp.Gating.Mode)}
 	tags := append([]string{}, rp.Tags...)
 	out.Tags = &tags
 	if !rp.LastModified.IsZero() {

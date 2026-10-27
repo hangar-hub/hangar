@@ -281,6 +281,7 @@ type Repo struct {
 	DeletedAt      *time.Time     `bun:"deleted_at"`
 	SizeBytes      int64          `bun:"size_bytes,notnull"`
 	LFSBytes       int64          `bun:"lfs_bytes,notnull"`
+	PresentBytes   int64          `bun:"present_bytes,notnull"`
 	Timestamps
 }
 
