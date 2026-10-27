@@ -566,18 +566,16 @@ func (x *extractor) mlx(s *Summary) {
 	bits, _ := num(q, "bits")
 	group, _ := num(q, "group_size")
 	// Bit widths and group sizes are small; a value only a broken config
-	// holds is left out, so the int conversions below cannot truncate.
-	if bits > 64 {
-		bits = 0
+	// holds is left out, so the int conversions cannot truncate.
+	qt := Quantisation{Name: "mlx"}
+	if bits > 0 && bits <= 64 {
+		qt.Bits = int(bits)
+		qt.Name = fmt.Sprintf("%dbit", bits)
 	}
-	if group > math.MaxInt32 {
-		group = 0
+	if group > 0 && group <= math.MaxInt32 {
+		qt.Group = int(group)
 	}
-	name := "mlx"
-	if bits > 0 {
-		name = fmt.Sprintf("%dbit", bits)
-	}
-	s.Quantisations = append(s.Quantisations, Quantisation{Name: name, Bits: int(bits), Group: int(group)})
+	s.Quantisations = append(s.Quantisations, qt)
 }
 
 var licenceFileRe = regexp.MustCompile(`(?i)^(licen[cs]e|copying)([._-].*)?$`)
