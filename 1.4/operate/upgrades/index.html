@@ -3429,12 +3429,20 @@ docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> 
 </thead>
 <tbody>
 <tr>
-<td>The release after 1.3.0, from any earlier 1.x</td>
+<td>1.4.0, from any earlier 1.x</td>
+<td>Run <code>hangar admin migrate</code> as usual (migration <code>0011</code>). A Repo's size is now its total: <code>size_bytes</code> in the native API counts every LFS object the Repo's Commits reference, including the files a Partial mirror has not pulled, and the new <code>present_bytes</code> counts what the Instance holds. Before, <code>size_bytes</code> counted only what the Instance held. The migration fills both for existing Repos, and the size sort and the <code>size_max</code> filter compare the total. The Hub API's <code>usedStorage</code> is still the bytes held. Update <code>hangar</code> on client machines for tab completion; see <a href="../../guides/hangar-cli/#turn-on-tab-completion">Turn on tab completion</a>.</td>
+</tr>
+<tr>
+<td>1.3.1, from any earlier 1.x</td>
 <td>Run <code>hangar admin migrate</code> as usual (migrations <code>0008</code> to <code>0010</code>). On an HTTPS Instance, everyone signs in to the web UI once more, because the session cookie is now <code>__Host-hangar_session</code>. UI sessions unused for 7 days now end (<code>security.session_idle_timeout</code>). Device logins give a <code>read</code> Token unless the user chooses <code>write</code>, and their Tokens expire after 30 days. Registering an Ollama key needs a signature from the key: update <code>hangar</code> on machines that run <code>hangar ollama key register</code>.</td>
 </tr>
 <tr>
+<td>1.3.0, from any earlier 1.x</td>
+<td>Run <code>hangar admin migrate</code> as usual (migrations <code>0004</code> to <code>0007</code>).</td>
+</tr>
+<tr>
 <td>1.1.x or 1.2.x, from any earlier 1.x</td>
-<td>Nothing. No release since 1.0.0 has changed the database schema or the Helm chart's values. 1.2.0 added <code>ui.docs_url</code>, which defaults to https://hangar.page/; on an <a href="../../guides/air-gapped/#keep-the-web-ui-on-the-inside">air-gapped network</a>, point it at your copy of the docs.</td>
+<td>Nothing. No release from 1.0.0 to 1.2.3 changed the database schema or the Helm chart's values. 1.2.0 added <code>ui.docs_url</code>, which defaults to https://hangar.page/; on an <a href="../../guides/air-gapped/#keep-the-web-ui-on-the-inside">air-gapped network</a>, point it at your copy of the docs.</td>
 </tr>
 </tbody>
 </table>
