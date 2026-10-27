@@ -19,6 +19,28 @@ The device sign-in opens the Instance's **Connect a device** page. Type the code
 
 The URL and username are saved in `~/.config/hangar/config.yaml`; the Token goes in the OS keychain (macOS Keychain, Windows Credential Manager or the Secret Service on Linux) where one is available, otherwise in that file with mode 0600. In scripts and CI, set `HANGAR_CLI_URL` and `HANGAR_CLI_TOKEN` instead, or pass `--url` and `--token`. `HANGAR_CLI_CONFIG` points the CLI at another configuration file, and `HANGAR_CLI_NO_KEYCHAIN=1` keeps the Token in that file instead of the OS keychain.
 
+## Turn on tab completion
+
+`hangar completion <shell>` prints a completion script for bash, zsh, fish or PowerShell. The Homebrew cask installs the bash, zsh and fish scripts for you, and each release archive has all four in its `completions` folder. To load the script yourself, add a line to your shell's startup file:
+
+```sh
+source <(hangar completion bash)    # ~/.bashrc; needs the bash-completion package
+source <(hangar completion zsh)     # ~/.zshrc, after compinit
+hangar completion fish > ~/.config/fish/completions/hangar.fish
+```
+
+In PowerShell, add `hangar completion powershell | Out-String | Invoke-Expression` to your profile.
+
+Besides commands and flags, Tab completes:
+
+- Repo IDs from the Arsenal and, after a colon, the Repo's quants, as in `hangar pull bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M`.
+- The IDs of your Jobs that have not finished, for `hangar jobs watch` and `hangar jobs cancel`.
+- A dataset's Configs and Splits, for `hangar pull --config` and `--split`.
+- Flag values with a fixed set of choices, such as `--type` and `--sort`, the keys of `hangar search --filter`, and the configuration keys of `--set`.
+- Folder names, for flags and arguments that take a folder.
+
+Completions that need the Instance use the saved login, or `--url` and `--token` when they come earlier on the command line. If the Instance does not answer within 3 seconds, Tab offers nothing.
+
 ## Find and inspect
 
 ```sh

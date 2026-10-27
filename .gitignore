@@ -4,6 +4,8 @@
 /hangar
 /hangar.exe
 /dist/
+# scripts/completions.sh
+/completions/
 /coverage.out
 /coverage/
 *.test

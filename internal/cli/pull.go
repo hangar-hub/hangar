@@ -58,7 +58,8 @@ patterns, or, for datasets, --config, --split and --parquet-only. With
   hangar pull hf-internal-testing/tiny-random-bert --include '*.json' --include '*.safetensors'
   hangar pull datasets/lhoestq/demo1 --config default --split train --parquet-only --to ./data
   hangar pull Qwen/Qwen3-0.6B --server-only`,
-		Args: args(cobra.ExactArgs(1)),
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: a.completeRepoArg(&o.Type, "", true),
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			ref, err := parseRepoRef(argv[0], o.Type, true)
@@ -99,6 +100,11 @@ patterns, or, for datasets, --config, --split and --parquet-only. With
 	f.BoolVar(&o.Track, "track", false, "make a new Mirror follow its upstream branch")
 	f.BoolVar(&o.Now, "now", false, "start the Pull now, outside the Instance's pull windows, if allowed")
 	f.StringVar(&o.CacheDir, "cache-dir", "", "Hugging Face cache folder (default: $HF_HUB_CACHE or ~/.cache/huggingface/hub)")
+	_ = cmd.RegisterFlagCompletionFunc("type", repoTypes)
+	_ = cmd.RegisterFlagCompletionFunc("config", a.completeDatasetConfig(&o.Type, &o.Revision, false))
+	_ = cmd.RegisterFlagCompletionFunc("split", a.completeDatasetConfig(&o.Type, &o.Revision, true))
+	_ = cmd.MarkFlagDirname("to")
+	_ = cmd.MarkFlagDirname("cache-dir")
 	return cmd
 }
 

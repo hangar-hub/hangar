@@ -107,7 +107,8 @@ unless the Repo is public and the Instance allows anonymous reads
 		Example: `  hangar ollama install bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
   hangar ollama install bartowski/Llama-3.2-3B-Instruct-GGUF:Q8_0 --pull
   hangar ollama install acme/private-model --yes`,
-		Args: args(cobra.ExactArgs(1)),
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: a.completeRepoArg(ptr(string(model.RepoTypeModel)), "gguf", true),
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			ref, err := parseRepoRef(argv[0], "model", true)

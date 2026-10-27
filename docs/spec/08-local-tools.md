@@ -100,5 +100,6 @@ One binary for server and client. Client commands talk to an Instance through th
 | `hangar config reference` | Prints the configuration reference. |
 | `hangar healthcheck` | Calls `/readyz` on localhost and exits 0 or 1; used by the container `HEALTHCHECK`. |
 | `hangar version` | |
+| `hangar completion bash\|zsh\|fish\|powershell` | Prints a shell completion script. Besides commands and flags, it completes Repo IDs from the Arsenal and, after a colon, their quants; unfinished Job IDs; a dataset's Configs and Splits for `pull`; fixed flag values; `--set` configuration keys; and folders for flags and arguments that take one. Completions that need the Instance use the saved login, give up after 3 seconds and never print an error. Other values offer no file names. |
 
 Output: human-readable tables by default, `--json` for scripting on every command. Exit codes: 0 success, 1 error, 2 usage error, 3 not found, 4 auth error.

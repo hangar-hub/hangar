@@ -66,6 +66,7 @@ func (e *env) runIn(stdin string, args ...string) result {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return &ExitError{Code: ExitUsage, Err: err} })
 	root.AddCommand(&cobra.Command{Use: "admin", Short: "Administer an Instance"})
 	Register(root, Options{Version: "test", Admin: e.deps})
+	SetDefaultCompletions(root)
 	var out, errb bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&errb)

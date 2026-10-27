@@ -128,6 +128,7 @@ func newRootCommand() *cobra.Command {
 		},
 	}})
 	root.AddGroup(&cobra.Group{ID: groupServer, Title: "Server commands:"}, &cobra.Group{ID: groupOther, Title: "Other commands:"})
+	cli.SetDefaultCompletions(root)
 	return root
 }
 

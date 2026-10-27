@@ -58,6 +58,7 @@ to it, to a conversion service on huggingface.co.`,
 	}
 	a.clientFlags(cmd)
 	cmd.Flags().StringVar(&shell, "shell", "", "shell syntax: bash, zsh, fish or powershell (default: from $SHELL)")
+	_ = cmd.RegisterFlagCompletionFunc("shell", values("bash", "zsh", "fish", "powershell"))
 	return cmd
 }
 

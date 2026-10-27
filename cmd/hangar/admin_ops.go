@@ -425,6 +425,8 @@ Name a Repo as namespace/name, or datasets/namespace/name for a dataset.`,
 	addJSONFlag(cmd, &asJSON)
 	cmd.Flags().BoolVar(&stale, "stale", false, "queue Jobs only for results from an older indexer or scanner version")
 	cmd.Flags().StringVar(&repoType, "type", "", "the type of Repo IDs without a prefix: model (the default) or dataset")
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions(
+		[]cobra.Completion{string(model.RepoTypeModel), string(model.RepoTypeDataset)}, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }
 

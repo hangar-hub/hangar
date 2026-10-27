@@ -109,6 +109,7 @@ replication or a filesystem snapshot).`,
 	f.register(cmd, a)
 	cmd.Flags().StringVarP(&out, "output", "o", "", "folder to write the backup to; must not exist or be empty")
 	cmd.Flags().BoolVar(&skipBlobs, "skip-blobs", false, "back up the database only")
+	_ = cmd.MarkFlagDirname("output")
 	return cmd
 }
 
@@ -280,7 +281,8 @@ round, and a filesystem backup restores into S3 and the other way round.
 Stop every Hangar process first.`,
 		Example: `  hangar admin restore /backups/hangar-2026-10-13
   hangar admin restore /backups/hangar-2026-10-13 --set database.driver=postgres --set database.dsn=postgres://...`,
-		Args: args(cobra.ExactArgs(1)),
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: dirs,
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			cfg, err := f.load()

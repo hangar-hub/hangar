@@ -4,6 +4,7 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,6 +96,52 @@ func TestGoReleaserFooterReachesTheRelease(t *testing.T) {
 	for _, cmd := range cmds {
 		if !setsPublicURL(cmd) {
 			t.Errorf("release.footer: %q does not set publicURL", strings.Join(strings.Fields(cmd), " "))
+		}
+	}
+}
+
+// TestGoReleaserShipsCompletions checks that the shell completion scripts
+// scripts/completions.sh writes reach the release archives and the Homebrew
+// cask, which installs them where each shell looks.
+func TestGoReleaserShipsCompletions(t *testing.T) {
+	b, err := os.ReadFile("../.goreleaser.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Before struct {
+			Hooks []string `yaml:"hooks"`
+		} `yaml:"before"`
+		Archives []struct {
+			Files []string `yaml:"files"`
+		} `yaml:"archives"`
+		Casks []struct {
+			Completions map[string]string `yaml:"completions"`
+		} `yaml:"homebrew_casks"`
+	}
+	if err := yaml.Unmarshal(b, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(cfg.Before.Hooks, "./scripts/completions.sh") {
+		t.Error("before.hooks does not run ./scripts/completions.sh")
+	}
+	for i, a := range cfg.Archives {
+		if !slices.Contains(a.Files, "completions/*") {
+			t.Errorf("archives[%d].files leaves out completions/*", i)
+		}
+	}
+	script, err := os.ReadFile("../scripts/completions.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(script), `for sh in bash zsh fish; do`) {
+		t.Error("scripts/completions.sh does not write completions/hangar.bash, .zsh and .fish")
+	}
+	for i, c := range cfg.Casks {
+		for _, sh := range []string{"bash", "zsh", "fish"} {
+			if want := "completions/hangar." + sh; c.Completions[sh] != want {
+				t.Errorf("homebrew_casks[%d].completions.%s is %q, not %q", i, sh, c.Completions[sh], want)
+			}
 		}
 	}
 }

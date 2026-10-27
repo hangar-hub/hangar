@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/hangar-hub/hangar/internal/cli"
 	"github.com/hangar-hub/hangar/internal/config"
 )
 
@@ -22,6 +23,9 @@ func (f *configFlags) register(cmd *cobra.Command) {
 	fl.StringVar(&f.role, "role", "", "shortcut for --set server.role=...")
 	fl.StringVar(&f.listen, "listen", "", "shortcut for --set server.listen=...")
 	fl.StringVar(&f.publicURL, "public-url", "", "shortcut for --set server.public_url=...")
+	cli.CompleteConfigFlags(cmd)
+	_ = cmd.RegisterFlagCompletionFunc("role", cobra.FixedCompletions(
+		[]cobra.Completion{config.RoleAll, config.RoleWeb, config.RoleWorker}, cobra.ShellCompDirectiveNoFileComp))
 }
 
 // loadServer is load for hangar server and worker, whose output is their

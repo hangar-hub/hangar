@@ -36,7 +36,8 @@ If the Repo is not in the Arsenal, shows what an Upstream has instead, unless
 --local is set. Repo IDs for datasets take a datasets/ prefix.`,
 		Example: `  hangar info bartowski/Llama-3.2-3B-Instruct-GGUF
   hangar info datasets/lhoestq/demo1 --json`,
-		Args: args(cobra.ExactArgs(1)),
+		Args:              args(cobra.ExactArgs(1)),
+		ValidArgsFunction: a.completeRepoArg(&typ, "", false),
 		RunE: func(cmd *cobra.Command, argv []string) error {
 			a := a.with(cmd)
 			ref, err := parseRepoRef(argv[0], typ, false)
@@ -52,6 +53,7 @@ If the Repo is not in the Arsenal, shows what an Upstream has instead, unless
 	f.StringVar(&upstream, "upstream", "huggingface", "Upstream to ask when the Repo is not in the Arsenal")
 	f.StringVar(&typ, "type", "", "Repo type for IDs without a prefix: model or dataset")
 	f.BoolVar(&local, "local", false, "only look in the Arsenal")
+	_ = cmd.RegisterFlagCompletionFunc("type", repoTypes)
 	return cmd
 }
 

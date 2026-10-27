@@ -15,6 +15,8 @@ before:
     # The UI is embedded in the binary, so it is built once before every target.
     - corepack enable
     - make ui
+    # Shell completion scripts for the archives and the cask.
+    - ./scripts/completions.sh
 
 builds:
   - id: hangar
@@ -43,6 +45,7 @@ archives:
       - NOTICE
       - README.md
       - CHANGELOG.md
+      - completions/*
 
 checksum:
   name_template: "checksums.txt"
@@ -129,6 +132,10 @@ homebrew_casks:
     homepage: https://hangar.page/
     description: Self-hosted model and dataset hub, compatible with the Hugging Face Hub
     license: Elastic-2.0
+    completions:
+      bash: completions/hangar.bash
+      zsh: completions/hangar.zsh
+      fish: completions/hangar.fish
     commit_author:
       name: hangar-release
       email: hangar-release@users.noreply.github.com
