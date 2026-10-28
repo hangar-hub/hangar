@@ -7,7 +7,11 @@
 # /assets/... and /get-started/, and the Worker serves that 404.html for any missing
 # page under the version. These rules send such paths, and links that leave
 # out the version, to the latest version. Every top-level section of docs/
-# needs a line (deploy/scripts_test.go TestDocsRedirectsCoverEverySection).
+# needs a line (deploy/cloudflare_test.go TestDocsRedirectsCoverEverySection).
+#
+# scripts/docs-root-files.sh adds two rules after these on gh-pages, which
+# send the version directory that /latest/ links to, such as /1.4/, to
+# /latest/, so each page of the current docs has one address.
 /assets/*        /latest/assets/:splat        200
 /search/*        /latest/search/:splat        200
 /benchmarks/*    /latest/benchmarks/:splat    301

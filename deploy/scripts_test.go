@@ -307,6 +307,45 @@ func TestDocsRootFiles(t *testing.T) {
 	if again := git("rev-parse", "gh-pages"); again != head {
 		t.Errorf("the second run committed %s", again)
 	}
+	redirects, err := os.ReadFile(filepath.Join("cloudflare", "docs-root", "_redirects"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := git("show", "gh-pages:_redirects"); got != strings.TrimSpace(string(redirects)) {
+		t.Errorf("with no latest alias, gh-pages:_redirects differs from deploy/cloudflare/docs-root/_redirects:\n%s", got)
+	}
+
+	// A release: mike adds the version and points the latest symlink at it.
+	git("checkout", "-q", "gh-pages")
+	write("1.4/index.html", "1.4")
+	if err := os.Symlink("1.4", filepath.Join(repo, "latest")); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "1.4/index.html", "latest")
+	git("commit", "-q", "-m", "Deployed 1.4 with aliases latest")
+	git("checkout", "-q", "-f", "main")
+	if out := run(); !strings.Contains(out, "gh-pages now has the root files") {
+		t.Fatalf("the script did not add the redirects for the latest version:\n%s", out)
+	}
+	got := git("show", "gh-pages:_redirects")
+	if !strings.HasPrefix(got, strings.TrimSpace(string(redirects))) {
+		t.Errorf("gh-pages:_redirects does not start with deploy/cloudflare/docs-root/_redirects:\n%s", got)
+	}
+	for _, rule := range [][]string{{"/1.4", "/latest/", "301"}, {"/1.4/*", "/latest/:splat", "301"}} {
+		if !slices.ContainsFunc(strings.Split(got, "\n"), func(line string) bool { return slices.Equal(strings.Fields(line), rule) }) {
+			t.Errorf("gh-pages:_redirects has no rule %v:\n%s", rule, got)
+		}
+	}
+	if git("show", "gh-pages:latest") != "1.4" {
+		t.Errorf("the script changed the latest symlink")
+	}
+	head = git("rev-parse", "gh-pages")
+	if out := run(); !strings.Contains(out, "already has the root files") {
+		t.Errorf("the run after the release did not see the files:\n%s", out)
+	}
+	if again := git("rev-parse", "gh-pages"); again != head {
+		t.Errorf("the run after the release committed %s", again)
+	}
 }
 
 // TestDocsOutdatedBanner checks that scripts/docs-outdated-banner.py fills
