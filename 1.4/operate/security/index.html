@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities.">
+        <meta name="description" content="Run Hangar securely: scan pickle models for malware, block unsafe downloads, verify the container image and report vulnerabilities.">
       
       
       
@@ -27,7 +27,7 @@
     
     
       
-        <title>Security hardening - Hangar</title>
+        <title>Scan models for malware and harden Hangar - Hangar</title>
       
     
     
@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/security/"><meta property="og:title" content="Security hardening - Hangar"><meta property="og:description" content="A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Security hardening", "description": "A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities.", "url": "https://hangar.page/latest/operate/security/", "mainEntityOfPage": "https://hangar.page/latest/operate/security/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Security hardening", "item": "https://hangar.page/latest/operate/security/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/operate/security/"><meta property="og:title" content="Scan models for malware and harden Hangar - Hangar"><meta property="og:description" content="Run Hangar securely: scan pickle models for malware, block unsafe downloads, verify the container image and report vulnerabilities."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Scan models for malware and harden Hangar", "description": "Run Hangar securely: scan pickle models for malware, block unsafe downloads, verify the container image and report vulnerabilities.", "url": "https://hangar.page/latest/operate/security/", "mainEntityOfPage": "https://hangar.page/latest/operate/security/", "inLanguage": "en-GB", "dateModified": "2026-10-28", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Operate", "item": "https://hangar.page/latest/operate/"}, {"@type": "ListItem", "position": 4, "name": "Security hardening", "item": "https://hangar.page/latest/operate/security/"}]}]}</script></head>
   
   
     
@@ -125,7 +125,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Security hardening
+              Scan models for malware and harden Hangar
             
           </span>
         </div>
@@ -1154,6 +1154,8 @@
       
         
       
+        
+      
     
     
     
@@ -1419,6 +1421,34 @@
     
   
     LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/llama-cpp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    llama.cpp
   
 
     
@@ -3309,7 +3339,7 @@
 <li>Leave <code>webhooks.allow_private_targets</code> off (the default) on Instances shared with people you do not fully trust, so webhooks cannot reach your internal network. Webhooks and Upstreams never reach link-local or cloud metadata addresses, and a public Upstream cannot redirect Hangar to a private address; see <a href="../../concepts/mirrors/#upstreams">Mirrors and Upstreams</a>.</li>
 <li>Watch the audit log (<strong>Admin</strong>, <strong>Audit log</strong>) and export it with your logs.</li>
 <li>Run the image as it ships: non-root (UID 65532), read-only root filesystem, no shell. The Helm chart also drops every capability and uses the <code>RuntimeDefault</code> seccomp profile; turn on its NetworkPolicy.</li>
-<li>Pickle-based weights can run code when loaded. Hangar scans them and shows a warning on suspicious and unsafe files; prefer safetensors. To refuse downloads of risky files, turn on <strong>Block downloads of unsafe files</strong> under <strong>Admin</strong>, <strong>Settings</strong>, and choose whether to block suspicious files too. See <a href="#blocking-unsafe-downloads">Blocking unsafe downloads</a>.</li>
+<li>Pickle-based weights can run code when loaded, so a malicious model can carry malware. Hangar scans them and shows a warning on suspicious and unsafe files; prefer safetensors. To refuse downloads of risky files, turn on <strong>Block downloads of unsafe files</strong> under <strong>Admin</strong>, <strong>Settings</strong>, and choose whether to block suspicious files too. See <a href="#blocking-unsafe-downloads">Blocking unsafe downloads</a>.</li>
 </ul>
 <h2 id="blocking-unsafe-downloads">Blocking unsafe downloads<a class="headerlink" href="#blocking-unsafe-downloads" title="Permanent link">&para;</a></h2>
 <p>With <strong>Block downloads of unsafe files</strong> on (<code>scan_block_unsafe_downloads</code> in the native API), Hangar refuses to serve:</p>

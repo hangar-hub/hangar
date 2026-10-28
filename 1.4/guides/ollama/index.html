@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/ollama/"><meta property="og:title" content="Ollama pull from a private GGUF model registry - Hangar"><meta property="og:description" content="Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Ollama pull from a private GGUF model registry", "description": "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer.", "url": "https://hangar.page/latest/guides/ollama/", "mainEntityOfPage": "https://hangar.page/latest/guides/ollama/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "Ollama", "item": "https://hangar.page/latest/guides/ollama/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/guides/ollama/"><meta property="og:title" content="Ollama pull from a private GGUF model registry - Hangar"><meta property="og:description" content="Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Ollama pull from a private GGUF model registry", "description": "Run GGUF models from Hangar in Ollama with ollama pull, as you would from huggingface.co, including private Repos and the hangar CLI installer.", "url": "https://hangar.page/latest/guides/ollama/", "mainEntityOfPage": "https://hangar.page/latest/guides/ollama/", "inLanguage": "en-GB", "dateModified": "2026-10-28", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Guides", "item": "https://hangar.page/latest/guides/"}, {"@type": "ListItem", "position": 4, "name": "Ollama", "item": "https://hangar.page/latest/guides/ollama/"}]}]}</script></head>
   
   
     
@@ -1156,6 +1156,8 @@
       
         
       
+        
+      
     
     
     
@@ -1515,6 +1517,34 @@
     
   
     LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../llama-cpp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    llama.cpp
   
 
     
@@ -3237,7 +3267,7 @@
 
 
 <h1 id="use-ollama">Use Ollama<a class="headerlink" href="#use-ollama" title="Permanent link">&para;</a></h1>
-<p>This guide pulls GGUF models from Hangar into Ollama on your own machine. To set Hangar up as the Ollama registry for a team or for shared Ollama servers, see <a href="../ollama-registry/">Run a private Ollama registry</a>.</p>
+<p>This guide pulls GGUF models from Hangar into Ollama on your own machine. To set Hangar up as the Ollama registry for a team, for shared Ollama servers or for Open WebUI, see <a href="../ollama-registry/">Run a private Ollama registry</a>. To run GGUF models with llama.cpp instead, see <a href="../llama-cpp/">llama.cpp</a>.</p>
 <p>Hangar serves GGUF Repos to Ollama the way huggingface.co does. Ollama signs its requests with the key pair in <code>~/.ollama</code>, and Hangar needs that key for every Repo unless the Repo is public and the Instance allows anonymous reads (<code>security.anonymous_read</code>, off by default). Register the key once:</p>
 <div class="highlight"><pre><span></span><code>hangar<span class="w"> </span>ollama<span class="w"> </span>key<span class="w"> </span>register
 </code></pre></div>
