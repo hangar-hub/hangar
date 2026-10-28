@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.2](https://github.com/hangar-hub/hangar/compare/v1.4.1...v1.4.2) (2026-10-28)
+
+
+### Bug fixes
+
+* **docs:** date sitemap pages from git again, submit changes to IndexNow, and use the terms people search for ([#78](https://github.com/hangar-hub/hangar/issues/78)) ([83ebc88](https://github.com/hangar-hub/hangar/commit/83ebc88c0bcf5afa60fc283172aa0c7448ef0494))
+* **docs:** send a User-Agent from scripts/indexnow.py, which Cloudflare refuses without one ([#81](https://github.com/hangar-hub/hangar/issues/81)) ([8ea80da](https://github.com/hangar-hub/hangar/commit/8ea80daf6bd7c40a5f2b4d051e33912c8eed3d5e))
+
 ## [1.4.1](https://github.com/hangar-hub/hangar/compare/v1.4.0...v1.4.1) (2026-10-27)
 
 
