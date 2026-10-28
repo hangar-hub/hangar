@@ -48,7 +48,8 @@ func TestResolveBlocksUnscannedPickles(t *testing.T) {
 
 // TestResolveHeadIssuesNoPresignedLinkPastTheGate checks that in redirect
 // mode a HEAD of a blocked file keeps its metadata but gets no presigned
-// URL, which would download it without the check a GET makes.
+// URL, which would download it without the check a GET makes. No HEAD gets
+// one: only a GET is redirected, after the check.
 func TestResolveHeadIssuesNoPresignedLinkPastTheGate(t *testing.T) {
 	t.Parallel()
 	store := blobtest.NewFake()
@@ -68,10 +69,15 @@ func TestResolveHeadIssuesNoPresignedLinkPastTheGate(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.StatusCode, "metadata stays readable")
 	require.Empty(t, r.Header.Get("Location"))
 	require.NotEmpty(t, r.Header.Get("X-Linked-Etag"))
-	r = e.Request(t, http.MethodHead, "/alice/s3/resolve/main/evil.pkl?accept_risk=1", "", "")
+	for _, file := range []string{"evil.pkl?accept_risk=1", "model.safetensors"} {
+		r = e.Request(t, http.MethodHead, "/alice/s3/resolve/main/"+file, "", "")
+		require.Equal(t, http.StatusOK, r.StatusCode, file)
+		require.Empty(t, r.Header.Get("Location"), file)
+	}
+	require.Equal(t, http.StatusForbidden, e.Request(t, http.MethodGet, "/alice/s3/resolve/main/evil.pkl", "", "").StatusCode)
+	r = e.Request(t, http.MethodGet, "/alice/s3/resolve/main/evil.pkl?accept_risk=1", "", "")
 	require.Equal(t, http.StatusFound, r.StatusCode)
 	require.True(t, strings.HasPrefix(r.Header.Get("Location"), "https://blobs.example/"))
-	r = e.Request(t, http.MethodHead, "/alice/s3/resolve/main/model.safetensors", "", "")
-	require.Equal(t, http.StatusFound, r.StatusCode, "files the gate allows still redirect")
-	require.Equal(t, http.StatusForbidden, e.Request(t, http.MethodGet, "/alice/s3/resolve/main/evil.pkl", "", "").StatusCode)
+	r = e.Request(t, http.MethodGet, "/alice/s3/resolve/main/model.safetensors", "", "")
+	require.Equal(t, http.StatusFound, r.StatusCode, "files the gate allows redirect")
 }

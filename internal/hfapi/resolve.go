@@ -108,23 +108,27 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 	blob.SetDownloadHeaders(hdr, path.Base(clean))
 	hdr.Set("Content-Disposition", contentDisposition(path.Base(clean)))
 
+	// Only a GET is redirected. A presigned URL is signed for GET, so a
+	// client that follows a redirected HEAD with another HEAD, as llama.cpp
+	// does, would get 403 from the bucket. huggingface_hub downloads from
+	// the URL it sent the HEAD to when there is no Location, and its GET
+	// then gets the redirect.
 	redirect := e.IsLFS() && h.d.Settings.RedirectDownloads
-	if r.Method == http.MethodGet {
-		if !h.allowDownload(w, r, rp, sha, clean) {
-			return
-		}
-	} else if redirect && !httpx.QueryBool(r.URL.Query(), "accept_risk", false) {
-		// A HEAD of a file a GET would refuse keeps its metadata but gets
-		// no presigned link, which would download it past the gate.
-		err := h.d.Downloads.CheckFile(ctx, rp.UUID, rp.ID, sha, clean)
-		if err != nil && !scan.IsBlocked(err) {
-			h.internalError(w, r, err)
-			return
-		}
-		redirect = err == nil
+	if r.Method == http.MethodGet && !h.allowDownload(w, r, rp, sha, clean) {
+		return
 	}
 	if e.IsLFS() && !e.Present {
 		h.serveNotPresent(w, r, rp, sha, e)
+		return
+	}
+	if r.Method == http.MethodHead {
+		// Rule 14: the GET's redirect leaves out X-Linked-Size over 50 GB,
+		// so the HEAD leaves out the size as well.
+		if !redirect || e.Size <= maxPlainDownload {
+			hdr.Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
+			hdr.Set("Content-Length", strconv.FormatInt(e.Size, 10))
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if redirect {
@@ -137,7 +141,7 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 			hdr.Set("Location", u)
 			hdr.Set("Content-Length", "0")
 			w.WriteHeader(http.StatusFound)
-			h.recordDownload(ctx, rp.ID.Type, "redirect", e.Size, r.Method == http.MethodGet)
+			h.recordDownload(ctx, rp.ID.Type, "redirect", e.Size, true)
 			return
 		case !errors.Is(err, blob.ErrNotSupported):
 			h.internalError(w, r, err)
@@ -145,11 +149,6 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, ref repoRef, r
 		}
 	}
 	hdr.Set(headerLinkedSize, strconv.FormatInt(e.Size, 10))
-	if r.Method == http.MethodHead {
-		hdr.Set("Content-Length", strconv.FormatInt(e.Size, 10))
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 	rng, status, ok := parseRange(r.Header.Get("Range"), e.Size)
 	if !ok {
 		hdr.Set("Content-Range", "bytes */"+strconv.FormatInt(e.Size, 10))
