@@ -33,7 +33,7 @@ These come from the contract and are repeated here because breaking them breaks 
    - Answer from metadata in under 10 seconds.
    - Ranges return a real 206 with `Content-Range: bytes a-b/total`, and 416 past the end.
 6. **Redirects**:
-   - S3 `redirect` mode: return a 302 to a presigned URL on a different origin, with all metadata headers on the 302 itself.
+   - S3 `redirect` mode: answer `GET` with a 302 to a presigned URL on a different origin, with all metadata headers on the 302 itself. Answer `HEAD` with a 200 and the metadata, as in `proxy` mode: a presigned `GET` URL does not answer `HEAD`, so a client that follows a redirected `HEAD` with another `HEAD` (llama.cpp) fails. huggingface_hub then downloads from the `resolve` URL, and its `GET` gets the redirect (`TestResolveRedirectMode`).
    - Never redirect to another path on Hangar's own origin unless the target repeats every header.
    - Use 307, not 302, for anything that is not a `GET` or `HEAD` (moved Repos).
 7. **Never emit Xet download data**: no `X-Xet-Hash`, `X-Xet-Refresh-Route`, `Link: rel="xet-auth"` or `xetHash`. Downloads then use plain HTTP whether or not `hf_xet` is installed.
@@ -46,7 +46,7 @@ These come from the contract and are repeated here because breaking them breaks 
     - Upload `href`s are presigned or carry a one-time signed query token, because the client sends no `Authorization` header on them.
     - Multipart is signalled by `chunk_size` in the header plus numbered part URLs (`ceil(size/chunk_size)` of them), and every part PUT must return an `ETag`.
     - On the filesystem backend, Hangar's own part URLs carry the signed token.
-14. **Downloads over 50 GB**: the client refuses plain HTTP downloads over 50 GB when it knows the size. Implement the contract's off-origin redirect without `X-Linked-Size` for files over 50 GB in S3 `redirect` mode, and document the limit for `proxy` mode and the filesystem backend.
+14. **Downloads over 50 GB**: the client refuses plain HTTP downloads over 50 GB when it knows the size. Implement the contract's off-origin redirect without `X-Linked-Size` for files over 50 GB in S3 `redirect` mode, answer their `HEAD` without `X-Linked-Size` or `Content-Length`, and document the limit for `proxy` mode and the filesystem backend.
 15. **`datasets-server`**: `datasets` calls `datasets-server.<host>/info` with a 100-second timeout. That name must either not resolve, or point at Hangar, which serves the Dataset Viewer API there ([14](14-datasets.md)). The docs recommend pointing it at Hangar; the Helm chart's Ingress can add it (`ingress.datasetsServerHost: true`).
 
 ## Download counting
