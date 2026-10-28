@@ -152,8 +152,11 @@ def fetch(url):
         return None, str(err)
 
 
-def wait_until_served(tree, urls):
-    """Waits until the site serves each URL as the commit has it."""
+def wait_until_served(tree, urls, before=None):
+    """Waits until the site serves each URL as the commit has it. A file the
+    site serves as the earlier commit has it means the deploy, or a cache in
+    front of it, has not caught up; one that matches neither means something
+    changes the file on its way."""
     deadline = time.monotonic() + TIMEOUT
     pending = {u: None for u in urls}
     while True:
@@ -161,8 +164,12 @@ def wait_until_served(tree, urls):
             body, failure = fetch(url)
             if body == tree.read(site_path(url)):
                 del pending[url]
+            elif failure:
+                pending[url] = failure
+            elif before and body == before.read(site_path(url)):
+                pending[url] = f"the file from {before.ref}"
             else:
-                pending[url] = failure or "a different file"
+                pending[url] = f"a file that matches neither commit, {len(body)} bytes"
         if not pending:
             return
         if time.monotonic() > deadline:
@@ -208,9 +215,9 @@ def main():
         print("No pages changed.")
         return
     key_name = key(after)
-    # The sitemaps, and the pages they give no <lastmod> for, show whether
-    # the Worker has deployed this commit.
-    wait_until_served(after, sitemap_urls + [u for u, lastmod in new.items() if lastmod is None])
+    # The sitemaps, and the changed pages they give no <lastmod> for, show
+    # whether the Worker has deployed this commit.
+    wait_until_served(after, sitemap_urls + [u for u in changed if new.get(u, "") is None], before)
     hosts = {urllib.parse.urlsplit(u).hostname for u in changed}
     if len(hosts) != 1:
         sys.exit(f"error: the pages span several hosts: {sorted(hosts)}")
