@@ -7,6 +7,12 @@
 # deploy/cloudflare/docs-root/, dotfiles included, to the root and commits
 # only when one is missing or differs. Run it after `mike deploy --push`,
 # with gh-pages fetched.
+#
+# mike's latest alias is a symlink to a version directory, so the site serves
+# that version's pages at two addresses, such as /1.4/faq/ and /latest/faq/.
+# Search engines then sometimes index the versioned one rather than the
+# canonical /latest/ one, so this adds rules to _redirects that send the
+# version that latest names to /latest/.
 # Usage: scripts/docs-root-files.sh [--push]
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,9 +28,22 @@ fi
 index="$(mktemp)"
 trap 'rm -f "$index"' EXIT
 GIT_INDEX_FILE="$index" git read-tree gh-pages
+latest=""
+if [ "$(git ls-tree gh-pages latest | cut -d' ' -f1)" = 120000 ]; then
+  latest="$(git cat-file blob gh-pages:latest)"
+fi
 shopt -s dotglob
 for f in "$src"/*; do
-  blob="$(git hash-object -w "$f")"
+  if [ "$(basename "$f")" = _redirects ] && [ -n "$latest" ]; then
+    blob="$({
+      cat "$f"
+      printf '\n# Added by scripts/docs-root-files.sh: /%s/ is the version that /latest/ names.\n' "$latest"
+      printf '/%s      /latest/          301\n' "$latest"
+      printf '/%s/*    /latest/:splat    301\n' "$latest"
+    } | git hash-object -w --stdin)"
+  else
+    blob="$(git hash-object -w "$f")"
+  fi
   GIT_INDEX_FILE="$index" git update-index --add --cacheinfo "100644,${blob},$(basename "$f")"
 done
 tree="$(GIT_INDEX_FILE="$index" git write-tree)"
