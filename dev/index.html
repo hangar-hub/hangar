@@ -57,7 +57,7 @@
 
     
     
-  <meta property="og:type" content="website"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/"><meta property="og:title" content="Docs for the self-hosted model registry - Hangar"><meta property="og:description" content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Install it and pull your first model."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Docs for the self-hosted model registry", "description": "Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Install it and pull your first model.", "url": "https://hangar.page/latest/", "mainEntityOfPage": "https://hangar.page/latest/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}]}</script></head>
+  <meta property="og:type" content="website"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/"><meta property="og:title" content="Docs for the self-hosted model registry - Hangar"><meta property="og:description" content="Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Install it and pull your first model."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Docs for the self-hosted model registry", "description": "Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. Install it and pull your first model.", "url": "https://hangar.page/latest/", "mainEntityOfPage": "https://hangar.page/latest/", "inLanguage": "en-GB", "dateModified": "2026-10-28", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}]}</script></head>
   
   
     
@@ -1243,6 +1243,8 @@
       
         
       
+        
+      
     
     
     
@@ -1508,6 +1510,34 @@
     
   
     LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="guides/llama-cpp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    llama.cpp
   
 
     
@@ -3232,12 +3262,13 @@
 <h1 id="hangar">Hangar<a class="headerlink" href="#hangar" title="Permanent link">&para;</a></h1>
 <p><strong>A self-hosted home for your arsenal of models.</strong></p>
 <p><a class="md-button md-button--primary" href="get-started/">Get started</a> <a class="md-button" href="https://demo.hangar.page/">Try the demo</a></p>
-<p>Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. It keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:</p>
+<p>Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. It's model storage and management for your machine learning models and datasets: it keeps them on your own storage, with full version history, and serves them to the tools you already use:</p>
 <ul>
 <li><strong>Hugging Face clients.</strong> Set <code>HF_ENDPOINT</code>, and <code>huggingface_hub</code>, the <code>hf</code> CLI, <code>transformers</code>, <code>diffusers</code>, <code>sentence-transformers</code>, <code>datasets</code> and vLLM work unchanged.</li>
 <li><strong>git.</strong> <code>git clone</code> and <code>git push</code>, with git-lfs.</li>
 <li><strong>Ollama.</strong> <code>ollama pull hangar.example.com/org/model:Q4_K_M</code> for any GGUF Repo.</li>
 <li><strong>LM Studio.</strong> <code>hangar lmstudio install org/model:Q4_K_M</code>.</li>
+<li><strong>llama.cpp.</strong> <code>llama-server -hf org/model:Q4_K_M</code>, with <code>MODEL_ENDPOINT</code> set to your Instance. See <a href="guides/llama-cpp/">llama.cpp</a>.</li>
 <li><strong>Datasets.</strong> <code>load_dataset</code>, pandas and Polars over <code>hf://</code>, DuckDB over HTTPS, and a Dataset Viewer in the browser.</li>
 </ul>
 <p>Teams use it as a <a href="guides/ollama-registry/">private Ollama registry</a>, as <a href="guides/shared-cache/">one model cache for everyone</a>, to <a href="guides/ci/">avoid Hugging Face rate limits in CI</a> and to <a href="guides/kubernetes/">load models in Kubernetes</a> without downloading them on every Pod start. Hugging Face does not sell an on-premises Hub; <a href="concepts/on-premises/">Hugging Face Hub on-premises</a> explains how Hangar fills that gap.</p>

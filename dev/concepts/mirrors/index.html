@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with Partial mirrors, tracking and Pull-through.">
+        <meta name="description" content="Run your own Hugging Face mirror: Hangar mirrors Repos from huggingface.co with their Commit SHAs, and can work as a pull-through caching proxy.">
       
       
       
@@ -27,7 +27,7 @@
     
     
       
-        <title>Mirror Hugging Face Repos with full git history - Hangar</title>
+        <title>Self-hosted Hugging Face mirror with git history - Hangar</title>
       
     
     
@@ -59,7 +59,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/concepts/mirrors/"><meta property="og:title" content="Mirror Hugging Face Repos with full git history - Hangar"><meta property="og:description" content="How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with Partial mirrors, tracking and Pull-through."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Mirror Hugging Face Repos with full git history", "description": "How Hangar mirrors Repos from Upstreams such as huggingface.co, keeping their IDs and Commit SHAs, with Partial mirrors, tracking and Pull-through.", "url": "https://hangar.page/latest/concepts/mirrors/", "mainEntityOfPage": "https://hangar.page/latest/concepts/mirrors/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Concepts", "item": "https://hangar.page/latest/concepts/"}, {"@type": "ListItem", "position": 4, "name": "Mirrors and Upstreams", "item": "https://hangar.page/latest/concepts/mirrors/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/concepts/mirrors/"><meta property="og:title" content="Self-hosted Hugging Face mirror with git history - Hangar"><meta property="og:description" content="Run your own Hugging Face mirror: Hangar mirrors Repos from huggingface.co with their Commit SHAs, and can work as a pull-through caching proxy."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Self-hosted Hugging Face mirror with git history", "description": "Run your own Hugging Face mirror: Hangar mirrors Repos from huggingface.co with their Commit SHAs, and can work as a pull-through caching proxy.", "url": "https://hangar.page/latest/concepts/mirrors/", "mainEntityOfPage": "https://hangar.page/latest/concepts/mirrors/", "inLanguage": "en-GB", "dateModified": "2026-10-28", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "Concepts", "item": "https://hangar.page/latest/concepts/"}, {"@type": "ListItem", "position": 4, "name": "Mirrors and Upstreams", "item": "https://hangar.page/latest/concepts/mirrors/"}]}]}</script></head>
   
   
     
@@ -125,7 +125,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Mirror Hugging Face Repos with full git history
+              Self-hosted Hugging Face mirror with git history
             
           </span>
         </div>
@@ -1272,6 +1272,8 @@
       
         
       
+        
+      
     
     
     
@@ -1537,6 +1539,34 @@
     
   
     LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/llama-cpp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    llama.cpp
   
 
     
@@ -3281,6 +3311,7 @@
 
 
 <h1 id="mirrors-and-upstreams">Mirrors and Upstreams<a class="headerlink" href="#mirrors-and-upstreams" title="Permanent link">&para;</a></h1>
+<p>Hangar is a self-hosted Hugging Face mirror. It copies the Repos you choose from huggingface.co, or from another hub, into your own storage, keeps their Repo IDs and Commit SHAs, and serves them to your tools through <code>HF_ENDPOINT</code>. Unlike a public mirror such as hf-mirror.com, it runs on your own servers, and it can also hold models that exist nowhere else.</p>
 <h2 id="upstreams">Upstreams<a class="headerlink" href="#upstreams" title="Permanent link">&para;</a></h2>
 <p>An Upstream is a hub that speaks the Hugging Face Hub API. huggingface.co is built in, with the ID <code>huggingface</code>. Admins can add others, such as another Hangar Instance or a corporate mirror, under <strong>Admin</strong>, <strong>Upstreams</strong>, and turn any of them off.</p>
 <p>Requests to an Upstream use your own upstream token if you saved one (<strong>Settings</strong>, <strong>Upstream tokens</strong>), otherwise the Instance token configured for that Upstream, otherwise none.</p>
@@ -3297,7 +3328,7 @@
 <h2 id="tracking">Tracking<a class="headerlink" href="#tracking" title="Permanent link">&para;</a></h2>
 <p>A Mirror can follow its upstream branch (<code>--track</code> on <code>hangar pull</code>, or <strong>Track upstream</strong> in the UI). It then checks for new Commits on a schedule, six-hourly by default, and pulls new versions of the files it already selected. A GGUF quant selection follows the quant, not a file name, so a renamed file of the same quant is still followed. Commits replaced by an upstream force-push stay reachable under <code>refs/hangar/previous/&lt;time&gt;</code>, so nothing pinned to them breaks.</p>
 <h2 id="pull-through">Pull-through<a class="headerlink" href="#pull-through" title="Permanent link">&para;</a></h2>
-<p>Pull-through is off by default. When it is on (<code>pull.pull_through.enabled</code>) and a Repo ID matches <code>pull.pull_through.allow</code>, a Hub API or git request for a Repo that is not in the Arsenal starts a Pull automatically, and a download of a file that is not present starts that file's Pull and streams it as it arrives.</p>
+<p>Pull-through is off by default. When it is on (<code>pull.pull_through.enabled</code>) and a Repo ID matches <code>pull.pull_through.allow</code>, a Hub API or git request for a Repo that is not in the Arsenal starts a Pull automatically, and a download of a file that is not present starts that file's Pull and streams it as it arrives. With Pull-through on, Hangar works as a caching proxy for huggingface.co: clients ask Hangar for any allowed Repo, and Hangar fetches and keeps it on first use.</p>
 <h2 id="related-pages">Related pages<a class="headerlink" href="#related-pages" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../pulls/">Pulls and Dependencies</a>: what a Pull fetches, and the code a Repo depends on.</li>

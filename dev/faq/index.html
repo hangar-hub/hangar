@@ -57,7 +57,7 @@
 
     
     
-  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/faq/"><meta property="og:title" content="FAQ: a private, self-hosted Hugging Face Hub - Hangar"><meta property="og:description" content="Answers about Hangar: is it a model registry or a private Hugging Face Hub, does it run models, does it work air-gapped, and is it open source."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "FAQ: a private, self-hosted Hugging Face Hub", "description": "Answers about Hangar: is it a model registry or a private Hugging Face Hub, does it run models, does it work air-gapped, and is it open source.", "url": "https://hangar.page/latest/faq/", "mainEntityOfPage": "https://hangar.page/latest/faq/", "inLanguage": "en-GB", "dateModified": "2026-10-27", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "FAQ", "item": "https://hangar.page/latest/faq/"}]}]}</script></head>
+  <meta property="og:type" content="article"><meta property="og:site_name" content="Hangar"><meta property="og:locale" content="en_GB"><meta property="og:url" content="https://hangar.page/latest/faq/"><meta property="og:title" content="FAQ: a private, self-hosted Hugging Face Hub - Hangar"><meta property="og:description" content="Answers about Hangar: is it a model registry or a private Hugging Face Hub, does it run models, does it work air-gapped, and is it open source."><meta property="og:image" content="https://hangar.page/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "FAQ: a private, self-hosted Hugging Face Hub", "description": "Answers about Hangar: is it a model registry or a private Hugging Face Hub, does it run models, does it work air-gapped, and is it open source.", "url": "https://hangar.page/latest/faq/", "mainEntityOfPage": "https://hangar.page/latest/faq/", "inLanguage": "en-GB", "dateModified": "2026-10-28", "image": "https://hangar.page/og.png", "isPartOf": {"@type": "WebSite", "@id": "https://hangar.page/#website", "name": "Hangar", "url": "https://hangar.page/"}, "author": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}, "publisher": {"@type": "Organization", "@id": "https://hangar.page/#organization", "name": "Hangar", "url": "https://hangar.page/"}}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Hangar", "item": "https://hangar.page/"}, {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://hangar.page/latest/"}, {"@type": "ListItem", "position": 3, "name": "FAQ", "item": "https://hangar.page/latest/faq/"}]}]}</script></head>
   
   
     
@@ -1152,6 +1152,8 @@
       
         
       
+        
+      
     
     
     
@@ -1417,6 +1419,34 @@
     
   
     LM Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/llama-cpp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    llama.cpp
   
 
     
@@ -3122,10 +3152,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#is-hangar-a-cache-for-hugging-face-models" class="md-nav__link">
+  <a href="#is-hangar-a-cache-or-proxy-for-hugging-face-models" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Is Hangar a cache for Hugging Face models?
+        Is Hangar a cache or proxy for Hugging Face models?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#is-hangar-like-hf-mirrorcom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Is Hangar like hf-mirror.com?
       
     </span>
   </a>
@@ -3194,10 +3235,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#does-it-work-with-ollama-and-lm-studio" class="md-nav__link">
+  <a href="#does-it-work-with-ollama-lm-studio-and-llamacpp" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Does it work with Ollama and LM Studio?
+        Does it work with Ollama, LM Studio and llama.cpp?
       
     </span>
   </a>
@@ -3216,6 +3257,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#does-hangar-scan-models-for-malware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does Hangar scan models for malware?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#does-it-handle-datasets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3227,10 +3279,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#can-hangar-run-air-gapped-with-no-internet-access" class="md-nav__link">
+  <a href="#can-hangar-run-offline-or-air-gapped-with-no-internet-access" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Can Hangar run air-gapped, with no internet access?
+        Can Hangar run offline or air-gapped, with no internet access?
       
     </span>
   </a>
@@ -3433,10 +3485,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#is-hangar-a-cache-for-hugging-face-models" class="md-nav__link">
+  <a href="#is-hangar-a-cache-or-proxy-for-hugging-face-models" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Is Hangar a cache for Hugging Face models?
+        Is Hangar a cache or proxy for Hugging Face models?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#is-hangar-like-hf-mirrorcom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Is Hangar like hf-mirror.com?
       
     </span>
   </a>
@@ -3505,10 +3568,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#does-it-work-with-ollama-and-lm-studio" class="md-nav__link">
+  <a href="#does-it-work-with-ollama-lm-studio-and-llamacpp" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Does it work with Ollama and LM Studio?
+        Does it work with Ollama, LM Studio and llama.cpp?
       
     </span>
   </a>
@@ -3527,6 +3590,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#does-hangar-scan-models-for-malware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does Hangar scan models for malware?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#does-it-handle-datasets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3538,10 +3612,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#can-hangar-run-air-gapped-with-no-internet-access" class="md-nav__link">
+  <a href="#can-hangar-run-offline-or-air-gapped-with-no-internet-access" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Can Hangar run air-gapped, with no internet access?
+        Can Hangar run offline or air-gapped, with no internet access?
       
     </span>
   </a>
@@ -3698,15 +3772,17 @@
 <h1 id="frequently-asked-questions">Frequently asked questions<a class="headerlink" href="#frequently-asked-questions" title="Permanent link">&para;</a></h1>
 <h2 id="what-hangar-is">What Hangar is<a class="headerlink" href="#what-hangar-is" title="Permanent link">&para;</a></h2>
 <h3 id="is-hangar-a-model-registry">Is Hangar a model registry?<a class="headerlink" href="#is-hangar-a-model-registry" title="Permanent link">&para;</a></h3>
-<p>It covers the storage and serving side of one. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.</p>
+<p>It covers the storage and serving side of one, which some teams call a model repository or model store. Hangar is a self-hosted model and dataset hub: every Repo is a git repository with branches, tags and Commits, and clients load files through the Hugging Face Hub API, git, Ollama or LM Studio.</p>
 <p>For experiment tracking and model lineage, pair it with MLflow: MLflow records runs and model versions, and Hangar stores and serves the files. See <a href="../concepts/comparison/#model-registries-mlflow">How Hangar compares</a>.</p>
 <h3 id="is-hangar-a-private-hugging-face-hub-alternative">Is Hangar a private Hugging Face Hub alternative?<a class="headerlink" href="#is-hangar-a-private-hugging-face-hub-alternative" title="Permanent link">&para;</a></h3>
 <p>Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set <code>HF_ENDPOINT</code> to your Instance, and <code>huggingface_hub</code>, <code>transformers</code> and <code>datasets</code> use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access. See <a href="../get-started/hf-endpoint/">Point <code>HF_ENDPOINT</code> at Hangar</a>. For what Hugging Face itself offers, see <a href="../concepts/on-premises/">Hugging Face Hub on-premises</a>.</p>
-<h3 id="is-hangar-a-cache-for-hugging-face-models">Is Hangar a cache for Hugging Face models?<a class="headerlink" href="#is-hangar-a-cache-for-hugging-face-models" title="Permanent link">&para;</a></h3>
+<h3 id="is-hangar-a-cache-or-proxy-for-hugging-face-models">Is Hangar a cache or proxy for Hugging Face models?<a class="headerlink" href="#is-hangar-a-cache-or-proxy-for-hugging-face-models" title="Permanent link">&para;</a></h3>
 <p>It does more than cache. Each Pull keeps a <a href="../concepts/mirrors/">Mirror</a> of the Repo with its git history and the upstream Commit SHAs, so a Revision pinned in your code still resolves after the upstream Repo changes or disappears. You can also upload models that exist nowhere else. Clients load everything from your own storage.</p>
-<p>A caching proxy, such as olah, keeps whatever clients happen to download. <a href="../concepts/comparison/">How Hangar compares</a> sets the two kinds of tool side by side.</p>
+<p>With <a href="../concepts/mirrors/#pull-through">Pull-through</a> on, Hangar also works as a caching proxy: it fetches a Repo from huggingface.co the first time a client asks for it. A plain caching proxy, such as olah, keeps only whatever clients happen to download. <a href="../concepts/comparison/">How Hangar compares</a> sets the two kinds of tool side by side.</p>
+<h3 id="is-hangar-like-hf-mirrorcom">Is Hangar like hf-mirror.com?<a class="headerlink" href="#is-hangar-like-hf-mirrorcom" title="Permanent link">&para;</a></h3>
+<p>For your tools, yes: you set <code>HF_ENDPOINT</code> to Hangar, as you would to hf-mirror.com. hf-mirror.com is a public mirror of huggingface.co that someone else runs. Hangar runs on your own servers, holds only what you choose, controls who can download it, and works without internet access. See <a href="../get-started/hf-endpoint/#moving-from-a-public-mirror">Moving from a public mirror</a>.</p>
 <h3 id="does-hangar-run-models">Does Hangar run models?<a class="headerlink" href="#does-hangar-run-models" title="Permanent link">&para;</a></h3>
-<p>No. Hangar stores and serves files. Run models with the tools you already use, such as <code>transformers</code>, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope.</p>
+<p>No. Hangar is a model storage server, not an inference server: it stores and serves files. Run models with the tools you already use, such as <code>transformers</code>, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope.</p>
 <h3 id="is-there-a-hosted-version">Is there a hosted version?<a class="headerlink" href="#is-there-a-hosted-version" title="Permanent link">&para;</a></h3>
 <p>No. Hangar is self-hosted only, and its licence does not let others offer it as a hosted or managed service. To look around without installing anything, open the <a href="https://demo.hangar.page/">demo</a>: it runs on sample data, and nothing you do there is saved.</p>
 <h2 id="using-hangar">Using Hangar<a class="headerlink" href="#using-hangar" title="Permanent link">&para;</a></h2>
@@ -3714,13 +3790,15 @@
 <p>No. Set <code>HF_ENDPOINT</code> to your Instance and <code>HF_TOKEN</code> to a Token you create in Hangar. <code>huggingface_hub</code>, the <code>hf</code> CLI, <code>transformers</code>, <code>diffusers</code>, <code>sentence-transformers</code>, <code>datasets</code> and vLLM then work unchanged. Code that names a Repo, such as <code>org/model</code>, and a Revision keeps working, because Mirrors keep the upstream IDs and Commit SHAs.</p>
 <h3 id="which-versions-of-my-tools-work">Which versions of my tools work?<a class="headerlink" href="#which-versions-of-my-tools-work" title="Permanent link">&para;</a></h3>
 <p><a href="../reference/compatibility/">Tested versions and platforms</a> lists the versions of <code>huggingface_hub</code>, Python, <code>transformers</code>, git, Ollama, Postgres and Kubernetes that CI runs against, and what is documented but not tested. <a href="../reference/hub-api-compatibility/">Hub API compatibility</a> lists every Hub endpoint and whether Hangar serves it.</p>
-<h3 id="does-it-work-with-ollama-and-lm-studio">Does it work with Ollama and LM Studio?<a class="headerlink" href="#does-it-work-with-ollama-and-lm-studio" title="Permanent link">&para;</a></h3>
-<p>Yes. <code>ollama pull hangar.example.com/org/model:Q4_K_M</code> pulls a GGUF quantisation straight from your Instance, and <code>hangar lmstudio install org/model:Q4_K_M</code> puts one into LM Studio's models folder. See <a href="../guides/ollama/">Ollama</a> and <a href="../guides/lm-studio/">LM Studio</a>. To serve GGUF models to every Ollama install on your network, see <a href="../guides/ollama-registry/">Run a private Ollama registry</a>.</p>
+<h3 id="does-it-work-with-ollama-lm-studio-and-llamacpp">Does it work with Ollama, LM Studio and llama.cpp?<a class="headerlink" href="#does-it-work-with-ollama-lm-studio-and-llamacpp" title="Permanent link">&para;</a></h3>
+<p>Yes. <code>ollama pull hangar.example.com/org/model:Q4_K_M</code> pulls a GGUF quantisation straight from your Instance, <code>hangar lmstudio install org/model:Q4_K_M</code> puts one into LM Studio's models folder, and llama.cpp downloads from Hangar with <code>MODEL_ENDPOINT</code>. Open WebUI pulls through its Ollama server. See <a href="../guides/ollama/">Ollama</a>, <a href="../guides/lm-studio/">LM Studio</a> and <a href="../guides/llama-cpp/">llama.cpp</a>. To serve GGUF models to every Ollama install on your network, see <a href="../guides/ollama-registry/">Run a private Ollama registry</a>.</p>
 <h3 id="does-it-work-with-hf_xet">Does it work with hf_xet?<a class="headerlink" href="#does-it-work-with-hf_xet" title="Permanent link">&para;</a></h3>
 <p>Yes for uploads. Hangar accepts Xet uploads, so <code>huggingface_hub</code> with <code>hf_xet</code> installed works with no setup. It stores whole files and serves them over plain HTTP.</p>
+<h3 id="does-hangar-scan-models-for-malware">Does Hangar scan models for malware?<a class="headerlink" href="#does-hangar-scan-models-for-malware" title="Permanent link">&para;</a></h3>
+<p>Yes, for the formats that can run code. Pickle, PyTorch, joblib and NumPy files can run code when they are loaded, so a malicious model can hide malware in them. Hangar lists the imports of every such file at the tip of each branch, tag and pull request, marks unsafe and suspicious files in the web UI, and can refuse to serve them. Prefer safetensors, which cannot run code. See <a href="../operate/security/#blocking-unsafe-downloads">Blocking unsafe downloads</a>.</p>
 <h3 id="does-it-handle-datasets">Does it handle datasets?<a class="headerlink" href="#does-it-handle-datasets" title="Permanent link">&para;</a></h3>
 <p>Yes. Dataset Repos work with <code>load_dataset</code>, pandas and Polars over <code>hf://</code> and DuckDB over HTTPS, and the web UI has a Dataset Viewer. Hangar builds a Parquet export of each dataset, as huggingface.co does. See <a href="../guides/datasets/">Datasets</a>.</p>
-<h3 id="can-hangar-run-air-gapped-with-no-internet-access">Can Hangar run air-gapped, with no internet access?<a class="headerlink" href="#can-hangar-run-air-gapped-with-no-internet-access" title="Permanent link">&para;</a></h3>
+<h3 id="can-hangar-run-offline-or-air-gapped-with-no-internet-access">Can Hangar run offline or air-gapped, with no internet access?<a class="headerlink" href="#can-hangar-run-offline-or-air-gapped-with-no-internet-access" title="Permanent link">&para;</a></h3>
 <p>Yes. An Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also carry a backup or a Hugging Face cache across and import it. See <a href="../guides/air-gapped/">Air-gapped Instances</a>.</p>
 <h2 id="running-hangar">Running Hangar<a class="headerlink" href="#running-hangar" title="Permanent link">&para;</a></h2>
 <h3 id="what-does-it-need-to-run">What does it need to run?<a class="headerlink" href="#what-does-it-need-to-run" title="Permanent link">&para;</a></h3>
