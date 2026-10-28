@@ -44,6 +44,8 @@ KEY_FILE = re.compile(r"^([0-9a-f]{32})\.txt$")
 # check. Workers Builds usually deploys gh-pages within a few minutes.
 TIMEOUT = 900
 POLL = 15
+# Cloudflare refuses Python's default User-Agent (Python-urllib) with 403.
+USER_AGENT = "hangar-indexnow/1 (+https://github.com/hangar-hub/hangar)"
 
 
 def git(*args, check=True):
@@ -139,24 +141,33 @@ def key(tree):
 
 
 def fetch(url):
-    request = urllib.request.Request(url, headers={"Cache-Control": "no-cache"})
+    """The body the site serves for a URL, or the reason it served none."""
+    request = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return response.read()
-    except (urllib.error.URLError, TimeoutError):
-        return None
+            return response.read(), None
+    except urllib.error.HTTPError as err:
+        return None, f"HTTP {err.code}"
+    except (urllib.error.URLError, TimeoutError) as err:
+        return None, str(err)
 
 
 def wait_until_served(tree, urls):
     """Waits until the site serves each URL as the commit has it."""
     deadline = time.monotonic() + TIMEOUT
-    pending = list(urls)
+    pending = {u: None for u in urls}
     while True:
-        pending = [u for u in pending if fetch(u) != tree.read(site_path(u))]
+        for url in list(pending):
+            body, failure = fetch(url)
+            if body == tree.read(site_path(url)):
+                del pending[url]
+            else:
+                pending[url] = failure or "a different file"
         if not pending:
             return
         if time.monotonic() > deadline:
-            sys.exit(f"error: after {TIMEOUT}s the site still does not serve {tree.ref} for: {' '.join(pending)}")
+            found = "; ".join(f"{u} ({why})" for u, why in pending.items())
+            sys.exit(f"error: after {TIMEOUT}s the site still does not serve {tree.ref} for: {found}")
         time.sleep(POLL)
 
 
@@ -169,7 +180,7 @@ def submit(host, key_name, urls):
     }).encode()
     request = urllib.request.Request(
         ENDPOINT, data=body, method="POST",
-        headers={"Content-Type": "application/json; charset=utf-8"},
+        headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": USER_AGENT},
     )
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
