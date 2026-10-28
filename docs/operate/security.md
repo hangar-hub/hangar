@@ -1,5 +1,6 @@
 ---
-description: "A checklist for running Hangar securely, with blocking unsafe downloads, verifying the container image and reporting vulnerabilities."
+title: Scan models for malware and harden Hangar
+description: "Run Hangar securely: scan pickle models for malware, block unsafe downloads, verify the container image and report vulnerabilities."
 ---
 
 # Security hardening
@@ -18,7 +19,7 @@ This page lists what to do to run Hangar securely. For what Hangar protects, its
 - Leave `webhooks.allow_private_targets` off (the default) on Instances shared with people you do not fully trust, so webhooks cannot reach your internal network. Webhooks and Upstreams never reach link-local or cloud metadata addresses, and a public Upstream cannot redirect Hangar to a private address; see [Mirrors and Upstreams](../concepts/mirrors.md#upstreams).
 - Watch the audit log (**Admin**, **Audit log**) and export it with your logs.
 - Run the image as it ships: non-root (UID 65532), read-only root filesystem, no shell. The Helm chart also drops every capability and uses the `RuntimeDefault` seccomp profile; turn on its NetworkPolicy.
-- Pickle-based weights can run code when loaded. Hangar scans them and shows a warning on suspicious and unsafe files; prefer safetensors. To refuse downloads of risky files, turn on **Block downloads of unsafe files** under **Admin**, **Settings**, and choose whether to block suspicious files too. See [Blocking unsafe downloads](#blocking-unsafe-downloads).
+- Pickle-based weights can run code when loaded, so a malicious model can carry malware. Hangar scans them and shows a warning on suspicious and unsafe files; prefer safetensors. To refuse downloads of risky files, turn on **Block downloads of unsafe files** under **Admin**, **Settings**, and choose whether to block suspicious files too. See [Blocking unsafe downloads](#blocking-unsafe-downloads).
 
 ## Blocking unsafe downloads
 

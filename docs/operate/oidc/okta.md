@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with Okta (OIDC)
 description: "Set up sign-in to Hangar with Okta as the OpenID Connect provider: create an OIDC web app integration and configure Hangar."
 ---
 

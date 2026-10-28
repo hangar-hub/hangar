@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with Authentik (OIDC)
 description: "Set up sign-in to Hangar with Authentik as the OpenID Connect provider: create an OAuth2/OpenID provider and application, then configure Hangar."
 ---
 

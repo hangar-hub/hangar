@@ -1,4 +1,5 @@
 ---
+title: Hugging Face Collections on a self-hosted hub
 description: "Curate Collections in Hangar: named, ordered lists of models, datasets and other Collections, with a note on each, from the web UI, huggingface_hub or the API."
 ---
 

@@ -9,12 +9,13 @@ description: "Hangar is a self-hosted model and dataset hub, compatible with the
 
 [Get started](get-started/index.md){ .md-button .md-button--primary } [Try the demo](https://demo.hangar.page/){ .md-button }
 
-Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. It keeps your machine learning models and datasets on your own storage, with full version history, and serves them to the tools you already use:
+Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama and LM Studio. It's model storage and management for your machine learning models and datasets: it keeps them on your own storage, with full version history, and serves them to the tools you already use:
 
 - **Hugging Face clients.** Set `HF_ENDPOINT`, and `huggingface_hub`, the `hf` CLI, `transformers`, `diffusers`, `sentence-transformers`, `datasets` and vLLM work unchanged.
 - **git.** `git clone` and `git push`, with git-lfs.
 - **Ollama.** `ollama pull hangar.example.com/org/model:Q4_K_M` for any GGUF Repo.
 - **LM Studio.** `hangar lmstudio install org/model:Q4_K_M`.
+- **llama.cpp.** `llama-server -hf org/model:Q4_K_M`, with `MODEL_ENDPOINT` set to your Instance. See [llama.cpp](guides/llama-cpp.md).
 - **Datasets.** `load_dataset`, pandas and Polars over `hf://`, DuckDB over HTTPS, and a Dataset Viewer in the browser.
 
 Teams use it as a [private Ollama registry](guides/ollama-registry.md), as [one model cache for everyone](guides/shared-cache.md), to [avoid Hugging Face rate limits in CI](guides/ci.md) and to [load models in Kubernetes](guides/kubernetes.md) without downloading them on every Pod start. Hugging Face does not sell an on-premises Hub; [Hugging Face Hub on-premises](concepts/on-premises.md) explains how Hangar fills that gap.

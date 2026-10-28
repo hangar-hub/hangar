@@ -45,4 +45,8 @@ or pass `endpoint=` to `HfApi`, `hf_hub_download` and `snapshot_download`.
 
 `datasets` also calls `datasets-server.<host>`. Point that name at Hangar too, which serves the Dataset Viewer API there; see [Datasets](../guides/datasets.md#the-datasets-server-name).
 
+## Moving from a public mirror
+
+If you already set `HF_ENDPOINT` to a public mirror such as hf-mirror.com, replace that address with your Instance's, and add `HF_TOKEN`. Your code stays the same. Pull the Repos you use into Hangar first, or ask an admin to turn on [Pull-through](../concepts/mirrors.md#pull-through), so Hangar fetches them from huggingface.co the first time someone asks.
+
 More: [Python libraries](../guides/python.md).

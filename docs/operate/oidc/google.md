@@ -1,4 +1,5 @@
 ---
+title: Single sign-on with Google (OIDC)
 description: "Set up sign-in to Hangar with Google as the OpenID Connect provider: create an OAuth client ID in the Google Cloud console and configure Hangar."
 ---
 

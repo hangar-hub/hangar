@@ -1,4 +1,5 @@
 ---
+title: Back up and restore a self-hosted model hub
 description: "Back up and restore a Hangar Instance with hangar admin backup, for each database and storage combination and in a container."
 ---
 

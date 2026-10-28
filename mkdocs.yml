@@ -139,6 +139,7 @@ nav:
       - Ollama: guides/ollama.md
       - Private Ollama registry: guides/ollama-registry.md
       - LM Studio: guides/lm-studio.md
+      - llama.cpp: guides/llama-cpp.md
       - vLLM: guides/vllm.md
       - Kubernetes model loading: guides/kubernetes.md
       - The hangar CLI: guides/hangar-cli.md

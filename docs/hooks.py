@@ -7,6 +7,7 @@ import datetime
 import html
 import json
 import logging
+import os
 import pathlib
 import re
 import subprocess
@@ -62,6 +63,11 @@ PUBLISHER = {"@type": "Organization", "@id": HOME + "#organization", "name": "Ha
 def on_config(config, **kwargs):
     COMMIT_DATES.clear()
     COMMIT_DATES.update(commit_dates())
+    # The workflows that publish the site set this, so a checkout without the
+    # history fails the build instead of dating every page with the build
+    # date, which tells search engines that every page changed.
+    if not COMMIT_DATES and os.environ.get("DOCS_REQUIRE_GIT_DATES"):
+        raise PluginError("DOCS_REQUIRE_GIT_DATES is set, but pages cannot be dated from git: fetch the full history")
     return config
 
 
@@ -71,8 +77,9 @@ def commit_dates():
     uncommitted changes are left out, so they get the build date. Returns
     nothing outside a git checkout, or in a shallow clone, where every file
     would get the date of the one commit fetched: the docs workflows that
-    publish the site fetch the full history (.github/workflows/docs.yml and
-    release.yml)."""
+    publish the site fetch the full history, of main and of gh-pages, since
+    fetching either shallowly makes the whole checkout shallow
+    (.github/workflows/docs.yml and release.yml)."""
     paths = ["docs", *INCLUDED_PATHS]
 
     def git(*args):

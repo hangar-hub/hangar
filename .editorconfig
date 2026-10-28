@@ -20,3 +20,7 @@ trim_trailing_whitespace = false
 
 [*.{sql,py}]
 indent_size = 4
+
+# IndexNow reads this file as the key itself, with nothing after it.
+[deploy/cloudflare/docs-root/2a49683a696184ea686721ffb7b0c285.txt]
+insert_final_newline = false

@@ -94,7 +94,11 @@
               "availability": "https://schema.org/InStock"
             },
             "publisher": { "@id": "https://hangar.page/#organization" },
-            "sameAs": ["https://github.com/hangar-hub/hangar", "https://github.com/hangar-hub/hangar/pkgs/container/hangar"]
+            "sameAs": [
+              "https://github.com/hangar-hub/hangar",
+              "https://github.com/hangar-hub/hangar/pkgs/container/hangar",
+              "https://artifacthub.io/packages/helm/hangar/hangar"
+            ]
           },
           {
             "@type": "FAQPage",
@@ -118,10 +122,10 @@
               },
               {
                 "@type": "Question",
-                "name": "Is Hangar a cache for Hugging Face models?",
+                "name": "Is Hangar a cache or proxy for Hugging Face models?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. Clients load everything from your own storage."
+                  "text": "It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. With Pull-through on, it also works as a caching proxy for huggingface.co, and as a self-hosted alternative to public mirrors such as hf-mirror.com. Clients load everything from your own storage."
                 }
               },
               {
@@ -129,7 +133,7 @@
                 "name": "Does Hangar run models?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "No. Hangar stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope."
+                  "text": "No. Hangar is a model storage server, not an inference server: it stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope."
                 }
               },
               {
@@ -142,10 +146,18 @@
               },
               {
                 "@type": "Question",
-                "name": "Can Hangar run air-gapped, with no internet access?",
+                "name": "Can Hangar run offline or air-gapped, with no internet access?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache."
+                  "text": "Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache, and clients load what they already downloaded with HF_HUB_OFFLINE=1."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Hangar scan models for malware?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes, for the formats that can run code. Pickle, PyTorch, joblib and NumPy files can run code when they are loaded, so a malicious model can hide malware in them. Hangar lists the imports of every such file at the tip of each branch, tag and pull request, marks unsafe and suspicious files, and can refuse to serve them. Prefer safetensors, which cannot run code."
                 }
               },
               {
@@ -1485,8 +1497,8 @@
               </h1>
               <p class="lead" data-stagger style="--i: 2">
                 Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face Hub API, git, Ollama
-                and LM Studio. Pull from huggingface.co once, keep full version history on your own storage, and
-                serve your models, LLMs and datasets to the tools you already use.
+                and LM Studio. Pull from huggingface.co once, keep full version history on your own model storage,
+                and serve your models, LLMs and datasets to the tools you already use, even offline.
               </p>
               <div class="actions" data-stagger style="--i: 3">
                 <a class="btn btn-primary" href="/latest/get-started/">
@@ -1554,8 +1566,11 @@
             <li data-reveal style="--i: 0">
               <h3>Every machine downloads the same gigabytes</h3>
               <p>
-                Laptops, CI runners and GPU nodes each fetch the same weights from huggingface.co.
-                With Hangar you pull a model once, and every client loads it from your own network.
+                Laptops, <a class="link" href="/latest/guides/ci/">CI runners</a> and
+                <a class="link" href="/latest/guides/kubernetes/">Kubernetes Pods</a> each fetch the
+                same weights from huggingface.co. With Hangar you pull a model once, and every client
+                loads it from a <a class="link" href="/latest/guides/shared-cache/">shared model cache</a>
+                on your own network.
               </p>
             </li>
             <li data-reveal style="--i: 1">
@@ -1570,14 +1585,17 @@
               <h3>Every tool fetches its own copy</h3>
               <p>
                 Hugging Face libraries, Ollama and LM Studio each download from the internet
-                separately. Hangar gives them one source on your network.
+                separately. Hangar gives them one source on your network, and doubles as a
+                <a class="link" href="/latest/guides/ollama-registry/">private Ollama registry</a>.
               </p>
             </li>
             <li data-reveal style="--i: 3">
               <h3>Some networks can't reach the internet at all</h3>
               <p>
                 An <a class="link" href="/latest/guides/air-gapped/">air-gapped Instance</a> pulls
-                from another Hangar Instance that can.
+                from another Hangar Instance that can. Hugging Face does not sell the
+                <a class="link" href="/latest/concepts/on-premises/">Hub on-premises</a>, so this is
+                how you run one.
               </p>
             </li>
           </ul>
@@ -1823,8 +1841,8 @@
             <li data-reveal style="--i: 2">
               <h3>Security scans</h3>
               <p>
-                Hangar scans the tip of every branch, tag and pull request for pickle files that
-                run code when loaded, and you choose what to block.
+                Hangar scans the tip of every branch, tag and pull request for malware in pickle
+                files, which can run code when loaded, and you choose what to block.
               </p>
             </li>
             <li data-reveal style="--i: 0">
@@ -1899,20 +1917,24 @@ docker cp hangar:/var/lib/hangar/secrets.yaml - | tar -xO | grep bootstrap_admin
               <p>Yes. Hangar serves the Hugging Face Hub API from your own servers and storage, so models and datasets stay on your network. Set HF_ENDPOINT to your Instance and huggingface_hub, transformers and datasets use it in place of huggingface.co. Private Repos are visible only to the Users and Organisations you give access.</p>
             </details>
             <details>
-              <summary>Is Hangar a cache for Hugging Face models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. Clients load everything from your own storage.</p>
+              <summary>Is Hangar a cache or proxy for Hugging Face models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>It does more than cache. Each Pull keeps a Mirror of the Repo with its git history and the upstream Commit SHAs, and you can upload models that exist nowhere else. With Pull-through on, it also works as a caching proxy for huggingface.co, and as a self-hosted alternative to public mirrors such as hf-mirror.com. Clients load everything from your own storage.</p>
             </details>
             <details>
               <summary>Does Hangar run models?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>No. Hangar stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope.</p>
+              <p>No. Hangar is a model storage server, not an inference server: it stores and serves files. Run models with the tools you already use, such as transformers, vLLM, Ollama or LM Studio, and point them at Hangar for the weights. Spaces and the Inference API are out of scope.</p>
             </details>
             <details>
               <summary>Do I need to change my code?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
               <p>No. Set HF_ENDPOINT to your Instance and HF_TOKEN to a Token you create in Hangar. huggingface_hub, the hf CLI, transformers, diffusers, sentence-transformers, datasets and vLLM then work unchanged.</p>
             </details>
             <details>
-              <summary>Can Hangar run air-gapped, with no internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
-              <p>Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache.</p>
+              <summary>Can Hangar run offline or air-gapped, with no internet access?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes. Hangar runs as an air-gapped model and dataset hub: an Instance with no internet access pulls from another Hangar Instance that has it, as its Upstream. You can also import an existing Hugging Face cache, and clients load what they already downloaded with HF_HUB_OFFLINE=1.</p>
+            </details>
+            <details>
+              <summary>Does Hangar scan models for malware?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>
+              <p>Yes, for the formats that can run code. Pickle, PyTorch, joblib and NumPy files can run code when they are loaded, so a malicious model can hide malware in them. Hangar lists the imports of every such file at the tip of each branch, tag and pull request, marks unsafe and suspicious files, and can refuse to serve them. Prefer safetensors, which cannot run code.</p>
             </details>
             <details>
               <summary>Does it work with hf_xet?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg></summary>

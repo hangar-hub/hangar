@@ -7,7 +7,7 @@ description: "How Hangar compares with MatrixHub, KohakuHub, CSGHub, olah, JFrog
 
 Teams that want models and datasets on their own infrastructure usually look at one of three kinds of tool: a caching proxy in front of huggingface.co, a full self-hosted hub, or an MLOps model registry. Hangar is a self-hosted hub: it serves the Hugging Face Hub API, keeps Mirrors with their git history, and also accepts your own uploads.
 
-This page compares Hangar with tools people evaluate alongside it. Each fact about another tool comes from that tool's own documentation or source code, linked in [Sources](#sources): MatrixHub, KohakuHub and ModnFace were checked on 21 October 2026, and the others on 20 October 2026. Tools change, so check their current documentation before you decide.
+This page compares Hangar with tools people evaluate alongside it. Each fact about another tool comes from that tool's own documentation or source code, linked in [Sources](#sources): hf-mirror.com was checked on 27 October 2026, MatrixHub, KohakuHub and ModnFace on 21 October 2026, and the others on 20 October 2026. Tools change, so check their current documentation before you decide.
 
 ## At a glance
 
@@ -36,6 +36,12 @@ A caching proxy sits in front of huggingface.co and keeps a copy of what clients
 - **Sonatype Nexus Repository** supports Hugging Face as a proxy repository for models and datasets. It has no hosted Hugging Face repositories, so you cannot upload to it.
 
 Choose Hangar over a proxy when you want Mirrors that keep the upstream git history and Commit SHAs, so a model pinned to a Commit still resolves after upstream changes, or when you also need uploads, git, Ollama or LM Studio.
+
+## Public mirrors: hf-mirror.com
+
+**hf-mirror.com** is a public mirror of huggingface.co, run as a non-profit project to give developers in China fast, reliable downloads of models and datasets. You use it by setting `HF_ENDPOINT=https://hf-mirror.com`. It is a service, not software you run, so you cannot keep your own models on it, control who can download what, or use it from a network without internet access.
+
+Hangar works the same way for your tools, through `HF_ENDPOINT`, but runs on your own servers: a self-hosted alternative to hf-mirror.com. To move, set `HF_ENDPOINT` to your Instance instead; see [Point `HF_ENDPOINT` at Hangar](../get-started/hf-endpoint.md#moving-from-a-public-mirror).
 
 ## Self-hosted hubs: MatrixHub, KohakuHub and CSGHub
 
@@ -66,6 +72,10 @@ Choose Hangar when the files must stay on your own servers or network, including
 Hangar stores and serves files; it does not run models. Spaces, the Inference API, Hugging Face Jobs, Buckets and kernels, SSH git and Xet downloads are out of scope. For the Hub API endpoints Hangar serves, see [Hub API compatibility](../reference/hub-api-compatibility.md).
 
 ## Sources
+
+Checked on 27 October 2026:
+
+- hf-mirror.com: [home page](https://hf-mirror.com/)
 
 Checked on 21 October 2026:
 

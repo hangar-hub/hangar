@@ -20,6 +20,7 @@ Hangar pulls Repos from huggingface.co or another Hangar Instance, keeps their g
 - [git and git-lfs](https://hangar.page/latest/guides/git/): clone, fetch and push Repos over HTTPS
 - [Ollama](https://hangar.page/latest/guides/ollama/): `ollama pull` GGUF models from Hangar
 - [LM Studio](https://hangar.page/latest/guides/lm-studio/): install models into LM Studio from Hangar
+- [llama.cpp](https://hangar.page/latest/guides/llama-cpp/): download GGUF models into llama-server with `MODEL_ENDPOINT`
 - [vLLM](https://hangar.page/latest/guides/vllm/): serve models with vLLM from weights stored in Hangar
 - [Air-gapped Instances](https://hangar.page/latest/guides/air-gapped/): run Hangar with no internet access
 - [Run a private Ollama registry](https://hangar.page/latest/guides/ollama-registry/): serve GGUF models to every Ollama install on your network

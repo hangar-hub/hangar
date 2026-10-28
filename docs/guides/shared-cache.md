@@ -1,6 +1,6 @@
 ---
 title: Share one Hugging Face model cache across a team
-description: "Stop every machine downloading the same models: share a Hugging Face cache on a network drive, or serve one copy to the team from Hangar."
+description: "Stop every machine downloading the same models: share a Hugging Face cache on a network drive, or run Hangar as the team's cache server."
 ---
 
 # Share one Hugging Face model cache across a team

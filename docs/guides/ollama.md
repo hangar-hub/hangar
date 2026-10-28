@@ -5,7 +5,7 @@ description: "Run GGUF models from Hangar in Ollama with ollama pull, as you wou
 
 # Use Ollama
 
-This guide pulls GGUF models from Hangar into Ollama on your own machine. To set Hangar up as the Ollama registry for a team or for shared Ollama servers, see [Run a private Ollama registry](ollama-registry.md).
+This guide pulls GGUF models from Hangar into Ollama on your own machine. To set Hangar up as the Ollama registry for a team, for shared Ollama servers or for Open WebUI, see [Run a private Ollama registry](ollama-registry.md). To run GGUF models with llama.cpp instead, see [llama.cpp](llama-cpp.md).
 
 Hangar serves GGUF Repos to Ollama the way huggingface.co does. Ollama signs its requests with the key pair in `~/.ollama`, and Hangar needs that key for every Repo unless the Repo is public and the Instance allows anonymous reads (`security.anonymous_read`, off by default). Register the key once:
 
