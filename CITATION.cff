@@ -13,7 +13,7 @@ url: https://hangar.page/
 license-url: https://github.com/hangar-hub/hangar/blob/main/LICENSE
 # release-please updates the version in each release pull request
 # (extra-files in release-please-config.json).
-version: 1.4.2 # x-release-please-version
+version: 1.4.3 # x-release-please-version
 keywords:
   - hugging face hub
   - model registry
