@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.3](https://github.com/hangar-hub/hangar/compare/v1.4.2...v1.4.3) (2026-10-28)
+
+
+### Bug fixes
+
+* **docs:** redirect the version that latest names to /latest/, so each page has one address ([#84](https://github.com/hangar-hub/hangar/issues/84)) ([d5465e0](https://github.com/hangar-hub/hangar/commit/d5465e025016a19b4466f2de614641c7fca54ab1))
+* **docs:** wait only for changed pages in scripts/indexnow.py, and say why a page does not match ([#82](https://github.com/hangar-hub/hangar/issues/82)) ([0007e89](https://github.com/hangar-hub/hangar/commit/0007e8926d391e6618a014a340511f39e34bffb3))
+
 ## [1.4.2](https://github.com/hangar-hub/hangar/compare/v1.4.1...v1.4.2) (2026-10-28)
 
 
