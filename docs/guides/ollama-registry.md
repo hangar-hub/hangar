@@ -1,6 +1,6 @@
 ---
 title: Run a private Ollama registry for GGUF models
-description: "Run Hangar as a self-hosted Ollama registry: serve GGUF models from your own server to every Ollama install, with access control and no Modelfiles."
+description: "Run Hangar as a self-hosted Ollama registry: serve GGUF models to every Ollama install and Open WebUI, with access control and no Modelfiles."
 ---
 
 # Run a private Ollama registry
@@ -87,6 +87,12 @@ ollama run hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M
 - The tag picks a quant, ignoring case, or a full GGUF filename. Without a tag, Ollama asks for `latest`, and Hangar serves `Q4_K_M` if the Repo has it, otherwise the closest quant.
 - For an Ollama server in a container, run the same command inside it, such as `docker exec ollama ollama pull hangar.example.com/...`.
 - To give the model a shorter name on one machine, copy it with `ollama cp`, such as `ollama cp hangar.example.com/acme/support-assistant-GGUF:Q4_K_M support`.
+
+### From Open WebUI
+
+Open WebUI passes the model name you type to its Ollama server's pull request unchanged, so it pulls from Hangar too. In Open WebUI, open **Admin Panel**, **Settings**, **Models**, and pull `hangar.example.com/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M`. Open WebUI always asks Ollama to allow plain HTTP, so you do not need `--insecure`.
+
+The key Hangar must know is the one of the Ollama server that Open WebUI talks to, often a container, not the key on the machine with your browser; see [A key for each Ollama server](#a-key-for-each-ollama-server). Open WebUI's option to download a GGUF file by its URL accepts only huggingface.co and github.com links, so pull by name instead.
 
 On a plain-HTTP Instance on your own network, add `--insecure` to `ollama pull`. `hangar ollama install` runs `ollama pull` for you and adds `--insecure` for `http://` Instances. It also checks that the quant is in the Arsenal and that your key is registered first; see [Install with the hangar CLI](ollama.md#install-with-the-hangar-cli).
 

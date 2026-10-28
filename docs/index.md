@@ -15,6 +15,7 @@ Hangar is a self-hosted model and dataset hub, compatible with the Hugging Face 
 - **git.** `git clone` and `git push`, with git-lfs.
 - **Ollama.** `ollama pull hangar.example.com/org/model:Q4_K_M` for any GGUF Repo.
 - **LM Studio.** `hangar lmstudio install org/model:Q4_K_M`.
+- **llama.cpp.** `llama-server -hf org/model:Q4_K_M`, with `MODEL_ENDPOINT` set to your Instance. See [llama.cpp](guides/llama-cpp.md).
 - **Datasets.** `load_dataset`, pandas and Polars over `hf://`, DuckDB over HTTPS, and a Dataset Viewer in the browser.
 
 Teams use it as a [private Ollama registry](guides/ollama-registry.md), as [one model cache for everyone](guides/shared-cache.md), to [avoid Hugging Face rate limits in CI](guides/ci.md) and to [load models in Kubernetes](guides/kubernetes.md) without downloading them on every Pod start. Hugging Face does not sell an on-premises Hub; [Hugging Face Hub on-premises](concepts/on-premises.md) explains how Hangar fills that gap.

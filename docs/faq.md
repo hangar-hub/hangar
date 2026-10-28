@@ -45,9 +45,9 @@ No. Set `HF_ENDPOINT` to your Instance and `HF_TOKEN` to a Token you create in H
 
 [Tested versions and platforms](reference/compatibility.md) lists the versions of `huggingface_hub`, Python, `transformers`, git, Ollama, Postgres and Kubernetes that CI runs against, and what is documented but not tested. [Hub API compatibility](reference/hub-api-compatibility.md) lists every Hub endpoint and whether Hangar serves it.
 
-### Does it work with Ollama and LM Studio?
+### Does it work with Ollama, LM Studio and llama.cpp?
 
-Yes. `ollama pull hangar.example.com/org/model:Q4_K_M` pulls a GGUF quantisation straight from your Instance, and `hangar lmstudio install org/model:Q4_K_M` puts one into LM Studio's models folder. See [Ollama](guides/ollama.md) and [LM Studio](guides/lm-studio.md). To serve GGUF models to every Ollama install on your network, see [Run a private Ollama registry](guides/ollama-registry.md).
+Yes. `ollama pull hangar.example.com/org/model:Q4_K_M` pulls a GGUF quantisation straight from your Instance, `hangar lmstudio install org/model:Q4_K_M` puts one into LM Studio's models folder, and llama.cpp downloads from Hangar with `MODEL_ENDPOINT`. Open WebUI pulls through its Ollama server. See [Ollama](guides/ollama.md), [LM Studio](guides/lm-studio.md) and [llama.cpp](guides/llama-cpp.md). To serve GGUF models to every Ollama install on your network, see [Run a private Ollama registry](guides/ollama-registry.md).
 
 ### Does it work with hf_xet?
 
