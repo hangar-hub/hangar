@@ -10,17 +10,17 @@ require (
 	github.com/andybalholm/brotli v1.2.6
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/getkin/kin-openapi v0.151.0
-	github.com/go-chi/chi/v5 v5.4.0
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-git/go-billy/v6 v6.0.0-beta.1
 	github.com/go-git/go-git/v6 v6.0.0-beta.1
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/uuid v1.6.0
 	github.com/gpustack/gguf-parser-go v0.26.4
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/confmap v1.0.1
 	github.com/knadh/koanf/providers/file v1.2.1
-	github.com/knadh/koanf/v2 v2.3.8
+	github.com/knadh/koanf/v2 v2.4.1
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/parquet-go/parquet-go v0.32.0
@@ -56,7 +56,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v1.47.0
 	go.opentelemetry.io/otel/sdk/metric v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.58.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
