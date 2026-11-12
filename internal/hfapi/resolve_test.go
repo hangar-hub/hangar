@@ -176,11 +176,20 @@ func TestResolveRedirectMode(t *testing.T) {
 	_, sha := seed(t, e, "alice", modelID("alice", "s3"), model.VisibilityPublic, map[string]string{"model.safetensors": weights, "config.json": configJSON})
 	for _, method := range []string{http.MethodHead, http.MethodGet} {
 		r := e.Request(t, method, "/alice/s3/resolve/main/model.safetensors", "", "")
+		require.Equal(t, string(sha), r.Header.Get("X-Repo-Commit"), method)
+		require.Equal(t, "300", r.Header.Get("X-Linked-Size"), method)
+		require.Equal(t, `"`+sha256hex(weights)+`"`, r.Header.Get("X-Linked-Etag"), method)
+		if method == http.MethodHead {
+			// The presigned URL is signed for GET, so a client that
+			// follows a redirect with HEAD, such as llama.cpp, would get
+			// 403 from the bucket. The HEAD answers itself.
+			require.Equal(t, http.StatusOK, r.StatusCode)
+			require.Empty(t, r.Header.Get("Location"))
+			require.Equal(t, "300", r.Header.Get("Content-Length"))
+			continue
+		}
 		require.Equal(t, http.StatusFound, r.StatusCode)
 		require.True(t, strings.HasPrefix(r.Header.Get("Location"), "https://blobs.example/"), r.Header.Get("Location"))
-		require.Equal(t, string(sha), r.Header.Get("X-Repo-Commit"))
-		require.Equal(t, "300", r.Header.Get("X-Linked-Size"))
-		require.Equal(t, `"`+sha256hex(weights)+`"`, r.Header.Get("X-Linked-Etag"))
 	}
 	// Regular files are never redirected.
 	r := e.Request(t, http.MethodGet, "/alice/s3/resolve/main/config.json", "", "")
@@ -206,9 +215,10 @@ func (s sizedRepos) Entry(ctx context.Context, id model.RepoID, commit model.Com
 
 // TestResolveRedirectOver50GB covers 03-hf-api.md rule 14: huggingface_hub
 // refuses a plain HTTP download over 50 GB when it knows the
-// size, so in redirect mode a file over the limit gets its 302 without
-// X-Linked-Size and the client learns the size from the GET. A file of
-// exactly 50 GB still gets the header, and proxy mode always sends it.
+// size, so in redirect mode a file over the limit gets its HEAD answer
+// and its 302 without X-Linked-Size or a Content-Length that gives the
+// size, and the client learns the size from the GET. A file of exactly
+// 50 GB still gets the header, and proxy mode always sends it.
 func TestResolveRedirectOver50GB(t *testing.T) {
 	t.Parallel()
 	const limit = int64(50_000_000_000) // huggingface_hub MAX_HTTP_DOWNLOAD_SIZE
@@ -237,13 +247,24 @@ func TestResolveRedirectOver50GB(t *testing.T) {
 			continue
 		}
 		for _, method := range []string{http.MethodHead, http.MethodGet} {
+			want := http.StatusFound
+			if method == http.MethodHead {
+				want = http.StatusOK
+			}
 			r := e.Request(t, method, "/alice/big/resolve/main/at-limit.safetensors", "", "")
-			require.Equal(t, http.StatusFound, r.StatusCode, method)
+			require.Equal(t, want, r.StatusCode, method)
 			require.Equal(t, strconv.FormatInt(limit, 10), r.Header.Get("X-Linked-Size"), method)
 
 			r = e.Request(t, method, "/alice/big/resolve/main/over-limit.safetensors", "", "")
-			require.Equal(t, http.StatusFound, r.StatusCode, method)
-			require.True(t, strings.HasPrefix(r.Header.Get("Location"), "https://blobs.example/"), r.Header.Get("Location"))
+			require.Equal(t, want, r.StatusCode, method)
+			if method == http.MethodGet {
+				require.True(t, strings.HasPrefix(r.Header.Get("Location"), "https://blobs.example/"), r.Header.Get("Location"))
+			} else {
+				// huggingface_hub reads the size from Content-Length when
+				// the HEAD is not a redirect.
+				require.NotEqual(t, strconv.FormatInt(limit+1, 10), r.Header.Get("Content-Length"), "HEAD sent the size in Content-Length")
+				require.LessOrEqual(t, r.ContentLength, int64(0), "HEAD sent a Content-Length over 50 GB")
+			}
 			_, sent := r.Header["X-Linked-Size"]
 			require.False(t, sent, "%s sent X-Linked-Size %q over 50 GB", method, r.Header.Get("X-Linked-Size"))
 			// The ETag still lets the client cache and verify the file.

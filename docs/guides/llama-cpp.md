@@ -37,7 +37,9 @@ The URL is `<Instance>/<repo>/resolve/<revision>/<file>`. The **Files** tab of a
 
 ## S3 storage
 
-llama.cpp checks each file with a `HEAD` request and follows the redirect Hangar answers it with. On S3 in `redirect` mode, that redirect goes to a link the bucket signed for downloads only, and the bucket refuses the `HEAD` request, so the download fails with a status code such as 400 or 403. Set `storage.s3.download_mode: proxy`, so Hangar streams the files itself. See [Storage backends](../operate/storage.md).
+On S3 storage, set `storage.s3.download_mode: proxy`, so Hangar streams the files itself. See [Storage backends](../operate/storage.md).
+
+In `redirect` mode, Hangar sends each download to a link that the bucket signed. llama.cpp decodes and re-encodes the link's query string when it follows the redirect, so the bucket no longer receives the link it signed. MinIO, for example, refuses the download with 400.
 
 ## Errors you may see
 
