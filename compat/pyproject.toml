@@ -5,13 +5,13 @@ description = "Client compatibility suites for Hangar."
 requires-python = ">=3.10"
 license = "Elastic-2.0"
 dependencies = [
-  "pytest==9.1.1",
+  "pytest==9.2.0",
   "requests==2.34.2",
-  "huggingface_hub==2.2.0",
-  "transformers==5.19.0",
+  "huggingface_hub==2.4.0",
+  "transformers==5.20.2",
   "torch==2.14.1",
   "datasets==5.1.0",
-  "sentence-transformers==5.7.0",
+  "sentence-transformers==6.2.0",
 ]
 
 [tool.uv]
